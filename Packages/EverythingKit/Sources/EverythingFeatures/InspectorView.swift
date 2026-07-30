@@ -11,6 +11,8 @@ import SwiftUI
 /// row, because a note has no due date.
 public struct InspectorView: View {
     @Environment(\.services) private var services
+    @Environment(\.inspectorPaneWidth) private var paneWidth
+
     private let navigation: NavigationModel
 
     @State private var tagInput = ""
@@ -31,7 +33,8 @@ public struct InspectorView: View {
                 )
             }
         }
-        .frame(minWidth: Theme.Size.inspectorWidth)
+        .frame(minWidth: InspectorLayout.minimumWidth)
+        .measuresInspectorLayout()
         .accessibilityIdentifier(AccessibilityID.Inspector.root)
     }
 
@@ -116,14 +119,10 @@ public struct InspectorView: View {
     private func statusSection(for item: Item) -> some View {
         InspectorSection("Status") {
             InspectorRow("State") {
-                Picker("State", selection: statusBinding(for: item)) {
-                    ForEach([ItemStatus.open, .completed, .cancelled], id: \.self) { status in
-                        Text(status.displayName).tag(status)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier(AccessibilityID.Inspector.statusPicker)
+                StatusPicker(
+                    selection: statusBinding(for: item),
+                    usesSegmentedStyle: InspectorLayout.canUseSegmentedControl(paneWidth: paneWidth)
+                )
             }
 
             if item.kind.supportedFields.contains(.priority) {
@@ -473,4 +472,37 @@ public struct InspectorView: View {
     return InspectorView(navigation: navigation)
         .appServices(services)
         .frame(width: 300, height: 700)
+}
+
+/// The status control, in whichever form fits.
+///
+/// A three-way segmented control needs roughly 220pt and does not shrink below its intrinsic size —
+/// it clips, which is exactly what the previous inspector did to "Cancelled". Below that width it
+/// becomes a menu, which is a control that genuinely adapts. Two branches rather than a conditional
+/// style, because `.segmented` and `.menu` are different types.
+private struct StatusPicker: View {
+    @Binding var selection: ItemStatus
+    let usesSegmentedStyle: Bool
+
+    private static let choices: [ItemStatus] = [.open, .completed, .cancelled]
+
+    var body: some View {
+        Group {
+            if usesSegmentedStyle {
+                picker.pickerStyle(.segmented)
+            } else {
+                picker.pickerStyle(.menu)
+            }
+        }
+        .accessibilityIdentifier(AccessibilityID.Inspector.statusPicker)
+    }
+
+    private var picker: some View {
+        Picker("State", selection: $selection) {
+            ForEach(Self.choices, id: \.self) { status in
+                Text(status.displayName).tag(status)
+            }
+        }
+        .labelsHidden()
+    }
 }

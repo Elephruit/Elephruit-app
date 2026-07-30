@@ -427,9 +427,13 @@ public struct KeyHint: View {
 
 /// A labelled row in the inspector.
 ///
-/// The label column is a fixed width so every row's value starts at the same x position, which
-/// is what lets the eye scan an inspector rather than read it.
+/// Adapts rather than clips. Above ``InspectorLayout/stackingBreakpoint`` the label sits in a fixed
+/// column so every value starts at the same x position, which is what lets the eye scan an inspector
+/// rather than read it. Below it, the label moves above the control and the control takes the full
+/// width — because a taller row is better than a squeezed control, and far better than a clipped one.
 public struct InspectorRow<Content: View>: View {
+    @Environment(\.inspectorLayoutStyle) private var style
+
     private let label: String
     private let content: Content
 
@@ -439,17 +443,37 @@ public struct InspectorRow<Content: View>: View {
     }
 
     public var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
-            Text(label)
-                .font(Theme.Text.metadata)
-                .foregroundStyle(Theme.Colors.secondaryText)
-                .frame(width: 78, alignment: .trailing)
+        Group {
+            switch style {
+            case .inline:
+                HStack(alignment: .firstTextBaseline, spacing: InspectorLayout.labelGap) {
+                    labelText
+                        .frame(width: InspectorLayout.labelColumnWidth, alignment: .trailing)
 
-            content
-                .font(Theme.Text.rowSubtitle)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                    content
+                        .font(Theme.Text.rowSubtitle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+            case .stacked:
+                VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                    labelText
+
+                    content
+                        .font(Theme.Text.rowSubtitle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var labelText: some View {
+        Text(style == .stacked ? label.uppercased() : label)
+            .font(style == .stacked ? Theme.Text.sectionHeader : Theme.Text.metadata)
+            .kerning(style == .stacked ? 0.4 : 0)
+            .foregroundStyle(Theme.Colors.secondaryText)
+            .lineLimit(1)
     }
 }
 

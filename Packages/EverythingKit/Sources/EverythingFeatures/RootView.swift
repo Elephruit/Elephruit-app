@@ -107,7 +107,11 @@ public struct RootView: View {
         .navigationSplitViewStyle(.balanced)
         .inspector(isPresented: inspectorBinding) {
             InspectorView(navigation: navigation)
-                .inspectorColumnWidth(min: 240, ideal: Theme.Size.inspectorWidth, max: 380)
+                .inspectorColumnWidth(
+                    min: InspectorLayout.minimumWidth,
+                    ideal: InspectorLayout.idealWidth,
+                    max: InspectorLayout.maximumWidth
+                )
         }
         .focusedSceneValue(\.navigationModel, navigation)
         .focusedSceneValue(\.transferActions, TransferActions(
