@@ -1,4 +1,5 @@
 import ElephruitCore
+import ElephruitPersistence
 import Foundation
 import Testing
 
@@ -285,5 +286,67 @@ public struct ReferenceMachine: Codable, Sendable {
             calibrationSeconds: calibrationSeconds,
             recordedAt: Date().formatted(.iso8601)
         )
+    }
+}
+
+// MARK: - Workspace
+
+/// Where benchmarks put the stores and indexes they build.
+///
+/// ### The leak this replaces
+/// Every benchmark used to call `StoreLocation.temporary()`, which mints a fresh UUID directory, and
+/// none of them deleted it afterwards. A search index over a large corpus is hundreds of megabytes
+/// and a 200,000-entry store is over a hundred; across a few dozen runs that had quietly accumulated
+/// **4.1 GB** in the user's temporary directory. Nothing failed, nothing warned, and the only symptom
+/// would have been a disk filling up for no visible reason.
+///
+/// Everything now lives under one root that is **wiped when a process first touches it**. Disk is
+/// therefore bounded by a single run rather than by how many times anyone has ever run benchmarks.
+///
+/// Wiping on start rather than on finish is deliberate: swift-testing has no suite-level teardown
+/// that survives a cancelled or crashed run, and a cleanup that only happens on the happy path is
+/// exactly how this got to four gigabytes. Wiping on start cannot be skipped.
+@MainActor
+public enum BenchmarkWorkspace {
+    /// The root, wiped once per process on first access.
+    public static let root: URL = {
+        let url = URL.temporaryDirectory.appending(path: "ElephruitBenchmarks", directoryHint: .isDirectory)
+        try? FileManager.default.removeItem(at: url)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }()
+
+    /// A store location inside the workspace.
+    public static func storeLocation(named name: String) -> StoreLocation {
+        let base = root.appending(path: name, directoryHint: .isDirectory)
+        return StoreLocation(
+            root: base.appending(path: "Library", directoryHint: .isDirectory),
+            cachesRoot: base.appending(path: "Caches", directoryHint: .isDirectory)
+        )
+    }
+
+    /// A search index file inside the workspace.
+    public static func indexURL(named name: String) -> URL {
+        root.appending(path: "\(name).sqlite", directoryHint: .notDirectory)
+    }
+
+    /// Bytes currently held, so a run can report what it left behind.
+    public static func bytesUsed() -> Int64 {
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.fileSizeKey]
+        ) else { return 0 }
+
+        var total: Int64 = 0
+        for case let url as URL in enumerator {
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            total += Int64(size)
+        }
+        return total
+    }
+
+    public static func reportUsage() {
+        let megabytes = Double(bytesUsed()) / 1_048_576
+        print(String(format: "  [workspace] %.0f MB under %@", megabytes, root.path as NSString))
     }
 }

@@ -115,7 +115,8 @@ A `TimeDayRollup` derived cache was designed for in `docs/09` and deliberately *
 grounds that a week touches a few hundred rows. The benchmark exists to check that claim rather than
 assert it.
 
-Measured over a **200,000-entry, three-year history** — the size the published criterion names:
+Measured over a **200,000-entry, three-year history** — the size `docs/09` named, though see the note
+below on why that figure was not a good one:
 
 | Report | Budget | Measured | |
 |---|---|---|---|
@@ -127,6 +128,32 @@ Measured over a **200,000-entry, three-year history** — the size the published
 
 **The rollup table stays unbuilt.** Every report the interface can actually produce is well inside
 budget, and a second source of truth maintained for no measured benefit is worse than the arithmetic.
+
+### The 200,000 figure was cargo
+
+`docs/09` published it, and it came from copying the *item* count in the search criteria across to
+time entries without asking what it would represent. Two hundred thousand entries at half an hour
+each is a hundred thousand hours — roughly fifty working years.
+
+A heavy user tracking eight sessions a day, two hundred and fifty days a year, accumulates about
+**20,000 entries a decade**. So the default benchmark scale is now 20,000 (a realistic career),
+`full` is 60,000 (three decades), and the original 200,000 is kept as `huge` for hunting a regression
+in the query path.
+
+The numbers above were measured at the full 200,000 and stand. What changed is that reaching them
+took roughly twenty minutes and four separate 200,000-entry fixtures, none of which were deleted —
+see below. A `full` sweep now takes **72 seconds**.
+
+### 4.1 GB left in the temporary directory
+
+Every benchmark called `StoreLocation.temporary()`, which mints a fresh UUID directory, and none of
+them removed it. Search indexes over large corpora are hundreds of megabytes each; across the runs
+made during Phases B and C that had quietly accumulated **4.1 GB**. Nothing failed and nothing warned.
+
+Fixed three ways: one `BenchmarkWorkspace` root that is **wiped when a process first touches it**
+(cleaning up on start rather than on finish, because a cleanup that only runs on the happy path is
+exactly how this happened); one shared history per process instead of one per test, which is sound
+because every test in the suite only reads; and a printed report of what a run is holding.
 
 ### Why the year figure is recorded rather than asserted
 
