@@ -37,7 +37,7 @@ struct ElephruitApp: App {
         // static icon.
         MenuBarExtra {
             if case .ready(let services) = environment.state {
-                TimerMenuBarContent(services: services)
+                TimerMenuBarContent(services: services) { environment.quickJot?.show() }
             } else {
                 Text("Opening your library…")
             }
@@ -153,7 +153,7 @@ struct ElephruitCommands: Commands {
 
             Divider()
 
-            Button("Quick Capture…") { navigation?.isQuickCaptureVisible = true }
+            Button("Quick Jot…") { navigation?.isQuickCaptureVisible = true }
                 .shortcut(.quickCapture, in: shortcuts)
 
             Divider()
@@ -316,6 +316,10 @@ struct SettingsView: View {
             Section("Calendar") {
                 if case .ready(let services) = environment.state {
                     CalendarSettingsSection(calendar: services.calendar)
+                    ShortcutSettingsSection(
+                        registry: services.shortcuts,
+                        globalResults: environment.hotKeyResults
+                    )
                 } else {
                     Text("Available once your library is open.")
                         .font(Theme.Text.metadata)

@@ -29,6 +29,16 @@ final class AppEnvironment {
 
     private(set) var state: State = .opening
 
+    /// The floating capture panel, once there is a library to capture into.
+    private(set) var quickJot: QuickJotController?
+
+    /// System-wide shortcuts. Held for the life of the app, so a preference change can unregister
+    /// and re-register rather than leaving a stale binding behind.
+    private let hotKeys = GlobalHotKeyCenter()
+
+    /// What the system said about each global shortcut, for Settings to report.
+    private(set) var hotKeyResults: [ShortcutCommand: HotKeyRegistration] = [:]
+
     /// Whether developer affordances are available.
     ///
     /// A launch argument, not a build configuration, so a release build can be inspected when needed
@@ -68,6 +78,10 @@ final class AppEnvironment {
             // live for as long as the intent has shipped.
             CaptureBridge.adopt(services)
 
+            let quickJot = QuickJotController(services: services)
+            self.quickJot = quickJot
+            registerGlobalShortcuts(for: services)
+
             state = .ready(services)
 
             Diagnostics.shell.info(
@@ -82,5 +96,28 @@ final class AppEnvironment {
     var services: AppServices? {
         if case .ready(let services) = state { return services }
         return nil
+    }
+
+    /// Offers the global shortcuts to the system and records what it said.
+    ///
+    /// Idempotent, so a preference change calls it again: the centre unregisters before it
+    /// registers, which is what stops a stale binding surviving a rebind.
+    ///
+    /// A refusal is **not** an error. Another application having claimed the keys first is
+    /// information the user needs, not a failure the app can fix — so it is recorded and shown in
+    /// Settings rather than thrown. See ADR 0008.
+    func registerGlobalShortcuts(for services: AppServices) {
+        let result = hotKeys.register(
+            .quickCapture,
+            binding: services.shortcuts.binding(for: .quickCapture)
+        ) { [weak self] in
+            self?.quickJot?.show()
+        }
+
+        hotKeyResults[.quickCapture] = result
+
+        if let explanation = result.explanation {
+            Diagnostics.shell.info("Global shortcut not taken: \(explanation, privacy: .public)")
+        }
     }
 }

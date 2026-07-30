@@ -238,7 +238,7 @@ registration itself. The registry is the foundation both need.
 
 ---
 
-## S9 — Quick Jot surface · **next**
+## S9 — Quick Jot surface · **done**
 
 **Goal.** The plan's first vertical slice, on a foundation that now holds. `NSPanel`; the opt-in
 hotkey picker; a menu-bar Quick Jot entry alongside the timer; caret autocomplete for `#`, `@`,
@@ -252,9 +252,36 @@ nothing, empty is refused, a save failure keeps the text.
 **Risk.** Medium — the first `NSPanel` in the codebase. One acceptance item no unit test can
 discharge: **verification in a signed, sandboxed Release build**, without Accessibility permission.
 
+**Outcome.** A `.nonactivatingPanel` that joins all spaces and floats over full-screen apps, so
+capture works while looking at something else. The global shortcut is Carbon
+`RegisterEventHotKey` — no entitlement, no Accessibility prompt — and a refusal is *recorded and
+shown in Settings*, which is precisely the "collides silently" objection that put this off for a
+phase. Menu bar gains a Quick Jot entry beside the timer.
+
+Three design points. **The draft lives on the controller, not the view**, so closing the panel
+keeps the text — the view is destroyed with the window, and `@State` there would turn an accidental
+dismissal into lost work. **Only a successful save clears the field.** And **pressing the shortcut
+twice focuses the panel that is open** rather than stacking a second one.
+
+Caret autocomplete for `#`, `@`, `>`, `due:` and `follow:` reuses the same index-backed
+`titleSuggestions` that already powers `[[` completion. The completion rule is a pure type, so it
+is tested without a window.
+
+**620 tests pass** (+18), zero warnings; Debug and Release build. The app was launched against a
+temporary store and ran for over an hour with the registration in its launch path — no crash, no
+hang.
+
+**Not verified, and honestly the important one:** actually *pressing* ⌘⇧N in a signed sandboxed
+Release build. That needs interactive input on a real desktop session and is the one acceptance
+item the plan itself flags as undischargeable by test.
+
+**Deliberate limitation.** `.keyboardShortcut` still appears on sheet default/cancel buttons. Those
+are standard AppKit affordances, not nameable commands, and putting them in the registry would be
+inventing bindings the system already owns.
+
 ---
 
-## S10 — Attachment lifecycle
+## S10 — Attachment lifecycle · **next**
 
 **Goal.** ADR 0003's own unbuilt consequences. Staged import with atomic commit; grace-period
 deletion after the transaction; a launch orphan sweep; reference counting on the `contentHash`

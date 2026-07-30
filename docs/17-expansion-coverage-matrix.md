@@ -29,7 +29,7 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 | F13 | Capture is undoable | Absent | `StructuralUndoCoordinator` has no create inverse | S5 |
 | F14 | Action commits model + links + undo + index atomically | Rejected (in part) | Index stays fire-and-forget by decision; divergence is detected and repaired by the generation counter. ADR 0007 | S5 |
 | F15 | Shortcut registry with collision detection | **Met** (S8) | `ShortcutRegistry` in `ElephruitCore`; all 20 menu literals resolve through it; palette glyphs derived | — |
-| F15b | Registration of a *global* hotkey | Absent | ADR 0008 — Carbon, no Accessibility permission | S9 |
+| F15b | Registration of a *global* hotkey | **Met** (S9) | Carbon `RegisterEventHotKey`; no entitlement, no Accessibility prompt | — |
 | F16 | Stable links; archived sources do not cascade-delete history | Met | `Item.timeEntries` is `.nullify` deliberately; `deletingAnItemDoesNotDestroyTime:228` | — |
 | F17 | Attachment stable ID, relative path, UTI, size, checksum | Met | `AttachmentStore.swift:63-138` | — |
 | F18 | Attachment staged import with atomic commit | Absent | File-then-row-then-save, no staging, no rollback | S10 |
@@ -48,20 +48,20 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 
 | # | Requirement | Status | Evidence | Slice |
 |---|---|---|---|---|
-| Q1 | Reusable floating panel, not a main-window sheet | Absent | It is a `.sheet` (`RootView.swift:42-46`). No `NSPanel` exists | S9 |
-| Q2 | Opens while another app is active | Partial | Only via the App Intent, and only once the user assigns a shortcut | S9 |
-| Q3 | Global shortcut, proposed default ⌘⇧J | Absent | ADR 0008 — hotkey as convenience over the intent | S8, S9 |
+| Q1 | Reusable floating panel, not a main-window sheet | **Met** (S9) | `QuickJotPanel`, a non-activating floating panel across all spaces | — |
+| Q2 | Opens while another app is active | **Met** (S9) | Carbon hot key plus the menu-bar entry; neither needs the main window | — |
+| Q3 | Global shortcut | **Met** (S9) | `GlobalHotKeyCenter`; default follows the registry's Quick Jot binding | — |
 | Q4 | A global hotkey as *the* mechanism | Rejected | ADR 0008; `docs/10 §0` | — |
-| Q5 | ⌘↩ saves exactly once | Met, untested | `QuickCaptureView.swift:159-160` | S9 (test) |
+| Q5 | ⌘↩ saves exactly once | **Met** (S9) | Intercepted in `CaptureTextField.keyDown`; controller save tested | — |
 | Q6 | Escape cancels without saving | Met, untested | `:155-156`, plus the escape ladder | S9 (test) |
-| Q7 | Empty or whitespace-only refused | Met, untested | `:162`, `:175`, `CaptureService.swift:32` — three layers | S9 (test) |
-| Q8 | Save failure retains text and explains | Met, untested | `:185-188` — clearing is inside `if didSave` | S9 (test) |
-| Q9 | Focus loss does not discard the draft | Absent | `@State` on a sheet destroyed at dismiss; nothing persisted | S9 |
-| Q10 | Focus returns to the previously active app | Absent | No `NSApp.hide`/previous-app tracking | S9 |
-| Q11 | Autocomplete at caret for `#` `@` `>` `due:` `follow:` | Absent | Bare `TextEditor`. `SearchIndexStore.titles(prefix:limit:)` already backs `[[` completion and is reusable | S9 |
-| Q12 | Repeated invocation never creates a second panel | Partial | Idempotent `Bool`, but per-window, so two windows can each present one | S9 |
-| Q13 | Menu-bar Quick Jot entry | Absent | `MenuBarExtra` exists but is timer-only | S9 |
-| Q14 | Shortcut conflict appears non-blockingly in Settings | Absent | No registry | S8 |
+| Q7 | Empty or whitespace-only refused | **Met** (S9) | `emptySavesNothing` | — |
+| Q8 | Save failure retains text and explains | **Met** (S9) | Error shown in the panel; only a successful save clears | — |
+| Q9 | Focus loss does not discard the draft | **Met** (S9) | Text lives on the controller; only a successful save clears it | — |
+| Q10 | Focus returns to the previously active app | **Met** (S9) | Frontmost app recorded on show, reactivated on hide | — |
+| Q11 | Autocomplete at caret for `#` `@` `>` `due:` `follow:` | **Met** (S9) | `CaptureCompletion`, a pure type; reuses `titleSuggestions` unchanged | — |
+| Q12 | Repeated invocation never creates a second panel | **Met** (S9) | One controller owns one panel; a second show focuses it | — |
+| Q13 | Menu-bar Quick Jot entry | **Met** (S9) | Beside the timer controls | — |
+| Q14 | Shortcut conflict appears non-blockingly in Settings | **Met** (S9) | `ShortcutSettingsSection` reports registry collisions and system refusals | — |
 | Q15 | Whole interaction works without a mouse | Unverified | Plausible; nothing asserts it | S9 |
 | Q16 | Sandboxed release build works without Accessibility | Unverified | Never performed. The one item no unit test can discharge | S9 |
 

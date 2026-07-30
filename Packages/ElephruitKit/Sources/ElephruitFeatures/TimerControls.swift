@@ -124,8 +124,12 @@ public struct ItemTimerButton: View {
 public struct TimerMenuBarContent: View {
     private let services: AppServices
 
-    public init(services: AppServices) {
+    /// Opens the floating capture panel. `nil` in a preview, where there is no panel to open.
+    private let openQuickJot: (() -> Void)?
+
+    public init(services: AppServices, openQuickJot: (() -> Void)? = nil) {
         self.services = services
+        self.openQuickJot = openQuickJot
     }
 
     public var body: some View {
@@ -137,7 +141,7 @@ public struct TimerMenuBarContent: View {
                 Divider()
 
                 Button("Stop Timer") { services.timer.stop() }
-                    .keyboardShortcut("t", modifiers: [.command, .control])
+                    .shortcut(.toggleTimer, in: services.shortcuts)
             } else {
                 Text("No timer running")
 
@@ -151,10 +155,17 @@ public struct TimerMenuBarContent: View {
                 }
 
                 Button("Start Untitled Timer") { services.timer.switchTo(item: nil) }
-                    .keyboardShortcut("t", modifiers: [.command, .control])
+                    .shortcut(.toggleTimer, in: services.shortcuts)
             }
 
             Divider()
+
+            // Capture belongs here as much as the timer does. Both are things wanted while looking
+            // at something else, and this menu is the only part of Elephruit visible then.
+            if let openQuickJot {
+                Button("Quick Jot…") { openQuickJot() }
+                    .shortcut(.quickCapture, in: services.shortcuts)
+            }
 
             Button("Open Elephruit") {
                 NSApplication.shared.activate(ignoringOtherApps: true)
