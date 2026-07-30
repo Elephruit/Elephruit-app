@@ -78,6 +78,10 @@ public enum SidebarRegistry {
     public static let allDeclared: [SidebarDestination] = [
         // MARK: Primary
 
+        // Available as of Phase E, and first, because it answers the question you have when you
+        // open the app rather than one you go looking for.
+        SidebarDestination(id: "home", selection: .home, band: .primary, title: "Home", symbolName: "house"),
+
         SidebarDestination(
             id: "today",
             selection: .today,
@@ -117,7 +121,6 @@ public enum SidebarRegistry {
         // These exist so the phase that builds them changes one flag. Until then they are invisible:
         // no row, no customisation entry, no menu item.
 
-        SidebarDestination(id: "home", selection: .home, band: .primary, title: "Home", symbolName: "house", isAvailable: false),
         SidebarDestination(id: "calendar", selection: .calendar, band: .library, title: "Calendar", symbolName: "calendar.day.timeline.left", isAvailable: false),
 
         // Available as of Phase C. In the Library band rather than the top one, by decision: time is

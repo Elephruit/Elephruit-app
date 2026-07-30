@@ -45,6 +45,12 @@ public struct ItemQuery: Sendable, Hashable {
     /// Empty means every kind.
     public var kinds: Set<ItemKind> = []
 
+    /// `yyyy-MM-dd`, for finding a daily entry.
+    ///
+    /// An equality test on a stored key rather than a date range, so "today's entry" cannot match two
+    /// rows because of a timezone boundary.
+    public var dayKey: String?
+
     /// Empty means any status.
     public var statuses: Set<ItemStatus> = []
 

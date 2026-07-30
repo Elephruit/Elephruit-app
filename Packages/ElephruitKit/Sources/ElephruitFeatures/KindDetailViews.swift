@@ -234,6 +234,8 @@ struct PersonDetailView: View {
     @Binding var title: String
     @Binding var bodyText: String
 
+    @State private var isRecordingInteraction = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             DetailHeader(item: item, title: $title, isEditable: !item.isInTrash) {
@@ -244,6 +246,8 @@ struct PersonDetailView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+                    relationshipSummary
+
                     MarkdownTextEditor(
                         text: $bodyText,
                         isMonospaced: prefersMonospaced,
@@ -280,6 +284,59 @@ struct PersonDetailView: View {
             }
         }
         .accessibilityIdentifier(AccessibilityID.Detail.root)
+    }
+
+    /// When you last spoke, what is next, and what is open — the answer to "where are we with this
+    /// person", above everything else on the page.
+    ///
+    /// Computed from links rather than stored, so it cannot go stale: editing a note about someone
+    /// *is* the act that updates it.
+    @ViewBuilder
+    private var relationshipSummary: some View {
+        if let context = personContext {
+            HStack(spacing: Theme.Spacing.small) {
+                Text(context.summary(using: services?.dateProvider ?? SystemDateProvider()))
+                    .font(Theme.Text.rowSubtitle)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+
+                Spacer(minLength: Theme.Spacing.small)
+
+                Button("Record a conversation") { isRecordingInteraction = true }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .accessibilityIdentifier(AccessibilityID.People.recordInteraction)
+            }
+            .padding(.horizontal, Theme.Spacing.large)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(AccessibilityID.People.relationshipSummary)
+            .sheet(isPresented: $isRecordingInteraction) {
+                RecordInteractionSheet(
+                    personName: item.displayTitle,
+                    onSave: { summary, notes, date in
+                        record(summary: summary, notes: notes, at: date)
+                        isRecordingInteraction = false
+                    },
+                    onCancel: { isRecordingInteraction = false }
+                )
+            }
+        }
+    }
+
+    private var personContext: PersonContext? {
+        services?.people.context(for: item)
+    }
+
+    private func record(summary: String, notes: String, at date: Date) {
+        guard let services else { return }
+        services.perform {
+            let interaction = try services.people.recordInteraction(
+                with: item,
+                summary: summary,
+                at: date,
+                notes: notes
+            )
+            services.noteChange(to: interaction)
+        }
     }
 
     private var firstName: String {

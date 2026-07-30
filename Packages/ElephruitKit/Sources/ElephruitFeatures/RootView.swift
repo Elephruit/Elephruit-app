@@ -138,6 +138,8 @@ public struct RootView: View {
             Group {
                 if navigation.selection == .time {
                     TimeView(navigation: navigation)
+                } else if navigation.selection == .home {
+                    HomeView(navigation: navigation)
                 } else {
                     ItemListView(navigation: navigation)
                 }
