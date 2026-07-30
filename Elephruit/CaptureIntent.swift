@@ -47,7 +47,9 @@ struct CaptureIntent: AppIntent {
         // which is most of when it is useful.
         let services = try CaptureBridge.services()
 
-        guard let item = try services.capture.capture(text: trimmed) else {
+        // `captureText`, not `capture.capture` — the latter writes the row and leaves the index
+        // untouched, so everything captured this way was invisible to search.
+        guard let item = try services.captureText(trimmed) else {
             return .result(dialog: "Nothing to capture.")
         }
 

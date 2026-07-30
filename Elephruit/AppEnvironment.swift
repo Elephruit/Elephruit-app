@@ -62,6 +62,12 @@ final class AppEnvironment {
                 isDevelopmentMode: isDevelopmentMode
             )
 
+            // An intent firing in this process now uses the container that is already open, rather
+            // than opening a second writable one on the same SQLite file. `CaptureBridge` was
+            // written for this and the call was never made, so the failure it exists to prevent was
+            // live for as long as the intent has shipped.
+            CaptureBridge.adopt(services)
+
             state = .ready(services)
 
             Diagnostics.shell.info(

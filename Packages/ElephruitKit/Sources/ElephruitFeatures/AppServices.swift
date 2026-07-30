@@ -244,6 +244,26 @@ public final class AppServices {
         refreshDerivedState()
     }
 
+    /// Captures a line of text **and** keeps derived state current.
+    ///
+    /// The whole of a capture, from any entry point. ``CaptureService`` writes the item; this adds
+    /// the half that makes it findable.
+    ///
+    /// ### Why this exists rather than two calls at each site
+    /// `noteChange` is opt-in, and ``CaptureIntent`` did not opt in — so an item captured from
+    /// Spotlight or Shortcuts was written to the store and was then unreachable by search, silently,
+    /// for a whole phase. A capture is not finished when the row exists; it is finished when the
+    /// index knows. Making that one call rather than two removes the opportunity to do half of it.
+    ///
+    /// This is a step toward the action layer in ADR 0007, not the whole of it: the same argument
+    /// applies to every mutation, and the remaining call sites are converted in that slice.
+    @discardableResult
+    public func captureText(_ text: String) throws(AppError) -> Item? {
+        guard let item = try capture.capture(text: text) else { return nil }
+        noteChange(to: item)
+        return item
+    }
+
     public func noteRemoval(of id: UUID) {
         let engine = search
         Task { await engine.removeFromIndex(id: id) }

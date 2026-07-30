@@ -32,7 +32,8 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 | F16 | Stable links; archived sources do not cascade-delete history | Met | `Item.timeEntries` is `.nullify` deliberately; `deletingAnItemDoesNotDestroyTime:228` | — |
 | F17 | Attachment stable ID, relative path, UTI, size, checksum | Met | `AttachmentStore.swift:63-138` | — |
 | F18 | Attachment staged import with atomic commit | Absent | File-then-row-then-save, no staging, no rollback | S10 |
-| F19 | Attachment grace-period cleanup after the transaction | Absent | Bytes removed **before** `context.delete` + `save()` — inverts ADR 0003 §3 | S1 (ordering), S10 (grace period) |
+| F19 | Attachment bytes removed only after the transaction commits | **Met** (S1) | Row deleted and saved first; bytes after. `AttachmentStore.swift` | — |
+| F19b | Grace-period cleanup rather than immediate deletion | Absent | — | S10 |
 | F20 | Reference counting / shared-reference safety | Partial | Removing a reference never deletes the file (`removingReferenceKeepsTheFile`); `contentHash` is written and never read, so no refcount | S10 |
 | F21 | Orphan reconciliation at launch | Absent | Specified in ADR 0003 §2 and risk R6; never built | S10 |
 | F22 | Search indexing incremental, cancellable, off main thread | Met | `@ModelActor IndexWorker`, cursor paging, `Task.checkCancellation()`, generation-stamped rebuild | — |
@@ -84,6 +85,7 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 | R15 | Export plain text and Markdown | Met | ~35 round-trip tests | — |
 | R16 | Export RTF / HTML / PDF | Absent | `ExportFormat` has three cases | S14 |
 | R17 | Archive preserves attachment identity and content | Absent | **Bug.** `bundlePath` named, bytes never written, `Importer` never reads them | S3 |
+| R18 | A capture commits everything it wrote | **Met** (S1) | `captureCommitsEverythingItWrote`; `@person` links were never saved before | — |
 
 ## People
 

@@ -2,6 +2,7 @@ import ElephruitCore
 import ElephruitModel
 import ElephruitPersistence
 import Foundation
+import SwiftData
 import Testing
 
 /// **Criterion A1-17** — capture is invocable without any view being constructed.
@@ -95,6 +96,42 @@ struct CaptureServiceTests {
 
         #expect(try fixture.items.items(matching: .kind(.person)).count == 1)
         #expect(existing.incomingLinks.contains { $0.kind == .mentions })
+    }
+
+    /// An App Intent's process can exit the moment `perform()` returns.
+    ///
+    /// `linkPeople` used to `context.insert` the link and leave it to autosave, which is a bet that
+    /// the process lives long enough for autosave to fire. In the app it usually does. In an intent
+    /// invoked from Spotlight it need not, and the person link — the whole point of typing `@Sarah` —
+    /// would be the part that went missing.
+    ///
+    /// Asserted through a second context over the same container, because the first context's
+    /// in-memory graph shows the link whether or not it was ever written.
+    @Test("A capture leaves nothing pending, so a process that exits immediately loses nothing")
+    func captureCommitsEverythingItWrote() throws {
+        let fixture = try StoreFixture()
+        let service = makeService(fixture)
+
+        let item = try #require(try service.capture(text: "Follow up with @Sarah #urgent"))
+
+        #expect(fixture.context.hasChanges == false, "capture returned with work still uncommitted")
+
+        let fresh = fixture.freshContext()
+        let links = try fresh.fetch(FetchDescriptor<ItemLink>())
+        #expect(links.contains { $0.kind == .mentions && $0.source?.id == item.id })
+    }
+
+    @Test("Linking an existing person also commits")
+    func linkingAnExistingPersonCommits() throws {
+        let fixture = try StoreFixture()
+        _ = try fixture.items.create(ItemDraft(kind: .person, title: "Sarah"))
+        let service = makeService(fixture)
+
+        _ = try #require(try service.capture(text: "Chat with @Sarah"))
+
+        #expect(fixture.context.hasChanges == false)
+        let fresh = fixture.freshContext()
+        #expect(try fresh.fetch(FetchDescriptor<ItemLink>()).contains { $0.kind == .mentions })
     }
 
     @Test("Empty input captures nothing rather than an empty item")
