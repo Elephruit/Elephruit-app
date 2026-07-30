@@ -90,7 +90,7 @@ let package = Package(
         .testTarget(name: "EverythingCoreTests", dependencies: ["EverythingCore"], swiftSettings: .strict),
         .testTarget(
             name: "EverythingPersistenceTests",
-            dependencies: ["EverythingPersistence", "EverythingModel", "EverythingCore"],
+            dependencies: ["EverythingPersistence", "EverythingModel", "EverythingCore", "EverythingDesign"],
             swiftSettings: .strict
         ),
         .testTarget(

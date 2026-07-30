@@ -28,6 +28,12 @@ public final class AppServices {
     public let exporter: Exporter
     public let importer: Importer
 
+    /// The two sidebar badges. Read during rendering; never computed there.
+    public let counts: CountsService
+
+    /// Pinned items, tags, and saved searches, computed away from the view.
+    public let sidebar: SidebarModel
+
     /// Reported to the sidebar's status line. ``SyncStatus/disabled`` until Phase 4.
     public var syncStatus: SyncStatus = .disabled
 
@@ -65,6 +71,18 @@ public final class AppServices {
         self.search = DefaultSearchEngine(items: items, dateProvider: dateProvider)
         self.exporter = Exporter(items: items, context: context, dateProvider: dateProvider)
         self.importer = Importer(items: items, tags: tags, context: context, dateProvider: dateProvider)
+        self.counts = CountsService(container: stack.container, dateProvider: dateProvider)
+        self.sidebar = SidebarModel(
+            items: items,
+            tags: tags,
+            savedSearchProvider: {
+                let descriptor = FetchDescriptor<SavedSearch>(
+                    predicate: #Predicate { $0.showsInSidebar && $0.deletedAt == nil },
+                    sortBy: [SortDescriptor(\.sortOrder)]
+                )
+                return (try? context.fetch(descriptor)) ?? []
+            }
+        )
     }
 
     /// An isolated in-memory instance, for previews and tests.
@@ -83,6 +101,7 @@ public final class AppServices {
         if populated {
             services.loadSampleData()
         }
+        services.refreshDerivedState()
         return services
     }
 
@@ -123,15 +142,26 @@ public final class AppServices {
         await search.warmIndex()
     }
 
-    /// Keeps the index current after a change. Fire-and-forget from a view's action.
+    /// Keeps derived state current after a change. Fire-and-forget from a view's action.
+    ///
+    /// One call site rather than several, so a new mutation cannot update the index and forget the
+    /// counts — the class of bug where a badge silently goes stale.
     public func noteChange(to item: Item) {
         let engine = search
         Task { await engine.indexDidChange(for: item) }
+        refreshDerivedState()
     }
 
     public func noteRemoval(of id: UUID) {
         let engine = search
         Task { await engine.removeFromIndex(id: id) }
+        refreshDerivedState()
+    }
+
+    /// Recomputes everything the sidebar reads. Coalesced, and never during a render pass.
+    public func refreshDerivedState() {
+        counts.refresh()
+        sidebar.refresh()
     }
 
     // MARK: - Sample data
