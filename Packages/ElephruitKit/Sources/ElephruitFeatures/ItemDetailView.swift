@@ -95,7 +95,7 @@ public struct ItemDetailView: View {
                 headline: item.displayTitle,
                 message: "Headings are edited inside their project.",
                 actionTitle: item.parent.map { "Open \($0.displayTitle)" },
-                action: item.parent.map { parent in { navigation.selectedItemID = parent.id } }
+                action: item.parent.map { parent in { navigation.selectItem(parent.id) } }
             )
 
         case .note, .idea, .reference, .decision, .interaction, .meeting, .dailyEntry:
@@ -284,7 +284,7 @@ public struct ItemDetailView: View {
 #Preview("Project", traits: .fixedLayout(width: 760, height: 640)) {
     let services = AppServices.inMemory()
     let navigation = NavigationModel()
-    navigation.selectedItemID = (try? services.items.items(matching: .kind(.project)))?.first?.id
+    navigation.selectItem((try? services.items.items(matching: .kind(.project)))?.first?.id)
 
     return ItemDetailView(navigation: navigation)
         .appServices(services)
@@ -294,7 +294,7 @@ public struct ItemDetailView: View {
 #Preview("Note", traits: .fixedLayout(width: 760, height: 640)) {
     let services = AppServices.inMemory()
     let navigation = NavigationModel()
-    navigation.selectedItemID = (try? services.items.items(matching: .kind(.note)))?.first?.id
+    navigation.selectItem((try? services.items.items(matching: .kind(.note)))?.first?.id)
 
     return ItemDetailView(navigation: navigation)
         .appServices(services)

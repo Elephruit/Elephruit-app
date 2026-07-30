@@ -47,7 +47,26 @@ public struct ItemListView: View {
         }
     }
 
+    @ViewBuilder
     private var list: some View {
+        VStack(spacing: 0) {
+            itemList
+
+            if navigation.hasMultipleSelection {
+                BatchActionBar(
+                    count: navigation.selectedItemIDs.count,
+                    isTrashScope: navigation.selection.showsTrashedItems,
+                    onComplete: { batchToggleCompletion() },
+                    onArchive: { batchArchive() },
+                    onTrash: { batchTrash() },
+                    onRestore: { batchRestore() },
+                    onClear: { navigation.selectedItemIDs = [] }
+                )
+            }
+        }
+    }
+
+    private var itemList: some View {
         List(selection: selectedItemBinding) {
             ForEach(displayedItems, id: \.id) { item in
                 NavigationLink(value: SidebarSelection.item(id: item.id)) {
@@ -58,6 +77,44 @@ public struct ItemListView: View {
         }
         .listStyle(.inset)
         .alternatingRowBackgrounds(.disabled)
+    }
+
+    // MARK: - Batch actions
+
+    /// Each is one undo step, because each is one thing the user did.
+    private func batchToggleCompletion() {
+        runBatch { undo, targets in
+            try undo.toggleCompletion(targets.filter { $0.kind.supportsStatus })
+        }
+    }
+
+    private func batchArchive() {
+        runBatch { undo, targets in try undo.setArchived(targets, true) }
+    }
+
+    private func batchTrash() {
+        let ids = navigation.selectedItemIDs
+        runBatch { undo, targets in try undo.moveToTrash(targets) }
+        navigation.selectedItemIDs = []
+        services?.noteRemoval(of: ids.first ?? UUID())
+    }
+
+    private func batchRestore() {
+        let ids = Array(navigation.selectedItemIDs)
+        guard let services else { return }
+        services.perform { try services.undo.restore(ids: ids) }
+        services.refreshDerivedState()
+        Task { await reload() }
+    }
+
+    private func runBatch(_ body: (StructuralUndoCoordinator, [Item]) throws -> Void) {
+        guard let services else { return }
+        let targets = selectedItems
+        guard !targets.isEmpty else { return }
+
+        services.perform { try body(services.undo, targets) }
+        services.refreshDerivedState()
+        Task { await reload() }
     }
 
     private func row(for item: Item) -> some View {
@@ -329,8 +386,17 @@ public struct ItemListView: View {
         )
     }
 
-    private var selectedItemBinding: Binding<UUID?> {
-        Binding(get: { navigation.selectedItemID }, set: { navigation.selectedItemID = $0 })
+    /// The list's own selection — a set, so shift- and command-click work.
+    private var selectedItemBinding: Binding<Set<UUID>> {
+        Binding(
+            get: { navigation.selectedItemIDs },
+            set: { navigation.selectedItemIDs = $0 }
+        )
+    }
+
+    /// The items behind the current selection, in the order they appear.
+    private var selectedItems: [Item] {
+        displayedItems.filter { navigation.selectedItemIDs.contains($0.id) }
     }
 
     // MARK: - Actions
@@ -351,7 +417,7 @@ public struct ItemListView: View {
 
         services.perform {
             let created = try services.items.create(draft)
-            navigation.selectedItemID = created.id
+            navigation.selectItem(created.id)
             services.noteChange(to: created)
         }
         Task { await reload() }
@@ -387,7 +453,7 @@ public struct ItemListView: View {
         guard let services else { return }
         let id = item.id
         services.perform { try services.items.moveToTrash(item) }
-        if navigation.selectedItemID == id { navigation.selectedItemID = nil }
+        navigation.selectedItemIDs.remove(id)
         services.noteRemoval(of: id)
         Task { await reload() }
     }
@@ -403,7 +469,7 @@ public struct ItemListView: View {
         guard let services else { return }
         let id = item.id
         services.perform { try services.items.deletePermanently(item) }
-        if navigation.selectedItemID == id { navigation.selectedItemID = nil }
+        navigation.selectedItemIDs.remove(id)
         services.noteRemoval(of: id)
         Task { await reload() }
     }
@@ -411,7 +477,7 @@ public struct ItemListView: View {
     private func emptyTrash() {
         guard let services else { return }
         services.perform { try services.items.emptyTrash() }
-        navigation.selectedItemID = nil
+        navigation.selectedItemIDs = []
         Task {
             await services.warmSearchIndex()
             await reload()

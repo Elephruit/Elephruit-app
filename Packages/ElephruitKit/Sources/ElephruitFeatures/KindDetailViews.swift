@@ -52,7 +52,7 @@ struct NoteDetailView: View {
 
             if !backlinks.isEmpty {
                 Divider()
-                BacklinkList(links: backlinks) { navigation.selectedItemID = $0 }
+                BacklinkList(links: backlinks) { navigation.selectItem($0) }
                     .padding(.horizontal, Theme.Spacing.large)
                     .padding(.vertical, Theme.Spacing.medium)
                     .frame(maxHeight: 180)
@@ -111,7 +111,7 @@ struct TaskDetailView: View {
                             count: item.visibleBacklinks().count,
                             systemImage: "link"
                         ) {
-                            BacklinkList(links: item.visibleBacklinks()) { navigation.selectedItemID = $0 }
+                            BacklinkList(links: item.visibleBacklinks()) { navigation.selectItem($0) }
                         }
                         .padding(.horizontal, Theme.Spacing.large)
                     }
@@ -138,7 +138,7 @@ struct TaskDetailView: View {
                         task: subtask,
                         dateProvider: services?.dateProvider ?? SystemDateProvider(),
                         onToggle: { toggle(subtask) },
-                        onOpen: { navigation.selectedItemID = subtask.id }
+                        onOpen: { navigation.selectItem(subtask.id) }
                     )
                 }
             }
@@ -178,7 +178,7 @@ struct TaskDetailView: View {
         guard let services else { return }
         services.perform {
             let subtask = try services.items.create(ItemDraft(kind: .task, parentID: item.id))
-            navigation.selectedItemID = subtask.id
+            navigation.selectItem(subtask.id)
         }
     }
 }
@@ -261,7 +261,7 @@ struct PersonDetailView: View {
                                     task: task,
                                     dateProvider: services?.dateProvider ?? SystemDateProvider(),
                                     onToggle: { toggle(task) },
-                                    onOpen: { navigation.selectedItemID = task.id }
+                                    onOpen: { navigation.selectItem(task.id) }
                                 )
                             }
                         }
@@ -271,7 +271,7 @@ struct PersonDetailView: View {
                     if !mentions.isEmpty {
                         VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
                             SectionHeader("Mentioned in", count: mentions.count)
-                            BacklinkList(links: mentions) { navigation.selectedItemID = $0 }
+                            BacklinkList(links: mentions) { navigation.selectItem($0) }
                         }
                         .padding(.horizontal, Theme.Spacing.large)
                     }

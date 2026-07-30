@@ -343,7 +343,7 @@ public struct SearchView: View {
         // Selecting the kind's list first means the item is visible in context rather than
         // appearing in whatever list happened to be open.
         navigation.select(.kind(result.item.kind))
-        navigation.selectedItemID = result.item.id
+        navigation.selectItem(result.item.id)
         dismiss()
     }
 

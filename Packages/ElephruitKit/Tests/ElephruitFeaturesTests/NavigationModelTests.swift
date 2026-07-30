@@ -66,10 +66,10 @@ struct SearchModeTests {
     func selectionIsRestored() {
         let navigation = NavigationModel()
         let original = UUID()
-        navigation.selectedItemID = original
+        navigation.selectItem(original)
 
         navigation.beginSearch()
-        navigation.selectedItemID = UUID()  // walking the results
+        navigation.selectItem(UUID())  // walking the results
         navigation.endSearch()
 
         #expect(navigation.selectedItemID == original, "Escape never changes what was selected")
@@ -218,5 +218,69 @@ struct LayoutAndFocusTests {
             #expect(navigation.layoutMode.isVisible(navigation.focusedPane))
             #expect(navigation.focusedPane != .inspector, "The inspector is not showing")
         }
+    }
+}
+
+/// **Criterion A1-7 (selection half)** — a multi-selection can act on many items while the detail
+/// pane still shows something coherent.
+@MainActor
+@Suite("Multi-selection")
+struct MultiSelectionTests {
+    @Test("Selecting one item shows it")
+    func singleSelection() {
+        let navigation = NavigationModel()
+        let id = UUID()
+
+        navigation.selectItem(id)
+        #expect(navigation.selectedItemID == id)
+        #expect(navigation.hasMultipleSelection == false)
+    }
+
+    @Test("A multi-selection still shows one item rather than going blank")
+    func multiSelectionKeepsAPrimary() {
+        let navigation = NavigationModel()
+        let first = UUID()
+
+        navigation.selectItem(first)
+        navigation.selectedItemIDs.insert(UUID())
+        navigation.selectedItemIDs.insert(UUID())
+
+        #expect(navigation.hasMultipleSelection)
+        #expect(navigation.selectedItemID == first, "The pane does not jump as the selection grows")
+    }
+
+    @Test("Shrinking a selection past the shown item moves to one still selected")
+    func primaryFollowsShrinkingSelection() {
+        let navigation = NavigationModel()
+        let first = UUID()
+        let second = UUID()
+
+        navigation.selectedItemIDs = [first, second]
+        #expect(navigation.selectedItemID != nil)
+
+        // Deselect whichever one is being shown.
+        navigation.selectedItemIDs = navigation.selectedItemIDs.filter { $0 != navigation.selectedItemID }
+
+        #expect(navigation.selectedItemID != nil, "The pane never goes blank while something is selected")
+        #expect(navigation.selectedItemIDs.contains(navigation.selectedItemID ?? UUID()))
+    }
+
+    @Test("Clearing the selection empties the detail pane")
+    func clearingEmptiesThePane() {
+        let navigation = NavigationModel()
+        navigation.selectedItemIDs = [UUID(), UUID()]
+
+        navigation.selectedItemIDs = []
+        #expect(navigation.selectedItemID == nil)
+    }
+
+    @Test("Changing destination clears the selection")
+    func changingDestinationClears() {
+        let navigation = NavigationModel()
+        navigation.selectedItemIDs = [UUID(), UUID()]
+
+        navigation.select(.inbox)
+        #expect(navigation.selectedItemIDs.isEmpty)
+        #expect(navigation.selectedItemID == nil)
     }
 }

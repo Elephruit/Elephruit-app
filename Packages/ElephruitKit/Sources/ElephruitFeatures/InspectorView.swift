@@ -467,7 +467,7 @@ public struct InspectorView: View {
 #Preview("Inspector", traits: .fixedLayout(width: 300, height: 700)) {
     let services = AppServices.inMemory()
     let navigation = NavigationModel()
-    navigation.selectedItemID = (try? services.items.items(matching: .kind(.task)))?.first?.id
+    navigation.selectItem((try? services.items.items(matching: .kind(.task)))?.first?.id)
 
     return InspectorView(navigation: navigation)
         .appServices(services)

@@ -40,7 +40,7 @@ public struct RootView: View {
         .environment(navigation)
         .sheet(isPresented: quickCaptureBinding) {
             QuickCaptureView { id in
-                navigation.selectedItemID = id
+                navigation.selectItem(id)
             }
         }
         .sheet(isPresented: searchBinding) {
@@ -275,7 +275,7 @@ public struct RootView: View {
         services.perform {
             let created = try services.items.create(ItemDraft(kind: kind))
             navigation.select(.kind(kind))
-            navigation.selectedItemID = created.id
+            navigation.selectItem(created.id)
             services.noteChange(to: created)
         }
     }

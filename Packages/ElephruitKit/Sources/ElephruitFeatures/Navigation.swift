@@ -141,7 +141,18 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
 @MainActor
 public final class NavigationModel {
     public var selection: SidebarSelection = .today
-    public var selectedItemID: UUID?
+
+    /// Everything selected in the list.
+    ///
+    /// The set is the truth; ``selectedItemID`` is the one the detail pane shows. Keeping both means
+    /// a multi-selection can act on twenty items while the editor still shows something coherent
+    /// rather than going blank.
+    public var selectedItemIDs: Set<UUID> = [] {
+        didSet { reconcilePrimarySelection() }
+    }
+
+    /// The item the detail pane shows.
+    public private(set) var selectedItemID: UUID?
 
     /// The list's own filter field, distinct from the global search sheet.
     public var listFilterText = ""
@@ -192,9 +203,28 @@ public final class NavigationModel {
     public func select(_ selection: SidebarSelection) {
         guard self.selection != selection else { return }
         self.selection = selection
-        selectedItemID = nil
+        selectedItemIDs = []
         listFilterText = ""
         sortOverride = nil
+    }
+
+    /// Selects exactly one item.
+    public func selectItem(_ id: UUID?) {
+        selectedItemIDs = id.map { [$0] } ?? []
+    }
+
+    /// Whether a batch action bar should appear.
+    public var hasMultipleSelection: Bool {
+        selectedItemIDs.count > 1
+    }
+
+    /// Keeps the detail pane pointed at something that is still selected.
+    ///
+    /// When a selection shrinks, the previously-shown item may no longer be in it; when it grows,
+    /// the first one stays put rather than the pane jumping around as the user shift-clicks.
+    private func reconcilePrimarySelection() {
+        if let current = selectedItemID, selectedItemIDs.contains(current) { return }
+        selectedItemID = selectedItemIDs.first
     }
 
     // MARK: - Search mode
@@ -226,7 +256,7 @@ public final class NavigationModel {
         isSearchActive = false
         searchQuery = ""
         shouldSelectSearchQuery = false
-        selectedItemID = selectionBeforeSearch
+        selectItem(selectionBeforeSearch)
         selectionBeforeSearch = nil
     }
 
