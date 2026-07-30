@@ -73,6 +73,17 @@ Read these before changing anything structural.
 | [06 — Privacy & entitlements](docs/06-privacy-and-entitlements.md) | No-network posture, entitlement schedule, accessibility commitments |
 | [07 — Roadmap](docs/07-roadmap.md) | Phases 1–5 and the milestone-1 implementation plan |
 | [08 — Risks](docs/08-risks.md) | Twelve risks with mitigations and documented fallbacks |
+| [09 — v2 plan](docs/09-v2-plan.md) | The plan phases A–F were built against |
+| [16 — Expansion audit](docs/16-expansion-audit.md) | Stage 0. Frozen state of the codebase against the expansion specification |
+| [17 — Coverage matrix](docs/17-expansion-coverage-matrix.md) | Every expansion requirement, its status and its closing slice |
+| [18 — Architecture checkpoint](docs/18-architecture-checkpoint.md) | Standing rules, the four seams, deferred decisions |
+| [19 — Permissions matrix](docs/19-permissions-matrix.md) | Entitlements and usage strings, per capability |
+| [20 — Expansion slices](docs/20-expansion-slices.md) | The ordered slice list |
+
+Phase records: [10 — A scope](docs/10-phase-a-scope.md) ·
+[11 — B](docs/11-phase-b-record.md) · [12 — C](docs/12-phase-c-record.md) ·
+[13 — D](docs/13-phase-d-record.md) · [14 — E](docs/14-phase-e-record.md) ·
+[15 — F](docs/15-phase-f-record.md)
 
 Architecture decision records live in [docs/adr/](docs/adr/).
 
