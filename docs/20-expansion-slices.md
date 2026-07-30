@@ -176,7 +176,7 @@ deliberately — running a wide diff while the schema is in flux is the worse or
 
 ---
 
-## S6 — Capture grammar
+## S6 + S7 — Capture grammar, and `follow:` made real · **done**
 
 **Goal.** `due:`, `follow:`, `!high|!medium|!low`, `time:`/`from:`/`to:`; month names, two-word
 forms and times in `NaturalDateParser`; source ranges and original text on `CaptureDraft`, killing
@@ -189,17 +189,24 @@ reconstructs exactly from the draft · DST-transition and timezone cases.
 **Risk. Very low.** One pure, side-effect-free file that is already the best-tested unit in the
 repo.
 
----
+**Outcome.** Done together, because a grammar for `follow:` that nothing stores is half a feature.
+All four of the plan's capture fixtures parse, and every date fixture it names has a deterministic
+test. `follow:` reaches `Item.deferUntil`, asserted through the Today filter that implements
+"not yet" rather than by reading the field back — it appears on the day and never becomes overdue.
 
-## S7 — `follow:` reachable
+`CaptureDraft` now carries `originalText` verbatim and a token list with character ranges, so the
+lossy rebuilt title is no longer the only record of what was typed.
 
-**Goal.** Add `deferUntil` to `ItemDraft` and wire `follow:` through `CaptureService`.
+Two design notes worth keeping. A date value **extends greedily over following words while the
+longer phrase still parses**, which is what makes `due:tomorrow 3pm` and `due:next Tuesday` work
+without quotes — and `due:friday meeting` still leaves "meeting" in the title. And a bare number is
+never a time: "Review 3 documents" must not acquire a deadline.
 
-**Acceptance.** Capturing `follow:friday` produces an item hidden from Today until Friday —
-asserted through the existing filters at `ItemQuery.swift:340` and `CountsService.swift:56` — and
-it never becomes overdue.
+**587 tests pass** (+38), zero warnings; Debug and Release build.
 
-**Risk.** Low. The field and every consumer already exist; only the draft cannot carry it.
+**Deliberately not done:** `time:`, `from:` and `to:`. The plan scopes them to time-entry contexts
+and Quick Jot is not one, so they would have been tokens with no consumer. They belong with the
+manual-entry work in S12.
 
 ---
 

@@ -16,6 +16,10 @@ public struct ItemDraft: Sendable, Hashable {
     public var parentID: UUID?
     public var dueAt: Date?
     public var startAt: Date?
+
+    /// When this should come back into view. Never overdue — see ``Item/deferUntil``.
+    public var deferUntil: Date?
+
     public var priority: Priority
     public var source: ItemSource
     public var url: URL?
@@ -30,6 +34,7 @@ public struct ItemDraft: Sendable, Hashable {
         parentID: UUID? = nil,
         dueAt: Date? = nil,
         startAt: Date? = nil,
+        deferUntil: Date? = nil,
         priority: Priority = .normal,
         source: ItemSource = .manual,
         url: URL? = nil,
@@ -43,6 +48,7 @@ public struct ItemDraft: Sendable, Hashable {
         self.parentID = parentID
         self.dueAt = dueAt
         self.startAt = startAt
+        self.deferUntil = deferUntil
         self.priority = priority
         self.source = source
         self.url = url
@@ -204,6 +210,7 @@ public final class SwiftDataItemRepository: ItemRepository {
         let fields = draft.kind.supportedFields
         if fields.contains(.dueDate) { item.dueAt = draft.dueAt }
         if fields.contains(.startDate) { item.startAt = draft.startAt }
+        if fields.contains(.deferDate) { item.deferUntil = draft.deferUntil }
         if fields.contains(.dayKey) { item.dayKey = draft.dayKey }
         if !fields.contains(.priority) { item.priority = .normal }
 

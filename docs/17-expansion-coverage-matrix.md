@@ -16,15 +16,15 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 |---|---|---|---|---|
 | F1 | Parser is side-effect free and fixture-tested | Met | `CaptureParser.swift` is a pure `enum` of statics; 14 tests `CaptureAndRecurrenceTests.swift:5-127` | — |
 | F2 | Unknown syntax stays literal | Met | `CaptureParser.swift:118,128,145`; `unrecognisedTokensArePreserved:59` | — |
-| F3 | `CaptureDraft` carries source ranges and original text | Absent | Exists at `:7-53`; title rebuilt lossily at `:154` | S6 |
+| F3 | `CaptureDraft` carries source ranges and original text | **Met** (S6) | `originalText` verbatim; `tokens` with character ranges covering extended phrases | — |
 | F4 | Tokens `#tag @person >project` | Met | `CaptureParser.swift:113-137` | — |
-| F5 | `due:` is a deadline and may become overdue | Partial | `!date` → `dueAt`; overdue defined once at `DateProvider.swift:54` | S6 |
-| F6 | `follow:` is a start date and never becomes overdue | Partial | `Item.deferUntil` **is** this semantic and is fully plumbed; unreachable because `ItemDraft` lacks the field | S7 |
-| F7 | Priority tokens `!high/!medium/!low` | Absent | `!` routes unconditionally to the date parser | S6 |
-| F8 | `time:` / `from:` / `to:` | Absent | No time-of-day parsing anywhere | S6 |
+| F5 | `due:` is a deadline and may become overdue | **Met** (S6) | `dueDateIsADeadline` asserts through `isOverdue` | — |
+| F6 | `follow:` is a start date and never becomes overdue | **Met** (S7) | Reaches `Item.deferUntil`; asserted through the Today filter, not the field | — |
+| F7 | Priority tokens `!high/!medium/!low` | **Met** (S6) | Absence stays `nil` rather than becoming `.normal` | — |
+| F8 | `time:` / `from:` / `to:` | Absent | Time-of-day parsing now exists; the tokens await a time-entry context to consume them | S12 |
 | F9 | Natural dates — today, tomorrow, weekdays, ISO, offsets | Met | `NaturalDateParser.swift:105-161`; 6 tests | — |
-| F10 | Natural dates — month names, "next Tuesday", "in 2 weeks", times | Absent | No month table; tokenizer splits on whitespace; all expressions resolve to start-of-day | S6 |
-| F11 | DST and timezone fixtures | Absent | Zero `DST`/`daylight` hits in Tests. `Calendar` is injected, so arithmetic is probably right; nothing proves it | S6 |
+| F10 | Natural dates — month names, "next Tuesday", "in 2 weeks", times | **Met** (S6) | `interpret(_:)` over whole phrases; `.monthDay` resolves to the next occurrence rather than guessing a year at parse time | — |
+| F11 | DST and timezone fixtures | **Met** (S6) | 23-hour and 25-hour days in Europe/London; a time inside the spring-forward gap; weekdays across three zones | — |
 | F12 | Canonical action layer | Absent | Split across 5 places, no single owner. ADR 0007 | S5 |
 | F13 | Capture is undoable | Absent | `StructuralUndoCoordinator` has no create inverse | S5 |
 | F14 | Action commits model + links + undo + index atomically | Rejected (in part) | Index stays fire-and-forget by decision; divergence is detected and repaired by the generation counter. ADR 0007 | S5 |

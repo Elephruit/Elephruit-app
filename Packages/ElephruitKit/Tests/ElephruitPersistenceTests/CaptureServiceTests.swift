@@ -134,6 +134,64 @@ struct CaptureServiceTests {
         #expect(try fresh.fetch(FetchDescriptor<ItemLink>()).contains { $0.kind == .mentions })
     }
 
+    // MARK: - due: and follow:
+
+    /// The distinction the token exists for, asserted through the filters that actually implement
+    /// it rather than by reading the field back.
+    @Test("follow: hides an item from Today until the day, and never makes it overdue")
+    func followDateDefersRatherThanNags() throws {
+        let fixture = try StoreFixture()
+        let service = makeService(fixture)
+
+        let item = try #require(try service.capture(text: "Chase the invoice follow:+3d"))
+
+        let deferUntil = try #require(item.deferUntil)
+        #expect(deferUntil == fixture.dateProvider.startOfDay(daysFromToday: 3))
+        #expect(item.dueAt == nil, "a date to come back to is not a deadline")
+
+        // Today's filter is where "not yet" is implemented.
+        var today = ItemQuery()
+        today.notDeferredAfter = fixture.dateProvider.startOfToday
+        #expect(try fixture.items.items(matching: today).contains { $0.id == item.id } == false)
+
+        // And on the day, it appears.
+        var later = ItemQuery()
+        later.notDeferredAfter = fixture.dateProvider.startOfDay(daysFromToday: 3)
+        #expect(try fixture.items.items(matching: later).contains { $0.id == item.id })
+    }
+
+    @Test("due: sets a deadline, which can become overdue")
+    func dueDateIsADeadline() throws {
+        let fixture = try StoreFixture()
+        let service = makeService(fixture)
+
+        let item = try #require(try service.capture(text: "File the return due:-1d"))
+
+        let dueAt = try #require(item.dueAt)
+        #expect(fixture.dateProvider.isOverdue(dueAt))
+        #expect(item.deferUntil == nil)
+    }
+
+    @Test("A due time is kept, not rounded away to the start of the day")
+    func dueTimesArePreserved() throws {
+        let fixture = try StoreFixture()
+        let service = makeService(fixture)
+
+        let item = try #require(try service.capture(text: "Review the deck due:tomorrow 3pm"))
+        let dueAt = try #require(item.dueAt)
+
+        #expect(fixture.dateProvider.calendar.component(.hour, from: dueAt) == 15)
+    }
+
+    @Test("A priority given in the text is applied")
+    func priorityIsApplied() throws {
+        let fixture = try StoreFixture()
+        let service = makeService(fixture)
+
+        let item = try #require(try service.capture(text: "Submit the report due:friday !high"))
+        #expect(item.priority == .high)
+    }
+
     @Test("Empty input captures nothing rather than an empty item")
     func emptyInputIsIgnored() throws {
         let fixture = try StoreFixture()

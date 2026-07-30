@@ -117,8 +117,22 @@ public struct QuickCaptureView: View {
                     .help(resolvedProject(named: project) == nil ? "No project with this name — the capture will go to the Inbox" : project)
             }
 
-            if let due = parsed.dueDate {
+            if let due = parsed.dueInterpretation {
                 Label(due.summary, systemImage: "calendar")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+
+            // Deliberately a different glyph from the deadline. The two dates mean opposite things
+            // and a shared icon would be the interface conflating what the grammar separates.
+            if let follow = parsed.followDate {
+                Label(follow.summary, systemImage: "arrow.trianglehead.counterclockwise")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+
+            if let priority = parsed.priority, priority != .normal {
+                Label(priority.displayName, systemImage: "flag")
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.secondaryText)
             }
@@ -140,7 +154,11 @@ public struct QuickCaptureView: View {
         var parts = ["Will create a \(parsed.kind.displayName.lowercased())"]
         if !parsed.tagSlugs.isEmpty { parts.append("tagged \(parsed.tagSlugs.joined(separator: ", "))") }
         if let project = parsed.projectHint { parts.append("in \(project)") }
-        if let due = parsed.dueDate { parts.append("due \(due.summary)") }
+        if let due = parsed.dueInterpretation { parts.append("due \(due.summary)") }
+        if let follow = parsed.followDate { parts.append("coming back \(follow.summary)") }
+        if let priority = parsed.priority, priority != .normal {
+            parts.append("\(priority.displayName.lowercased()) priority")
+        }
         return parts.joined(separator: ", ")
     }
 
