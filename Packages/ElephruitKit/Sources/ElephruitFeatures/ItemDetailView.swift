@@ -25,7 +25,7 @@ public struct ItemDetailView: View {
     @State private var completionContext: WikiLinkCompletionContext?
     @State private var completionSuggestions: [(id: UUID, title: String)] = []
     @State private var pendingInsertion: WikiLinkInsertion?
-    @State private var saveTask: Task<Void, Never>?
+    @State private var pendingSave = PendingSave()
 
     public init(navigation: NavigationModel) {
         self.navigation = navigation
@@ -53,6 +53,16 @@ public struct ItemDetailView: View {
         }
         .task(id: navigation.selectedItemID) { load() }
         .onDisappear { flushPendingSave() }
+        // `scenePhase` does not report a macOS quit, so the notification is the only hook that
+        // fires before the process goes. `NSSupportsSuddenTermination` is already `false` for
+        // exactly this reason — the plist half of the promise was kept and this half was not.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+            flushPendingSave()
+        }
+        // Switching away is the other moment the pending half-second stops being cheap.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            flushPendingSave()
+        }
     }
 
     /// The one place kind becomes presentation.
@@ -224,21 +234,14 @@ public struct ItemDetailView: View {
     /// Debounces the write.
     ///
     /// Half a second: long enough that a burst of typing produces one save, short enough that a
-    /// force-quit loses at most a phrase. Autosave on the context and a flush on disappear cover
-    /// the rest.
+    /// force-quit loses at most a phrase. Quitting, switching app, and changing item all flush,
+    /// so in practice the window is only ever a real crash.
     private func scheduleSave() {
-        saveTask?.cancel()
-        saveTask = Task {
-            try? await Task.sleep(for: .milliseconds(500))
-            guard !Task.isCancelled else { return }
-            commit()
-        }
+        pendingSave.schedule { commit() }
     }
 
     private func flushPendingSave() {
-        saveTask?.cancel()
-        saveTask = nil
-        commit()
+        pendingSave.flush()
     }
 
     private func commit() {

@@ -80,7 +80,7 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 | R10 | ⌘K hyperlinks | Absent | ⌘K is the command palette | S14 |
 | R11 | Editor zoom is display-only | Absent | No zoom | S14 |
 | R12 | Autosave debounced and selection-preserving | Met | 500 ms; selection preserved on external writes | — |
-| R13 | Save on focus loss or terminate | Absent | `.onDisappear` only; `scenePhase` does not fire on macOS quit | S2 |
+| R13 | Save on focus loss or terminate | **Met** (S2) | `PendingSave` + `willTerminateNotification` and `didResignActiveNotification` in `ItemDetailView` | — |
 | R14 | Multi-window revision handling | Absent | "New Window" is `.disabled(true)` | S14 |
 | R15 | Export plain text and Markdown | Met | ~35 round-trip tests | — |
 | R16 | Export RTF / HTML / PDF | Absent | `ExportFormat` has three cases | S14 |

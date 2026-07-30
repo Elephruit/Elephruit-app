@@ -56,7 +56,7 @@ direction observable, and the test belongs there.
 
 ---
 
-## S2 — Editor durability · **next**
+## S2 — Editor durability · **done**
 
 **Goal.** Bug 7. Flush the debounced editor write on terminate and resign-active, not only on
 `onDisappear`.
@@ -67,9 +67,19 @@ direction observable, and the test belongs there.
 `NSApplication.willTerminateNotification` and a synchronous flush against an async debounce.
 `NSSupportsSuddenTermination` is already `false` for exactly this reason.
 
+**Outcome.** The debounce became a type, `PendingSave`, rather than a `Task` the view juggles —
+which is what made the property assertable without a window: scheduled work runs **exactly once**,
+whichever of the timer and the flush arrives first. `ItemDetailView` now flushes on
+`willTerminateNotification` and `didResignActiveNotification` as well as `onDisappear`.
+
+**534 tests pass** (+7), zero warnings; Debug and Release build.
+
+**Known limitation.** The notification wiring itself is not asserted — that needs a UI test host,
+which arrives in S15. What is asserted is everything the notification calls into.
+
 ---
 
-## S3 — Archive completeness
+## S3 — Archive completeness · **next**
 
 **Goal.** ADR 0009. Bugs 5–6: attachment bytes and `TimeEntry` enter the archive contract.
 
