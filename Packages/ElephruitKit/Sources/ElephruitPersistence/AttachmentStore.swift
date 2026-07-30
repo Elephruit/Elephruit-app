@@ -216,14 +216,33 @@ public final class AttachmentStore {
     ///
     /// A referenced file is **never** deleted — Elephruit does not own it, and removing an attachment
     /// must not remove someone's document from their Desktop.
+    ///
+    /// ### Why the row goes first
+    /// ADR 0003 chose the ordering deliberately: of the two ways two stores can disagree, "a crash
+    /// leaves an orphan file, which is recoverable, rather than a row pointing at nothing, which is
+    /// not." Deletion is that rule read backwards — bytes go only **after** the transaction commits,
+    /// so a failed save leaves a row whose file is still there rather than a row pointing at nothing.
+    ///
+    /// This used to run the other way round, which inverted the ADR's own consequence 3 and made the
+    /// one unrecoverable direction the likely one.
+    ///
+    /// The directory is resolved *before* the delete, because the identifier it is keyed on belongs
+    /// to an object that is about to leave the context.
     public func remove(_ attachment: Attachment) throws(AppError) {
-        if attachment.storageKind == .managedCopy, let location {
-            let directory = location.attachmentDirectory(id: attachment.id)
-            try? FileManager.default.removeItem(at: directory)
+        let managedBytes: URL? = if attachment.storageKind == .managedCopy, let location {
+            location.attachmentDirectory(id: attachment.id)
+        } else {
+            nil
         }
 
         context.delete(attachment)
         try save()
+
+        // Past the commit. A failure here leaves an orphan directory, which the reconciliation pass
+        // can find and the user can be offered; it cannot leave a live row with no bytes.
+        if let managedBytes {
+            try? FileManager.default.removeItem(at: managedBytes)
+        }
     }
 
     // MARK: - Helpers

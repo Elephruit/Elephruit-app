@@ -61,6 +61,16 @@ public struct CaptureService {
 
         let item = try items.create(itemDraft)
         try linkPeople(named: draft.personHints, from: item)
+
+        // Capture returns with nothing pending.
+        //
+        // `items.create` saves, but the links inserted after it did not, and were left to autosave.
+        // That is a bet that the process outlives the capture — true in the app, and not true of an
+        // App Intent invoked from Spotlight, whose process can exit the moment `perform()` returns.
+        // The part that went missing was the person link, which is the whole point of typing
+        // `@Sarah`.
+        try commit()
+
         return item
     }
 
@@ -111,5 +121,14 @@ public struct CaptureService {
         return try items.create(
             ItemDraft(kind: .person, title: name, source: ItemSource(kind: .quickCapture, identifier: "mention"))
         )
+    }
+
+    private func commit() throws(AppError) {
+        guard context.hasChanges else { return }
+        do {
+            try context.save()
+        } catch {
+            throw .writeFailed(path: "store", reason: error.localizedDescription)
+        }
     }
 }

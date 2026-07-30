@@ -16,7 +16,7 @@ limitations and the next bounded slice recorded.
 
 ---
 
-## S1 — Capture correctness · **next**
+## S1 — Capture correctness · **done**
 
 **Goal.** Close the four write-path bugs. No schema change, no format change.
 
@@ -40,9 +40,23 @@ Bugs 1–4 from `docs/16 §6`:
 **Risk.** Low, with one wrinkle: the app target has no test coverage and no test target, so
 `perform()` must be factored into a testable function reachable from the package.
 
+**Outcome.** All four closed. Bug 3 was **confirmed first**, as planned: a test asserting
+`context.hasChanges == false` after a capture, and reading the link back through a second context,
+failed before the fix — the `@person` link genuinely never reached the store. `AppServices.captureText`
+now composes capture and index so the intent cannot do half of it, and lives in a target that has
+tests. `CaptureBridge.adopt` is wired in `AppEnvironment.start()`. Attachment deletion now removes
+bytes only after the transaction commits.
+
+**527 tests pass** (+6), zero warnings; Debug and Release build.
+
+**Known limitation.** The attachment-ordering fix has no direct test for its failure path: inducing
+a SwiftData save failure in-process is not tractable, so the recoverable-direction property rests on
+the code and ADR 0003 rather than on an assertion. The orphan sweep in S10 is what makes that
+direction observable, and the test belongs there.
+
 ---
 
-## S2 — Editor durability
+## S2 — Editor durability · **next**
 
 **Goal.** Bug 7. Flush the debounced editor write on terminate and resign-active, not only on
 `onDisappear`.
