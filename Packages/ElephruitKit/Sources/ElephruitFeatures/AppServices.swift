@@ -82,6 +82,13 @@ public final class AppServices {
     /// irreversible-by-hand decision the app does not make on the user's behalf.
     public private(set) var pendingContainmentRepair: MigrationReport?
 
+    /// What a sweep of the attachment folder would tidy, if anything.
+    ///
+    /// A dry run, computed once the store is open. Offered rather than performed: ADR 0003's
+    /// integrity pass exists to *report* orphans in both directions, and deciding to move someone's
+    /// files is not a decision to make on launch without saying so.
+    public private(set) var pendingAttachmentTidy: AttachmentReconciliationReport?
+
     /// The outcome of the last repair the user applied, shown once and then cleared.
     public var lastContainmentRepair: MigrationReport?
 
@@ -313,6 +320,46 @@ public final class AppServices {
             )
             pendingContainmentRepair = nil
         }
+    }
+
+    /// Works out whether the attachment folder and the store still agree.
+    ///
+    /// Writes nothing. Failure is logged and treated as "nothing to tidy" — a housekeeping pass that
+    /// could not run is not a reason to bother the user, and certainly not a reason to fail a launch.
+    public func checkForAttachmentTidy() {
+        guard let location = stack.location else {
+            pendingAttachmentTidy = nil
+            return
+        }
+
+        let reconciliation = AttachmentReconciliation(
+            context: context, location: location, dateProvider: dateProvider
+        )
+        do {
+            let report = try reconciliation.plan()
+            pendingAttachmentTidy = report.isEmpty ? nil : report
+            if let report = pendingAttachmentTidy {
+                Diagnostics.persistence.info("Attachment tidy available: \(report.summary, privacy: .public)")
+            }
+        } catch {
+            Diagnostics.persistence.error(
+                "Could not plan attachment tidy: \(error.localizedDescription, privacy: .public)"
+            )
+            pendingAttachmentTidy = nil
+        }
+    }
+
+    /// Performs the tidy the user approved.
+    @discardableResult
+    public func applyAttachmentTidy() -> Bool {
+        guard let location = stack.location, let report = pendingAttachmentTidy else { return false }
+
+        let reconciliation = AttachmentReconciliation(
+            context: context, location: location, dateProvider: dateProvider
+        )
+        let succeeded = perform { try reconciliation.apply(report) }
+        if succeeded { pendingAttachmentTidy = nil }
+        return succeeded
     }
 
     /// Applies the repair the user just approved, backing the store up first.
