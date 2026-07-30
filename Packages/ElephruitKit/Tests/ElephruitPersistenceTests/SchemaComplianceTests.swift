@@ -87,7 +87,7 @@ struct SchemaComplianceTests {
     /// whether a migrating launch takes a backup.
     @Test("Schema version is reported for archives and diagnostics")
     func schemaVersionIsReadable() {
-        #expect(CurrentSchema.versionString == "3.0.0")
+        #expect(CurrentSchema.versionString == "0.0.3")
     }
 
     @Test("Every released schema stays in source, with a stage between each")

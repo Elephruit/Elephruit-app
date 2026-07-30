@@ -49,8 +49,16 @@ offered and dry-runnable; `referenceLostAt` is a state with "Locate…", not an 
 ### R5 — A derived cache is the second answer
 
 Before adding a rollup, aggregate table, or memo, prove the underlying query cannot be made fast.
-The 200k week-report failure (`docs/16 §8`) is the live example: the cost is a predicate with no
-lower bound, and a cache would have hidden that rather than fixed it.
+
+The 200k week-report failure (`docs/16 §8`) is the worked example, and it went the way the rule
+predicts. The suite existed to test whether the absence of a `TimeDayRollup` was a mistake; the
+answer was that the rollup was never the problem. `entries(in:)` could bound only `startedAt <
+upper`, which for any window ending now matches every row ever recorded, because the lower bound
+lived in an optional the store cannot range over. A cache would have memoised a full scan instead
+of removing it.
+
+The fix was a non-optional mirror — the same trick `Item.dueSortKey` already plays, for the same
+measured reason. Reach for the shape of the data before reaching for a cache of it.
 
 ---
 

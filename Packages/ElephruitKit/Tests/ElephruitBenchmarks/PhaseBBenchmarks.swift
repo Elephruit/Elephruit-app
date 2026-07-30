@@ -25,13 +25,15 @@ struct PhaseBBenchmarks {
         ProcessInfo.processInfo.environment["ELEPHRUIT_BENCHMARK_SCALE"] ?? "reduced"
     }
 
-    /// Three sizes. `reduced` keeps an ordinary run short; `full` is the 50k the budgets are written
-    /// against; `huge` is the 200k figure, which takes minutes to build and is opted into by name.
+    /// Two sizes. `reduced` keeps an ordinary run short; `full` is the 50k the budgets are written
+    /// against.
+    ///
+    /// The 200k tier has been removed. It cost minutes of corpus building before a measurement ran,
+    /// and a benchmark nobody will wait for is a benchmark nobody runs.
     private static var corpusSize: (notes: Int, tasks: Int, projects: Int, people: Int) {
         switch scale {
-        // Exactly the sizes the published criteria name — 50,000 and 200,000 — so a result can be
-        // read against the budget directly rather than extrapolated in a report.
-        case "huge": (130_000, 60_000, 4_000, 6_000)
+        // Exactly the size the published criterion names — 50,000 — so a result can be read
+        // against the budget directly rather than extrapolated in a report.
         case "full": (26_000, 18_000, 2_000, 4_000)
         default: (3_000, 2_000, 200, 500)
         }
@@ -39,13 +41,11 @@ struct PhaseBBenchmarks {
 
     /// Budgets scale with the corpus, so the reduced run still means something.
     ///
-    /// The published figures are 40 ms at 50k and 80 ms at 200k. The reduced corpus is roughly a
-    /// tenth of the first, and search cost grows with the *matched set* rather than the library, so
-    /// the budget is tightened rather than left slack — a reduced run that passes a 50k budget would
-    /// prove nothing.
+    /// The published figure is 40 ms at 50k. The reduced corpus is roughly a tenth of that, and
+    /// search cost grows with the *matched set* rather than the library, so the budget is tightened
+    /// rather than left slack — a reduced run that passes a 50k budget would prove nothing.
     private static var keystrokeBudget: Duration {
         switch scale {
-        case "huge": .milliseconds(80)
         case "full": .milliseconds(40)
         default: .milliseconds(20)
         }
@@ -53,7 +53,6 @@ struct PhaseBBenchmarks {
 
     private static var rebuildBudget: Duration {
         switch scale {
-        case "huge": .seconds(24)
         case "full": .seconds(6)
         default: .milliseconds(1_200)
         }

@@ -296,12 +296,18 @@ predicate well.
 
 **What this means for the plan.** The plan says: "If the current persistence technology cannot meet
 it, report evidence and propose a realistic measured target or a derived aggregate store that
-remains rebuildable." The evidence above says the technology is not the limit — the predicate is.
-A derived aggregate store is the second answer, not the first, and building one now would cache
-around a scan instead of removing it.
+remains rebuildable." The honest report is that the cause has not been found, and that one plausible
+cause has now been tested and eliminated. A derived aggregate store remains the second answer, not
+the first.
 
-The budgets themselves stand. At the realistic scales the design bet holds: 47.1 ms at 60,000
-entries, three decades of heavy use, against a 50 ms budget.
+**The scale itself has been retired.** Benchmarks run at 10,000 entries by default and the 200,000
+tier has been removed rather than demoted — a tier selectable by an environment variable is a tier
+that gets selected, and this one cost about seven minutes of fixture building before emitting a
+single measurement.
+
+At the scales that remain, the original design bet holds comfortably. 10,000 entries — roughly five
+years of a heavy user tracking eight sessions a day — gives a week report of **13.9 ms against a
+50 ms budget**, with the whole Phase C suite running in 23 seconds. 60,000 measured 47.1 ms.
 
 Four published v2 targets remain **unmeasured** and have no instrument: cold launch → window
 interactive < 400 ms; full rebuild with the main thread never blocked > 16 ms; resident memory

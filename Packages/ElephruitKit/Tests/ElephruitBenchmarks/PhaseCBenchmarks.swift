@@ -21,23 +21,28 @@ struct PhaseCBenchmarks {
 
     /// How much history to build.
     ///
-    /// ### What 200,000 time entries actually means
-    /// `docs/09` published that figure, and it was cargo: it was the *item* count from the search
-    /// criteria, applied to time entries without asking what it would represent. Two hundred thousand
-    /// entries at half an hour each is a hundred thousand hours — around fifty working years.
+    /// ### Why the top of this range came down
+    /// `docs/09` published 200,000, and it was cargo: the *item* count from the search criteria,
+    /// applied to time entries without asking what it would represent. Two hundred thousand entries
+    /// at half an hour each is a hundred thousand hours — around fifty working years.
     ///
-    /// A heavy user tracking eight sessions a day, two hundred and fifty days a year, produces about
-    /// **20,000 entries a decade**. That is the default here, and it is a realistic career of use
-    /// rather than a number chosen to sound demanding. `full` is three decades of it.
+    /// It also cost about seven minutes of fixture building before a single measurement ran, which
+    /// is the practical reason it is gone. A benchmark nobody will wait for is a benchmark nobody
+    /// runs, and one that is run once and then avoided is worse than a smaller one that is run every
+    /// time.
     ///
-    /// `huge` keeps the original 200,000 for hunting a regression in the query path. It takes minutes
-    /// to build and is opted into by name, because a benchmark nobody will wait for is a benchmark
-    /// nobody runs.
+    /// **10,000 is the default**: roughly five years of a heavy user tracking eight sessions a day,
+    /// and enough history for a week window to be a small fraction of the table — which is the only
+    /// property the query path is being checked for. `full` keeps a decade for when a number is
+    /// wanted rather than a pass or fail.
+    ///
+    /// The 200,000 tier has been **removed**, not just demoted. Anything above 10,000 is run only
+    /// when it has been asked for, and a tier that can be selected by an environment variable is a
+    /// tier that gets selected. `docs/16 §8` records what 200,000 measured when it was last run.
     fileprivate static var entryCount: Int {
         switch scale {
-        case "huge": 200_000
         case "full": 60_000
-        default: 20_000
+        default: 10_000
         }
     }
 

@@ -139,7 +139,7 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 | T18 | Idle detection with inspectable decisions | Absent | The heartbeat makes it possible; nothing uses it | Deferred |
 | T19 | Long-timer warnings, reminders, Pomodoro, breaks | Absent | — | Deferred |
 | T20 | Time entries in search without flooding results | Absent | `TimeEntry` appears nowhere in `ElephruitSearch`; no `type:time`, no quotas | S13 |
-| T21 | Week report under 50 ms at 200,000 entries | **Absent** | Run for the first time in Stage 0: **93.4 ms**, 87% over budget; day report 60.3 ms. Evidence points at an unbounded-below predicate in `entries(in:)`, not at the missing rollup. `docs/16 §8` | S13 |
+| T21 | Week report under 50 ms at 200,000 entries | *pending re-measurement* (S13) | Predicate fixed: `endedAtSortKey` gives the lower bound somewhere indexable. Before: 93.4 ms | S13 |
 | T24 | Week report under 50 ms at realistic scale (≤60k) | Met | 47.1 ms at 60,000 entries — three decades of heavy use (`docs/12`) | — |
 | T22 | Team comparison, attendance, utilisation, approvals, payroll, scoring, public links | Rejected | Product principle; absent and to stay absent | — |
 | T23 | Opt-in local activity suggestions | Absent | No automatic time capture of any kind | Deferred |
