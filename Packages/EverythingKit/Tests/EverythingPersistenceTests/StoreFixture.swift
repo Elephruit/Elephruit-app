@@ -17,12 +17,17 @@ struct StoreFixture {
     let tags: SwiftDataTagRepository
     let dateProvider: FixedDateProvider
 
-    init(dateProvider: FixedDateProvider = .reference) throws {
+    init(dateProvider: FixedDateProvider = .reference, audit: FetchAudit? = nil) throws {
         self.stack = try PersistenceStack.inMemory()
         self.context = ModelContext(stack.container)
         self.dateProvider = dateProvider
         self.tags = SwiftDataTagRepository(context: context, dateProvider: dateProvider)
-        self.items = SwiftDataItemRepository(context: context, dateProvider: dateProvider, tags: tags)
+        self.items = SwiftDataItemRepository(
+            context: context,
+            dateProvider: dateProvider,
+            tags: tags,
+            audit: audit
+        )
     }
 
     /// A second context over the same container, for asserting that data survives a

@@ -94,10 +94,20 @@ public final class SwiftDataItemRepository: ItemRepository {
     private let dateProvider: any DateProvider
     private let tags: TagRepository
 
-    public init(context: ModelContext, dateProvider: any DateProvider, tags: TagRepository) {
+    /// Optional store-access instrumentation. `nil` in production, so it costs one optional check.
+    /// See ``FetchAudit`` for why it is not behind `#if DEBUG`.
+    private let audit: FetchAudit?
+
+    public init(
+        context: ModelContext,
+        dateProvider: any DateProvider,
+        tags: TagRepository,
+        audit: FetchAudit? = nil
+    ) {
         self.context = context
         self.dateProvider = dateProvider
         self.tags = tags
+        self.audit = audit
     }
 
     // MARK: - Reading
@@ -119,6 +129,7 @@ public final class SwiftDataItemRepository: ItemRepository {
         guard !query.requiresPostFiltering else {
             return try items(matching: query).count
         }
+        audit?.record(.itemCountQuery)
         do {
             return try context.fetchCount(query.fetchDescriptor())
         } catch {
@@ -127,6 +138,7 @@ public final class SwiftDataItemRepository: ItemRepository {
     }
 
     private func fetch(_ descriptor: FetchDescriptor<Item>) throws(AppError) -> [Item] {
+        audit?.record(.itemFetch)
         do {
             return try context.fetch(descriptor)
         } catch {
@@ -541,6 +553,7 @@ public final class SwiftDataItemRepository: ItemRepository {
 
         let descriptor = FetchDescriptor<ItemLink>(predicate: #Predicate { $0.unresolvedMatchKey == key })
         let pending: [ItemLink]
+        audit?.record(.other)
         do {
             pending = try context.fetch(descriptor)
         } catch {

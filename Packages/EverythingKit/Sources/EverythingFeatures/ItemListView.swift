@@ -141,7 +141,20 @@ public struct ItemListView: View {
             EmptyStateView(
                 symbolName: "square.stack.3d.up",
                 headline: "Nothing inside yet",
-                message: "Add tasks or notes to this project."
+                message: "Add tasks to this project."
+            )
+        case .archive:
+            EmptyStateView(
+                symbolName: "archivebox",
+                headline: "Nothing archived",
+                message: "Archiving keeps something without leaving it in your way."
+            )
+        case .home, .calendar, .time:
+            // Unreachable: these destinations are declared but unavailable, so nothing selects them.
+            EmptyStateView(
+                symbolName: "questionmark.circle",
+                headline: "Not available yet",
+                message: "This view arrives in a later version."
             )
         }
     }
