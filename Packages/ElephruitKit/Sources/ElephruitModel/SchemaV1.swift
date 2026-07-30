@@ -66,6 +66,36 @@ public enum SchemaV2: VersionedSchema {
     }
 }
 
+/// The third schema: an estimate on an item, and an index on its creation date.
+///
+/// Additive again — one optional attribute and one index. Nothing changes shape, nothing is
+/// rewritten, and a store opened under this version gains a nullable column it can ignore.
+///
+/// ### Why this is still a version rather than a silent change
+/// The version identifier is what the `.schema-version` stamp beside the store is compared against,
+/// and a mismatch is what triggers the backup in ``PersistenceStack``. A schema change that did not
+/// bump the version would migrate real user data with **no backup taken** — which is precisely the
+/// bug fixed once already, when the backup was keyed on `stages.isEmpty` and so "silently switched
+/// the backup off on exactly the launch that needed it most."
+///
+/// ### Why the model types are still live, and when that stops being true
+/// The freeze described below is not required for an additive change, and the evidence is this
+/// codebase: `TimeEntry` — a whole new entity plus a relationship — arrived by lightweight inference
+/// under a single declared version and migrates real bytes correctly, which
+/// `RealStoreMigrationTests` now demonstrates against a store written by a build that predates it.
+///
+/// What the freeze *is* required for is the first change that cannot be inferred: a rename, a type
+/// change, a value that has to be computed from old data. That needs a `.custom` stage, a stage
+/// needs more than one version in `schemas`, and more than one version needs distinct checksums —
+/// which live shared types cannot provide. See ADR 0005 for the trigger and the procedure.
+public enum SchemaV3: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(3, 0, 0) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV2.models
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -78,7 +108,7 @@ public enum SchemaV2: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV2.self]
+        [SchemaV3.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -98,13 +128,13 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV2.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV3.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV2.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV3.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {
-        let version = SchemaV2.versionIdentifier
+        let version = SchemaV3.versionIdentifier
         return "\(version.major).\(version.minor).\(version.patch)"
     }
 }

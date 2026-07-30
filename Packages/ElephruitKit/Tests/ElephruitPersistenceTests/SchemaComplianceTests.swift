@@ -81,9 +81,13 @@ struct SchemaComplianceTests {
         #expect(all.first?.title == "First")
     }
 
+    /// Pinned to a literal rather than derived from `CurrentSchema`, so bumping the version is a
+    /// deliberate act with a failing test attached rather than something that can happen quietly.
+    /// The stamp beside the store is compared against this string, and the stamp is what decides
+    /// whether a migrating launch takes a backup.
     @Test("Schema version is reported for archives and diagnostics")
     func schemaVersionIsReadable() {
-        #expect(CurrentSchema.versionString == "2.0.0")
+        #expect(CurrentSchema.versionString == "3.0.0")
     }
 
     @Test("Every released schema stays in source, with a stage between each")

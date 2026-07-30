@@ -1,62 +1,86 @@
-# ADR 0005 — Freeze the schema snapshots before the next migration stage
+# ADR 0005 — When the old model types have to be frozen
 
 - **Status:** Accepted
 - **Date:** 2026-07-30
+- **Revised:** 2026-07-30, after the claim below was tested rather than reasoned about.
 
 ## Decision
 
-The next `VersionedSchema` that adds, removes, or changes a **stored property** must first
-replace the live model types in `SchemaV1` and `SchemaV2` with **frozen snapshots** — nested
-model types that describe the shape those versions actually had on disk.
+The first change that needs a **custom migration stage** — a rename, a type change, or a value that
+has to be computed from old data — must first replace the live model types in `SchemaV1` and
+`SchemaV2` with **frozen snapshots**: nested model types describing the shape those versions had on
+disk.
 
-Until that work lands, **no stored property may be added to any `@Model` type.** Adding one
-without the freeze is the change that breaks migration, not a change that merely risks it.
+Until such a change is proposed, **additive changes ship as they always have**: one version declared
+in `schemas`, an empty `stages`, and lightweight migration inferred by Core Data. Adding an
+attribute, an index, or a whole new entity does not require the freeze.
 
-Rejected: continuing to declare one version in `schemas` and letting Core Data infer
-lightweight migration forever. It works only while every change is purely additive *and*
-every version's resolved entity graph stays identical, and the expansion breaks both.
+Every schema change, additive or not, still **bumps the version identifier**.
 
-## Rationale
+## What this ADR originally said, and why it was wrong
 
-`SchemaV1.swift:79-95` records the failure already paid for. While the versioned schemas
-reference **live** model types, SwiftData resolves each one's full entity graph — so
-`SchemaV1`, which never mentions `TimeEntry`, has it pulled in through `Item.timeEntries`
-and comes out byte-identical to `SchemaV2`. Two versions with the same checksum throw
-`"Duplicate version checksums detected"`, and that crashed every launch that needed to
-migrate until commit `37337b7` fixed it by declaring one version.
+The first draft of this decision said no stored property could be added to any `@Model` until the
+freeze landed, and called that the critical path for the whole expansion. That was inferred from
+`SchemaV1.swift:79-95` — which records that live shared types give `SchemaV1` and `SchemaV2` the
+same Core Data checksum, and that a plan holding both throws — and it over-read that note.
 
-Declaring one version bought time. It did not solve anything: the same docstring already
-names the consequence — the first change that needs a custom stage "is also the one that
-makes freezing the old model types mandatory rather than optional."
+The checksum collision is real, and it only bites when the plan holds **more than one version**.
+A plan holding one version never compares two checksums. So the constraint is not "no stored
+property may change"; it is "no *stage* may be declared", and a stage is only needed when inference
+cannot do the work.
 
-The expansion makes that change unavoidable. Every one of the four capabilities wants a
-stored property:
+The evidence is in this repository, and it is now a test rather than an argument. `TimeEntry` — an
+entire new entity plus a relationship on `Item` — shipped under a single declared version with an
+empty `stages`, by inference. `RealStoreMigrationTests` migrates a store written by a build that
+**predates `TimeEntry`**, and it passes: five items, their tags, containment and links all readable
+afterwards, with an empty time table rather than an invented one. That test existed and had never
+been run, because it needs a genuine legacy store and none had been produced. One now has been.
 
-| Capability | Property |
-|---|---|
-| Time tracking | `Item.estimateMinutes`, for estimate vs. actual |
-| Rich documents | A note format version and payload reference |
-| People | `ContactIdentity`, `Relationship`, `Observation` |
-| Search | `@Index` on `Item.createdAt` — the fix for the one known benchmark miss |
+Adding `Item.estimateMinutes` and an index on `Item.createdAt` was then verified the same way, on
+the same legacy bytes, through both version steps.
 
-None can land first. The freeze is the critical path for the whole programme, and it is
-not in the expansion plan at all.
+Getting this wrong in the cautious direction had a real cost attached: it would have put a large,
+delicate refactor — roughly twenty duplicated model types — in front of four capabilities that
+never needed it.
+
+## When the freeze becomes mandatory
+
+The trigger is a change inference cannot perform:
+
+- renaming an attribute or an entity, where the old and new names must be related;
+- changing an attribute's type;
+- deriving a value in the new shape from data in the old one;
+- splitting or merging entities.
+
+Any of these needs a `.custom` stage. A stage needs at least two versions in `schemas`. Two versions
+need distinct checksums. Live shared types cannot provide them, because SwiftData resolves each
+version's full entity graph from the same classes — which is exactly how `SchemaV1` ended up
+containing `TimeEntry` without ever mentioning it.
+
+## The procedure, when that day comes
+
+1. Snapshot each prior version's models as nested types inside its `VersionedSchema`, carrying
+   **stored properties and relationships only** — no computed properties, no helpers.
+2. Verify the entity names still match; the snapshot is identified by name, not by position.
+3. Declare every version in `schemas`, oldest first, and the stages between them.
+4. Prove it against a real legacy store, not a synthetic fixture. A fixture built from today's
+   types already has the shape the old version never had, needs no migration, and so exercises
+   none — "it looked covered and was not."
+5. Ship it alone.
+
+A legacy store can be generated from any historical commit with a git worktree and a throwaway test
+that populates a store at a known path; `ELEPHRUIT_LEGACY_STORE` then points
+`RealStoreMigrationTests` at it. That is how the store used above was made, and doing it again is
+cheap.
 
 ## Consequences
 
-1. The freeze ships **alone**, in its own slice, with no feature riding on it.
-2. Once frozen, a version's snapshot is immutable. Editing one rewrites history and is a
-   defect, not a refactor.
-3. `ElephruitMigrationPlan.stages` becomes non-empty for the first time, which activates the
-   backup path in `PersistenceStack.swift:104-110`. That path is already correct and already
-   keyed on the schema version stamp rather than on `stages.isEmpty` — a bug fixed once
-   because it "silently switched the backup off on exactly the launch that needed it most."
-4. The first real stage must be proven against a **real on-disk V2 store**, not a synthetic
-   fixture. `RealStoreMigrationTests` already records why: a synthetic fixture "already ha[s]
-   the shape V1 never had, so opening it needs no migration and the migration path is never
-   executed — it looked covered and was not." That test is env-gated off by default and must
-   be part of the freeze slice's acceptance, not skipped by it.
-5. All eight `ContainmentRepair` fixtures must stay green across the stage, including the
-   `GraphFingerprint` equality check.
-6. Every released version stays in source forever, per the rule already stated at
-   `SchemaV1.swift:75-78`.
+1. Every released version stays in source forever, per `SchemaV1.swift:75-78`.
+2. Every schema change bumps the version identifier — including additive ones. The identifier is
+   what the `.schema-version` stamp is compared against, and the stamp is what triggers the backup.
+   A change that kept the old number would migrate real user data with no backup taken, which is
+   the bug already fixed once when the trigger was `stages.isEmpty` and it "silently switched the
+   backup off on exactly the launch that needed it most."
+3. Frozen snapshots, once written, are immutable. Editing one rewrites history.
+4. The four capabilities that were thought blocked on this are not: `ContactIdentity`,
+   `Relationship`, `Observation` and a rich-document payload are all additive.
