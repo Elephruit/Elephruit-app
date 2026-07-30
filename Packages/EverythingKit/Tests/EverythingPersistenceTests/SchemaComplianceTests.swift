@@ -279,11 +279,22 @@ struct ItemValidationTests {
     func everyKindDeclaresItsFields() {
         // Guards against the wide-row failure mode in R2: a kind with no declaration would
         // silently permit every field.
-        for kind in ItemKind.allCases {
+        for kind in ItemKind.allCases where kind.participatesInContentViews {
             #expect(
                 kind.supportedFields.contains(.body),
-                "\(kind.rawValue) should declare at least a body"
+                "\(kind.rawValue) is content, so it should declare a body"
             )
+            #expect(
+                kind.supportedFields.contains(.tags),
+                "\(kind.rawValue) is content, so it should be taggable"
+            )
+        }
+
+        // A structural kind carries nothing but its title, its order, and what it contains.
+        for kind in ItemKind.allCases where !kind.participatesInContentViews {
+            #expect(kind.supportedFields == [.children], "\(kind.rawValue) should carry nothing else")
+            #expect(kind.appearsInInbox == false)
+            #expect(kind.countsAsWork == false)
         }
 
         // Status-bearing kinds and the status field must agree.

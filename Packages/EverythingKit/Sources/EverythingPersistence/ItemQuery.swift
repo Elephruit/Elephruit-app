@@ -65,6 +65,14 @@ public struct ItemQuery: Sendable, Hashable {
     /// ``ItemKind/appearsInInbox``.
     public var inboxEligibleKindsOnly = false
 
+    /// Whether structural kinds — headings — may appear.
+    ///
+    /// `false` for every ordinary content view, so a heading never turns up beside notes and tasks.
+    /// The views that legitimately need one opt in: a project's own contents, Archive, Trash, and
+    /// export. Naming a non-content kind in ``ItemQuery/kinds`` also opts in, which is what makes
+    /// `type:heading` work without a second mechanism.
+    public var includesNonContentKinds = false
+
     public var isFavorite: Bool?
     public var isPinned: Bool?
 
@@ -142,6 +150,8 @@ extension ItemQuery {
         var query = ItemQuery()
         query.parentID = parentID
         query.sort = sort
+        // A project's own contents include its headings — that is the one place they belong.
+        query.includesNonContentKinds = true
         return query
     }
 
@@ -149,6 +159,8 @@ extension ItemQuery {
         var query = ItemQuery()
         query.scope = .trashed
         query.sort = .updatedNewestFirst
+        // A trashed heading must be visible in order to be restored.
+        query.includesNonContentKinds = true
         return query
     }
 
@@ -157,6 +169,7 @@ extension ItemQuery {
         var query = ItemQuery()
         query.scope = .all
         query.sort = .createdNewestFirst
+        query.includesNonContentKinds = true
         return query
     }
 }
@@ -198,6 +211,24 @@ extension ItemQuery {
             || (text?.isEmpty == false)
     }
 
+    /// The kinds the fetch actually asks for.
+    ///
+    /// Excluding headings could have been a post-filter, but that would have forced *every* content
+    /// query through `postFilter` and destroyed the `fetchCount` fast path for all of them. Inverting
+    /// it costs nothing: when the caller names no kinds and structural ones are unwanted, the query
+    /// asks for the content kinds by name instead. That is one `IN` clause either way — the same
+    /// single clause the predicate already had room for.
+    var effectiveKindRaws: [String] {
+        if !kinds.isEmpty {
+            // Naming a kind is asking for it, which is what makes `type:heading` work.
+            return kinds.map(\.rawValue)
+        }
+        if includesNonContentKinds {
+            return []
+        }
+        return ItemKind.allCases.filter(\.participatesInContentViews).map(\.rawValue)
+    }
+
     /// The clauses that go to the store: scope, kind, and status.
     ///
     /// Built by ``ItemPredicateBuilder``, which explains why it is split by scope. Contains
@@ -207,7 +238,7 @@ extension ItemQuery {
     public func predicate() -> Predicate<Item> {
         ItemPredicateBuilder.make(
             scope: scope,
-            kindRaws: kinds.map { $0.rawValue },
+            kindRaws: effectiveKindRaws,
             statusRaws: statuses.map { $0.rawValue }
         )
     }
@@ -328,6 +359,8 @@ extension ItemQuery {
         var query = ItemQuery()
         query.scope = .archived
         query.sort = .updatedNewestFirst
+        // An archived heading must be visible in order to be brought back.
+        query.includesNonContentKinds = true
         return query
     }
 }

@@ -51,6 +51,18 @@ public enum ItemKind: String, Codable, Sendable, Hashable, CaseIterable {
 
     /// Material kept because it may be needed, not because it is being worked on.
     case reference
+
+    /// A named section inside a project — "Planning", "Things to buy".
+    ///
+    /// Project *organisation*, not content. A heading has a title, an order, and tasks beneath it,
+    /// and nothing else: no body, no dates, no status, no tags. It never appears in search, the
+    /// Inbox, or any content list, and it never counts as work.
+    ///
+    /// Modelled as a kind rather than as a string field on each task so that drag-to-reorder,
+    /// archive, trash, and restore all work on a heading and its tasks with no new machinery.
+    /// Adding a kind costs nothing at the storage layer — `kindRaw` is already a `String`, so this
+    /// is not a schema change at all.
+    case heading
 }
 
 // MARK: - Fields
@@ -94,6 +106,8 @@ public struct ItemFields: OptionSet, Sendable, Hashable {
     public static let personProfile = ItemFields(rawValue: 1 << 11)
     /// Has an `EventReference` satellite.
     public static let eventReference = ItemFields(rawValue: 1 << 12)
+    /// May carry tags. Everything except a heading, which is structure rather than content.
+    public static let tags = ItemFields(rawValue: 1 << 13)
 
     /// Fields every kind supports, and which therefore need no declaration:
     /// title, timestamps, tags, links, attachments, flags, sort order, metadata.
@@ -106,40 +120,44 @@ extension ItemKind {
     public var supportedFields: ItemFields {
         switch self {
         case .note, .idea, .reference:
-            [.body]
+            [.body, .tags]
 
         case .task:
-            [.body, .status, .dueDate, .startDate, .deferDate, .recurrence, .priority, .children]
+            [.body, .tags, .status, .dueDate, .startDate, .deferDate, .recurrence, .priority, .children]
 
         case .project:
-            [.body, .status, .dueDate, .startDate, .deferDate, .priority, .children, .appearance]
+            [.body, .tags, .status, .dueDate, .startDate, .deferDate, .priority, .children, .appearance]
 
         case .area:
-            [.body, .children, .appearance]
+            [.body, .tags, .children, .appearance]
 
         case .person:
-            [.body, .appearance, .personProfile]
+            [.body, .tags, .appearance, .personProfile]
 
         case .organization:
-            [.body, .appearance, .url]
+            [.body, .tags, .appearance, .url]
 
         case .interaction:
-            [.body, .startDate]
+            [.body, .tags, .startDate]
 
         case .meeting:
-            [.body, .startDate, .children, .eventReference]
+            [.body, .tags, .startDate, .children, .eventReference]
 
         case .bookmark:
-            [.body, .url]
+            [.body, .tags, .url]
 
         case .dailyEntry:
-            [.body, .dayKey, .children]
+            [.body, .tags, .dayKey, .children]
 
         case .goal:
-            [.body, .status, .dueDate, .startDate, .children, .appearance]
+            [.body, .tags, .status, .dueDate, .startDate, .children, .appearance]
 
         case .decision:
-            [.body, .startDate]
+            [.body, .tags, .startDate]
+
+        case .heading:
+            // A title, an order, and tasks. Nothing else — deliberately.
+            [.children]
         }
     }
 
@@ -159,7 +177,10 @@ extension ItemKind {
         case .area:
             return childKind == .project || childKind == .goal || childKind.isAttachableContent
         case .project:
-            return childKind == .task || childKind == .meeting || childKind.isAttachableContent
+            return childKind == .heading || childKind == .task || childKind == .meeting
+                || childKind.isAttachableContent
+        case .heading:
+            return childKind == .task
         case .task:
             return childKind == .task
         case .goal:
@@ -203,9 +224,31 @@ extension ItemKind {
         case .dailyEntry:
             // Created by the calendar, not captured by the user.
             false
+        case .heading:
+            // Structure, not content.
+            false
         default:
             true
         }
+    }
+
+    /// Whether items of this kind belong in ordinary content views — search results, the Inbox, the
+    /// Notes and Tasks lists, tag views.
+    ///
+    /// `false` only for ``ItemKind/heading``. A heading is scaffolding for a project; surfacing it
+    /// beside notes and tasks would be like listing a folder among its own files. Views that
+    /// legitimately need it — a project's own contents, Archive, Trash, export — opt in explicitly
+    /// via `ItemQuery.includesNonContentKinds`, and search matches it when `type:heading` names it.
+    public var participatesInContentViews: Bool {
+        self != .heading
+    }
+
+    /// Whether completing items of this kind constitutes progress.
+    ///
+    /// A heading is never work, so a project whose only remaining children are empty headings is
+    /// finished.
+    public var countsAsWork: Bool {
+        supportsStatus
     }
 }
 
@@ -229,6 +272,7 @@ extension ItemKind {
         case .goal: "target"
         case .decision: "arrow.triangle.branch"
         case .reference: "books.vertical"
+        case .heading: "text.append"
         }
     }
 
@@ -250,6 +294,7 @@ extension ItemKind {
         case .goal: "Goal"
         case .decision: "Decision"
         case .reference: "Reference"
+        case .heading: "Heading"
         }
     }
 

@@ -320,6 +320,62 @@ extension Item {
         }
     }
 
+    /// This item's headings, in the user's order.
+    ///
+    /// Empty for anything that is not a project. An empty heading is legitimate — it is a
+    /// placeholder for work not yet written down — and is never pruned automatically.
+    public func orderedHeadings() -> [Item] {
+        children
+            .filter { $0.kind == .heading && $0.deletedAt == nil }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    /// Direct child tasks that sit outside any heading, in order.
+    public func ungroupedTasks() -> [Item] {
+        children
+            .filter { $0.kind == .task && $0.deletedAt == nil }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    /// Every task beneath this item, flattened through headings and subtasks.
+    ///
+    /// Bounded, so a containment cycle introduced by a bug cannot hang the interface.
+    public func descendantTasks(limit: Int = 10_000) -> [Item] {
+        var result: [Item] = []
+        var seen: Set<UUID> = [id]
+        var queue = children
+
+        while let next = queue.popLast(), result.count < limit {
+            guard next.deletedAt == nil, seen.insert(next.id).inserted else { continue }
+            if next.kind == .task { result.append(next) }
+            // Descend through headings and tasks alike: a heading holds tasks, a task holds subtasks.
+            if next.kind == .heading || next.kind == .task {
+                queue.append(contentsOf: next.children)
+            }
+        }
+
+        return result
+    }
+
+    /// Completed and total task counts.
+    ///
+    /// Headings are excluded on both sides — a heading is scaffolding, never work — so a project
+    /// whose only remaining children are empty headings reads as finished.
+    public func taskProgress() -> (completed: Int, total: Int) {
+        let tasks = descendantTasks()
+        return (tasks.count { $0.status == .completed }, tasks.count)
+    }
+
+    /// Whether this project has any work at all. An empty project is not a finished one.
+    public var hasAnyTasks: Bool {
+        !descendantTasks(limit: 1).isEmpty
+    }
+
+    /// Whether any task beneath this item is still open.
+    public var hasOpenTasks: Bool {
+        descendantTasks().contains { $0.status == .open }
+    }
+
     /// Ancestors, outermost last. Bounded, so a cycle introduced by a bug cannot hang
     /// the UI — validation prevents cycles, and this is the belt to that braces.
     public func ancestors(limit: Int = 32) -> [Item] {

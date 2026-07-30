@@ -48,6 +48,16 @@ struct StoreFixture {
         return try freshContext().fetch(descriptor).first
     }
 
+    /// Looks the item up in the fixture's *own* context.
+    ///
+    /// Use this whenever the result will be mutated or related to another object. Relating two models
+    /// that came from different contexts traps inside SwiftData, so `requireItem(id:)` — which reads
+    /// through a fresh context — is for assertions only.
+    func sameContextItem(id: UUID) throws -> Item {
+        guard let item = try items.item(id: id) else { throw AppError.itemNotFound(id: id) }
+        return item
+    }
+
     /// ``StoreFixture/refetch(id:)``, failing the test if the item is absent.
     ///
     /// A throwing helper rather than `try #require(try …)` at every call site: nesting a
