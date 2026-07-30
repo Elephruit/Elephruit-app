@@ -1,6 +1,7 @@
 import ElephruitCore
 import ElephruitModel
 import Foundation
+import SQLite3
 import SwiftData
 
 /// How the store is configured.
@@ -89,6 +90,17 @@ public struct PersistenceStack: Sendable {
             )
         }
 
+        // A migration plan with stages means this open may rewrite the store. Back it up first, so
+        // a failure has something to restore from — requirement M4. Skipped when there is nothing to
+        // protect: no stages, no store file, or an in-memory store.
+        var backup: URL?
+        if case .onDisk(let location) = mode,
+           !ElephruitMigrationPlan.stages.isEmpty,
+           FileManager.default.fileExists(atPath: location.storeURL.path(percentEncoded: false)) {
+            backup = backupStore(at: location, label: "pre-v\(CurrentSchema.versionString)-\(UUID().uuidString.prefix(8))")
+            pruneBackups(at: location, keeping: 3)
+        }
+
         do {
             let container = try ModelContainer(
                 for: CurrentSchema.schema,
@@ -104,15 +116,23 @@ public struct PersistenceStack: Sendable {
         } catch {
             Diagnostics.persistence.error("Store open failed: \(error.localizedDescription, privacy: .public)")
 
-            // A failure while a migration plan is in play is reported as a migration
-            // failure, because that is the recovery the user needs — the backup path.
+            // Requirement M7: a failed migration leaves the original store untouched. SwiftData may
+            // have partially rewritten it before failing, so "untouched" is achieved by putting the
+            // backup back rather than by hoping nothing was written.
+            if case .onDisk(let location) = mode, let backup {
+                let restored = restoreStore(at: location, from: backup)
+                Diagnostics.persistence.error(
+                    "Restored pre-migration store: \(restored, privacy: .public)"
+                )
+            }
+
             if ElephruitMigrationPlan.stages.isEmpty {
                 throw .storeUnavailable(underlying: error.localizedDescription)
             } else {
                 throw .migrationFailed(
                     fromVersion: "unknown",
                     toVersion: CurrentSchema.versionString,
-                    backupPath: backupPath(for: mode)
+                    backupPath: backup?.path(percentEncoded: false) ?? backupPath(for: mode)
                 )
             }
         }
@@ -133,19 +153,27 @@ public struct PersistenceStack: Sendable {
     /// Best-effort by design: a failed backup must not prevent the app from starting, but
     /// it is logged so the reason is discoverable. Returns the backup directory when one
     /// was written.
+    /// Copies the store aside before a migration.
+    ///
+    /// All three SQLite components are copied together — requirement **M5**. Copying only
+    /// `.store` produces a file that either fails to open or silently loses whatever was still in
+    /// the write-ahead log, which on a real library is the most recent work.
+    ///
+    /// The WAL is checkpointed first, so the copy is a consistent snapshot rather than three files
+    /// caught mid-transaction.
     @discardableResult
     public static func backupStore(at location: StoreLocation, label: String) -> URL? {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: location.storeURL.path(percentEncoded: false)) else { return nil }
+
+        checkpointWriteAheadLog(at: location.storeURL)
 
         let destination = location.backupsRoot.appending(path: label, directoryHint: .isDirectory)
 
         do {
             try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
 
-            // SQLite keeps companions; copying only the main file would produce a backup
-            // that cannot be opened.
-            for suffix in ["", "-wal", "-shm"] {
+            for suffix in storeComponentSuffixes {
                 let source = URL(filePath: location.storeURL.path(percentEncoded: false) + suffix)
                 guard fileManager.fileExists(atPath: source.path(percentEncoded: false)) else { continue }
                 try fileManager.copyItem(
@@ -159,6 +187,82 @@ public struct PersistenceStack: Sendable {
         } catch {
             Diagnostics.persistence.error("Backup failed: \(error.localizedDescription, privacy: .public)")
             return nil
+        }
+    }
+
+    /// Every file that is part of the store. A backup missing one is not a backup.
+    public static let storeComponentSuffixes = ["", "-wal", "-shm"]
+
+    /// Puts a backup back over the live store — requirement **M7**.
+    ///
+    /// Removes the current components first, so a leftover `-wal` from the failed attempt cannot be
+    /// replayed over the restored `.store` and undo the restore.
+    @discardableResult
+    public static func restoreStore(at location: StoreLocation, from backup: URL) -> Bool {
+        let fileManager = FileManager.default
+
+        do {
+            for suffix in storeComponentSuffixes {
+                let live = URL(filePath: location.storeURL.path(percentEncoded: false) + suffix)
+                if fileManager.fileExists(atPath: live.path(percentEncoded: false)) {
+                    try fileManager.removeItem(at: live)
+                }
+            }
+
+            for suffix in storeComponentSuffixes {
+                let name = location.storeURL.lastPathComponent + suffix
+                let source = backup.appending(path: name, directoryHint: .notDirectory)
+                guard fileManager.fileExists(atPath: source.path(percentEncoded: false)) else { continue }
+                try fileManager.copyItem(
+                    at: source,
+                    to: URL(filePath: location.storeURL.path(percentEncoded: false) + suffix)
+                )
+            }
+            return true
+        } catch {
+            Diagnostics.persistence.fault("Restore failed: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    /// Folds the write-ahead log into the main file, so a copy is self-contained.
+    ///
+    /// Best-effort: if the checkpoint cannot run, all three components are still copied together and
+    /// the backup remains valid — it is simply three files rather than one.
+    private static func checkpointWriteAheadLog(at storeURL: URL) {
+        var handle: OpaquePointer?
+        let path = storeURL.path(percentEncoded: false)
+
+        guard sqlite3_open_v2(path, &handle, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
+            if handle != nil { sqlite3_close(handle) }
+            return
+        }
+        defer { sqlite3_close(handle) }
+
+        sqlite3_exec(handle, "PRAGMA wal_checkpoint(TRUNCATE)", nil, nil, nil)
+    }
+
+    /// Keeps the most recent backups and removes the rest.
+    ///
+    /// Bounded on purpose: a backup per launch would fill the container over a year of use. Three is
+    /// enough to recover from a bad migration and from the attempt that followed it.
+    public static func pruneBackups(at location: StoreLocation, keeping count: Int) {
+        let fileManager = FileManager.default
+
+        guard let entries = try? fileManager.contentsOfDirectory(
+            at: location.backupsRoot,
+            includingPropertiesForKeys: [.creationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        let sorted = entries.sorted { left, right in
+            let leftDate = (try? left.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+            let rightDate = (try? right.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+            return leftDate > rightDate
+        }
+
+        for stale in sorted.dropFirst(count) {
+            try? fileManager.removeItem(at: stale)
         }
     }
 }

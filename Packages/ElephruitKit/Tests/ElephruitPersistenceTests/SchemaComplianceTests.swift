@@ -83,8 +83,20 @@ struct SchemaComplianceTests {
 
     @Test("Schema version is reported for archives and diagnostics")
     func schemaVersionIsReadable() {
-        #expect(CurrentSchema.versionString == "1.0.0")
-        #expect(ElephruitMigrationPlan.schemas.count == 1)
+        #expect(CurrentSchema.versionString == "2.0.0")
+    }
+
+    @Test("Every released schema stays in source, with a stage between each")
+    func migrationPathIsComplete() {
+        // A released version removed from `schemas` makes its migration path uncompilable and
+        // untestable, and any store still on it unopenable. The rule in docs/05 is that they stay
+        // forever; this is what enforces it.
+        #expect(ElephruitMigrationPlan.schemas.count == 2)
+        #expect(ElephruitMigrationPlan.stages.count == ElephruitMigrationPlan.schemas.count - 1)
+
+        let versions = ElephruitMigrationPlan.schemas.map { $0.versionIdentifier }
+        #expect(versions == versions.sorted(), "Versions must be declared in order")
+        #expect(versions.last == SchemaV2.versionIdentifier, "The last must be the current one")
     }
 
     @Test("An unknown stored kind reads as reference without rewriting the row")
