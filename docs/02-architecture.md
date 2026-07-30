@@ -7,31 +7,31 @@ The package is the product; the app target is a shell that wires modules togethe
 and owns entitlements, Info.plist, and assets.
 
 ```
-everything-app/
-├── Everything.xcodeproj              # thin, file-system-synchronized groups
-├── Everything/                       # app shell target
-│   ├── EverythingApp.swift           # @main, scenes, commands, DI root
+elephruit-app/
+├── Elephruit.xcodeproj              # thin, file-system-synchronized groups
+├── Elephruit/                       # app shell target
+│   ├── ElephruitApp.swift           # @main, scenes, commands, DI root
 │   ├── AppEnvironment.swift          # composition root
-│   ├── Everything.entitlements
+│   ├── Elephruit.entitlements
 │   ├── Info.plist
 │   └── Assets.xcassets
-├── Packages/EverythingKit/           # all real code lives here
+├── Packages/ElephruitKit/           # all real code lives here
 │   ├── Package.swift
 │   ├── Sources/
-│   │   ├── EverythingCore/           # domain: value types, protocols, errors
-│   │   ├── EverythingModel/          # SwiftData @Model entities + schema
-│   │   ├── EverythingPersistence/    # container, migrations, repositories
-│   │   ├── EverythingSearch/         # query grammar, engine, Spotlight bridge
-│   │   ├── EverythingDesign/         # tokens, components, previews
-│   │   ├── EverythingTransfer/       # import/export, archive format
-│   │   ├── EverythingIntegrations/   # EventKit/Contacts/Notifications adapters
-│   │   └── EverythingFeatures/       # feature modules (views + models)
+│   │   ├── ElephruitCore/           # domain: value types, protocols, errors
+│   │   ├── ElephruitModel/          # SwiftData @Model entities + schema
+│   │   ├── ElephruitPersistence/    # container, migrations, repositories
+│   │   ├── ElephruitSearch/         # query grammar, engine, Spotlight bridge
+│   │   ├── ElephruitDesign/         # tokens, components, previews
+│   │   ├── ElephruitTransfer/       # import/export, archive format
+│   │   ├── ElephruitIntegrations/   # EventKit/Contacts/Notifications adapters
+│   │   └── ElephruitFeatures/       # feature modules (views + models)
 │   └── Tests/
-│       ├── EverythingCoreTests/
-│       ├── EverythingPersistenceTests/
-│       ├── EverythingSearchTests/
-│       └── EverythingTransferTests/
-├── EverythingUITests/                # XCUITest (Phase 2+)
+│       ├── ElephruitCoreTests/
+│       ├── ElephruitPersistenceTests/
+│       ├── ElephruitSearchTests/
+│       └── ElephruitTransferTests/
+├── ElephruitUITests/                # XCUITest (Phase 2+)
 └── docs/
 ```
 
@@ -108,7 +108,7 @@ Swift 6 language mode, strict concurrency, throughout.
 ### Composition root
 
 ```swift
-// Everything/AppEnvironment.swift  (sketch — see implementation)
+// Elephruit/AppEnvironment.swift  (sketch — see implementation)
 @MainActor
 final class AppEnvironment {
     let container: ModelContainer
@@ -134,7 +134,7 @@ testable without freezing the machine's date.
 1. No `ModelContext` mutation inside a view body. Views call methods on their
    `@Observable` feature model, which calls a repository.
 2. No business rule inside a view. "Completing a recurring task advances its next
-   occurrence" lives in `EverythingCore`/`Persistence` with a unit test, not in a
+   occurrence" lives in `ElephruitCore`/`Persistence` with a unit test, not in a
    button's action closure.
 3. Feature models are small — one screen's worth of state and intent. When one grows
    past roughly 150 lines it is decomposed, not annotated with a comment.

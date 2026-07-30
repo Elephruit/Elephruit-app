@@ -6,7 +6,7 @@
 ## Decision
 
 Attachment **bytes** live as files under
-`Application Support/Everything/Attachments/<attachment-uuid>/<filename>`.
+`Application Support/Elephruit/Attachments/<attachment-uuid>/<filename>`.
 Attachment **metadata** lives in the SwiftData store as an `Attachment` entity.
 
 Rejected: bytes in the store as `Data`, and bytes in the store with

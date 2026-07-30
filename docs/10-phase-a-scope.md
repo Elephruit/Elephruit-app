@@ -292,7 +292,7 @@ Reporting raw wall-clock alongside the normalised figure means calibration canno
 slowdown: a rising raw number with a steady normalised one is visible as exactly what it is.
 
 Harness rules: separate target, excluded from the default test plan, runs only under
-`EVERYTHING_BENCHMARKS=1`; a deterministic calibration workload derives `hostFactor`; budgets scale by
+`ELEPHRUIT_BENCHMARKS=1`; a deterministic calibration workload derives `hostFactor`; budgets scale by
 it; an absolute `4×` ceiling catches real regressions on any host; `Benchmarks/reference.json` commits
 the reference machine and its calibration time.
 

@@ -5,7 +5,7 @@ else is a derived cache that can be deleted and rebuilt without loss.
 
 | Data | Authoritative home | Synced by | Rebuildable? | Rationale |
 |---|---|---|---|---|
-| Notes, tasks, projects, areas, tags, collections, saved searches, daily entries | **SwiftData** (`Everything.store` in App Support) | CloudKit private DB (Phase 4) | No — this *is* the data | Structured, relational, queryable, needs migrations |
+| Notes, tasks, projects, areas, tags, collections, saved searches, daily entries | **SwiftData** (`Elephruit.store` in App Support) | CloudKit private DB (Phase 4) | No — this *is* the data | Structured, relational, queryable, needs migrations |
 | People, organisations, interactions | **SwiftData** | CloudKit private DB | No | Same graph as everything else; a separate store would break cross-entity links and search |
 | Item↔item links (wiki-links, relations) | **SwiftData** (`ItemLink` entity) | CloudKit private DB | Partly — reconstructable from note bodies for `[[…]]` links, but explicit relations are not | Links need their own metadata (kind, created date, resolved state) |
 | Attachment **bytes** | **Files on disk**, inside the app's Application Support (`Attachments/<uuid>/<filename>`) | CloudKit `CKAsset` (Phase 4) | No | Blobs do not belong in a relational store; keeps the store small and migrations fast |
@@ -42,7 +42,7 @@ work but hands lifecycle control to the framework and complicates export; explic
 files are clearer and Trash-restorable.
 
 ### Why not the iCloud ubiquity container in v1
-Everything is a library app with one store, not a document app with many files.
+Elephruit is a library app with one store, not a document app with many files.
 Putting the SwiftData store in a ubiquity container invites multi-writer corruption;
 CloudKit record-level mirroring is the supported path and merges properly.
 Ubiquity may earn a place later for *exported archives* — never for the live store.

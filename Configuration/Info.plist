@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Everything</string>
+	<string>Elephruit</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -52,9 +52,9 @@
 	<array>
 		<dict>
 			<key>UTTypeIdentifier</key>
-			<string>com.everything.archive</string>
+			<string>com.elephruit.archive</string>
 			<key>UTTypeDescription</key>
-			<string>Everything Archive</string>
+			<string>Elephruit Archive</string>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.json</string>
