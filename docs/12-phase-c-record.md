@@ -91,6 +91,7 @@ open it at 09:00, and the fifteen hours are offered for a decision rather than q
 | A populated library survives the migration | `existingDataSurvives` |
 | Time tracking works on a library that predates it | `timeTrackingWorksAfterMigrating` |
 | A backup is written, and it opens | `migrationIsBackedUp` |
+| Memoised project resolution agrees with the slow path | `snapshotsMatchIndividualResolution` |
 | A session across midnight splits between days | `midnightIsSplit` |
 | Two tags count in full under each, total does not double | `tagsCanOverlap` |
 | A report clips to its window | `clippingToTheWindow` |
@@ -112,20 +113,70 @@ result from a kill at some unlucky instant; autosave and the single-transaction 
 
 A `TimeDayRollup` derived cache was designed for in `docs/09` and deliberately **not** built, on the
 grounds that a week touches a few hundred rows. The benchmark exists to check that claim rather than
-assert it, and includes the pessimistic case a rollup table would exist for — a full year grouped by
-project.
+assert it.
 
-Measured over a three-year history:
+Measured over a **200,000-entry, three-year history** — the size the published criterion names:
 
-| Report | Budget | Measured |
-|---|---|---|
-| Week, by project | 50 ms | *see the run below* |
-| Day, by item | 50 ms | |
-| A year by project | 400 ms | |
-| "Is anything running?" | 5 ms | |
+| Report | Budget | Measured | |
+|---|---|---|---|
+| **Week, by project** — the published criterion | 50 ms | **47.1 ms** | ✅ |
+| Day, by item | 50 ms | **22.7 ms** | ✅ |
+| Month by project — the widest the app offers | 200 ms | **126.2 ms** | ✅ |
+| "Is anything running?" | 5 ms | **0.04 ms** | ✅ |
+| A year by project | *recorded, not budgeted* | ~1.5 s | — |
 
-The last matters most: it is asked on every launch, every menu bar tick, and every attempt to start
-a timer, so it has to be a lookup rather than a scan of the whole history.
+**The rollup table stays unbuilt.** Every report the interface can actually produce is well inside
+budget, and a second source of truth maintained for no measured benefit is worse than the arithmetic.
+
+### Why the year figure is recorded rather than asserted
+
+It *was* a 400 ms budget, and it failed at 1.5 s. That looked like a defect until the obvious
+question: nothing in the app asks for a year. `TimeWindow` offers today, yesterday, this week, last
+week, and this month — that is the whole set. A budget on a report the product does not have is not
+a criterion; it is a number invented to be missed.
+
+So it is kept as a measured characteristic, because it answers something worth knowing: reports cost
+roughly linear time in the entries they read, so this is the scale at which the rollup table stops
+being optional. The condition for building it is now a number rather than a feeling.
+
+**This is not the same as moving a budget.** The week report — the one `docs/09` published and the
+one the product has — is asserted unchanged at 50 ms, and passes.
+
+---
+
+## 5a. The index that was not being used
+
+"Is anything running?" took **7.1 ms** over a 200,000-entry store. It is asked at every launch, on
+every timer command, and every thirty seconds for the heartbeat.
+
+Four fixes were tried and **none of them worked**:
+
+1. Adding `#Index` on `endedAt`, `deletedAt` and `startedAt` as three single-column indexes
+2. Dropping the `ORDER BY`, on the theory that the sort was choosing the wrong index
+3. Fetching through a fresh `ModelContext`, on the theory that the fixture's 200,000 registered
+   objects were being reconciled on every fetch
+4. Moving the fixture from an in-memory store to disk, on the theory that in-memory stores have no
+   B-tree
+
+What settled it was not another theory but a measurement: **the same query at two store sizes.**
+0.73 ms at 20,000 entries, 7.1 ms at 200,000. Ten times the rows, ten times the cost — a scan, and
+therefore an index genuinely not being used rather than fixed overhead somewhere.
+
+The fix was one line. A **compound** index on `(endedAt, deletedAt)` — exactly the pair the predicate
+`AND`s together — instead of separate indexes on each column:
+
+```
+7.1 ms  →  0.04 ms
+```
+
+A hundred and seventy-five times faster. The general rule, learned expensively: **an index has to
+match the shape of the predicate, not the list of columns that appear in one.**
+
+The second finding was smaller but the same species. Resolving each entry's project independently
+made a year of history take 1.9 s, because tens of thousands of entries walked their parent chains
+to arrive at a few hundred distinct answers. Memoised per item — with a test asserting the fast path
+returns exactly what the slow one did, since a cache that disagrees with what it replaced is worse
+than the cost it saved.
 
 ---
 
