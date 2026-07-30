@@ -26,7 +26,44 @@ public actor SearchIndex {
 
     public private(set) var isWarm = false
 
+    /// How much of a rebuild has landed, so the interface can say "still indexing 34,000 of 51,200"
+    /// rather than showing a result count that looks final and is not.
+    public private(set) var indexedCount = 0
+    public private(set) var expectedCount = 0
+
     public init() {}
+
+    /// Begins a streamed rebuild. Existing contents stay queryable until ``finishRebuild()``.
+    ///
+    /// Keeping the old index live during a rebuild is what stops a search mid-warm from returning a
+    /// false empty state — the worst possible answer, because it looks like data loss.
+    public func beginRebuild(expecting total: Int) {
+        expectedCount = total
+        indexedCount = 0
+    }
+
+    /// Adds one batch of a streamed rebuild.
+    public func absorb(_ items: [ItemSnapshot]) {
+        for item in items {
+            remove(id: item.id)
+            insert(item)
+        }
+        indexedCount += items.count
+    }
+
+    /// Marks a streamed rebuild complete.
+    public func finishRebuild() {
+        isWarm = true
+        expectedCount = indexedCount
+        Diagnostics.search.info(
+            "Index ready: \(self.snapshots.count, privacy: .public) items, \(self.postings.count, privacy: .public) terms"
+        )
+    }
+
+    /// Whether a rebuild is still running.
+    public var isRebuilding: Bool {
+        expectedCount > 0 && indexedCount < expectedCount
+    }
 
     // MARK: - Building
 

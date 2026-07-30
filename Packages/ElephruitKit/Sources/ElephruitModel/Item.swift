@@ -46,6 +46,16 @@ public final class Item {
     /// path stays correct before the in-memory index warms or after a cache purge.
     public var searchText: String = ""
 
+    /// The title in matching form — case-folded, diacritic-stripped, whitespace collapsed.
+    ///
+    /// Denormalised so that resolving `[[Some Note]]` is an indexed equality lookup rather than a
+    /// fetch of every active item followed by folding each title in Swift. That scan was O(n) *per
+    /// newly-typed link*, which is the worst possible shape: it got slower exactly as the library
+    /// grew and exactly while the user was typing.
+    ///
+    /// Derived, recomputed on every save alongside ``Item/searchText``, so it cannot drift.
+    public var titleMatchKey: String = ""
+
     // MARK: Timestamps
 
     public var createdAt: Date = Date()
@@ -184,6 +194,7 @@ public final class Item {
         self.sourceURLString = source.url?.absoluteString
         self.sourceIdentifier = source.identifier
         self.sortOrder = sortOrder
+        self.titleMatchKey = TextNormalizer.foldedForMatching(title)
         self.searchText = Self.projectedSearchText(title: title, body: body, tagSlugs: [], extra: nil)
     }
 }
@@ -257,8 +268,9 @@ extension Item: ContentItem {
 // MARK: - Derived values
 
 extension Item {
-    /// Recomputes ``Item/searchText``. Called on every save path.
+    /// Recomputes the derived text columns. Called on every save path.
     public func refreshSearchText() {
+        titleMatchKey = TextNormalizer.foldedForMatching(title)
         searchText = Self.projectedSearchText(
             title: title,
             body: body,

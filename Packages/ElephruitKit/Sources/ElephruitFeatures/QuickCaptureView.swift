@@ -166,39 +166,18 @@ public struct QuickCaptureView: View {
 
     // MARK: - Saving
 
+    /// Hands the draft to ``CaptureService``.
+    ///
+    /// The panel deliberately owns none of this. The same call has to work from an App Intent, the
+    /// Services menu, and eventually a global hotkey — none of which can construct a view — so the
+    /// path from typed text to stored item lives outside the UI entirely.
     private func save() {
         guard let services, !draft.isEmpty, !isSaving else { return }
         isSaving = true
         defer { isSaving = false }
 
-        let parsed = draft
-
-        var itemDraft = ItemDraft(
-            kind: parsed.kind,
-            title: parsed.title,
-            body: parsed.body,
-            tagSlugs: parsed.tagSlugs,
-            source: .quickCapture,
-            url: parsed.url
-        )
-
-        // An unresolvable project hint is not an error: the item lands in the Inbox, which is
-        // exactly where an unfiled capture belongs.
-        if let hint = parsed.projectHint, let project = resolvedProject(named: hint) {
-            itemDraft.parentID = project.id
-        }
-
-        if let expression = parsed.dueDate, parsed.kind.supportedFields.contains(.dueDate) {
-            itemDraft.dueAt = expression.resolve(using: services.dateProvider)
-        }
-
         let didSave = services.perform {
-            let created = try services.items.create(itemDraft)
-
-            // People named with `@` become links, and are created if they do not exist yet, so the
-            // graph reflects what was written without a second step.
-            try linkPeople(named: parsed.personHints, from: created, services: services)
-
+            let created = try services.capture.capture(draft)
             services.noteChange(to: created)
             onCapture(created.id)
         }
@@ -209,46 +188,10 @@ public struct QuickCaptureView: View {
         }
     }
 
-    private func linkPeople(named names: [String], from item: Item, services: AppServices) throws(AppError) {
-        for name in names {
-            let trimmed = name.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { continue }
-
-            let person = try resolveOrCreatePerson(named: trimmed, services: services)
-            services.context.insert(
-                ItemLink(kind: .mentions, source: item, target: person, createdAt: services.dateProvider.now)
-            )
-        }
-    }
-
-    private func resolveOrCreatePerson(named name: String, services: AppServices) throws(AppError) -> Item {
-        var query = ItemQuery()
-        query.kinds = [.person]
-
-        let existing = try services.items.items(matching: query)
-        let folded = TextNormalizer.foldedForMatching(name)
-
-        if let match = existing.first(where: { TextNormalizer.foldedForMatching($0.title) == folded }) {
-            return match
-        }
-
-        return try services.items.create(
-            ItemDraft(kind: .person, title: name, source: ItemSource(kind: .quickCapture, identifier: "mention"))
-        )
-    }
-
+    /// Only for the live interpretation line — resolution for the *save* happens in the service.
     private func resolvedProject(named hint: String) -> Item? {
         guard let services else { return nil }
-
-        var query = ItemQuery()
-        query.kinds = [.project, .area, .goal]
-
-        let candidates = (try? services.items.items(matching: query)) ?? []
-        let folded = TextNormalizer.foldedForMatching(hint)
-
-        // Exact match first, then a prefix, so `>Q3` finds "Q3 Launch" without guessing wildly.
-        return candidates.first { TextNormalizer.foldedForMatching($0.title) == folded }
-            ?? candidates.first { TextNormalizer.foldedForMatching($0.title).hasPrefix(folded) }
+        return try? services.capture.resolveContainer(named: hint)
     }
 }
 
