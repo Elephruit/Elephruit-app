@@ -46,6 +46,13 @@ public enum AppError: Error, Sendable, Hashable {
 
     /// A write to disk failed.
     case writeFailed(path: String, reason: String)
+
+    /// A timer was asked to start while another was already running.
+    ///
+    /// Refusing rather than silently stopping the first one: the running timer is a record of what
+    /// the user is doing, and quietly ending it is exactly the kind of unrequested consequential
+    /// decision the app does not make. The caller that means "switch" says so.
+    case timerAlreadyRunning(description: String)
 }
 
 // MARK: - Presentation
@@ -77,6 +84,8 @@ extension AppError: LocalizedError {
             "The export did not complete."
         case .writeFailed(let path, _):
             "Elephruit could not save to “\(Self.displayName(forPath: path))”."
+        case .timerAlreadyRunning:
+            "A timer is already running."
         }
     }
 
@@ -106,6 +115,10 @@ extension AppError: LocalizedError {
             reason
         case .writeFailed(_, let reason):
             reason
+        case .timerAlreadyRunning(let description):
+            description.isEmpty
+                ? "Stop it before starting another."
+                : "“\(description)” is being timed. Stop it before starting another."
         }
     }
 
@@ -158,6 +171,11 @@ extension AppError {
             [.retry, .chooseFile, .dismiss]
         case .writeFailed:
             [.retry, .chooseFile, .dismiss]
+        case .timerAlreadyRunning:
+            // No "stop it and start mine" here. That is a different action with a different
+            // consequence, and offering it inside an error dialogue would make stopping a timer
+            // something you do by dismissing a message.
+            [.dismiss]
         }
     }
 
