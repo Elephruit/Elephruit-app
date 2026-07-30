@@ -61,6 +61,13 @@ public struct ItemQuery: Sendable, Hashable {
     /// `true` restricts to items carrying no tags. A tag is a home, so a tagged item has been filed.
     public var requiresNoTags = false
 
+    /// `true` restricts to items not filed under any container.
+    ///
+    /// Since content is filed by link rather than by containment, a filing is now one of the ways an
+    /// item acquires a home — and without this an item filed under a project would stay in the Inbox
+    /// forever, which is worse than the behaviour it replaced.
+    public var requiresNoFiling = false
+
     /// `true` restricts to kinds that can meaningfully sit in the Inbox — see
     /// ``ItemKind/appearsInInbox``.
     public var inboxEligibleKindsOnly = false
@@ -106,6 +113,7 @@ extension ItemQuery {
         var query = ItemQuery()
         query.hasNoParent = true
         query.requiresNoTags = true
+        query.requiresNoFiling = true
         query.inboxEligibleKindsOnly = true
         query.sort = .createdNewestFirst
         return query
@@ -205,6 +213,7 @@ extension ItemQuery {
             || isPinned != nil
             || notDeferredAfter != nil
             || requiresNoTags
+            || requiresNoFiling
             || inboxEligibleKindsOnly
             || (text?.isEmpty == false)
     }
@@ -333,6 +342,10 @@ extension ItemQuery {
 
         if requiresNoTags {
             result = result.filter { $0.tags.isEmpty }
+        }
+
+        if requiresNoFiling {
+            result = result.filter { $0.filedUnderContainers().isEmpty }
         }
 
         if !tagSlugs.isEmpty {
