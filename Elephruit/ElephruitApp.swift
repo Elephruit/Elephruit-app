@@ -165,8 +165,10 @@ struct ElephruitCommands: Commands {
         // MARK: Find
 
         CommandGroup(replacing: .textEditing) {
-            Button("Search Everything…") { navigation?.isSearchVisible = true }
-                .keyboardShortcut("f", modifiers: [.command, .shift])
+            // ⌘F, not ⌘⇧F. Search is no longer a separate place with its own shortcut — it is what
+            // the list becomes — so it takes the shortcut everyone already reaches for.
+            Button("Search Everything") { navigation?.beginSearch() }
+                .keyboardShortcut("f")
                 .disabled(navigation == nil)
 
             Button("Command Palette…") { navigation?.isCommandPaletteVisible = true }

@@ -19,23 +19,59 @@ public struct ItemListView: View {
     @State private var savedSearchResults: [SearchResult] = []
     @State private var isLoading = false
 
+    /// Built on first appearance, because the engine comes from the environment.
+    @State private var session: SearchSessionModel?
+
+    @State private var pendingSavedSearchName: String?
+
+    @FocusState private var isSearchFieldFocused: Bool
+
     public init(navigation: NavigationModel) {
         self.navigation = navigation
     }
 
     public var body: some View {
         content
-            .navigationTitle(navigation.selection.title)
+            .navigationTitle(navigation.isSearchActive ? "Search" : navigation.selection.title)
             .navigationSubtitle(subtitle)
-            .searchable(text: filterBinding, placement: .toolbar, prompt: "Filter this list")
+            .searchable(text: searchBinding, placement: .toolbar, prompt: searchPrompt)
+            .searchScopes(scopeBinding) {
+                Text("Everywhere").tag(SearchScope.everywhere)
+                Text(navigation.selection.title).tag(SearchScope.thisList)
+            }
+            .searchFocused($isSearchFieldFocused)
             .toolbar { toolbarContent }
+            .task { makeSessionIfNeeded() }
             .task(id: reloadToken) { await reload() }
+            .onChange(of: navigation.isSearchActive) { _, isActive in
+                searchModeDidChange(isActive: isActive)
+            }
             .accessibilityIdentifier(AccessibilityID.ItemList.root)
     }
 
+    /// The one search field.
+    ///
+    /// There used to be two: a "Filter this list" box here and a separate search sheet on ⌘F, which
+    /// looked identical and did different things. This is that field, and the scope picker is the
+    /// part that used to be a whole second feature.
     @ViewBuilder
     private var content: some View {
-        if isLoading, items.isEmpty {
+        if navigation.isSearchActive, let session {
+            InlineSearchResults(
+                session: session,
+                listTitle: navigation.selection.title,
+                onOpen: open,
+                onSave: { pendingSavedSearchName = defaultSavedSearchName(for: session) }
+            )
+            .sheet(item: savedSearchNameBinding) { name in
+                SaveSearchSheet(
+                    initialName: name.value,
+                    queryText: session.text,
+                    onSave: { saveSearch(named: $0, query: session.text) },
+                    onCancel: { pendingSavedSearchName = nil }
+                )
+            }
+        } else if isLoading, items.isEmpty {
             ProgressView()
                 .controlSize(.small)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -45,6 +81,33 @@ public struct ItemListView: View {
         } else {
             list
         }
+    }
+
+    private func makeSessionIfNeeded() {
+        guard session == nil, let services else { return }
+        session = SearchSessionModel(engine: services.search)
+    }
+
+    /// Keeps the field, the session, and the window's search mode in step.
+    ///
+    /// Entering search from the menu or ⌘F offers the previous query back and focuses the field, so
+    /// the shortcut lands somewhere you can type. Entering it *by typing* must not do that — the
+    /// text is already what the user wants — which is why the restore is conditional on the session
+    /// being empty rather than unconditional.
+    private func searchModeDidChange(isActive: Bool) {
+        guard let session else { return }
+
+        guard isActive else {
+            session.clear()
+            return
+        }
+
+        if session.text.isEmpty, !navigation.searchQuery.isEmpty {
+            session.text = navigation.searchQuery
+            navigation.didSelectSearchQuery()
+        }
+        session.listItemIDs = Set(items.map(\.id))
+        isSearchFieldFocused = true
     }
 
     @ViewBuilder
@@ -157,15 +220,6 @@ public struct ItemListView: View {
                 headline: "Trash is empty",
                 message: "Deleted items wait here until you remove them permanently."
             )
-        case .kind(let kind) where !navigation.listFilterText.isEmpty:
-            EmptyStateView(
-                symbolName: "magnifyingglass",
-                headline: "No \(kind.pluralDisplayName.lowercased()) match",
-                message: "Nothing here matches “\(navigation.listFilterText)”.",
-                tone: .noResults,
-                actionTitle: "Clear Filter",
-                action: { navigation.listFilterText = "" }
-            )
         case .kind(let kind):
             EmptyStateView(
                 symbolName: kind.symbolName,
@@ -253,8 +307,51 @@ public struct ItemListView: View {
     }
 
     private var subtitle: String {
+        if navigation.isSearchActive, let session {
+            return session.explanation
+        }
         let count = displayedItems.count
         return count == 1 ? "1 item" : "\(count) items"
+    }
+
+    // MARK: - Search results
+
+    /// Opens a result without leaving search.
+    ///
+    /// The results stay on screen and the detail pane changes, so several matches can be looked at
+    /// one after another. Leaving search is Escape's job, and only Escape's — a click that both
+    /// opened something *and* threw the results away would make the list feel like a trapdoor.
+    private func open(_ result: SearchResult) {
+        navigation.selectItem(result.item.id)
+        navigation.focus(.detail)
+    }
+
+    /// A name proposed from what was typed, so the common case is one Return.
+    private func defaultSavedSearchName(for session: SearchSessionModel) -> String {
+        let trimmed = session.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Saved Search" : trimmed
+    }
+
+    private func saveSearch(named name: String, query: String) {
+        guard let services else { return }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, !trimmedQuery.isEmpty else { return }
+
+        services.perform {
+            // The *text* is stored, not the parsed structure — so a saved search re-parses under a
+            // newer grammar and keeps working, and the user can read and edit what they saved.
+            let saved = SavedSearch(
+                name: trimmedName,
+                queryString: trimmedQuery,
+                createdAt: services.dateProvider.now
+            )
+            services.context.insert(saved)
+            try services.context.save()
+        }
+
+        pendingSavedSearchName = nil
+        services.refreshDerivedState()
     }
 
     // MARK: - Context menu
@@ -312,7 +409,6 @@ public struct ItemListView: View {
     private var reloadToken: String {
         var parts = [
             String(describing: navigation.selection),
-            navigation.listFilterText,
             String(describing: navigation.sortOverride),
         ]
         // Ensures a refetch after items change, since the repository is not observable.
@@ -372,8 +468,53 @@ public struct ItemListView: View {
 
     // MARK: - Bindings
 
-    private var filterBinding: Binding<String> {
-        Binding(get: { navigation.listFilterText }, set: { navigation.listFilterText = $0 })
+    /// Typing enters search; emptying the field leaves it.
+    ///
+    /// Deliberately *not* symmetrical with Escape. Emptying the field is the user erasing their
+    /// query, so restoring the list is what they asked for. Escape keeps the query in
+    /// ``NavigationModel/lastSearchQuery`` so reopening search offers it back — one gesture undoes
+    /// the search, the other undoes the typing, and neither destroys the other's work.
+    private var searchBinding: Binding<String> {
+        Binding(
+            get: { session?.text ?? "" },
+            set: { newValue in
+                session?.text = newValue
+                session?.listItemIDs = Set(items.map(\.id))
+
+                if newValue.isEmpty {
+                    navigation.endSearch()
+                } else {
+                    if !navigation.isSearchActive {
+                        navigation.beginSearch(clearingQuery: true)
+                        session?.text = newValue
+                    }
+                    // Mirrored so leaving search can keep it, and offer it back next time.
+                    navigation.searchQuery = newValue
+                }
+            }
+        )
+    }
+
+    private var scopeBinding: Binding<SearchScope> {
+        Binding(
+            get: { session?.scope ?? .everywhere },
+            set: { newValue in
+                session?.listItemIDs = Set(items.map(\.id))
+                session?.scope = newValue
+            }
+        )
+    }
+
+    private var searchPrompt: String {
+        navigation.isSearchActive ? "Search" : "Search everything"
+    }
+
+    /// Wraps the pending name so `.sheet(item:)` has something `Identifiable` to hold.
+    private var savedSearchNameBinding: Binding<IdentifiedString?> {
+        Binding(
+            get: { pendingSavedSearchName.map(IdentifiedString.init) },
+            set: { pendingSavedSearchName = $0?.value }
+        )
     }
 
     private var sortBinding: Binding<ItemQuery.Sort> {

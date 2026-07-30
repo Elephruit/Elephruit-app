@@ -153,6 +153,12 @@ extension Theme {
         public static let unresolvedLink = Color(nsColor: .systemOrange)
         /// A destructive action.
         public static let destructive = Color(nsColor: .systemRed)
+
+        /// Something the app could not interpret and has told the user about.
+        ///
+        /// Amber rather than red: an unreadable fragment of a search query is not a failure, it is
+        /// a part of the request that was skipped. Red would overstate it.
+        public static let warning = Color(nsColor: .systemOrange)
     }
 
     /// The palette a user may pick from for projects, areas, tags, and collections.

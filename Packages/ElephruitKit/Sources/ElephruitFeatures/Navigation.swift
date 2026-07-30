@@ -154,9 +154,6 @@ public final class NavigationModel {
     /// The item the detail pane shows.
     public private(set) var selectedItemID: UUID?
 
-    /// The list's own filter field, distinct from the global search sheet.
-    public var listFilterText = ""
-
     // MARK: Layout and focus
 
     public var layoutMode: LayoutMode = .full
@@ -165,7 +162,6 @@ public final class NavigationModel {
     public var isInspectorVisible = false
     public var isQuickCaptureVisible = false
     public var isCommandPaletteVisible = false
-    public var isSearchVisible = false
 
     /// The full tag list, reached from the sidebar's bounded disclosure group.
     public var isTagBrowserVisible = false
@@ -204,7 +200,6 @@ public final class NavigationModel {
         guard self.selection != selection else { return }
         self.selection = selection
         selectedItemIDs = []
-        listFilterText = ""
         sortOverride = nil
     }
 
@@ -269,8 +264,7 @@ public final class NavigationModel {
 
     public var shellState: ShellState {
         ShellState(
-            hasOverlay: isQuickCaptureVisible || isCommandPaletteVisible
-                || isSearchVisible || isTagBrowserVisible,
+            hasOverlay: isQuickCaptureVisible || isCommandPaletteVisible || isTagBrowserVisible,
             isSearchActive: isSearchActive,
             focusedPane: focusedPane,
             layoutMode: layoutMode
@@ -287,7 +281,6 @@ public final class NavigationModel {
         case .dismissOverlay:
             isQuickCaptureVisible = false
             isCommandPaletteVisible = false
-            isSearchVisible = false
             isTagBrowserVisible = false
 
         case .leaveSearch:
@@ -362,9 +355,6 @@ public final class NavigationModel {
         var query = selection.query(using: dateProvider)
         if let sortOverride {
             query.sort = sortOverride
-        }
-        if !listFilterText.isEmpty {
-            query.text = listFilterText
         }
         return query
     }

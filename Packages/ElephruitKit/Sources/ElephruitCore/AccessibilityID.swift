@@ -80,6 +80,10 @@ public enum AccessibilityID {
         public static let saveSearchButton = "search.saveSearch"
         public static let recentSearches = "search.recents"
         public static let tokenHelp = "search.tokenHelp"
+        public static let scopePicker = "search.scope"
+        public static let unrecognisedNote = "search.unrecognised"
+
+        public static func result(id: String) -> String { "search.result.\(id)" }
     }
 
     public enum Trash {
