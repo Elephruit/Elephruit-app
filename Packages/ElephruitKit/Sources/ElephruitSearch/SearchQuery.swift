@@ -20,6 +20,12 @@ public struct SearchQuery: Sendable, Hashable {
     /// `project:"Q3 Launch"` — matched against parent titles, resolved by the engine.
     public var containerTitles: Set<String> = []
 
+    /// `person:ana` — items that mention or link to a person.
+    ///
+    /// Matched against the names of linked people rather than against body text, so a note *about*
+    /// Ana is found while a note that happens to contain the word is not.
+    public var peopleNames: Set<String> = []
+
     /// `is:open`, `is:favorite`, …
     public var states: Set<StateFilter> = []
 
@@ -50,6 +56,7 @@ public struct SearchQuery: Sendable, Hashable {
             && kinds.isEmpty
             && tagSlugs.isEmpty
             && containerTitles.isEmpty
+            && peopleNames.isEmpty
             && states.isEmpty
             && due == nil
             && created == nil
@@ -58,7 +65,7 @@ public struct SearchQuery: Sendable, Hashable {
 
     /// Whether anything beyond free text is being filtered.
     public var hasStructuralFilters: Bool {
-        !kinds.isEmpty || !tagSlugs.isEmpty || !containerTitles.isEmpty
+        !kinds.isEmpty || !tagSlugs.isEmpty || !containerTitles.isEmpty || !peopleNames.isEmpty
             || !states.isEmpty || due != nil || created != nil || updated != nil
     }
 }
@@ -172,7 +179,8 @@ public enum SearchQueryParser {
     /// Keys the grammar understands. Exposed so the UI can offer completions from the same
     /// source of truth the parser uses.
     public static let recognisedKeys = [
-        "type", "kind", "tag", "project", "area", "in", "is", "due", "created", "updated",
+        "type", "kind", "tag", "project", "area", "in", "person", "with",
+        "is", "due", "created", "updated",
     ]
 
     public static func parse(_ input: String) -> SearchQuery {
@@ -227,6 +235,9 @@ public enum SearchQueryParser {
 
         case "project", "area", "in":
             query.containerTitles.insert(TextNormalizer.foldedForMatching(value))
+
+        case "person", "with":
+            query.peopleNames.insert(TextNormalizer.foldedForMatching(value))
 
         case "is":
             if let state = StateFilter(rawValue: value.lowercased()) {
@@ -324,6 +335,9 @@ public enum SearchQueryParser {
         }
         if !query.containerTitles.isEmpty {
             parts.append("in " + query.containerTitles.sorted().joined(separator: " or "))
+        }
+        if !query.peopleNames.isEmpty {
+            parts.append("involving " + query.peopleNames.sorted().joined(separator: " and "))
         }
         if !query.states.isEmpty {
             parts.append(query.states.map(\.displayName).sorted().joined(separator: ", ").lowercased())

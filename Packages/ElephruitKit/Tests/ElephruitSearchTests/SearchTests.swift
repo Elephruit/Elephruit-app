@@ -256,13 +256,20 @@ struct SearchEngineTests {
         try SearchFixture()
     }
 
+    /// The engine under test is the FTS5-backed one.
+    ///
+    /// Every test in this suite was written against the v1 engine and is unchanged. That is the
+    /// point of having put ``SearchEngine`` behind a protocol: the behaviour these assert is the
+    /// contract, and swapping the implementation underneath them is how the contract gets proven
+    /// rather than assumed.
     @MainActor
     struct SearchFixture {
         let stack: PersistenceStack
         let context: ModelContext
         let items: SwiftDataItemRepository
         let tags: SwiftDataTagRepository
-        let engine: DefaultSearchEngine
+        let engine: FTSSearchEngine
+        let indexURL: URL
         let clock = FixedDateProvider.reference
 
         init() throws {
@@ -270,7 +277,15 @@ struct SearchEngineTests {
             context = ModelContext(stack.container)
             tags = SwiftDataTagRepository(context: context, dateProvider: clock)
             items = SwiftDataItemRepository(context: context, dateProvider: clock, tags: tags)
-            engine = DefaultSearchEngine(items: items, dateProvider: clock)
+            indexURL = URL.temporaryDirectory
+                .appending(path: "ElephruitSearchTests", directoryHint: .isDirectory)
+                .appending(path: "\(UUID().uuidString).sqlite", directoryHint: .notDirectory)
+            engine = FTSSearchEngine(
+                items: items,
+                indexURL: indexURL,
+                dateProvider: clock,
+                container: stack.container
+            )
         }
     }
 

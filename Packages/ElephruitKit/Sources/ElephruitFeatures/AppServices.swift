@@ -93,7 +93,17 @@ public final class AppServices {
 
         self.tags = tags
         self.items = items
-        self.search = DefaultSearchEngine(items: items, dateProvider: dateProvider, container: stack.container)
+        // An in-memory stack has no location — previews and tests — so the index gets a throwaway
+        // file. It is derived either way; the only thing that changes is where it is thrown away.
+        let indexURL = stack.location?.searchIndexURL
+            ?? URL.temporaryDirectory.appending(path: "ElephruitIndex-\(UUID().uuidString).sqlite")
+
+        self.search = FTSSearchEngine(
+            items: items,
+            indexURL: indexURL,
+            dateProvider: dateProvider,
+            container: stack.container
+        )
         self.exporter = Exporter(items: items, context: context, dateProvider: dateProvider)
         self.importer = Importer(items: items, tags: tags, context: context, dateProvider: dateProvider)
         self.counts = CountsService(container: stack.container, dateProvider: dateProvider)

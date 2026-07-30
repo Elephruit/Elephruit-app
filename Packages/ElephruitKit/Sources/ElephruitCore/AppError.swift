@@ -112,6 +112,16 @@ extension AppError: LocalizedError {
     public var recoverySuggestion: String? {
         recovery.first?.title
     }
+
+    /// One line, for a log or a diagnostic surface.
+    ///
+    /// Deliberately built from the same two strings the user would see, so a log line and an alert
+    /// can never describe the same failure differently.
+    public var summary: String {
+        let description = errorDescription ?? "Something went wrong."
+        guard let reason = failureReason, !reason.isEmpty else { return description }
+        return "\(description) \(reason)"
+    }
 }
 
 // MARK: - Recovery
