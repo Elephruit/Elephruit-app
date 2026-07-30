@@ -306,9 +306,19 @@ struct SettingsView: View {
                     .foregroundStyle(Theme.Colors.secondaryText)
             }
 
+            Section("Calendar") {
+                if case .ready(let services) = environment.state {
+                    CalendarSettingsSection(calendar: services.calendar)
+                } else {
+                    Text("Available once your library is open.")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                }
+            }
+
             Section("Privacy") {
                 Label("This app makes no network requests.", systemImage: "lock.shield")
-                Text("Your library is stored only on this Mac. There is no analytics, no telemetry, and no crash reporting. iCloud sync is not enabled in this version.")
+                Text("Your library is stored only on this Mac. There is no analytics, no telemetry, and no crash reporting. iCloud sync is not enabled in this version. If you turn on Calendar, Elephruit reads your events and never writes to them.")
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)

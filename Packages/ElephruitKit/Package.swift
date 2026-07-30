@@ -109,7 +109,7 @@ let package = Package(
             name: "ElephruitFeaturesTests",
             dependencies: [
                 "ElephruitFeatures", "ElephruitPersistence", "ElephruitModel",
-                "ElephruitCore", "ElephruitDesign",
+                "ElephruitCore", "ElephruitDesign", "ElephruitIntegrations",
             ],
             swiftSettings: .strict
         ),

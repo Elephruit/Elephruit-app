@@ -1,4 +1,5 @@
 import ElephruitCore
+import ElephruitIntegrations
 import ElephruitModel
 import ElephruitPersistence
 import ElephruitSearch
@@ -39,6 +40,9 @@ public final class AppServices {
 
     /// The running timer, its heartbeat, and any recovery awaiting an answer.
     public let timer: TimerService
+
+    /// The user's calendar, read-only and off until they turn it on.
+    public let calendar: CalendarService
 
     /// What a containment repair would do, if one is needed.
     ///
@@ -122,6 +126,10 @@ public final class AppServices {
         )
         self.timeEntries = timeEntries
         self.timer = TimerService(entries: timeEntries, dateProvider: dateProvider)
+
+        // The provider is built lazily, and only when the feature is enabled — so an app that never
+        // turns the calendar on never constructs an `EKEventStore` and never prompts.
+        self.calendar = CalendarService(dateProvider: dateProvider) { EventKitCalendarProvider() }
 
         let undoManager = UndoManager()
         // Off, so one operation is one undo step regardless of run-loop timing. Every coordinator
