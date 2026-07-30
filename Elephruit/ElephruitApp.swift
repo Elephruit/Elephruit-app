@@ -27,6 +27,28 @@ struct ElephruitApp: App {
             ElephruitCommands()
         }
 
+        // The menu bar timer.
+        //
+        // A timer runs while you are doing something *else*, usually in another app. One you can
+        // only see by switching to Elephruit is one you forget is running, and a forgotten timer is
+        // how eleven hours end up billed to a task that took two.
+        //
+        // `.window` style rather than `.menu` so the elapsed time can be a live label rather than a
+        // static icon.
+        MenuBarExtra {
+            if case .ready(let services) = environment.state {
+                TimerMenuBarContent(services: services)
+            } else {
+                Text("Opening your library…")
+            }
+        } label: {
+            if case .ready(let services) = environment.state {
+                TimerMenuBarLabel(services: services)
+            } else {
+                Label("Elephruit", systemImage: "timer")
+            }
+        }
+
         Settings {
             SettingsView(environment: environment)
         }

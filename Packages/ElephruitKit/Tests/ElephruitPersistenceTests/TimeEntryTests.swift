@@ -266,6 +266,66 @@ struct TimeEntryItemTests {
                 "Time by project is unanswerable if a task's time does not roll up to it")
     }
 
+    /// The optimisation this guards.
+    ///
+    /// Resolving each entry's project one at a time made a year of history take 1.9 seconds over a
+    /// 200,000-entry store, because tens of thousands of entries walked their parent chains to reach
+    /// a few hundred distinct answers. `snapshots(in:)` memoises by item — and a cache that returns
+    /// something different from what it replaced is worse than the cost it saved, so this asserts
+    /// they agree, including for the cases most likely to break a memo.
+    @Test("Memoised snapshots agree with resolving each entry on its own")
+    func snapshotsMatchIndividualResolution() throws {
+        let fixture = try TimeFixture()
+
+        let projectA = try fixture.store.items.create(ItemDraft(kind: .project, title: "Alpha"))
+        let projectB = try fixture.store.items.create(ItemDraft(kind: .project, title: "Beta"))
+        let taskA = try fixture.store.items.create(
+            ItemDraft(kind: .task, title: "Task A", parentID: projectA.id)
+        )
+        let taskB = try fixture.store.items.create(
+            ItemDraft(kind: .task, title: "Task B", parentID: projectB.id)
+        )
+        let orphan = try fixture.makeTask("No project")
+
+        // Several entries per item, two items sharing nothing, one item with no project at all, and
+        // entries with no item — the four shapes a per-item memo has to keep straight.
+        for (index, subject) in [taskA, taskB, taskA, orphan, taskB].enumerated() {
+            _ = try fixture.time.addManual(
+                item: subject,
+                description: "Session \(index)",
+                startedAt: fixture.now.addingTimeInterval(Double(-3_600 * (index + 2))),
+                endedAt: fixture.now.addingTimeInterval(Double(-3_600 * (index + 1))),
+                tagSlugs: []
+            )
+        }
+        _ = try fixture.time.addManual(
+            item: nil,
+            description: "Unassigned",
+            startedAt: fixture.now.addingTimeInterval(-600),
+            endedAt: fixture.now,
+            tagSlugs: []
+        )
+
+        let window = fixture.now.addingTimeInterval(-86_400)..<fixture.now.addingTimeInterval(86_400)
+
+        let memoised = try fixture.time.snapshots(in: window, limit: nil)
+        let individually = try fixture.time.entries(in: window, limit: nil)
+            .map { $0.snapshot(at: fixture.now) }
+
+        #expect(memoised.count == individually.count)
+        #expect(memoised.map(\.id) == individually.map(\.id), "…and in the same order")
+
+        for (fast, slow) in zip(memoised, individually) {
+            #expect(fast.projectID == slow.projectID, "Project resolution must not depend on the path")
+            #expect(fast.projectTitle == slow.projectTitle)
+            #expect(fast.itemID == slow.itemID)
+            #expect(fast.duration(at: fixture.now) == slow.duration(at: fixture.now))
+        }
+
+        // And the memo genuinely distinguished the two projects rather than collapsing them.
+        #expect(Set(memoised.compactMap(\.projectTitle)) == ["Alpha", "Beta"])
+    }
+
     @Test("Continuing a previous entry keeps its subject and starts fresh")
     func resumeCarriesTheSubject() throws {
         let fixture = try TimeFixture()

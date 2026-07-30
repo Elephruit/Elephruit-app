@@ -154,6 +154,10 @@ struct DetailTaskRow: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
+
+            // Timing something is a thing you do *to* a task, so the control belongs on the task
+            // rather than in a separate place you have to go and tell about it afterwards.
+            ItemTimerButton(item: task, showsElapsed: true)
         }
         .frame(minHeight: Theme.Size.rowHeight)
         .accessibilityElement(children: .ignore)

@@ -34,6 +34,12 @@ public final class AppServices {
     /// Capture, callable without a view — see ``CaptureService``.
     public let capture: CaptureService
 
+    /// Tracked time.
+    public let timeEntries: any TimeEntryRepository
+
+    /// The running timer, its heartbeat, and any recovery awaiting an answer.
+    public let timer: TimerService
+
     /// What a containment repair would do, if one is needed.
     ///
     /// Computed by a dry run once the store is open. `nil` means there is nothing to convert — the
@@ -108,6 +114,14 @@ public final class AppServices {
         self.importer = Importer(items: items, tags: tags, context: context, dateProvider: dateProvider)
         self.counts = CountsService(container: stack.container, dateProvider: dateProvider)
         self.capture = CaptureService(items: items, context: context, dateProvider: dateProvider)
+
+        let timeEntries = SwiftDataTimeEntryRepository(
+            context: context,
+            dateProvider: dateProvider,
+            tags: tags
+        )
+        self.timeEntries = timeEntries
+        self.timer = TimerService(entries: timeEntries, dateProvider: dateProvider)
 
         let undoManager = UndoManager()
         // Off, so one operation is one undo step regardless of run-loop timing. Every coordinator
