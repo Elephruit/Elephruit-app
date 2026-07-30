@@ -50,6 +50,15 @@ struct TimeMigrationTests {
         ]
     }
 
+    // A synthetic "previous version" test used to live here and has been removed, because it could
+    // not do what its name claimed. The versioned schemas share live model types, and SwiftData
+    // resolves each one's full entity graph — so a store built from `SchemaV1` already contains
+    // `TimeEntry`, pulled in through `Item.timeEntries`. It needed no migration, so it exercised
+    // none, while reading as coverage.
+    //
+    // `RealStoreMigrationTests` replaces it. That one migrates bytes written by an earlier build,
+    // which is the only thing that reproduces the failure this suite missed.
+
     @Test("A populated library opens under the new schema with everything intact")
     func existingDataSurvives() throws {
         let location = StoreLocation.temporary()
@@ -167,7 +176,7 @@ struct TimeMigrationTests {
         #expect(entry.source == .manual)
     }
 
-    @Test("A backup is written before the migrating open")
+    @Test("A backup is written when the schema version has changed, and not otherwise")
     func migrationIsBackedUp() throws {
         let location = StoreLocation.temporary()
         defer { location.removeForTesting() }
@@ -179,13 +188,25 @@ struct TimeMigrationTests {
             _ = try populate(ModelContext(stack.container), clock: clock)
         }
 
+        // Reopening an already-current store must *not* churn out a backup on every launch.
+        _ = try PersistenceStack.open(mode: .onDisk(location))
+        let afterOrdinaryOpen = (try? FileManager.default.contentsOfDirectory(
+            at: location.backupsRoot, includingPropertiesForKeys: nil
+        )) ?? []
+        #expect(afterOrdinaryOpen.isEmpty, "An open that migrates nothing has nothing to protect")
+
+        // Now make the store look like one written by a different version, which is exactly what a
+        // real upgrade is, and open it again.
+        let stamp = location.root.appending(path: ".schema-version", directoryHint: .notDirectory)
+        try "0.9.0".write(to: stamp, atomically: true, encoding: .utf8)
+
         _ = try PersistenceStack.open(mode: .onDisk(location))
 
         let backups = try FileManager.default.contentsOfDirectory(
             at: location.backupsRoot,
             includingPropertiesForKeys: nil
         )
-        #expect(!backups.isEmpty, "A migrating open with no backup has no way back")
+        #expect(backups.count == 1, "A migrating open with no backup has no way back")
 
         // And the backup is a store that opens, not just bytes on disk.
         let backup = try #require(backups.first)
@@ -194,8 +215,20 @@ struct TimeMigrationTests {
             cachesRoot: location.cachesRoot.appending(path: "check", directoryHint: .isDirectory)
         )
         let stack = try PersistenceStack.open(mode: .onDisk(restored))
-        let context = ModelContext(stack.container)
-        #expect(try context.fetchCount(FetchDescriptor<Item>()) == 5,
+        #expect(try ModelContext(stack.container).fetchCount(FetchDescriptor<Item>()) == 5,
                 "A backup nobody has opened is a hope, not a backup")
+    }
+
+    @Test("The stamp is only written after a successful open")
+    func stampFollowsSuccess() throws {
+        let location = StoreLocation.temporary()
+        defer { location.removeForTesting() }
+        try location.createDirectories()
+
+        #expect(PersistenceStack.lastOpenedSchemaVersion(at: location) == nil,
+                "An untouched location claims nothing")
+
+        _ = try PersistenceStack.open(mode: .onDisk(location))
+        #expect(PersistenceStack.lastOpenedSchemaVersion(at: location) == CurrentSchema.versionString)
     }
 }

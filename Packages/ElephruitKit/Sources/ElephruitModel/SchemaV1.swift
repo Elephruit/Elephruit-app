@@ -31,52 +31,38 @@ public enum SchemaV1: VersionedSchema {
     }
 }
 
-/// The second schema.
+/// The second schema: time tracking.
 ///
-/// The entity *shapes* are identical to ``SchemaV1``: the attributes added along the way —
-/// `titleMatchKey`, `dueSortKey`, `completionPromptDismissedAt` — are all optional or defaulted and
-/// migrate lightweightly. What makes this a new version is the **data** change: containment was
-/// restricted to the work-breakdown structure, so parent relationships the new rules no longer
-/// permit have to become `filedUnder` links.
+/// One new entity, ``TimeEntry``, and one relationship on ``Item`` pointing at it. Both are
+/// **additive** — nothing existing changes shape and no data is rewritten. A store opened under this
+/// version gains an empty table and keeps everything it already had.
 ///
-/// The model types are shared rather than snapshotted, which is correct precisely because no shape
-/// changed. The moment one does, V1's types get frozen into this file — the rule in
-/// `docs/05-cloudkit-and-migrations.md`, which costs nothing to follow until it is needed.
+/// ### Why there is no shapeless version between this and V1
+/// There was one, briefly, and it broke the app.
+///
+/// Phase A2 declared a `SchemaV2` whose `models` were literally `SchemaV1.models` — the entity shapes
+/// were identical, and the version existed to mark a *data* change (restricting containment). But the
+/// data change was then correctly moved out of the migration and into an offered, post-open repair,
+/// which left a schema version that differed from its predecessor in no way at all.
+///
+/// Core Data identifies a version by a **checksum over its entity shapes**. Two versions with the
+/// same shapes have the same checksum, and when a plan contains more than one stage it builds an
+/// `NSLightweightMigrationStage` from the set of them and throws
+/// `"Duplicate version checksums detected"`. With a single stage that never happened; adding time
+/// tracking made it a second stage, and every launch that needed migrating crashed.
+///
+/// A version with no distinct shape is not a version. No store can be identified as being on it —
+/// it is byte-indistinguishable from V1 — so collapsing the two loses nothing and is invisible to
+/// any existing library.
+///
+/// **The rule this establishes:** a `VersionedSchema` earns its number by changing a shape. A change
+/// to *data* under unchanged shapes is a repair, and repairs live outside the migration plan, which
+/// is where ``ContainmentRepair`` already is.
 public enum SchemaV2: VersionedSchema {
     public static var versionIdentifier: Schema.Version { Schema.Version(2, 0, 0) }
 
-    public static var models: [any PersistentModel.Type] { SchemaV1.models }
-}
-
-/// The third schema: time tracking.
-///
-/// One new entity, ``TimeEntry``, and one new relationship on ``Item`` pointing at it. Both are
-/// **additive** — nothing existing changes shape, nothing is transformed, and no data is rewritten.
-/// A store opened under this version gains an empty table and keeps everything it already had.
-///
-/// ### The honest limit
-/// V1, V2 and V3 all reference the *live* model types rather than frozen copies. That is accurate
-/// for V1 and V2, whose shapes were genuinely identical, and it is now slightly generous for V3:
-/// `Item` has gained `timeEntries`, so a store built from `SchemaV2.models` in a test is really
-/// built with V3's `Item`.
-///
-/// Freezing would mean duplicating the whole entity graph, because `Item`'s relationships name
-/// `Tag`, `ItemLink`, `Attachment` and the rest, and each of those names `Item` back through an
-/// inverse. Copying one entity means copying all nine, and the copies rot.
-///
-/// What is therefore proven by test is the thing that actually matters here: **a store containing
-/// real data opens under the new schema with every item, tag, link, collection and profile intact,
-/// and time tracking works afterwards.** What is *not* proven is a byte-level V2→V3 shape migration.
-/// That distinction is affordable only because this change is additive. The first change that
-/// rewrites or removes anything makes freezing mandatory, and this comment is the reminder.
-///
-/// A backup is written before any open that could migrate — see `PersistenceStack.open` — so the
-/// recovery path does not depend on the argument above being right.
-public enum SchemaV3: VersionedSchema {
-    public static var versionIdentifier: Schema.Version { Schema.Version(3, 0, 0) }
-
     public static var models: [any PersistentModel.Type] {
-        SchemaV2.models + [TimeEntry.self]
+        SchemaV1.models + [TimeEntry.self]
     }
 }
 
@@ -92,53 +78,33 @@ public enum SchemaV3: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV1.self, SchemaV2.self, SchemaV3.self]
+        [SchemaV2.self]
     }
 
-    public static var stages: [MigrationStage] {
-        [containmentRepair, timeTracking]
-    }
+    /// **Empty, and that is not an oversight.**
+    ///
+    /// See the note on ``SchemaV2``. While the versioned schemas share live model types, SwiftData
+    /// resolves each one's full entity graph — so `SchemaV1`, which never mentions `TimeEntry`, has
+    /// it pulled in anyway through `Item.timeEntries`, and comes out byte-identical to `SchemaV2`.
+    /// Two versions with the same shape have the same checksum, and a plan holding both throws.
+    ///
+    /// Declaring one version leaves Core Data to infer the lightweight migration, which is exactly
+    /// what it is good at: adding a table and leaving everything else alone. The machinery stays
+    /// here for the first change that genuinely needs a custom stage, and that change is also the
+    /// one that makes freezing the old model types mandatory rather than optional.
+    public static var stages: [MigrationStage] { [] }
 
-    /// V1 to V2.
-    ///
-    /// **Lightweight, on purpose.** No entity shape changed, so opening the store needs to do
-    /// nothing but restamp the version.
-    ///
-    /// The consequential part — converting parent relationships into `filedUnder` links — is
-    /// deliberately *not* here. A `didMigrate` closure runs unattended, deep inside
-    /// `ModelContainer`'s initialiser, the first time the user happens to launch. That is precisely
-    /// the shape of decision the app is not supposed to make on its own.
-    ///
-    /// So ``ContainmentRepair`` runs after the store is open, only when the user says so, and only
-    /// after showing them exactly what it will do. It is idempotent and dry-runnable, which is what
-    /// makes deferring it safe rather than merely delayed.
-    static let containmentRepair = MigrationStage.lightweight(
-        fromVersion: SchemaV1.self,
-        toVersion: SchemaV2.self
-    )
-
-    /// V2 to V3 — time tracking.
-    ///
-    /// Additive: a new entity and a relationship to it. Nothing existing is read, rewritten, or
-    /// removed, so there is no data decision to make and nothing for the user to be asked about.
-    /// This is what a migration is supposed to look like, and the contrast with
-    /// ``containmentRepair`` — which had to be split out and *offered* — is the point of keeping
-    /// both here.
-    static let timeTracking = MigrationStage.lightweight(
-        fromVersion: SchemaV2.self,
-        toVersion: SchemaV3.self
-    )
 }
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV3.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV2.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV3.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV2.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {
-        let version = SchemaV3.versionIdentifier
+        let version = SchemaV2.versionIdentifier
         return "\(version.major).\(version.minor).\(version.patch)"
     }
 }

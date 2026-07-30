@@ -90,13 +90,21 @@ public struct PersistenceStack: Sendable {
             )
         }
 
-        // A migration plan with stages means this open may rewrite the store. Back it up first, so
-        // a failure has something to restore from — requirement M4. Skipped when there is nothing to
-        // protect: no stages, no store file, or an in-memory store.
+        // Back up before an open that could rewrite the store — requirement M4.
+        //
+        // This used to key off `ElephruitMigrationPlan.stages` being non-empty, which was wrong in a
+        // way that only became dangerous later: Core Data infers a lightweight migration whether or
+        // not a stage is declared, so a plan with no stages still rewrites the store. When the plan
+        // was reduced to a single schema, that condition silently switched the backup off on exactly
+        // the launch that needed it most.
+        //
+        // The condition is now what it should always have been: **the store on disk was last opened
+        // by a different schema version than this build uses.** That is true on precisely the
+        // launches that migrate, and false on every ordinary one, so it costs nothing to leave on.
         var backup: URL?
         if case .onDisk(let location) = mode,
-           !ElephruitMigrationPlan.stages.isEmpty,
-           FileManager.default.fileExists(atPath: location.storeURL.path(percentEncoded: false)) {
+           FileManager.default.fileExists(atPath: location.storeURL.path(percentEncoded: false)),
+           lastOpenedSchemaVersion(at: location) != CurrentSchema.versionString {
             backup = backupStore(at: location, label: "pre-v\(CurrentSchema.versionString)-\(UUID().uuidString.prefix(8))")
             pruneBackups(at: location, keeping: 3)
         }
@@ -107,6 +115,10 @@ public struct PersistenceStack: Sendable {
                 migrationPlan: ElephruitMigrationPlan.self,
                 configurations: configuration
             )
+
+            if case .onDisk(let location) = mode {
+                recordOpenedSchemaVersion(at: location)
+            }
 
             Diagnostics.persistence.info(
                 "Opened store, schema \(CurrentSchema.versionString, privacy: .public), mode \(String(describing: mode), privacy: .public)"
@@ -148,16 +160,45 @@ public struct PersistenceStack: Sendable {
         return location.backupsRoot.path(percentEncoded: false)
     }
 
-    /// Copies the store aside before a migration that is not lightweight.
+    // MARK: - Schema stamp
+
+    /// A tiny file recording which schema version last opened this store successfully.
     ///
-    /// Best-effort by design: a failed backup must not prevent the app from starting, but
-    /// it is logged so the reason is discoverable. Returns the backup directory when one
-    /// was written.
+    /// Kept beside the store rather than inside it, so reading it costs nothing and cannot itself
+    /// require the migration it is meant to guard.
+    private static func schemaStampURL(at location: StoreLocation) -> URL {
+        location.root.appending(path: ".schema-version", directoryHint: .notDirectory)
+    }
+
+    /// The version that last opened this store, or `nil` if unknown.
+    ///
+    /// `nil` is treated as "different", so a store from before this stamp existed — the user's, right
+    /// now — is backed up on its next open rather than assumed safe.
+    public static func lastOpenedSchemaVersion(at location: StoreLocation) -> String? {
+        try? String(contentsOf: schemaStampURL(at: location), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Written only after a successful open, so a crashed migration does not leave a stamp claiming
+    /// the store is already current.
+    private static func recordOpenedSchemaVersion(at location: StoreLocation) {
+        try? CurrentSchema.versionString.write(
+            to: schemaStampURL(at: location),
+            atomically: true,
+            encoding: .utf8
+        )
+    }
+
+    // MARK: - Backup
+
     /// Copies the store aside before a migration.
     ///
-    /// All three SQLite components are copied together — requirement **M5**. Copying only
-    /// `.store` produces a file that either fails to open or silently loses whatever was still in
-    /// the write-ahead log, which on a real library is the most recent work.
+    /// Best-effort by design: a failed backup must not prevent the app from starting, but it is
+    /// logged so the reason is discoverable. Returns the backup directory when one was written.
+    ///
+    /// All three SQLite components are copied together — requirement **M5**. Copying only `.store`
+    /// produces a file that either fails to open or silently loses whatever was still in the
+    /// write-ahead log, which on a real library is the most recent work.
     ///
     /// The WAL is checkpointed first, so the copy is a consistent snapshot rather than three files
     /// caught mid-transaction.

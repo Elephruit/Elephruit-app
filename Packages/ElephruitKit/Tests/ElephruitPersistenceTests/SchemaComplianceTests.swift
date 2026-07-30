@@ -83,7 +83,7 @@ struct SchemaComplianceTests {
 
     @Test("Schema version is reported for archives and diagnostics")
     func schemaVersionIsReadable() {
-        #expect(CurrentSchema.versionString == "3.0.0")
+        #expect(CurrentSchema.versionString == "2.0.0")
     }
 
     @Test("Every released schema stays in source, with a stage between each")
@@ -91,13 +91,23 @@ struct SchemaComplianceTests {
         // A released version removed from `schemas` makes its migration path uncompilable and
         // untestable, and any store still on it unopenable. The rule in docs/05 is that they stay
         // forever; this is what enforces it.
-        #expect(ElephruitMigrationPlan.schemas.count == 3)
-        #expect(ElephruitMigrationPlan.stages.count == ElephruitMigrationPlan.schemas.count - 1)
+        #expect(ElephruitMigrationPlan.stages.count == max(0, ElephruitMigrationPlan.schemas.count - 1))
 
         let versions = ElephruitMigrationPlan.schemas.map { $0.versionIdentifier }
         #expect(versions == versions.sorted(), "Versions must be declared in order")
-        #expect(versions.last == SchemaV3.versionIdentifier, "The last must be the current one")
-        #expect(versions.first == SchemaV1.versionIdentifier, "The first released version never leaves")
+        #expect(versions.last == CurrentSchema.versioned.versionIdentifier, "The last must be the current one")
+
+        // Every declared version must have a *distinct* shape. Two that do not produce the same
+        // Core Data checksum, and a plan holding both throws "Duplicate version checksums detected"
+        // on any launch that needs migrating — which is precisely what shipped and crashed.
+        let entitySets = ElephruitMigrationPlan.schemas.map { versioned in
+            Set(Schema(versionedSchema: versioned).entities.map(\.name))
+        }
+        for (index, left) in entitySets.enumerated() {
+            for right in entitySets[(index + 1)...] {
+                #expect(left != right, "Two schema versions describe the same shape, which cannot migrate")
+            }
+        }
     }
 
     @Test("An unknown stored kind reads as reference without rewriting the row")
