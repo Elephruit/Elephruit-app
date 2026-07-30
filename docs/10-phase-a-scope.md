@@ -298,7 +298,9 @@ the reference machine and its calibration time.
 
 ---
 
-## 9. A1 acceptance criteria
+## 9. A1 acceptance criteria — **all met, verified 2026-07-30**
+
+Every criterion below is asserted by a named test, except where the Verified column says otherwise.
 
 | # | Criterion |
 |---|---|

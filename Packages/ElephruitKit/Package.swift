@@ -107,7 +107,10 @@ let package = Package(
         ),
         .testTarget(
             name: "ElephruitFeaturesTests",
-            dependencies: ["ElephruitFeatures", "ElephruitPersistence", "ElephruitModel", "ElephruitCore"],
+            dependencies: [
+                "ElephruitFeatures", "ElephruitPersistence", "ElephruitModel",
+                "ElephruitCore", "ElephruitDesign",
+            ],
             swiftSettings: .strict
         ),
         .testTarget(

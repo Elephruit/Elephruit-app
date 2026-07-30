@@ -1,0 +1,104 @@
+import ElephruitCore
+import ElephruitDesign
+import ElephruitFeatures
+import Foundation
+import Testing
+
+/// **Criteria A1-4 and A1-5** — the sidebar's truncation policy, and the rule that a destination the
+/// build cannot reach is never shown anywhere.
+///
+/// What is asserted here is the *policy*: which rows may be cut, which may not, and which exist at
+/// all. The rendering half — `.truncationMode(.tail)` and the tooltip on a derived row — is a view
+/// modifier, verified by reading rather than by test, and that limit is stated rather than papered
+/// over.
+@MainActor
+@Suite("Sidebar registry")
+struct SidebarRegistryTests {
+    @Test("No primary navigation row may be truncated")
+    func destinationsNeverTruncate() {
+        // An ambiguous "Proj…" costs more than a wider sidebar does. Every declared destination opts
+        // out of truncation, which is what makes the derived minimum width meaningful — the sidebar
+        // grows to fit them rather than cutting them to fit it.
+        for destination in SidebarRegistry.allDeclared {
+            #expect(
+                destination.mayTruncate == false,
+                "\(destination.title) would be allowed to truncate"
+            )
+        }
+    }
+
+    @Test("The derived minimum accounts for every visible destination")
+    func minimumWidthCoversEveryTitle() {
+        let titles = SidebarRegistry.nonTruncatingTitles
+        let available = SidebarRegistry.available.map(\.title)
+
+        #expect(Set(titles) == Set(available), "A destination missing here could be cut off")
+        #expect(SidebarMetrics.minimumWidth(fittingTitles: titles) >= SidebarMetrics.floorWidth)
+    }
+
+    @Test("Unavailable destinations are enumerated nowhere")
+    func unavailableDestinationsAreInvisible() {
+        // A roadmap should not leak into the interface as a row that leads nowhere — not in the
+        // sidebar, not in a customisation screen, not in a menu.
+        let declared = Set(SidebarRegistry.allDeclared.map(\.id))
+        let available = Set(SidebarRegistry.available.map(\.id))
+
+        #expect(declared.count > available.count, "Some destinations are declared for later phases")
+
+        for destination in SidebarRegistry.allDeclared where !destination.isAvailable {
+            #expect(!available.contains(destination.id), "\(destination.title) should be invisible")
+
+            for band in SidebarDestination.Band.allCases {
+                #expect(!SidebarRegistry.destinations(in: band).contains { $0.id == destination.id })
+            }
+        }
+    }
+
+    @Test("Home, Calendar, and Time are declared but not yet shown")
+    func laterDestinationsAreDeclared() {
+        // Declared now so the phase that builds one flips a flag rather than editing the sidebar.
+        let laterIDs = ["home", "calendar", "time"]
+
+        for id in laterIDs {
+            let destination = SidebarRegistry.allDeclared.first { $0.id == id }
+            #expect(destination != nil, "\(id) should be declared")
+            #expect(destination?.isAvailable == false, "\(id) should not be shown yet")
+        }
+    }
+
+    @Test("Only Today and Inbox carry a count")
+    func onlyTwoRowsShowCounts() {
+        // A count is a prompt to act. A count of every note ever written is decoration.
+        let counted = SidebarRegistry.available.filter(\.showsCount).map(\.id)
+        #expect(Set(counted) == ["today", "inbox"])
+    }
+
+    @Test("Numeric shortcuts follow the order rows are shown in")
+    func shortcutsMatchVisibleOrder() {
+        // ⌘1 must select whatever is first, or the shortcut and the eye disagree.
+        let ordered = SidebarRegistry.destinations(in: .primary)
+            + SidebarRegistry.destinations(in: .library)
+
+        for (index, destination) in ordered.enumerated() {
+            #expect(SidebarRegistry.destination(forShortcutIndex: index + 1)?.id == destination.id)
+        }
+
+        #expect(SidebarRegistry.destination(forShortcutIndex: 0) == nil)
+        #expect(SidebarRegistry.destination(forShortcutIndex: ordered.count + 1) == nil)
+    }
+
+    @Test("A derived row keeps its full title, so a truncated one still has a tooltip")
+    func derivedRowsCarryTheirFullTitle() {
+        // The row may be cut in the view; the value it was built from is not, which is what the
+        // tooltip and the accessibility label read.
+        let long = "A pinned project with a name far too long for a 180 point sidebar"
+        let row = SidebarDerivedRow(
+            id: "pin.test",
+            selection: .today,
+            title: long,
+            symbolName: "square.stack.3d.up"
+        )
+
+        #expect(row.title == long)
+    }
+}
