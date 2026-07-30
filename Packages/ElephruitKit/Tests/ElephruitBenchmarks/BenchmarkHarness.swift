@@ -177,6 +177,55 @@ public enum Benchmark {
         print(measurement.report)
         return measurement
     }
+
+    /// Runs `body` once per input and reports a percentile rather than the median.
+    ///
+    /// Interactive budgets are stated at p95 on purpose. A median keystroke latency says nothing
+    /// about whether typing *feels* smooth — one query in twenty taking half a second is exactly
+    /// what makes a search field feel unreliable, and a median hides it completely.
+    @discardableResult
+    @MainActor
+    public static func measurePercentile<Input>(
+        _ name: String,
+        budget: Duration,
+        percentile: Double = 0.95,
+        inputs: [Input],
+        _ body: @MainActor (Input) async throws -> Void
+    ) async rethrows -> Measurement {
+        var samples: [Double] = []
+        samples.reserveCapacity(inputs.count)
+
+        for input in inputs {
+            let start = ContinuousClock.now
+            try await body(input)
+            samples.append((ContinuousClock.now - start).seconds)
+        }
+
+        let sorted = samples.sorted()
+        // Nearest-rank: the smallest sample at or above the percentile, which never interpolates a
+        // value that was not actually observed.
+        let rank = max(1, Int((percentile * Double(sorted.count)).rounded(.up)))
+        let raw = sorted[min(rank - 1, sorted.count - 1)]
+        let factor = hostFactor
+
+        let measurement = Measurement(
+            name: name,
+            rawSeconds: raw,
+            normalisedSeconds: raw / factor,
+            budgetSeconds: budget.seconds,
+            hostFactor: factor
+        )
+
+        print(measurement.report)
+        print(String(
+            format: "  └ %d samples · min %.2f ms · median %.2f ms · max %.2f ms",
+            sorted.count,
+            (sorted.first ?? 0) * 1_000,
+            sorted[sorted.count / 2] * 1_000,
+            (sorted.last ?? 0) * 1_000
+        ))
+        return measurement
+    }
 }
 
 extension Duration {

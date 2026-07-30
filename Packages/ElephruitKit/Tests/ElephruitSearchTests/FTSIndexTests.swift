@@ -97,6 +97,36 @@ struct SearchIndexDurabilityTests {
         #expect(try await relaunched.search(SearchQueryParser.parse("venue"), limit: 10).count == 1)
     }
 
+    /// The regression this exists for.
+    ///
+    /// A best-effort optimisation at the end of a rebuild — an FTS compaction and a WAL checkpoint —
+    /// was allowed to throw. `wal_checkpoint` returns `SQLITE_BUSY` whenever a reader is mid-query,
+    /// which is ordinary and not an error, and that throw propagated out, marked a perfectly good
+    /// index unavailable, and silently routed every search onto the store fallback: fifty times
+    /// slower, same answers.
+    ///
+    /// Nothing caught it. Every correctness test passed, because the fallback is correct. Only a
+    /// benchmark noticed, and only after the timing had been mistaken for a search regression. So
+    /// the assertion now is not "search works" but **"search is answering from the index"**.
+    @Test("A completed rebuild leaves the index ready, not merely correct")
+    func rebuildLeavesTheIndexReady() async throws {
+        let fixture = try IndexFixture()
+        for index in 0..<40 {
+            _ = try fixture.items.create(ItemDraft(kind: .note, title: "Launch item \(index)"))
+        }
+
+        await fixture.engine.warmIndex()
+
+        #expect(fixture.engine.status.isReady,
+                "A rebuild that finished must not leave search on the fallback path")
+        #expect(try await fixture.engine.isComplete(),
+                "The index must record itself as complete so the next launch trusts it")
+
+        let relaunched = fixture.reopened()
+        await relaunched.warmIndex()
+        #expect(relaunched.status.isReady, "…and must still be ready after a relaunch")
+    }
+
     @Test("Rebuilding by hand produces the same answers")
     func invalidateAndRebuild() async throws {
         let fixture = try IndexFixture()

@@ -110,7 +110,7 @@ public final class FTSSearchEngine: SearchEngine {
                 try await store.beginRebuild(expecting: total)
                 status = .building(progress: RebuildProgress(indexed: 0, expected: total, isRebuilding: true))
 
-                try await worker.stream(batchSize: 400) { batch, processed, expected in
+                try await worker.stream(batchSize: 2_000) { batch, processed, expected in
                     do {
                         try await store.upsert(batch)
                         await store.recordRebuildProgress(indexed: processed)
@@ -124,8 +124,7 @@ public final class FTSSearchEngine: SearchEngine {
                     }
                 }
 
-                let live = try await worker.liveIdentifiers()
-                try await store.finishRebuild(keeping: live)
+                try await store.finishRebuild()
 
                 let indexed = try await store.indexedCount()
                 status = .ready(indexed: indexed)
@@ -164,6 +163,11 @@ public final class FTSSearchEngine: SearchEngine {
     public func indexProgress() async -> (indexed: Int, expected: Int, isRebuilding: Bool) {
         let progress = await store.rebuildProgress
         return (progress.indexed, progress.expected, progress.isRebuilding)
+    }
+
+    /// Whether the index considers itself fully built.
+    public func isComplete() async throws(AppError) -> Bool {
+        try await store.isComplete()
     }
 
     public func indexStatistics() async -> (items: Int, terms: Int, isWarm: Bool) {
@@ -336,3 +340,4 @@ public enum IndexStatus: Sendable, Hashable {
         }
     }
 }
+
