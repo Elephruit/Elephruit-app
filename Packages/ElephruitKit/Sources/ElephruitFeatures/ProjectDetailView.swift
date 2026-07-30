@@ -232,7 +232,7 @@ public struct ProjectDetailView: View {
             task: task,
             dateProvider: services?.dateProvider ?? SystemDateProvider(),
             onToggle: { perform { try $0.toggleCompletion(task) } },
-            onOpen: { navigation.selectedItemID = task.id }
+            onOpen: { navigation.selectItem(task.id) }
         )
     }
 
@@ -246,7 +246,7 @@ public struct ProjectDetailView: View {
             Button {
                 perform { repository in
                     let task = try repository.create(ItemDraft(kind: .task, parentID: project.id))
-                    navigation.selectedItemID = task.id
+                    navigation.selectItem(task.id)
                 }
             } label: {
                 Label("New Task", systemImage: "plus")
@@ -350,7 +350,7 @@ public struct ProjectDetailView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
                 ForEach(items, id: \.id) { item in
                     Button {
-                        navigation.selectedItemID = item.id
+                        navigation.selectItem(item.id)
                     } label: {
                         HStack(spacing: Theme.Spacing.small) {
                             Image(systemName: item.effectiveSymbolName)

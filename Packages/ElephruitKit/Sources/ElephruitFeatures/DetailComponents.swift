@@ -236,3 +236,50 @@ struct HeadingActionConfirmation: Identifiable {
         }
     }
 }
+
+/// The bar that appears while several items are selected.
+///
+/// Appears only while a multi-selection exists, and carries the few actions worth a click. Everything
+/// else stays in the context menu — a permanent toolbar of batch actions would be visual noise for
+/// the ninety-nine percent of the time nothing is multi-selected.
+struct BatchActionBar: View {
+    let count: Int
+    let isTrashScope: Bool
+    let onComplete: () -> Void
+    let onArchive: () -> Void
+    let onTrash: () -> Void
+    let onRestore: () -> Void
+    let onClear: () -> Void
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.medium) {
+            Text("\(count) selected")
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .monospacedDigit()
+
+            Spacer()
+
+            if isTrashScope {
+                Button("Put Back", systemImage: "arrow.uturn.backward", action: onRestore)
+            } else {
+                Button("Complete", systemImage: "checkmark.circle", action: onComplete)
+                Button("Archive", systemImage: "archivebox", action: onArchive)
+                Button("Trash", systemImage: "trash", role: .destructive, action: onTrash)
+            }
+
+            Button("Clear", systemImage: "xmark", action: onClear)
+                .labelStyle(.iconOnly)
+        }
+        .buttonStyle(.borderless)
+        .labelStyle(.titleAndIcon)
+        .font(Theme.Text.rowSubtitle)
+        .padding(.horizontal, Theme.Spacing.medium)
+        .padding(.vertical, Theme.Spacing.small)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
+        .accessibilityIdentifier("itemList.batchActions")
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(count) items selected")
+    }
+}

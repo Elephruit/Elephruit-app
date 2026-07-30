@@ -308,7 +308,7 @@ public struct CommandPaletteView: View {
     private func openItem(id: UUID) {
         guard let services, let item = try? services.items.item(id: id) else { return }
         navigation.select(.kind(item.kind))
-        navigation.selectedItemID = id
+        navigation.selectItem(id)
         dismiss()
     }
 }
