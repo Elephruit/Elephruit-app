@@ -67,12 +67,24 @@ public enum SampleData {
 
         // MARK: Tasks — including the awkward cases
 
+        // Headings, so the project workspace has real structure to show.
+        let planning = try items.create(
+            ItemDraft(kind: .heading, title: "Planning", parentID: launch.id)
+        )
+        let writing = try items.create(
+            ItemDraft(kind: .heading, title: "Writing", parentID: launch.id)
+        )
+        // An empty heading is legitimate — a placeholder for work not yet written down.
+        _ = try items.create(
+            ItemDraft(kind: .heading, title: "After launch", parentID: launch.id)
+        )
+
         let overdue = try items.create(
             ItemDraft(
                 kind: .task,
                 title: "Send the revised pricing table to Priya for review",
                 tagSlugs: ["urgent"],
-                parentID: launch.id,
+                parentID: planning.id,
                 dueAt: clock.startOfDay(daysFromToday: -4),
                 priority: .high
             )
@@ -83,18 +95,19 @@ public enum SampleData {
                 kind: .task,
                 title: "Draft the announcement post",
                 body: "Tone: matter-of-fact. Reference [[Positioning Notes]] for the framing.",
-                parentID: launch.id,
+                tagSlugs: ["writing"],
+                parentID: writing.id,
                 dueAt: clock.startOfToday,
                 priority: .high
             )
         )
 
         _ = try items.create(
-            ItemDraft(kind: .task, title: "Book the venue", parentID: launch.id, dueAt: clock.startOfDay(daysFromToday: 2))
+            ItemDraft(kind: .task, title: "Book the venue", parentID: planning.id, dueAt: clock.startOfDay(daysFromToday: 2))
         )
 
         let completedTask = try items.create(
-            ItemDraft(kind: .task, title: "Agree the launch date with Sales", parentID: launch.id)
+            ItemDraft(kind: .task, title: "Agree the launch date with Sales", parentID: planning.id)
         )
         try items.toggleCompletion(completedTask)
 
@@ -120,6 +133,15 @@ public enum SampleData {
         _ = try items.create(
             ItemDraft(kind: .task, title: "Get quotes from three removal firms", tagSlugs: ["home"], parentID: houseMove.id)
         )
+
+        // A finished project, so the completion suggestion has somewhere to appear.
+        let finished = try items.create(
+            ItemDraft(kind: .project, title: "Renew the domain", parentID: work.id)
+        )
+        for title in ["Check the registrar", "Pay the invoice"] {
+            let task = try items.create(ItemDraft(kind: .task, title: title, parentID: finished.id))
+            try items.toggleCompletion(task)
+        }
 
         // MARK: Inbox — unfiled captures awaiting triage
 

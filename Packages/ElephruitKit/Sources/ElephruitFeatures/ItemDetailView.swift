@@ -4,13 +4,18 @@ import ElephruitModel
 import ElephruitPersistence
 import SwiftUI
 
-/// The third column: one item, editable.
+/// The third column: one item, in whatever form suits its kind.
 ///
-/// Edits are debounced and written through the repository, so validation, `searchText`, and wiki-link
-/// reconciliation all happen on every save without the view knowing about any of them.
+/// ### Why this is a router
+/// The previous version rendered title + body + backlinks for *everything*, so a project got a note
+/// view with a different glyph — no task list, no headings, no people. `ItemKind` discriminated the
+/// data but not the presentation, and that mismatch is why the app read as a note-taker with extra
+/// fields rather than as a connected system.
+///
+/// This view now owns only what every kind shares: loading the editable text, debouncing the write,
+/// and flushing it. Which surface to draw is a switch, and each surface is its own type.
 public struct ItemDetailView: View {
     @Environment(\.services) private var services
-    @Environment(\.prefersMonospacedEditor) private var prefersMonospaced
 
     private let navigation: NavigationModel
 
@@ -29,7 +34,14 @@ public struct ItemDetailView: View {
     public var body: some View {
         Group {
             if let item = currentItem {
-                editor(for: item)
+                VStack(spacing: 0) {
+                    if item.isInTrash {
+                        TrashBanner { restore(item) }
+                            .padding(.top, Theme.Spacing.medium)
+                    }
+                    surface(for: item)
+                }
+                .toolbar { detailToolbar(for: item) }
             } else {
                 EmptyStateView(
                     symbolName: "square.text.square",
@@ -43,220 +55,62 @@ public struct ItemDetailView: View {
         .onDisappear { flushPendingSave() }
     }
 
-    // MARK: - Editor
+    /// The one place kind becomes presentation.
+    @ViewBuilder
+    private func surface(for item: Item) -> some View {
+        switch item.kind {
+        case .project, .area, .goal:
+            ProjectDetailView(
+                project: item,
+                navigation: navigation,
+                title: titleBinding,
+                brief: bodyBinding
+            )
 
-    private func editor(for item: Item) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header(for: item)
+        case .task:
+            TaskDetailView(
+                item: item,
+                navigation: navigation,
+                title: titleBinding,
+                bodyText: bodyBinding
+            )
 
-            Divider()
+        case .bookmark:
+            BookmarkDetailView(item: item, title: titleBinding, bodyText: bodyBinding)
 
-            ZStack(alignment: .topLeading) {
-                MarkdownTextEditor(
-                    text: bodyBinding,
-                    pendingInsertion: $pendingInsertion,
-                    isMonospaced: prefersMonospaced,
-                    isEditable: !item.isInTrash,
-                    onCompletionContextChange: handleCompletionContextChange
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .person, .organization:
+            PersonDetailView(
+                item: item,
+                navigation: navigation,
+                title: titleBinding,
+                bodyText: bodyBinding
+            )
 
-                if let completionContext, !completionSuggestions.isEmpty {
-                    linkCompletionList(context: completionContext)
-                        .padding(.leading, Theme.Spacing.large)
-                        .padding(.top, Theme.Spacing.section)
-                }
-            }
+        case .heading:
+            // A heading is edited in place inside its project and never opened on its own. Reaching
+            // here means something selected one directly, so point back rather than showing a
+            // stripped editor for a thing with nothing to edit.
+            EmptyStateView(
+                symbolName: "text.append",
+                headline: item.displayTitle,
+                message: "Headings are edited inside their project.",
+                actionTitle: item.parent.map { "Open \($0.displayTitle)" },
+                action: item.parent.map { parent in { navigation.selectedItemID = parent.id } }
+            )
 
-            if !visibleBacklinks(for: item).isEmpty {
-                Divider()
-                backlinks(for: item)
-            }
+        case .note, .idea, .reference, .decision, .interaction, .meeting, .dailyEntry:
+            NoteDetailView(
+                item: item,
+                navigation: navigation,
+                title: titleBinding,
+                bodyText: bodyBinding,
+                pendingInsertion: $pendingInsertion,
+                completionContext: completionContext,
+                completionSuggestions: completionSuggestions,
+                onCompletionContextChange: handleCompletionContextChange,
+                onAcceptCompletion: acceptCompletion
+            )
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityIdentifier(AccessibilityID.Detail.root)
-        .toolbar { detailToolbar(for: item) }
-    }
-
-    private func header(for item: Item) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            if item.isInTrash {
-                trashBanner(for: item)
-            }
-
-            HStack(spacing: Theme.Spacing.small) {
-                Image(systemName: item.effectiveSymbolName)
-                    .foregroundStyle(Theme.Palette.color(named: item.colorName))
-                    .accessibilityHidden(true)
-
-                TextField("Title", text: titleBinding, prompt: Text("Untitled \(item.kind.displayName)"))
-                    .textFieldStyle(.plain)
-                    .font(Theme.Text.title)
-                    .disabled(item.isInTrash)
-                    .accessibilityIdentifier(AccessibilityID.Detail.titleField)
-                    .accessibilityLabel("Title")
-            }
-
-            metadataLine(for: item)
-        }
-        .padding(.horizontal, Theme.Spacing.large)
-        .padding(.vertical, Theme.Spacing.medium)
-    }
-
-    private func trashBanner(for item: Item) -> some View {
-        HStack(spacing: Theme.Spacing.small) {
-            Image(systemName: "trash")
-            Text("This item is in the Trash and cannot be edited.")
-            Spacer()
-            Button("Put Back") { restore(item) }
-                .accessibilityIdentifier(AccessibilityID.Trash.restoreButton)
-        }
-        .font(Theme.Text.rowSubtitle)
-        .padding(Theme.Spacing.small)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                .fill(Theme.Colors.subtleFill)
-        )
-    }
-
-    private func metadataLine(for item: Item) -> some View {
-        HStack(spacing: Theme.Spacing.small) {
-            if item.kind.supportsStatus {
-                Button {
-                    toggleCompletion(item)
-                } label: {
-                    Label(
-                        item.isCompleted ? "Completed" : "Open",
-                        systemImage: item.status.symbolName
-                    )
-                    .font(Theme.Text.metadata)
-                }
-                .buttonStyle(.borderless)
-                .disabled(item.isInTrash)
-            }
-
-            if let dueAt = item.dueAt {
-                DueDateLabel(
-                    date: dueAt,
-                    dateProvider: services?.dateProvider ?? SystemDateProvider(),
-                    isActionable: item.isActionable
-                )
-            }
-
-            if let parent = item.parent {
-                Button {
-                    navigation.select(.item(id: parent.id))
-                } label: {
-                    Label(parent.displayTitle, systemImage: parent.effectiveSymbolName)
-                        .font(Theme.Text.metadata)
-                }
-                .buttonStyle(.borderless)
-            }
-
-            if !item.tagSlugs.isEmpty {
-                TagChipRow(slugs: item.tagSlugs, limit: 4)
-            }
-
-            Spacer()
-
-            Text("Edited \(item.updatedAt.formatted(.relative(presentation: .named)))")
-                .font(Theme.Text.metadata)
-                .foregroundStyle(Theme.Colors.tertiaryText)
-        }
-        .foregroundStyle(Theme.Colors.secondaryText)
-    }
-
-    // MARK: - Link completion
-
-    /// The `[[` completion list.
-    ///
-    /// Offers to create the missing item when nothing matches, which is what makes writing a link to
-    /// something not yet written a natural act rather than a dead end.
-    private func linkCompletionList(context: WikiLinkCompletionContext) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(completionSuggestions.prefix(6), id: \.id) { suggestion in
-                Button {
-                    pendingInsertion = WikiLinkInsertion(title: suggestion.title, context: context)
-                    completionContext = nil
-                } label: {
-                    HStack {
-                        Image(systemName: "link")
-                            .font(Theme.Text.metadata)
-                        Text(suggestion.title)
-                            .lineLimit(1)
-                        Spacer()
-                    }
-                    .padding(.horizontal, Theme.Spacing.small)
-                    .padding(.vertical, Theme.Spacing.tight)
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .frame(width: 280, alignment: .leading)
-        .padding(Theme.Spacing.tight)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
-                .strokeBorder(Theme.Colors.separator)
-        )
-        .shadow(radius: 8, y: 2)
-        .accessibilityLabel("Link suggestions")
-    }
-
-    private func handleCompletionContextChange(_ context: WikiLinkCompletionContext?) {
-        completionContext = context
-
-        guard let context, let services else {
-            completionSuggestions = []
-            return
-        }
-
-        Task {
-            let suggestions = await services.search.titleSuggestions(prefix: context.query, limit: 8)
-            // Discard a stale result if the caret moved on while we were asking.
-            guard completionContext == context else { return }
-            completionSuggestions = suggestions.filter { $0.id != navigation.selectedItemID }
-        }
-    }
-
-    // MARK: - Backlinks
-
-    private func visibleBacklinks(for item: Item) -> [ItemLink] {
-        item.visibleBacklinks()
-    }
-
-    private func backlinks(for item: Item) -> some View {
-        let links = visibleBacklinks(for: item)
-
-        return VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            SectionHeader("Linked from", count: links.count)
-
-            ForEach(links, id: \.id) { link in
-                if let source = link.source {
-                    Button {
-                        navigation.selectedItemID = source.id
-                    } label: {
-                        HStack(spacing: Theme.Spacing.small) {
-                            Image(systemName: source.effectiveSymbolName)
-                                .foregroundStyle(Theme.Colors.secondaryText)
-                            Text(source.displayTitle)
-                                .lineLimit(1)
-                            Text(link.kind.displayName)
-                                .font(Theme.Text.metadata)
-                                .foregroundStyle(Theme.Colors.tertiaryText)
-                            Spacer()
-                        }
-                        .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .padding(.horizontal, Theme.Spacing.large)
-        .padding(.vertical, Theme.Spacing.medium)
-        .frame(maxHeight: 180)
-        .accessibilityIdentifier(AccessibilityID.Detail.backlinksSection)
     }
 
     // MARK: - Toolbar
@@ -277,13 +131,45 @@ public struct ItemDetailView: View {
 
         ToolbarItem {
             Button {
+                update(item) { $0.isPinned.toggle() }
+            } label: {
+                Label(item.isPinned ? "Unpin" : "Pin", systemImage: item.isPinned ? "pin.fill" : "pin")
+            }
+            .accessibilityIdentifier(AccessibilityID.Inspector.pinToggle)
+        }
+
+        ToolbarItem {
+            Button {
                 navigation.isInspectorVisible.toggle()
             } label: {
                 Label("Inspector", systemImage: "sidebar.trailing")
             }
             .accessibilityIdentifier(AccessibilityID.Detail.inspectorToggle)
-            .keyboardShortcut("i", modifiers: [.command, .option])
         }
+    }
+
+    // MARK: - Link completion
+
+    private func handleCompletionContextChange(_ context: WikiLinkCompletionContext?) {
+        completionContext = context
+
+        guard let context, let services else {
+            completionSuggestions = []
+            return
+        }
+
+        Task {
+            let suggestions = await services.search.titleSuggestions(prefix: context.query, limit: 8)
+            // Discard a stale result if the caret moved on while we were asking.
+            guard completionContext == context else { return }
+            completionSuggestions = suggestions.filter { $0.id != navigation.selectedItemID }
+        }
+    }
+
+    private func acceptCompletion(_ title: String) {
+        guard let context = completionContext else { return }
+        pendingInsertion = WikiLinkInsertion(title: title, context: context)
+        completionContext = nil
     }
 
     // MARK: - Loading and saving
@@ -295,9 +181,9 @@ public struct ItemDetailView: View {
 
     /// Pulls the item's text into local state.
     ///
-    /// Local state, rather than binding straight to the model, so that typing does not write to the
-    /// store on every keystroke — which would run validation, link reconciliation, and a save
-    /// several times a second.
+    /// Local state, rather than binding straight to the model, so typing does not write to the store
+    /// on every keystroke — which would run validation, link reconciliation, and a save several
+    /// times a second.
     private func load() {
         flushPendingSave()
 
@@ -337,9 +223,9 @@ public struct ItemDetailView: View {
 
     /// Debounces the write.
     ///
-    /// Half a second: long enough that a burst of typing produces one save, short enough that the
-    /// user never loses more than a phrase if the app is force-quit. Autosave on the context and
-    /// ``ItemDetailView/flushPendingSave()`` on disappear cover the rest.
+    /// Half a second: long enough that a burst of typing produces one save, short enough that a
+    /// force-quit loses at most a phrase. Autosave on the context and a flush on disappear cover
+    /// the rest.
     private func scheduleSave() {
         saveTask?.cancel()
         saveTask = Task {
@@ -371,7 +257,10 @@ public struct ItemDetailView: View {
         services.perform {
             try services.items.update(item) { subject in
                 subject.title = newTitle
-                subject.body = newBody
+                // A heading has no body, so writing one would fail validation.
+                if subject.kind.supportedFields.contains(.body) {
+                    subject.body = newBody
+                }
             }
         }
         services.noteChange(to: item)
@@ -385,12 +274,6 @@ public struct ItemDetailView: View {
         services.noteChange(to: item)
     }
 
-    private func toggleCompletion(_ item: Item) {
-        guard let services else { return }
-        services.perform { try services.items.toggleCompletion(item) }
-        services.noteChange(to: item)
-    }
-
     private func restore(_ item: Item) {
         guard let services else { return }
         services.perform { try services.items.restore(item) }
@@ -398,12 +281,22 @@ public struct ItemDetailView: View {
     }
 }
 
-#Preview("Detail", traits: .fixedLayout(width: 640, height: 560)) {
+#Preview("Project", traits: .fixedLayout(width: 760, height: 640)) {
+    let services = AppServices.inMemory()
+    let navigation = NavigationModel()
+    navigation.selectedItemID = (try? services.items.items(matching: .kind(.project)))?.first?.id
+
+    return ItemDetailView(navigation: navigation)
+        .appServices(services)
+        .frame(width: 760, height: 640)
+}
+
+#Preview("Note", traits: .fixedLayout(width: 760, height: 640)) {
     let services = AppServices.inMemory()
     let navigation = NavigationModel()
     navigation.selectedItemID = (try? services.items.items(matching: .kind(.note)))?.first?.id
 
     return ItemDetailView(navigation: navigation)
         .appServices(services)
-        .frame(width: 640, height: 560)
+        .frame(width: 760, height: 640)
 }
