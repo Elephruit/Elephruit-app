@@ -20,6 +20,7 @@ public struct RootView: View {
     @State private var isExportPresented = false
     @State private var isImportPresented = false
     @State private var transferSummary: String?
+    @State private var isRepairSheetPresented = false
 
     public init() {}
 
@@ -34,7 +35,7 @@ public struct RootView: View {
                     message: "Elephruit could not reach your library. Restart the app to try again."
                 )
             } else {
-                splitView
+                shellWithBanner
             }
         }
         .environment(navigation)
@@ -79,13 +80,45 @@ public struct RootView: View {
             Text(transferSummary ?? "")
         }
         .task {
+            services?.checkForContainmentRepair()
             await services?.warmSearchIndex()
+        }
+        .sheet(isPresented: repairSheetBinding) {
+            if let services, let report = services.pendingContainmentRepair {
+                ContainmentRepairSheet(
+                    report: report,
+                    onApply: {
+                        services.applyContainmentRepair()
+                        isRepairSheetPresented = false
+                    },
+                    onDefer: {
+                        services.deferContainmentRepair()
+                        isRepairSheetPresented = false
+                    }
+                )
+            }
         }
         // One handler for the whole window. The ladder decides; the view only reports the key.
         // Returning `.ignored` when nothing happened lets the event fall through rather than being
         // silently swallowed.
         .onKeyPress(.escape) {
             navigation.handleEscape() ? .handled : .ignored
+        }
+    }
+
+    /// The shell, with the repair offer above it when there is one.
+    ///
+    /// Lifted out of `body` because the combined expression exceeded the type checker's budget — the
+    /// same limit documented on `ItemPredicateBuilder`, in a different guise.
+    @ViewBuilder
+    private var shellWithBanner: some View {
+        VStack(spacing: 0) {
+            if let report = services?.pendingContainmentRepair {
+                ContainmentRepairBanner(report: report) {
+                    isRepairSheetPresented = true
+                }
+            }
+            splitView
         }
     }
 
@@ -229,6 +262,13 @@ public struct RootView: View {
                 default: break
                 }
             }
+        )
+    }
+
+    private var repairSheetBinding: Binding<Bool> {
+        Binding(
+            get: { isRepairSheetPresented && services?.pendingContainmentRepair != nil },
+            set: { isRepairSheetPresented = $0 }
         )
     }
 

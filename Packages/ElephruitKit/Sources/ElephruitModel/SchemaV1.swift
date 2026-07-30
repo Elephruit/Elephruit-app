@@ -1,7 +1,6 @@
 import ElephruitCore
 import Foundation
 import SwiftData
-import Synchronization
 
 /// The first released schema.
 ///
@@ -68,54 +67,23 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
         [containmentRepair]
     }
 
-    /// V1 to V2: parent relationships containment no longer permits become `filedUnder` links.
+    /// V1 to V2.
     ///
-    /// Runs in `didMigrate`, with the new schema already in place, so the repair operates on exactly
-    /// the model the rest of the app uses rather than on an intermediate shape.
+    /// **Lightweight, on purpose.** No entity shape changed, so opening the store needs to do
+    /// nothing but restamp the version.
     ///
-    /// The closure is deliberately thin. Everything it does lives in ``ContainmentRepair``, which can
-    /// be dry-run, reported on, and tested against fixture stores — none of which is possible inside
-    /// a migration closure.
-    static let containmentRepair = MigrationStage.custom(
+    /// The consequential part — converting parent relationships into `filedUnder` links — is
+    /// deliberately *not* here. A `didMigrate` closure runs unattended, deep inside
+    /// `ModelContainer`'s initialiser, the first time the user happens to launch. That is precisely
+    /// the shape of decision the app is not supposed to make on its own.
+    ///
+    /// So ``ContainmentRepair`` runs after the store is open, only when the user says so, and only
+    /// after showing them exactly what it will do. It is idempotent and dry-runnable, which is what
+    /// makes deferring it safe rather than merely delayed.
+    static let containmentRepair = MigrationStage.lightweight(
         fromVersion: SchemaV1.self,
-        toVersion: SchemaV2.self,
-        willMigrate: nil,
-        didMigrate: { context in
-            let report = try ContainmentRepair.apply(in: context)
-            MigrationReportStore.record(report)
-
-            Diagnostics.persistence.info(
-                "Containment repair: examined \(report.itemsExamined, privacy: .public), converted \(report.conversions.count, privacy: .public), unresolved \(report.unresolved.count, privacy: .public)"
-            )
-        }
+        toVersion: SchemaV2.self
     )
-}
-
-/// Carries the last migration report out of the stage closure.
-///
-/// A migration runs deep inside `ModelContainer`'s initialiser, which returns a container and nothing
-/// else. Without somewhere to put it, the report the user is entitled to see would go to the log and
-/// be lost.
-public enum MigrationReportStore {
-    /// A `Mutex` rather than a lock behind `nonisolated(unsafe)`.
-    ///
-    /// The hygiene suite forbids that annotation and was right to flag the first attempt here: a
-    /// migration report is not a special case, and "it is only written once" is exactly the reasoning
-    /// that precedes a data race. `Mutex` is `Sendable`, so a `static let` needs no escape hatch.
-    private static let stored = Mutex<MigrationReport?>(nil)
-
-    static func record(_ report: MigrationReport) {
-        stored.withLock { $0 = report }
-    }
-
-    /// Takes the report, clearing it. Called once by the shell after the store opens.
-    public static func take() -> MigrationReport? {
-        stored.withLock { value in
-            let report = value
-            value = nil
-            return report
-        }
-    }
 }
 
 /// The schema the app currently opens.

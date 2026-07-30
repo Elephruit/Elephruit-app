@@ -34,6 +34,18 @@ public final class AppServices {
     /// Capture, callable without a view — see ``CaptureService``.
     public let capture: CaptureService
 
+    /// What a containment repair would do, if one is needed.
+    ///
+    /// Computed by a dry run once the store is open. `nil` means there is nothing to convert — the
+    /// ordinary case for a library created after the change.
+    ///
+    /// The repair is *offered*, never performed on launch: it is exactly the kind of consequential,
+    /// irreversible-by-hand decision the app does not make on the user's behalf.
+    public private(set) var pendingContainmentRepair: MigrationReport?
+
+    /// The outcome of the last repair the user applied, shown once and then cleared.
+    public var lastContainmentRepair: MigrationReport?
+
     /// Structural undo — move, delete, retag, status, archive.
     ///
     /// One per `AppServices`, sharing the window's `UndoManager`, so `⌘Z` reverses the last
@@ -177,6 +189,57 @@ public final class AppServices {
         let engine = search
         Task { await engine.removeFromIndex(id: id) }
         refreshDerivedState()
+    }
+
+    // MARK: - Containment repair
+
+    /// Works out whether any parent relationship needs converting to a filing.
+    ///
+    /// A dry run: it writes nothing, and its report is what the user is shown before deciding.
+    public func checkForContainmentRepair() {
+        do {
+            let report = try ContainmentRepair.plan(in: context)
+            pendingContainmentRepair = report.hasWork || !report.unresolved.isEmpty ? report : nil
+
+            if let pending = pendingContainmentRepair {
+                Diagnostics.persistence.info(
+                    "Containment repair available: \(pending.conversions.count, privacy: .public) to convert"
+                )
+            }
+        } catch {
+            Diagnostics.persistence.error(
+                "Could not plan containment repair: \(error.localizedDescription, privacy: .public)"
+            )
+            pendingContainmentRepair = nil
+        }
+    }
+
+    /// Applies the repair the user just approved, backing the store up first.
+    ///
+    /// The backup happens here rather than inside the repair because it is a property of *this*
+    /// being irreversible by hand, not of the operation itself — the fixtures exercise the operation
+    /// without needing one.
+    @discardableResult
+    public func applyContainmentRepair() -> Bool {
+        if let location = stack.location {
+            PersistenceStack.backupStore(at: location, label: "pre-containment-repair")
+            PersistenceStack.pruneBackups(at: location, keeping: 3)
+        }
+
+        let succeeded = perform {
+            lastContainmentRepair = try ContainmentRepair.apply(in: context)
+        }
+
+        if succeeded {
+            pendingContainmentRepair = nil
+            refreshDerivedState()
+        }
+        return succeeded
+    }
+
+    /// Dismisses the offer for this session without changing anything.
+    public func deferContainmentRepair() {
+        pendingContainmentRepair = nil
     }
 
     /// Recomputes everything the sidebar reads. Coalesced, and never during a render pass.

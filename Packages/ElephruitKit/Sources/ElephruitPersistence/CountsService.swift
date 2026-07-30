@@ -68,7 +68,11 @@ actor CountsWorker {
         let unparented = try modelContext.fetch(descriptor)
 
         return unparented.count { item in
-            item.kind.appearsInInbox && item.tags.isEmpty
+            // Must match `ItemQuery.inbox()` exactly, or the badge and the list disagree — and a
+            // badge that says 3 over a list of 2 reads as a bug in the app, not in the query.
+            item.kind.appearsInInbox
+                && item.tags.isEmpty
+                && item.filedUnderContainers().isEmpty
         }
     }
 }
