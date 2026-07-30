@@ -47,6 +47,9 @@ public final class AppServices {
     /// People, computed from the links that already exist.
     public let people: PeopleService
 
+    /// Files attached to items — copied in, or referenced where they already live.
+    public let attachments: AttachmentStore
+
     /// Whether Home offers follow-up suggestions.
     ///
     /// **Off by default.** An app that starts telling you who you have neglected, unprompted, is a
@@ -149,6 +152,11 @@ public final class AppServices {
         // turns the calendar on never constructs an `EKEventStore` and never prompts.
         self.calendar = CalendarService(dateProvider: dateProvider) { EventKitCalendarProvider() }
         self.people = PeopleService(items: items, dateProvider: dateProvider)
+        self.attachments = AttachmentStore(
+            context: context,
+            location: stack.location,
+            dateProvider: dateProvider
+        )
 
         let undoManager = UndoManager()
         // Off, so one operation is one undo step regardless of run-loop timing. Every coordinator

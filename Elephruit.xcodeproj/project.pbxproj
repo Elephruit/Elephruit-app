@@ -1,17 +1,4 @@
 // !$*UTF8*$!
-//
-// Hand-written, and deliberately small.
-//
-// Two things keep it that way:
-//
-//   1. `PBXFileSystemSynchronizedRootGroup` — the `Elephruit` folder is synchronised with the file
-//      system, so source files are never enumerated here. Adding a file to the app shell requires no
-//      change to this file at all.
-//   2. All build settings live in `Configuration/Elephruit.xcconfig`.
-//
-// Every module lives in the local Swift package, so `swift build` and `swift test` provide a second,
-// generator-independent build path. If this file were lost, only the shell would need recreating.
-// See risk R9 in docs/08-risks.md.
 {
 	archiveVersion = 1;
 	classes = {
@@ -161,24 +148,6 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		E7A1000000000000000000FF /* Debug */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = E7A1000000000000000000F8 /* Elephruit.xcconfig */;
-			buildSettings = {
-				DEBUG_INFORMATION_FORMAT = dwarf;
-				ENABLE_TESTABILITY = YES;
-				GCC_OPTIMIZATION_LEVEL = 0;
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
-					"$(inherited)",
-				);
-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				ONLY_ACTIVE_ARCH = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-			};
-			name = Debug;
-		};
 		E7A1000000000000000000E1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = E7A1000000000000000000F8 /* Elephruit.xcconfig */;
@@ -206,23 +175,41 @@
 			};
 			name = Release;
 		};
+		E7A1000000000000000000FF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E7A1000000000000000000F8 /* Elephruit.xcconfig */;
+			buildSettings = {
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		E7A1000000000000000000FE /* Build configuration list for PBXProject "Elephruit" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				E7A1000000000000000000FF /* Debug */,
-				E7A1000000000000000000E1 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		E7A1000000000000000000E2 /* Build configuration list for PBXNativeTarget "Elephruit" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E7A1000000000000000000E3 /* Debug */,
 				E7A1000000000000000000E4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E7A1000000000000000000FE /* Build configuration list for PBXProject "Elephruit" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E7A1000000000000000000FF /* Debug */,
+				E7A1000000000000000000E1 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
