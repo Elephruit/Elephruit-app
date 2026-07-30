@@ -281,7 +281,7 @@ inventing bindings the system already owns.
 
 ---
 
-## S10 — Attachment lifecycle · **next**
+## S10 — Attachment lifecycle · **done**
 
 **Goal.** ADR 0003's own unbuilt consequences. Staged import with atomic commit; grace-period
 deletion after the transaction; a launch orphan sweep; reference counting on the `contentHash`
@@ -293,9 +293,35 @@ a file still used elsewhere · a failed import never commits a broken reference.
 
 **Risk.** Medium.
 
+**Outcome.** ADR 0003 named two failure modes and specified "a startup integrity pass that reports
+orphans in both directions and offers recovery" as the mitigation. That pass had never been built,
+so for three phases the decision's own safety net was a paragraph. `AttachmentReconciliation` is it:
+dry-runnable, idempotent, offered at launch beside the containment repair and on the same terms.
+
+Three behaviours worth stating. A **failed save now removes the bytes it just wrote** — file-first
+ordering is right, but a failed commit used to leave an orphan with nothing to clean it up.
+Removing an attachment **moves its bytes aside for a week** rather than destroying them; detaching
+is easy to do by accident and impossible to undo. And an **orphaned folder is moved, not deleted** —
+a file the app cannot account for is exactly the file it should be least confident about destroying.
+A row whose bytes are gone is marked lost and never removed, because the row is the last record the
+file existed.
+
+**631 tests pass** (+11), zero warnings; Debug and Release build.
+
+**A bug the tests caught.** The sweep first used the filesystem's creation date, which survives a
+move, is not what "removed at" means, and cannot be driven by an injected clock — so the test failed
+and the only alternative would have been waiting a week. The removal time is now encoded in the
+folder name, which is deterministic and testable.
+
+**Deliberately not done: content-hash deduplication.** `contentHash` is read now — the archive
+round-trip verifies it — but there is no reference counting, because the per-attachment-directory
+layout means no two attachments ever share a file. Reference counting would have nothing to count.
+The plan's "removing one reference must not delete a file still used elsewhere" is satisfied
+structurally rather than by a counter.
+
 ---
 
-## S11 — People surfaces
+## S11 — People surfaces · **next**
 
 **Goal.** Render what already exists. `PeopleService.allContexts()` as a real workspace; a merged
 reverse-chronological timeline; `PersonProfile.birthday` as celebrations; `attendeeNames` as

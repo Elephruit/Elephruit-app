@@ -32,11 +32,11 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 | F15b | Registration of a *global* hotkey | **Met** (S9) | Carbon `RegisterEventHotKey`; no entitlement, no Accessibility prompt | — |
 | F16 | Stable links; archived sources do not cascade-delete history | Met | `Item.timeEntries` is `.nullify` deliberately; `deletingAnItemDoesNotDestroyTime:228` | — |
 | F17 | Attachment stable ID, relative path, UTI, size, checksum | Met | `AttachmentStore.swift:63-138` | — |
-| F18 | Attachment staged import with atomic commit | Absent | File-then-row-then-save, no staging, no rollback | S10 |
+| F18 | A failed import never leaves an orphan | **Met** (S10) | Bytes rolled back when the commit fails; file-first ordering kept per ADR 0003 | — |
 | F19 | Attachment bytes removed only after the transaction commits | **Met** (S1) | Row deleted and saved first; bytes after. `AttachmentStore.swift` | — |
-| F19b | Grace-period cleanup rather than immediate deletion | Absent | — | S10 |
-| F20 | Reference counting / shared-reference safety | Partial | Removing a reference never deletes the file (`removingReferenceKeepsTheFile`); `contentHash` is written and never read, so no refcount | S10 |
-| F21 | Orphan reconciliation at launch | Absent | Specified in ADR 0003 §2 and risk R6; never built | S10 |
+| F19b | Grace-period cleanup rather than immediate deletion | **Met** (S10) | Seven days in `.removed/<uuid>__<epoch>`; swept by the reconciliation pass | — |
+| F20 | Shared-reference safety | **Met** (S10) | Structural: one directory per attachment, so no file is ever shared. Dedup deliberately not built — see S10 | — |
+| F21 | Orphan reconciliation at launch | **Met** (S10) | `AttachmentReconciliation`; dry-runnable, idempotent, offered not performed | — |
 | F22 | Search indexing incremental, cancellable, off main thread | Met | `@ModelActor IndexWorker`, cursor paging, `Task.checkCancellation()`, generation-stamped rebuild | — |
 | F23 | Structured filters `type/tag/project/person/is/due` | Met | `SearchQuery.swift:181-184`; 12 `is:` values | — |
 | F24 | Filters `duration:` `source:` `type:time` | Absent | Not in `recognisedKeys` | S13 |

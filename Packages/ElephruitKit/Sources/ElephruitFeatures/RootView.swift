@@ -78,6 +78,9 @@ public struct RootView: View {
         }
         .task {
             services?.checkForContainmentRepair()
+            // Housekeeping, in the same place and on the same terms: looked at once the store is
+            // open, reported if there is anything to say, and never acted on unasked.
+            services?.checkForAttachmentTidy()
             // Before the index warm, because a timer left running deserves an answer sooner than
             // search deserves to be fast.
             services?.timer.start()

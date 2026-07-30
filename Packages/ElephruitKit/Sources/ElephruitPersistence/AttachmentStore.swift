@@ -82,7 +82,17 @@ public final class AttachmentStore {
         attachment.relativePath = "\(attachment.id.uuidString)/\(url.lastPathComponent)"
         attachment.owner = item
         context.insert(attachment)
-        try save()
+
+        // Bytes first, then the row — ADR 0003's ordering, because an orphan file is recoverable
+        // and a row pointing at nothing is not. But a *failed* save used to leave that orphan
+        // behind with nothing to clean it up, so the write is undone here. Nothing else references
+        // these bytes yet, which is what makes removing them safe rather than presumptuous.
+        do {
+            try save()
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
+            throw error
+        }
 
         return attachment
     }
@@ -229,6 +239,7 @@ public final class AttachmentStore {
     /// The directory is resolved *before* the delete, because the identifier it is keyed on belongs
     /// to an object that is about to leave the context.
     public func remove(_ attachment: Attachment) throws(AppError) {
+        let removedID = attachment.id
         let managedBytes: URL? = if attachment.storageKind == .managedCopy, let location {
             location.attachmentDirectory(id: attachment.id)
         } else {
@@ -240,8 +251,27 @@ public final class AttachmentStore {
 
         // Past the commit. A failure here leaves an orphan directory, which the reconciliation pass
         // can find and the user can be offered; it cannot leave a live row with no bytes.
-        if let managedBytes {
-            try? FileManager.default.removeItem(at: managedBytes)
+        //
+        // The bytes are *moved aside*, not destroyed. Detaching a file is easy to do by accident and
+        // impossible to undo, and a week of grace costs disk the user can see and get back. The
+        // sweep in ``AttachmentReconciliation`` is what eventually clears it.
+        if let managedBytes, let location {
+            let removedRoot = location.attachmentsRoot.appending(
+                path: AttachmentReconciliation.deletionFolderName,
+                directoryHint: .isDirectory
+            )
+            let destination = removedRoot.appending(
+                path: AttachmentReconciliation.removalFolderName(id: removedID, at: dateProvider.now),
+                directoryHint: .isDirectory
+            )
+
+            try? FileManager.default.createDirectory(at: removedRoot, withIntermediateDirectories: true)
+            try? FileManager.default.removeItem(at: destination)
+            if (try? FileManager.default.moveItem(at: managedBytes, to: destination)) == nil {
+                // If it cannot be moved aside, removing it is still better than leaving bytes for a
+                // row that no longer exists.
+                try? FileManager.default.removeItem(at: managedBytes)
+            }
         }
     }
 
