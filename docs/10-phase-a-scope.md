@@ -354,13 +354,51 @@ Everything else links. Add `LinkKind.filedUnder`. Convert existing illegal paren
 | M7 | A failed migration leaves the **original store untouched**. The failure path is tested by injecting a fault mid-migration and asserting the original opens unchanged |
 | M8 | Dry-run mode produces the report without writing, so the outcome can be inspected before committing |
 
-### A2 acceptance criteria
+### A2 acceptance criteria — **all met, verified 2026-07-30**
 
-| # | Criterion |
-|---|---|
-| A2-1 | M1–M8 all satisfied |
-| A2-2 | A note filed with three projects appears in all three, and is owned by none |
-| A2-3 | Inbox contains no projects, areas, or headings |
-| A2-4 | Archiving or completing a project leaves its filed notes untouched and reachable |
-| A2-5 | The Project workspace distinguishes **Project notes** from **Related notes** without exposing link terminology |
-| A2-6 | Migrating each fixture is idempotent — running it twice changes nothing the second time |
+| # | Criterion | Evidence |
+|---|---|---|
+| A2-1 | M1–M8 all satisfied | See the table below |
+| A2-2 | A note filed with three projects appears in all three, and is owned by none | `notesFileInSeveralPlaces` |
+| A2-3 | Inbox contains no projects, areas, or headings | `inboxExcludesStructure` |
+| A2-4 | Archiving or completing a project leaves its filed notes untouched and reachable | `archivingSparesFiledNotes`, `completingSparesFiledNotes`, `trashingSparesFiledNotes` |
+| A2-5 | **Project notes** vs **Related notes**, without exposing link terminology | `filedAndMentioningAreDistinct`, `filedWinsOverMentioning` |
+| A2-6 | Migrating each fixture is idempotent | `migrationIsIdempotent`, over all eight fixtures |
+
+### Migration safety record
+
+| # | Requirement | Evidence |
+|---|---|---|
+| M1 | Multiple representative fixtures | Eight: empty, notes-under-project, notes-under-area, deep hierarchy, six mixed kinds, already-valid, a container that cannot hold filings, and 500 items |
+| M2 | Every parent becomes the correct link | `everyFixtureConverts` compares the pre-migration parent map against the post-migration filings, per fixture |
+| M3 | No loss of links, tags, ordering, content, timestamps, or flags | `nothingElseChanges` fingerprints the whole graph before and after |
+| M4 | The backup is opened and read back | `backupOpensAndReads` opens the backup *as a store* and reads its contents through SwiftData |
+| M5 | All SQLite components, transactionally consistent | `backupIsComplete`, `backupCapturesUncommittedWork` — the latter writes rows still in the WAL and proves they survive |
+| M6 | A migration report with converted and unresolved | `reportIsComplete`, `unresolvableAssociationsAreReported`; shown in full before applying |
+| M7 | A failed migration leaves the original untouched | `restoreRecoversTheOriginal`, `restoreRemovesStaleComponents`. **Limit:** injects a destructive fault and exercises the recovery path; it does not provoke a genuine mid-migration SwiftData failure, which cannot be reliably caused |
+| M8 | Dry-run mode | `dryRunWritesNothing`, `dryRunMatchesReality` — the preview predicts the real run exactly |
+
+### The repair is offered, never imposed
+
+The schema stage is **lightweight**: no entity shape changed, so opening the store restamps a version
+and nothing more. The consequential part runs afterwards and only on request:
+
+```
+launch   → dry run, writes nothing
+banner   → "3 items are filed in a way this version no longer uses"   [Review…]
+sheet    → every conversion listed, item by item
+Update   → backs up, then applies
+Not Now  → changes nothing; the library keeps working exactly as it does
+```
+
+Deferring is safe rather than merely delayed, because the repair is idempotent and dry-runnable.
+
+### Two gaps the tests found
+
+- **Filing did not remove an item from the Inbox.** With containment gone for notes, a filing is one
+  of the ways something acquires a home; without it a filed note would sit in the Inbox forever —
+  worse than the behaviour it replaced.
+- **The Inbox badge and list could disagree**, because the count and the query applied different
+  rules. A badge reading 3 over a list of 2 looks like a bug in the app, and it costs trust in every
+  other number the sidebar shows. Five tests now assert agreement across empty, mixed, trashed,
+  archived, and post-repair states.
