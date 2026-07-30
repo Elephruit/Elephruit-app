@@ -199,8 +199,24 @@ struct ElephruitCommands: Commands {
 
             Divider()
 
+            Button("Toggle Sidebar") { navigation?.toggleSidebar() }
+                .keyboardShortcut("s", modifiers: [.command, .control])
+                .disabled(navigation == nil)
+
             Button("Toggle Inspector") { navigation?.isInspectorVisible.toggle() }
                 .keyboardShortcut("i", modifiers: [.command, .option])
+                .disabled(navigation == nil)
+
+            Button(navigation?.layoutMode == .focus ? "Leave Focus Mode" : "Focus Mode") {
+                navigation?.toggleFocusMode()
+            }
+            .keyboardShortcut("f", modifiers: [.command, .option])
+            .disabled(navigation == nil)
+
+            Divider()
+
+            Button("Focus Sidebar") { navigation?.focus(.sidebar) }
+                .keyboardShortcut("l", modifiers: .command)
                 .disabled(navigation == nil)
         }
 

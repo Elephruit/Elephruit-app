@@ -99,6 +99,11 @@ let package = Package(
             swiftSettings: .strict
         ),
         .testTarget(
+            name: "ElephruitFeaturesTests",
+            dependencies: ["ElephruitFeatures", "ElephruitPersistence", "ElephruitModel", "ElephruitCore"],
+            swiftSettings: .strict
+        ),
+        .testTarget(
             name: "ElephruitTransferTests",
             dependencies: ["ElephruitTransfer", "ElephruitPersistence", "ElephruitModel", "ElephruitCore"],
             swiftSettings: .strict

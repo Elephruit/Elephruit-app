@@ -17,7 +17,6 @@ public struct RootView: View {
     @Environment(\.services) private var services
 
     @State private var navigation = NavigationModel()
-    @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var isExportPresented = false
     @State private var isImportPresented = false
     @State private var transferSummary: String?
@@ -82,10 +81,16 @@ public struct RootView: View {
         .task {
             await services?.warmSearchIndex()
         }
+        // One handler for the whole window. The ladder decides; the view only reports the key.
+        // Returning `.ignored` when nothing happened lets the event fall through rather than being
+        // silently swallowed.
+        .onKeyPress(.escape) {
+            navigation.handleEscape() ? .handled : .ignored
+        }
     }
 
     private var splitView: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        NavigationSplitView(columnVisibility: columnVisibilityBinding) {
             SidebarView(navigation: navigation)
                 // Derived, not fixed: the minimum is whatever primary navigation needs at the current
                 // text size, so a long or localised title widens the sidebar rather than truncating.
@@ -102,6 +107,12 @@ public struct RootView: View {
                 )
         } detail: {
             ItemDetailView(navigation: navigation)
+                .frame(
+                    // Focus mode caps the measure: long lines are hard to read, and the point of the
+                    // mode is reading and writing rather than filling the window.
+                    maxWidth: navigation.layoutMode == .focus ? Theme.Size.editorMaxWidth : .infinity
+                )
+                .frame(maxWidth: .infinity)
                 .navigationSplitViewColumnWidth(min: Theme.Size.detailMinWidth, ideal: 720)
         }
         .navigationSplitViewStyle(.balanced)
@@ -175,6 +186,12 @@ public struct RootView: View {
             PaletteCommand(id: "toggle-inspector", title: "Toggle Inspector", category: .view, symbolName: "sidebar.trailing", shortcut: ["⌘", "⌥", "I"]) {
                 navigation.isInspectorVisible.toggle()
             },
+            PaletteCommand(id: "toggle-sidebar", title: "Toggle Sidebar", category: .view, symbolName: "sidebar.leading", shortcut: ["⌘", "⌃", "S"]) {
+                navigation.toggleSidebar()
+            },
+            PaletteCommand(id: "focus-mode", title: "Focus Mode", category: .view, symbolName: "rectangle.center.inset.filled", shortcut: ["⌘", "⌥", "F"]) {
+                navigation.toggleFocusMode()
+            },
             PaletteCommand(id: "export", title: "Export Library…", category: .transfer, symbolName: "square.and.arrow.up", shortcut: ["⌘", "⇧", "E"]) {
                 isExportPresented = true
             },
@@ -192,6 +209,28 @@ public struct RootView: View {
     }
 
     // MARK: - Bindings
+
+    /// Layout mode drives column visibility, rather than the two states drifting apart.
+    private var columnVisibilityBinding: Binding<NavigationSplitViewVisibility> {
+        Binding(
+            get: {
+                switch navigation.layoutMode {
+                case .full: .all
+                case .twoPane: .doubleColumn
+                case .focus: .detailOnly
+                }
+            },
+            set: { visibility in
+                // A drag on the divider is a layout-mode change, so the two cannot disagree.
+                switch visibility {
+                case .all: navigation.setLayoutMode(.full)
+                case .doubleColumn: navigation.setLayoutMode(.twoPane)
+                case .detailOnly: navigation.setLayoutMode(.focus)
+                default: break
+                }
+            }
+        )
+    }
 
     private var inspectorBinding: Binding<Bool> {
         Binding(get: { navigation.isInspectorVisible }, set: { navigation.isInspectorVisible = $0 })

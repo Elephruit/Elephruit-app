@@ -146,6 +146,11 @@ public final class NavigationModel {
     /// The list's own filter field, distinct from the global search sheet.
     public var listFilterText = ""
 
+    // MARK: Layout and focus
+
+    public var layoutMode: LayoutMode = .full
+    public var focusedPane: ShellPane = .list
+
     public var isInspectorVisible = false
     public var isQuickCaptureVisible = false
     public var isCommandPaletteVisible = false
@@ -153,6 +158,26 @@ public final class NavigationModel {
 
     /// The full tag list, reached from the sidebar's bounded disclosure group.
     public var isTagBrowserVisible = false
+
+    // MARK: Search as a mode
+
+    /// Whether the list is currently showing search results rather than its usual contents.
+    public private(set) var isSearchActive = false
+
+    /// The live query while search is active.
+    public var searchQuery = ""
+
+    /// The query from the last search, kept so reopening search can offer it again.
+    ///
+    /// This is what lets one Escape leave search without losing what was typed. Clearing a query has
+    /// its own familiar affordances — select and delete, or the clear button — and is not Escape's job.
+    public private(set) var lastSearchQuery = ""
+
+    /// Set when search opens with a restored query, so the field selects it and typing replaces it.
+    public private(set) var shouldSelectSearchQuery = false
+
+    /// What was selected before search began, restored when it ends.
+    @ObservationIgnored private var selectionBeforeSearch: UUID?
 
     /// Sort override for the current list. Reset when the selection changes, because a sort that
     /// made sense for Tasks rarely makes sense for Notes.
@@ -170,6 +195,121 @@ public final class NavigationModel {
         selectedItemID = nil
         listFilterText = ""
         sortOverride = nil
+    }
+
+    // MARK: - Search mode
+
+    /// Enters search, offering the previous query back.
+    public func beginSearch(clearingQuery: Bool = false) {
+        if !isSearchActive {
+            selectionBeforeSearch = selectedItemID
+            isSearchActive = true
+        }
+
+        searchQuery = clearingQuery ? "" : lastSearchQuery
+        shouldSelectSearchQuery = !searchQuery.isEmpty
+        focusedPane = .list
+    }
+
+    /// Leaves search, restoring the previous list and selection.
+    ///
+    /// The query survives in ``lastSearchQuery``. Nothing the user typed is thrown away, and the
+    /// selection they had before searching comes back — Escape never destroys work.
+    public func endSearch() {
+        guard isSearchActive else { return }
+
+        if !searchQuery.isEmpty {
+            lastSearchQuery = searchQuery
+            recordSearch(searchQuery)
+        }
+
+        isSearchActive = false
+        searchQuery = ""
+        shouldSelectSearchQuery = false
+        selectedItemID = selectionBeforeSearch
+        selectionBeforeSearch = nil
+    }
+
+    /// Called by the search field once it has consumed the select-all hint.
+    public func didSelectSearchQuery() {
+        shouldSelectSearchQuery = false
+    }
+
+    // MARK: - Layout and focus
+
+    public var shellState: ShellState {
+        ShellState(
+            hasOverlay: isQuickCaptureVisible || isCommandPaletteVisible
+                || isSearchVisible || isTagBrowserVisible,
+            isSearchActive: isSearchActive,
+            focusedPane: focusedPane,
+            layoutMode: layoutMode
+        )
+    }
+
+    /// Applies one rung of the Escape ladder. Returns whether anything happened, so the key event is
+    /// only consumed when it did something.
+    @discardableResult
+    public func handleEscape() -> Bool {
+        let outcome = EscapeLadder.outcome(for: shellState)
+
+        switch outcome {
+        case .dismissOverlay:
+            isQuickCaptureVisible = false
+            isCommandPaletteVisible = false
+            isSearchVisible = false
+            isTagBrowserVisible = false
+
+        case .leaveSearch:
+            endSearch()
+
+        case .leaveFocusMode:
+            setLayoutMode(.full)
+
+        case .focusList, .focusSidebar:
+            guard let destination = EscapeLadder.destination(for: outcome) else { return false }
+            focusedPane = destination
+
+        case .nothing:
+            return false
+        }
+
+        return true
+    }
+
+    /// Changes layout mode, keeping focus somewhere visible.
+    public func setLayoutMode(_ mode: LayoutMode) {
+        layoutMode = mode
+
+        // Focus must never be left on a pane the mode has just hidden.
+        if !mode.isVisible(focusedPane) {
+            focusedPane = mode.showsList ? .list : .detail
+        }
+    }
+
+    public func toggleSidebar() {
+        setLayoutMode(layoutMode == .full ? .twoPane : .full)
+    }
+
+    public func toggleFocusMode() {
+        setLayoutMode(layoutMode == .focus ? .full : .focus)
+    }
+
+    /// Moves focus to the next visible pane.
+    public func advanceFocus(reversed: Bool = false) {
+        focusedPane = PaneTraversal.next(
+            after: focusedPane,
+            layoutMode: layoutMode,
+            isInspectorVisible: isInspectorVisible,
+            reversed: reversed
+        )
+    }
+
+    /// Moves focus to a pane, if that pane is on screen.
+    public func focus(_ pane: ShellPane) {
+        guard layoutMode.isVisible(pane) else { return }
+        guard pane != .inspector || isInspectorVisible else { return }
+        focusedPane = pane
     }
 
     public func recordSearch(_ text: String) {

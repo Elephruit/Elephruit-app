@@ -1,0 +1,222 @@
+import ElephruitCore
+import ElephruitFeatures
+import Foundation
+import Testing
+
+/// **Criterion A1-10** — one Escape leaves search, the query survives, and reopening restores it
+/// selected.
+///
+/// The behaviour being protected is small but load-bearing: Escape means *move out of this mode*,
+/// not *clear this field*. Clearing already has familiar affordances; making Escape do it would mean
+/// pressing it twice to leave, and losing what you typed if you only meant to step back.
+@MainActor
+@Suite("Search as a mode")
+struct SearchModeTests {
+    @Test("One Escape leaves search")
+    func oneEscapeLeaves() {
+        let navigation = NavigationModel()
+        navigation.beginSearch()
+        navigation.searchQuery = "launch"
+
+        #expect(navigation.isSearchActive)
+        #expect(navigation.handleEscape())
+        #expect(navigation.isSearchActive == false, "Escape leaves rather than clearing first")
+    }
+
+    @Test("The query survives leaving and is offered back")
+    func queryIsPreserved() {
+        let navigation = NavigationModel()
+        navigation.beginSearch()
+        navigation.searchQuery = "type:task is:open"
+        navigation.endSearch()
+
+        #expect(navigation.searchQuery.isEmpty, "The live field is cleared")
+
+        navigation.beginSearch()
+        #expect(navigation.searchQuery == "type:task is:open", "…but the query comes back")
+    }
+
+    @Test("A restored query is offered selected, so typing replaces it")
+    func restoredQueryIsSelected() {
+        let navigation = NavigationModel()
+        navigation.beginSearch()
+        navigation.searchQuery = "launch"
+        navigation.endSearch()
+
+        navigation.beginSearch()
+        #expect(navigation.shouldSelectSearchQuery, "Typing should replace, an arrow key should keep")
+
+        navigation.didSelectSearchQuery()
+        #expect(navigation.shouldSelectSearchQuery == false, "The hint is consumed once")
+    }
+
+    @Test("Opening search fresh does not offer the old query")
+    func canOpenClean() {
+        let navigation = NavigationModel()
+        navigation.beginSearch()
+        navigation.searchQuery = "old query"
+        navigation.endSearch()
+
+        navigation.beginSearch(clearingQuery: true)
+        #expect(navigation.searchQuery.isEmpty)
+        #expect(navigation.shouldSelectSearchQuery == false)
+    }
+
+    @Test("Leaving search restores the selection it began with")
+    func selectionIsRestored() {
+        let navigation = NavigationModel()
+        let original = UUID()
+        navigation.selectedItemID = original
+
+        navigation.beginSearch()
+        navigation.selectedItemID = UUID()  // walking the results
+        navigation.endSearch()
+
+        #expect(navigation.selectedItemID == original, "Escape never changes what was selected")
+    }
+
+    @Test("An empty search does not overwrite the remembered query")
+    func emptySearchDoesNotClobberHistory() {
+        let navigation = NavigationModel()
+        navigation.beginSearch()
+        navigation.searchQuery = "worth keeping"
+        navigation.endSearch()
+
+        navigation.beginSearch(clearingQuery: true)
+        navigation.endSearch()
+
+        navigation.beginSearch()
+        #expect(navigation.searchQuery == "worth keeping")
+    }
+
+    @Test("Searching records recent queries")
+    func recentsAreRecorded() {
+        let navigation = NavigationModel()
+
+        navigation.beginSearch()
+        navigation.searchQuery = "first"
+        navigation.endSearch()
+
+        navigation.beginSearch(clearingQuery: true)
+        navigation.searchQuery = "second"
+        navigation.endSearch()
+
+        #expect(navigation.recentSearches == ["second", "first"])
+    }
+
+    @Test("Leaving search when not searching is harmless")
+    func endingTwiceIsSafe() {
+        let navigation = NavigationModel()
+        navigation.endSearch()
+        #expect(navigation.isSearchActive == false)
+    }
+}
+
+@MainActor
+@Suite("Layout and focus")
+struct LayoutAndFocusTests {
+    @Test("Toggling the sidebar moves between full and two-pane")
+    func sidebarToggle() {
+        let navigation = NavigationModel()
+        #expect(navigation.layoutMode == .full)
+
+        navigation.toggleSidebar()
+        #expect(navigation.layoutMode == .twoPane)
+
+        navigation.toggleSidebar()
+        #expect(navigation.layoutMode == .full)
+    }
+
+    @Test("Focus mode is its own toggle and returns to full")
+    func focusModeToggle() {
+        let navigation = NavigationModel()
+        navigation.toggleFocusMode()
+        #expect(navigation.layoutMode == .focus)
+
+        navigation.toggleFocusMode()
+        #expect(navigation.layoutMode == .full)
+    }
+
+    @Test("Hiding a pane moves focus off it")
+    func focusFollowsVisibility() {
+        let navigation = NavigationModel()
+        navigation.focus(.sidebar)
+        #expect(navigation.focusedPane == .sidebar)
+
+        navigation.setLayoutMode(.twoPane)
+        #expect(navigation.focusedPane != .sidebar, "Focus cannot stay on a pane that just went away")
+        #expect(navigation.layoutMode.isVisible(navigation.focusedPane))
+    }
+
+    @Test("Focusing a hidden pane is refused rather than leaving the keyboard dead")
+    func cannotFocusHiddenPane() {
+        let navigation = NavigationModel()
+        navigation.setLayoutMode(.focus)
+
+        navigation.focus(.sidebar)
+        #expect(navigation.focusedPane != .sidebar)
+
+        navigation.focus(.list)
+        #expect(navigation.focusedPane != .list)
+    }
+
+    @Test("The inspector can only be focused while it is showing")
+    func inspectorFocusRequiresVisibility() {
+        let navigation = NavigationModel()
+
+        navigation.focus(.inspector)
+        #expect(navigation.focusedPane != .inspector)
+
+        navigation.isInspectorVisible = true
+        navigation.focus(.inspector)
+        #expect(navigation.focusedPane == .inspector)
+    }
+
+    @Test("Escape walks the ladder outward and then stops")
+    func escapeWalksOutward() {
+        let navigation = NavigationModel()
+        navigation.focus(.detail)
+
+        #expect(navigation.handleEscape())
+        #expect(navigation.focusedPane == .list)
+
+        #expect(navigation.handleEscape())
+        #expect(navigation.focusedPane == .sidebar)
+
+        #expect(navigation.handleEscape() == false, "The outermost rung consumes nothing")
+        #expect(navigation.focusedPane == .sidebar)
+    }
+
+    @Test("Escape from the detail in focus mode leaves the mode")
+    func escapeLeavesFocusMode() {
+        let navigation = NavigationModel()
+        navigation.setLayoutMode(.focus)
+        navigation.focus(.detail)
+
+        #expect(navigation.handleEscape())
+        #expect(navigation.layoutMode == .full)
+    }
+
+    @Test("Escape dismisses an overlay first")
+    func escapeDismissesOverlay() {
+        let navigation = NavigationModel()
+        navigation.isCommandPaletteVisible = true
+        navigation.focus(.detail)
+
+        #expect(navigation.handleEscape())
+        #expect(navigation.isCommandPaletteVisible == false)
+        #expect(navigation.focusedPane == .detail, "Dismissing an overlay does not also move focus")
+    }
+
+    @Test("Advancing focus never lands on a hidden pane")
+    func advanceStaysVisible() {
+        let navigation = NavigationModel()
+        navigation.setLayoutMode(.twoPane)
+
+        for _ in 1...8 {
+            navigation.advanceFocus()
+            #expect(navigation.layoutMode.isVisible(navigation.focusedPane))
+            #expect(navigation.focusedPane != .inspector, "The inspector is not showing")
+        }
+    }
+}
