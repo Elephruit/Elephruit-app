@@ -56,6 +56,20 @@ public final class Item {
     /// Derived, recomputed on every save alongside ``Item/searchText``, so it cannot drift.
     public var titleMatchKey: String = ""
 
+    /// ``Item/dueAt``, or `.distantFuture` when there is none.
+    ///
+    /// A non-optional mirror, so a due-date bound can live in the store-side predicate. Swift defines
+    /// no ordering between optionals and SwiftData translates neither `??` nor `flatMap` to SQL, so
+    /// the alternative was either a guarded force unwrap or post-filtering — and post-filtering meant
+    /// Today materialised every open item and then discarded most of them, which measured at 72 ms
+    /// against a 30 ms budget on a *reduced* corpus.
+    ///
+    /// `.distantFuture` for "no due date" is the right sentinel: an item with no deadline sorts last
+    /// and matches no upper bound, which is exactly how a missing due date should behave.
+    ///
+    /// Derived, refreshed on every save alongside the other projections.
+    public var dueSortKey: Date = Date.distantFuture
+
     // MARK: Timestamps
 
     public var createdAt: Date = Date()
@@ -195,6 +209,7 @@ public final class Item {
         self.sourceIdentifier = source.identifier
         self.sortOrder = sortOrder
         self.titleMatchKey = TextNormalizer.foldedForMatching(title)
+        self.dueSortKey = Date.distantFuture
         self.searchText = Self.projectedSearchText(title: title, body: body, tagSlugs: [], extra: nil)
     }
 }
@@ -271,6 +286,7 @@ extension Item {
     /// Recomputes the derived text columns. Called on every save path.
     public func refreshSearchText() {
         titleMatchKey = TextNormalizer.foldedForMatching(title)
+        dueSortKey = dueAt ?? Date.distantFuture
         searchText = Self.projectedSearchText(
             title: title,
             body: body,

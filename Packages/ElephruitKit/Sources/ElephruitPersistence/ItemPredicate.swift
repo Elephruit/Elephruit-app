@@ -33,10 +33,22 @@ enum ItemPredicateBuilder {
     static func make(
         scope: ItemQuery.Scope,
         kindRaws: [String],
-        statusRaws: [String]
+        statusRaws: [String],
+        dueFrom: Date?,
+        dueBefore: Date?
     ) -> Predicate<Item> {
         let filterByKind = !kindRaws.isEmpty
         let filterByStatus = !statusRaws.isEmpty
+
+        // The due bound goes to the store only in the active scope, which is where Today and Upcoming
+        // live and where it matters. Adding it to all four builders would push each past the clause
+        // ceiling; the other scopes are small enough that post-filtering costs nothing.
+        if scope == .active, dueFrom != nil || dueBefore != nil {
+            return activeWithDueBound(
+                filterByKind, kindRaws, filterByStatus, statusRaws,
+                dueFrom ?? .distantPast, dueBefore ?? .distantFuture
+            )
+        }
 
         switch scope {
         case .active:
@@ -47,6 +59,31 @@ enum ItemPredicateBuilder {
             return trashed(filterByKind, kindRaws, filterByStatus, statusRaws)
         case .all:
             return anyScope(filterByKind, kindRaws, filterByStatus, statusRaws)
+        }
+    }
+
+    /// Active, bounded by due date.
+    ///
+    /// Six clauses — the measured ceiling for this module. Adding a seventh will fail to compile
+    /// rather than fail at runtime, which is the right way round.
+    ///
+    /// Compares against `dueSortKey` rather than `dueAt`: a non-optional mirror, so there is no
+    /// optional comparison and therefore no guarded force unwrap.
+    private static func activeWithDueBound(
+        _ filterByKind: Bool,
+        _ kindRaws: [String],
+        _ filterByStatus: Bool,
+        _ statusRaws: [String],
+        _ dueFrom: Date,
+        _ dueBefore: Date
+    ) -> Predicate<Item> {
+        #Predicate<Item> { item in
+            item.deletedAt == nil
+                && item.archivedAt == nil
+                && item.dueSortKey >= dueFrom
+                && item.dueSortKey < dueBefore
+                && (!filterByKind || kindRaws.contains(item.kindRaw))
+                && (!filterByStatus || statusRaws.contains(item.statusRaw))
         }
     }
 
