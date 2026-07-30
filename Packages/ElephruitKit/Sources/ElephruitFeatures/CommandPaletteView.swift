@@ -26,7 +26,15 @@ public struct PaletteCommand: Identifiable, Sendable {
     public let title: String
     public let category: Category
     public let symbolName: String
+
+    /// The glyphs shown on the right of the row.
+    ///
+    /// Always derived from ``ShortcutRegistry`` rather than written out here. These used to be
+    /// hard-coded arrays like `["⌘","⇧","N"]` — a second description of a binding the menu already
+    /// owned, with nothing keeping the two equal. A palette that shows the wrong shortcut is worse
+    /// than one that shows none.
     public let shortcut: [String]
+
     public let action: @MainActor () -> Void
 
     public init(
@@ -43,6 +51,26 @@ public struct PaletteCommand: Identifiable, Sendable {
         self.symbolName = symbolName
         self.shortcut = shortcut
         self.action = action
+    }
+
+    /// The same, with the glyphs looked up rather than stated.
+    public init(
+        id: String,
+        title: String,
+        category: Category,
+        symbolName: String,
+        command: ShortcutCommand,
+        in registry: ShortcutRegistry,
+        action: @escaping @MainActor () -> Void
+    ) {
+        self.init(
+            id: id,
+            title: title,
+            category: category,
+            symbolName: symbolName,
+            shortcut: registry.binding(for: command)?.glyphs ?? [],
+            action: action
+        )
     }
 }
 

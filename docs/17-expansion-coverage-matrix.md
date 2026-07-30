@@ -28,7 +28,8 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 | F12 | Canonical action layer | Absent | Split across 5 places, no single owner. ADR 0007 | S5 |
 | F13 | Capture is undoable | Absent | `StructuralUndoCoordinator` has no create inverse | S5 |
 | F14 | Action commits model + links + undo + index atomically | Rejected (in part) | Index stays fire-and-forget by decision; divergence is detected and repaired by the generation counter. ADR 0007 | S5 |
-| F15 | Global shortcut registry with collision detection | Absent | 40 `.keyboardShortcut` literals; palette glyph arrays can drift. ADR 0008 | S8 |
+| F15 | Shortcut registry with collision detection | **Met** (S8) | `ShortcutRegistry` in `ElephruitCore`; all 20 menu literals resolve through it; palette glyphs derived | — |
+| F15b | Registration of a *global* hotkey | Absent | ADR 0008 — Carbon, no Accessibility permission | S9 |
 | F16 | Stable links; archived sources do not cascade-delete history | Met | `Item.timeEntries` is `.nullify` deliberately; `deletingAnItemDoesNotDestroyTime:228` | — |
 | F17 | Attachment stable ID, relative path, UTI, size, checksum | Met | `AttachmentStore.swift:63-138` | — |
 | F18 | Attachment staged import with atomic commit | Absent | File-then-row-then-save, no staging, no rollback | S10 |
