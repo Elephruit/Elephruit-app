@@ -54,16 +54,25 @@ struct SidebarRegistryTests {
         }
     }
 
-    @Test("Home, Calendar, and Time are declared but not yet shown")
+    @Test("Home and Calendar are declared but not yet shown")
     func laterDestinationsAreDeclared() {
         // Declared now so the phase that builds one flips a flag rather than editing the sidebar.
-        let laterIDs = ["home", "calendar", "time"]
-
-        for id in laterIDs {
+        for id in ["home", "calendar"] {
             let destination = SidebarRegistry.allDeclared.first { $0.id == id }
             #expect(destination != nil, "\(id) should be declared")
             #expect(destination?.isAvailable == false, "\(id) should not be shown yet")
         }
+    }
+
+    @Test("Time became available in Phase C, in the Library band")
+    func timeIsAvailable() {
+        let time = SidebarRegistry.allDeclared.first { $0.id == "time" }
+        #expect(time?.isAvailable == true)
+
+        // The Library band, not the top one, by decision: the top band is for what you are doing
+        // now, and time is something you look back at.
+        #expect(time?.band == .library)
+        #expect(SidebarRegistry.available.contains { $0.id == "time" })
     }
 
     @Test("Only Today and Inbox carry a count")

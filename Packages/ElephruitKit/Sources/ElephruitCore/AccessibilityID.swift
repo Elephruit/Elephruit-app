@@ -86,6 +86,24 @@ public enum AccessibilityID {
         public static func result(id: String) -> String { "search.result.\(id)" }
     }
 
+    public enum Time {
+        public static let root = "time"
+        public static let timerBar = "time.timerBar"
+        public static let startButton = "time.start"
+        public static let stopButton = "time.stop"
+        public static let addEntryButton = "time.addEntry"
+        public static let manualEntrySheet = "time.manualEntry"
+        public static let windowPicker = "time.window"
+        public static let groupingPicker = "time.grouping"
+        public static let recoveryBanner = "time.recovery"
+        public static let recoveryStop = "time.recovery.stop"
+        public static let recoveryKeep = "time.recovery.keep"
+        public static let recoveryDiscard = "time.recovery.discard"
+
+        public static func entryRow(id: String) -> String { "time.entry.\(id)" }
+        public static func itemToggle(id: String) -> String { "time.toggle.\(id)" }
+    }
+
     public enum Trash {
         public static let restoreButton = "trash.restore"
         public static let deletePermanentlyButton = "trash.deletePermanently"

@@ -78,6 +78,9 @@ public struct RootView: View {
         }
         .task {
             services?.checkForContainmentRepair()
+            // Before the index warm, because a timer left running deserves an answer sooner than
+            // search deserves to be fast.
+            services?.timer.start()
             await services?.warmSearchIndex()
         }
         .sheet(isPresented: repairSheetBinding) {
@@ -130,11 +133,19 @@ public struct RootView: View {
                     max: SidebarMetrics.maximumWidth
                 )
         } content: {
-            ItemListView(navigation: navigation)
-                .navigationSplitViewColumnWidth(
-                    min: Theme.Size.listMinWidth,
-                    ideal: Theme.Size.listIdealWidth
-                )
+            // Time replaces the list rather than opening beside it: it *is* the middle column's
+            // contents for that destination, in the same way a project's task list is.
+            Group {
+                if navigation.selection == .time {
+                    TimeView(navigation: navigation)
+                } else {
+                    ItemListView(navigation: navigation)
+                }
+            }
+            .navigationSplitViewColumnWidth(
+                min: Theme.Size.listMinWidth,
+                ideal: Theme.Size.listIdealWidth
+            )
         } detail: {
             ItemDetailView(navigation: navigation)
                 .frame(
@@ -212,6 +223,15 @@ public struct RootView: View {
             },
             PaletteCommand(id: "search", title: "Search Everything", category: .navigate, symbolName: "magnifyingglass", shortcut: ["⌘", "F"]) {
                 navigation.beginSearch()
+            },
+            PaletteCommand(id: "start-timer", title: "Start Timer", category: .create, symbolName: "play.circle", shortcut: ["⌃", "⌘", "T"]) {
+                services?.timer.switchTo(item: nil)
+            },
+            PaletteCommand(id: "stop-timer", title: "Stop Timer", category: .create, symbolName: "stop.circle") {
+                services?.timer.stop()
+            },
+            PaletteCommand(id: "go-time", title: "Go to Time", category: .navigate, symbolName: "timer") {
+                navigation.select(.time)
             },
             PaletteCommand(id: "toggle-inspector", title: "Toggle Inspector", category: .view, symbolName: "sidebar.trailing", shortcut: ["⌘", "⌥", "I"]) {
                 navigation.isInspectorVisible.toggle()

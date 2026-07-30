@@ -119,7 +119,10 @@ public enum SidebarRegistry {
 
         SidebarDestination(id: "home", selection: .home, band: .primary, title: "Home", symbolName: "house", isAvailable: false),
         SidebarDestination(id: "calendar", selection: .calendar, band: .library, title: "Calendar", symbolName: "calendar.day.timeline.left", isAvailable: false),
-        SidebarDestination(id: "time", selection: .time, band: .library, title: "Time", symbolName: "timer", isAvailable: false),
+
+        // Available as of Phase C. In the Library band rather than the top one, by decision: time is
+        // something you look *back* at, and the top band is for what you are doing now.
+        SidebarDestination(id: "time", selection: .time, band: .library, title: "Time", symbolName: "timer"),
     ]
 
     /// Available destinations in a band, in display order.
