@@ -31,6 +31,9 @@ public final class AppServices {
     /// The two sidebar badges. Read during rendering; never computed there.
     public let counts: CountsService
 
+    /// Capture, callable without a view — see ``CaptureService``.
+    public let capture: CaptureService
+
     /// Pinned items, tags, and saved searches, computed away from the view.
     public let sidebar: SidebarModel
 
@@ -68,10 +71,11 @@ public final class AppServices {
 
         self.tags = tags
         self.items = items
-        self.search = DefaultSearchEngine(items: items, dateProvider: dateProvider)
+        self.search = DefaultSearchEngine(items: items, dateProvider: dateProvider, container: stack.container)
         self.exporter = Exporter(items: items, context: context, dateProvider: dateProvider)
         self.importer = Importer(items: items, tags: tags, context: context, dateProvider: dateProvider)
         self.counts = CountsService(container: stack.container, dateProvider: dateProvider)
+        self.capture = CaptureService(items: items, context: context, dateProvider: dateProvider)
         self.sidebar = SidebarModel(
             items: items,
             tags: tags,

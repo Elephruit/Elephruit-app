@@ -661,14 +661,20 @@ public final class SwiftDataItemRepository: ItemRepository {
         }
     }
 
+    /// Resolves a wiki link's target by its folded title.
+    ///
+    /// An indexed equality lookup against `titleMatchKey`. This used to fetch every active item and
+    /// fold each title in Swift — O(n) per newly-typed link, growing with the library and running
+    /// while the user typed.
     private func itemByTitle(matchKey: String) throws(AppError) -> Item? {
-        // Titles are not indexed in folded form, so this compares in memory over a
-        // narrowed fetch. Acceptable because it runs once per newly-typed link, and it is
-        // the reason `searchText` exists for the bulk case.
-        var query = ItemQuery()
-        query.scope = .active
-        let candidates = try items(matching: query)
-        return candidates.first { TextNormalizer.foldedForMatching($0.title) == matchKey }
+        guard !matchKey.isEmpty else { return nil }
+
+        var descriptor = FetchDescriptor<Item>(
+            predicate: #Predicate { $0.titleMatchKey == matchKey && $0.deletedAt == nil }
+        )
+        descriptor.fetchLimit = 1
+
+        return try fetch(descriptor).first
     }
 
     // MARK: - Saving

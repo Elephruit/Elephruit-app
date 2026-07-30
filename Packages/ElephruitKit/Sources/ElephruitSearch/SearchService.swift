@@ -2,6 +2,7 @@ import ElephruitCore
 import ElephruitModel
 import ElephruitPersistence
 import Foundation
+import SwiftData
 
 /// One search result.
 public struct SearchResult: Sendable, Hashable, Identifiable {
@@ -67,27 +68,63 @@ public final class DefaultSearchEngine: SearchEngine {
     private let index: SearchIndex
     private let dateProvider: any DateProvider
 
-    public init(items: any ItemRepository, index: SearchIndex = SearchIndex(), dateProvider: any DateProvider) {
+    /// Used to spin up a `@ModelActor` for off-main-actor reads. Optional so a test can inject a
+    /// repository double without a real container.
+    private let container: ModelContainer?
+
+    public init(
+        items: any ItemRepository,
+        index: SearchIndex = SearchIndex(),
+        dateProvider: any DateProvider,
+        container: ModelContainer? = nil
+    ) {
         self.items = items
         self.index = index
         self.dateProvider = dateProvider
+        self.container = container
     }
 
     // MARK: - Index lifecycle
 
+    /// Builds the index by streaming the store in batches, off the main actor.
+    ///
+    /// This used to materialise every row on the main actor at launch — a multi-second hang on a
+    /// mature library, at precisely the moment the app should feel fastest. Now a `@ModelActor`
+    /// reads batches on its own context and hands back plain `Sendable` structs, and the index stays
+    /// queryable throughout, so a search run mid-warm returns partial results rather than a false
+    /// empty state.
     public func warmIndex() async {
+        guard let container else {
+            Diagnostics.search.error("Index warm skipped: no container available")
+            return
+        }
+
         let signpost = Diagnostics.performance
         let state = signpost.beginInterval("warmIndex")
         defer { signpost.endInterval("warmIndex", state) }
 
+        let worker = SnapshotWorker(modelContainer: container)
+        let index = self.index
+
         do {
-            // Snapshots are taken on the main actor, where the models live, and only the
-            // `Sendable` copies cross into the index actor.
-            let snapshots = try items.items(matching: .everything()).map { $0.snapshot() }
-            await index.rebuild(from: snapshots)
+            let total = try await worker.itemCount()
+            await index.beginRebuild(expecting: total)
+
+            try await worker.streamSnapshots(batchSize: 500) { batch, _, _ in
+                await index.absorb(batch)
+            }
+
+            await index.finishRebuild()
         } catch {
             Diagnostics.search.error("Index warm failed: \(String(describing: error), privacy: .public)")
+            // Whatever landed stays usable; the index simply reports itself as still building.
+            await index.finishRebuild()
         }
+    }
+
+    /// Progress of an in-flight rebuild, for the search header.
+    public func indexProgress() async -> (indexed: Int, expected: Int, isRebuilding: Bool) {
+        await (index.indexedCount, index.expectedCount, index.isRebuilding)
     }
 
     public func indexDidChange(for item: Item) async {
