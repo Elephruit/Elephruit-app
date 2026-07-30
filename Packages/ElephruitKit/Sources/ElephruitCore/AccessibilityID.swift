@@ -104,6 +104,18 @@ public enum AccessibilityID {
         public static func itemToggle(id: String) -> String { "time.toggle.\(id)" }
     }
 
+    public enum People {
+        public static let relationshipSummary = "people.summary"
+        public static let recordInteraction = "people.recordInteraction"
+        public static let interactionSheet = "people.interactionSheet"
+    }
+
+    public enum Home {
+        public static let root = "home"
+        public static let startDailyNote = "home.startDailyNote"
+        public static let followUps = "home.followUps"
+    }
+
     public enum Calendar {
         public static let statusBanner = "calendar.status"
         public static let enableToggle = "calendar.enable"

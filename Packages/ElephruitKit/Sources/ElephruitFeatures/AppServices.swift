@@ -44,6 +44,24 @@ public final class AppServices {
     /// The user's calendar, read-only and off until they turn it on.
     public let calendar: CalendarService
 
+    /// People, computed from the links that already exist.
+    public let people: PeopleService
+
+    /// Whether Home offers follow-up suggestions.
+    ///
+    /// **Off by default.** An app that starts telling you who you have neglected, unprompted, is a
+    /// different and worse product than one that answers when asked.
+    public var showsFollowUpSuggestions: Bool {
+        get { UserDefaults.standard.bool(forKey: "people.showsFollowUps") }
+        set { UserDefaults.standard.set(newValue, forKey: "people.showsFollowUps") }
+    }
+
+    /// How long a gap has to be before it is mentioned.
+    public var followUpThresholdDays: Int {
+        let stored = UserDefaults.standard.integer(forKey: "people.followUpThresholdDays")
+        return stored > 0 ? stored : FollowUpPolicy.defaultThresholdDays
+    }
+
     /// What a containment repair would do, if one is needed.
     ///
     /// Computed by a dry run once the store is open. `nil` means there is nothing to convert — the
@@ -130,6 +148,7 @@ public final class AppServices {
         // The provider is built lazily, and only when the feature is enabled — so an app that never
         // turns the calendar on never constructs an `EKEventStore` and never prompts.
         self.calendar = CalendarService(dateProvider: dateProvider) { EventKitCalendarProvider() }
+        self.people = PeopleService(items: items, dateProvider: dateProvider)
 
         let undoManager = UndoManager()
         // Off, so one operation is one undo step regardless of run-loop timing. Every coordinator

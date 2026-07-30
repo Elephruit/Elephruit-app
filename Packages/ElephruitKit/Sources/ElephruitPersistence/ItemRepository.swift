@@ -92,6 +92,9 @@ public protocol ItemRepository: AnyObject {
     /// projects stays filed under the other two. Passing `nil` removes every filing.
     func fileItem(_ item: Item, under container: Item?) throws(AppError)
 
+    /// Creates a link between two items, if one of that kind does not already exist.
+    func link(_ source: Item, to target: Item, kind: LinkKind) throws(AppError)
+
     /// Removes one filing without touching the others.
     func unfileItem(_ item: Item, from container: Item) throws(AppError)
 
@@ -303,6 +306,20 @@ public final class SwiftDataItemRepository: ItemRepository {
     }
 
     // MARK: - Filing
+
+    /// Links two items, idempotently.
+    ///
+    /// Linking twice is a no-op rather than an error: the caller's intent is "these are related",
+    /// and a second call means that is still true.
+    public func link(_ source: Item, to target: Item, kind: LinkKind) throws(AppError) {
+        let existing = source.outgoingLinks.contains {
+            $0.kind == kind && $0.target?.id == target.id
+        }
+        guard !existing else { return }
+
+        context.insert(ItemLink(kind: kind, source: source, target: target, createdAt: dateProvider.now))
+        try save()
+    }
 
     public func fileItem(_ item: Item, under container: Item?) throws(AppError) {
         guard let container else {

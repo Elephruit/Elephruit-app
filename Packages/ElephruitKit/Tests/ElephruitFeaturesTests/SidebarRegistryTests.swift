@@ -54,14 +54,24 @@ struct SidebarRegistryTests {
         }
     }
 
-    @Test("Home and Calendar are declared but not yet shown")
+    @Test("Calendar is declared but not yet shown")
     func laterDestinationsAreDeclared() {
-        // Declared now so the phase that builds one flips a flag rather than editing the sidebar.
-        for id in ["home", "calendar"] {
-            let destination = SidebarRegistry.allDeclared.first { $0.id == id }
-            #expect(destination != nil, "\(id) should be declared")
-            #expect(destination?.isAvailable == false, "\(id) should not be shown yet")
-        }
+        // Declared now so the phase that builds it flips a flag rather than editing the sidebar.
+        // Events already appear in Today and Upcoming; a dedicated calendar grid is what is missing.
+        let calendar = SidebarRegistry.allDeclared.first { $0.id == "calendar" }
+        #expect(calendar != nil)
+        #expect(calendar?.isAvailable == false)
+    }
+
+    @Test("Home became available in Phase E, first in the primary band")
+    func homeIsAvailable() {
+        let home = SidebarRegistry.allDeclared.first { $0.id == "home" }
+        #expect(home?.isAvailable == true)
+        #expect(home?.band == .primary)
+
+        // First, because it answers the question you have on opening the app rather than one you go
+        // looking for.
+        #expect(SidebarRegistry.destinations(in: .primary).first?.id == "home")
     }
 
     @Test("Time became available in Phase C, in the Library band")
