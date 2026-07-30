@@ -48,6 +48,38 @@ public enum SchemaV2: VersionedSchema {
     public static var models: [any PersistentModel.Type] { SchemaV1.models }
 }
 
+/// The third schema: time tracking.
+///
+/// One new entity, ``TimeEntry``, and one new relationship on ``Item`` pointing at it. Both are
+/// **additive** — nothing existing changes shape, nothing is transformed, and no data is rewritten.
+/// A store opened under this version gains an empty table and keeps everything it already had.
+///
+/// ### The honest limit
+/// V1, V2 and V3 all reference the *live* model types rather than frozen copies. That is accurate
+/// for V1 and V2, whose shapes were genuinely identical, and it is now slightly generous for V3:
+/// `Item` has gained `timeEntries`, so a store built from `SchemaV2.models` in a test is really
+/// built with V3's `Item`.
+///
+/// Freezing would mean duplicating the whole entity graph, because `Item`'s relationships name
+/// `Tag`, `ItemLink`, `Attachment` and the rest, and each of those names `Item` back through an
+/// inverse. Copying one entity means copying all nine, and the copies rot.
+///
+/// What is therefore proven by test is the thing that actually matters here: **a store containing
+/// real data opens under the new schema with every item, tag, link, collection and profile intact,
+/// and time tracking works afterwards.** What is *not* proven is a byte-level V2→V3 shape migration.
+/// That distinction is affordable only because this change is additive. The first change that
+/// rewrites or removes anything makes freezing mandatory, and this comment is the reminder.
+///
+/// A backup is written before any open that could migrate — see `PersistenceStack.open` — so the
+/// recovery path does not depend on the argument above being right.
+public enum SchemaV3: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(3, 0, 0) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV2.models + [TimeEntry.self]
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -60,11 +92,11 @@ public enum SchemaV2: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV1.self, SchemaV2.self]
+        [SchemaV1.self, SchemaV2.self, SchemaV3.self]
     }
 
     public static var stages: [MigrationStage] {
-        [containmentRepair]
+        [containmentRepair, timeTracking]
     }
 
     /// V1 to V2.
@@ -84,17 +116,29 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
         fromVersion: SchemaV1.self,
         toVersion: SchemaV2.self
     )
+
+    /// V2 to V3 — time tracking.
+    ///
+    /// Additive: a new entity and a relationship to it. Nothing existing is read, rewritten, or
+    /// removed, so there is no data decision to make and nothing for the user to be asked about.
+    /// This is what a migration is supposed to look like, and the contrast with
+    /// ``containmentRepair`` — which had to be split out and *offered* — is the point of keeping
+    /// both here.
+    static let timeTracking = MigrationStage.lightweight(
+        fromVersion: SchemaV2.self,
+        toVersion: SchemaV3.self
+    )
 }
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV2.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV3.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV2.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV3.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {
-        let version = SchemaV2.versionIdentifier
+        let version = SchemaV3.versionIdentifier
         return "\(version.major).\(version.minor).\(version.patch)"
     }
 }

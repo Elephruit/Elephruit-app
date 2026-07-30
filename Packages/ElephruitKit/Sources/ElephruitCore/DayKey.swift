@@ -27,6 +27,15 @@ public enum DayKey {
         components(from: key) != nil
     }
 
+    /// Two-digit zero padding, for clock faces and durations.
+    ///
+    /// Here rather than in a formatter for the same reason as the rest of this type: `String(format:)`
+    /// takes `CVarArg`, which the strict-memory-safety checks flag, and a duration is arithmetic
+    /// anyway.
+    public static func padded(_ value: Int) -> String {
+        pad(value, width: 2)
+    }
+
     private static func pad(_ value: Int, width: Int) -> String {
         let digits = String(abs(value))
         let padding = max(0, width - digits.count)

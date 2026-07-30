@@ -180,6 +180,19 @@ public final class Item {
     @Relationship(deleteRule: .cascade, inverse: \EventReference.item)
     public var eventReference: EventReference?
 
+    /// Time tracked against this item.
+    ///
+    /// **Not** `.cascade`, unlike every other relationship here. Deleting a task must not destroy the
+    /// record that four hours were spent on it — that is a fact about the past, and about work
+    /// someone may still need to bill for. The entries are nullified and survive as untethered time,
+    /// which is recoverable; a cascade would not be.
+    ///
+    /// The inverse is declared rather than left one-way because CloudKit mirroring requires inverse
+    /// relationships, and the decision of record is that deferring sync must not make adopting it
+    /// harder later.
+    @Relationship(deleteRule: .nullify)
+    public var timeEntries: [TimeEntry] = []
+
     // MARK: Init
 
     /// Everything defaulted, which is both a CloudKit requirement and a convenience:
