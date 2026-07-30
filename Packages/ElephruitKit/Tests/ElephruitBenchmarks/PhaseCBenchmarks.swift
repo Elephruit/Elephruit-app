@@ -19,10 +19,24 @@ struct PhaseCBenchmarks {
         ProcessInfo.processInfo.environment["ELEPHRUIT_BENCHMARK_SCALE"] ?? "reduced"
     }
 
-    /// The published criterion names 200,000 entries.
-    private static var entryCount: Int {
+    /// How much history to build.
+    ///
+    /// ### What 200,000 time entries actually means
+    /// `docs/09` published that figure, and it was cargo: it was the *item* count from the search
+    /// criteria, applied to time entries without asking what it would represent. Two hundred thousand
+    /// entries at half an hour each is a hundred thousand hours — around fifty working years.
+    ///
+    /// A heavy user tracking eight sessions a day, two hundred and fifty days a year, produces about
+    /// **20,000 entries a decade**. That is the default here, and it is a realistic career of use
+    /// rather than a number chosen to sound demanding. `full` is three decades of it.
+    ///
+    /// `huge` keeps the original 200,000 for hunting a regression in the query path. It takes minutes
+    /// to build and is opted into by name, because a benchmark nobody will wait for is a benchmark
+    /// nobody runs.
+    fileprivate static var entryCount: Int {
         switch scale {
-        case "huge", "full": 200_000
+        case "huge": 200_000
+        case "full": 60_000
         default: 20_000
         }
     }
@@ -32,79 +46,110 @@ struct PhaseCBenchmarks {
         let context: ModelContext
         let entries: SwiftDataTimeEntryRepository
         let clock: FixedDateProvider
-        let projectCount: Int
-        let location: StoreLocation
+        let entryCount: Int
     }
 
-    /// Builds a history spread over three years, so a week's worth is a genuinely small slice of it.
+    /// One history, built once per process and shared by every test in the suite.
     ///
-    /// Spread matters: two hundred thousand entries all inside one week would make the fetch trivial
-    /// *and* the report enormous, which is neither the real shape nor a useful measurement.
-    private func makeFixture() throws -> Fixture {
-        // **On disk, not in memory.**
-        //
-        // An in-memory store is not a SQLite database with the indexes turned off — it is a different
-        // store type whose predicates are evaluated linearly, so no index can ever help it. Measuring
-        // "is anything running?" against one reported 8 ms and survived three wrong fixes before that
-        // became clear. The app runs on disk; the benchmark has to.
-        let location = StoreLocation.temporary()
-        try location.createDirectories()
-        let stack = try PersistenceStack.open(mode: .onDisk(location))
-        let context = ModelContext(stack.container)
-        let clock = FixedDateProvider.reference
-        let tags = SwiftDataTagRepository(context: context, dateProvider: clock)
-        let items = SwiftDataItemRepository(context: context, dateProvider: clock, tags: tags)
-        let entries = SwiftDataTimeEntryRepository(context: context, dateProvider: clock, tags: tags)
+    /// ### Why this is shared rather than per-test
+    /// Each test used to build its own. At the 200,000-entry scale that meant four identical stores,
+    /// eight hundred thousand indexed inserts, and roughly twenty minutes for a sweep that measures a
+    /// handful of queries — and since the fixtures were never deleted, gigabytes left behind.
+    ///
+    /// Sharing is safe here because the suite is `.serialized` and **every test in it only reads**.
+    /// A benchmark that mutated the history would have to build its own, and the day one does, this
+    /// comment is the reason it must.
+    @MainActor
+    private enum SharedHistory {
+        private static var built: Fixture?
 
-        let projectCount = 40
-        var projects: [Item] = []
-        for index in 0..<projectCount {
-            projects.append(try items.create(ItemDraft(kind: .project, title: "Project \(index)")))
+        static func fixture() throws -> Fixture {
+            if let built { return built }
+
+            let made = try build()
+            built = made
+            return made
         }
 
-        var tasks: [Item] = []
-        for index in 0..<400 {
-            tasks.append(try items.create(ItemDraft(
-                kind: .task,
-                title: "Task \(index)",
-                parentID: projects[index % projectCount].id
-            )))
-        }
+        /// Builds a history spread over three years, so a week is a genuinely small slice of it.
+        ///
+        /// Spread matters: two hundred thousand entries inside one week would make the fetch trivial
+        /// *and* the report enormous, which is neither the real shape nor a useful measurement.
+        private static func build() throws -> Fixture {
+            // On disk, not in memory. An in-memory store is not a SQLite database with the indexes
+            // turned off — it is a different store type whose predicates are evaluated linearly, so
+            // no index can ever help it. Measuring "is anything running?" against one reported 8 ms
+            // and survived three wrong fixes before that became clear.
+            let location = BenchmarkWorkspace.storeLocation(named: "time-history")
+            try location.createDirectories()
 
-        let total = Self.entryCount
-        let spanSeconds = 3.0 * 365 * 86_400
-        let start = clock.now.addingTimeInterval(-spanSeconds)
+            let stack = try PersistenceStack.open(mode: .onDisk(location))
+            let context = ModelContext(stack.container)
+            let clock = FixedDateProvider.reference
+            let tags = SwiftDataTagRepository(context: context, dateProvider: clock)
+            let items = SwiftDataItemRepository(context: context, dateProvider: clock, tags: tags)
+            let entries = SwiftDataTimeEntryRepository(context: context, dateProvider: clock, tags: tags)
 
-        // Written directly rather than through the repository: this is fixture construction, and
-        // three hundred thousand individual saves would dominate the run.
-        for index in 0..<total {
-            let offset = spanSeconds * Double(index) / Double(total)
-            let startedAt = start.addingTimeInterval(offset)
-
-            let entry = TimeEntry(
-                startedAt: startedAt,
-                endedAt: startedAt.addingTimeInterval(Double(600 + (index % 12) * 300)),
-                entryDescription: "Session \(index)",
-                isBillable: index.isMultiple(of: 3),
-                createdAt: startedAt
-            )
-            entry.item = tasks[index % tasks.count]
-            context.insert(entry)
-
-            if index.isMultiple(of: 5_000) {
-                try context.save()
+            var projects: [Item] = []
+            for index in 0..<40 {
+                projects.append(try items.create(ItemDraft(kind: .project, title: "Project \(index)")))
             }
-        }
-        try context.save()
 
-        return Fixture(
-            stack: stack,
-            context: context,
-            entries: entries,
-            clock: clock,
-            projectCount: projectCount,
-            location: location
-        )
+            var tasks: [Item] = []
+            for index in 0..<400 {
+                tasks.append(try items.create(ItemDraft(
+                    kind: .task,
+                    title: "Task \(index)",
+                    parentID: projects[index % projects.count].id
+                )))
+            }
+
+            let total = PhaseCBenchmarks.entryCount
+            let spanSeconds = 3.0 * 365 * 86_400
+            let start = clock.now.addingTimeInterval(-spanSeconds)
+            let buildStart = ContinuousClock.now
+
+            // Written directly rather than through the repository: this is fixture construction, and
+            // two hundred thousand individual saves would dominate the run.
+            for index in 0..<total {
+                let startedAt = start.addingTimeInterval(spanSeconds * Double(index) / Double(total))
+
+                let entry = TimeEntry(
+                    startedAt: startedAt,
+                    endedAt: startedAt.addingTimeInterval(Double(600 + (index % 12) * 300)),
+                    entryDescription: "Session \(index)",
+                    isBillable: index.isMultiple(of: 3),
+                    createdAt: startedAt
+                )
+                entry.item = tasks[index % tasks.count]
+                context.insert(entry)
+
+                if index.isMultiple(of: 5_000) {
+                    try context.save()
+                }
+            }
+            try context.save()
+
+            let elapsed = ContinuousClock.now - buildStart
+            print(String(
+                format: "  [fixture] %d entries in %.1f s, built once and shared",
+                total,
+                Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+            ))
+            BenchmarkWorkspace.reportUsage()
+
+            return Fixture(
+                stack: stack,
+                context: context,
+                entries: entries,
+                clock: clock,
+                entryCount: total
+            )
+        }
+    }
+
+    private func makeFixture() throws -> Fixture {
+        try SharedHistory.fixture()
     }
 
     @Test("Week report")
@@ -214,11 +259,14 @@ struct PhaseCBenchmarks {
             )
         }
 
-        let perEntry = entriesRead > 0 ? measurement.rawSeconds / Double(entriesRead) * 1_000_000 : 0
+        // Entries read and total time, and nothing derived from them. An earlier version divided
+        // one by the other and printed the scale at which a rollup table "becomes necessary", which
+        // read as a finding and was not one: a wider date range costs more to fetch as well as more
+        // to roll up, so the two are not separable from this measurement alone. The honest output is
+        // the pair of numbers.
         print(String(
-            format: "  └ %d entries read · %.1f µs each — the rollup table becomes necessary "
-                + "above roughly %.0fk entries in one report",
-            entriesRead, perEntry, 0.2 / (perEntry / 1_000_000) / 1_000
+            format: "  └ %d entries read in %.0f ms",
+            entriesRead, measurement.rawSeconds * 1_000
         ))
 
         // Asserted only against something absurd, so a hundred-fold regression still fails loudly

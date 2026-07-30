@@ -83,9 +83,10 @@ struct PhaseBBenchmarks {
             projects: size.projects, people: size.people
         )
 
-        let indexURL = URL.temporaryDirectory
-            .appending(path: "ElephruitBenchmarks", directoryHint: .isDirectory)
-            .appending(path: "\(UUID().uuidString).sqlite", directoryHint: .notDirectory)
+        // Inside the workspace, which is wiped once per process. These files run to hundreds of
+        // megabytes at the full corpus, and there used to be one per fixture with nothing deleting
+        // any of them.
+        let indexURL = BenchmarkWorkspace.indexURL(named: "search-\(UUID().uuidString)")
 
         return Fixture(
             stack: stack,
