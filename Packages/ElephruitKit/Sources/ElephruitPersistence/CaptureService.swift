@@ -55,8 +55,18 @@ public struct CaptureService {
             itemDraft.parentID = container.id
         }
 
-        if let expression = draft.dueDate, draft.kind.supportedFields.contains(.dueDate) {
-            itemDraft.dueAt = expression.resolve(using: dateProvider)
+        if let interpretation = draft.dueInterpretation, draft.kind.supportedFields.contains(.dueDate) {
+            itemDraft.dueAt = interpretation.resolve(using: dateProvider)
+        }
+
+        // `follow:` is a start date, not a deadline. It brings the item into Today on that day and
+        // never becomes overdue — the whole reason it is a separate token from `due:`.
+        if let expression = draft.followDate, draft.kind.supportedFields.contains(.deferDate) {
+            itemDraft.deferUntil = expression.resolve(using: dateProvider)
+        }
+
+        if let priority = draft.priority, draft.kind.supportedFields.contains(.priority) {
+            itemDraft.priority = priority
         }
 
         let item = try items.create(itemDraft)
