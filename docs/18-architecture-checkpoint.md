@@ -11,25 +11,23 @@ Evidence is in `docs/16` (frozen at `dfe1846`). Decisions are in `docs/adr/0005`
 
 These bind every slice until an ADR retires them.
 
-### R1 — The schema is frozen shut
+### R1 — Every schema change bumps the version; a custom stage needs the freeze first
 
-**No stored property may be added to, removed from, or changed on any `@Model` type until the
-schema-freeze slice lands.** ADR 0005.
+Additive changes — an attribute, an index, a new entity — ship under a single declared version with
+lightweight inference, as they always have. **Every** schema change bumps the version identifier,
+because that is what the `.schema-version` stamp is compared against and the stamp is what triggers
+the backup.
 
-`ElephruitMigrationPlan.stages` is empty because live model types make `SchemaV1` and `SchemaV2`
-resolve to the same checksum. Adding a property without first snapshotting the old shapes is the
-change that breaks migration, not one that merely risks it — and it has already crashed every
-migrating launch once (`37337b7`).
+The freeze of old model types into nested snapshots is required before the first change that
+inference *cannot* perform: a rename, a type change, a derived value. ADR 0005 has the trigger and
+the procedure.
 
-This is the critical path for the whole programme and it is not in the expansion plan. Four
-capabilities queue behind it:
-
-| Capability | Blocked on |
-|---|---|
-| Estimate vs actual | `Item.estimateMinutes` |
-| Rich documents | note format version + payload reference |
-| People CRM | `ContactIdentity`, `Relationship`, `Observation` |
-| Index rebuild budget | `@Index` on `Item.createdAt` |
+*This rule was stated much more strongly at Stage 0 — "no stored property may move until the freeze
+lands" — and that was wrong. It was inferred from the checksum-collision note in `SchemaV1.swift`
+and over-read: the collision only bites when the plan holds more than one version. Tested rather
+than reasoned about, a store written by a build predating `TimeEntry` migrates through two version
+steps and an added attribute without any freeze. Four capabilities were thought blocked on it and
+none of them were.*
 
 ### R2 — Mutations go through the action layer
 
@@ -76,14 +74,13 @@ lower bound, and a cache would have hidden that rather than fixed it.
 
 ## 3. The four seams that must exist before capability work
 
-1. **Frozen schema + a real `MigrationStage`** (ADR 0005). Everything with a stored property
-   waits here.
+1. ~~**Frozen schema**~~ — **not a seam.** Tested and disproved; additive changes need no freeze.
+   ADR 0005 records the trigger for when it does become one.
 2. **The action layer** (ADR 0007). One owner for validate → save → undo → index. Removes the
    class of bug that `CaptureIntent` already hit.
 3. **The shortcut registry** (ADR 0008). One source of truth for 40 bindings, replacing the
    literals and the cosmetic glyph arrays that can drift from them.
-4. **The archive contract** (ADR 0009). Attachments and time are part of a backup; today neither
-   is, silently.
+4. ~~**The archive contract**~~ (ADR 0009) — **done in S3.** Attachments and time are in the backup.
 
 Rich documents (ADR 0006) is a fifth, but it is a capability with its own migration rather than a
 shared seam, and it is last.

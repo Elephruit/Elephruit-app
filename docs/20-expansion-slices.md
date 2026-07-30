@@ -119,30 +119,51 @@ rather than leaving the user to find out.
 
 ---
 
-## S4 — Schema freeze + first additive stage · **next, ships alone**
+## S4 — Additive schema change, and the freeze question answered · **done**
 
-**Goal.** ADR 0005. Snapshot the V1 and V2 entity shapes as frozen types, restore a non-empty
-`stages`, and land `Item.estimateMinutes` plus the `@Index` on `Item.createdAt` in that one stage.
+**Goal, as planned.** Freeze the V1 and V2 entity shapes, restore a non-empty `stages`, and land
+`Item.estimateMinutes` plus the `@Index` on `Item.createdAt`.
 
-**Files.** `ElephruitModel/SchemaV1.swift` · `ElephruitPersistence/PersistenceStack.swift` ·
-`Tests/.../MigrationSafetyTests.swift`, `RealStoreMigrationTests.swift`
+**What actually happened — the plan's premise was wrong.** Stage 0 read the checksum-collision note
+in `SchemaV1.swift` as "no stored property may move until the old model types are frozen," and
+called that the critical path for the whole programme. Tested rather than reasoned about, it is not
+true. The collision only bites when the migration plan holds **more than one version**; a plan
+holding one never compares two checksums. Additive changes ship by inference, as `TimeEntry` already
+did.
 
-**Acceptance.**
-- `stages.count == 1` and the app opens a real on-disk V2 store, migrates, and reads back V3
-  contents. **`RealStoreMigrationTests` is env-gated off by default — it is part of this slice's
-  acceptance, not skipped by it.**
-- A backup is written before the stage runs, proven by test.
-- A failure injected mid-migration rolls back and produces an actionable diagnostic; the original
-  store survives.
-- All eight `ContainmentRepair` fixtures stay green, including the `GraphFingerprint` equality
-  check.
-- The full-rebuild benchmark comes in under 6 s, closing the one known miss from `docs/11`.
+So the freeze was **not done**, and ADR 0005 was rewritten to say when it actually becomes
+mandatory — the first change inference cannot perform: a rename, a type change, a derived value.
+Roughly twenty duplicated model types were queued in front of four capabilities that never needed
+them.
 
-**Risk. High.** No feature rides on it. This is the critical path for the programme.
+**What was done instead.**
+
+- **A genuine legacy store, and the test that had never run.** `RealStoreMigrationTests` is gated on
+  `ELEPHRUIT_LEGACY_STORE` and no such store had ever been produced, so the one test that exercises
+  a real cross-version migration had never executed. One was generated from a git worktree at
+  `71f49ae` — a commit that predates `TimeEntry` entirely, with no `TimeEntry.swift` in the tree —
+  and those bytes now migrate through V1 → V2 → V3 with items, tags, containment and links all
+  readable, and an empty time table rather than an invented one.
+- `Item.estimateMinutes`, optional so that an item written before the field has *no estimate* rather
+  than a zero. Zero is a claim that something takes no time.
+- `#Index<Item>([\.createdAt])`, which the rebuild streams on.
+- Schema bumped to 3.0.0, because the version identifier is what the `.schema-version` stamp is
+  compared against and the stamp is what triggers the backup. A test asserts a migrating launch
+  leaves a backup behind, and the version literal is pinned so a future bump is deliberate.
+
+**The known benchmark miss is closed.** Full index rebuild at 50,000 items: **5734 ms against a
+6000 ms budget**, down from 6150 ms. All seven Phase B benchmarks now pass. That fix was identified
+in `docs/11` and declined at the time for being a schema change to real user data.
+
+**549 tests pass** (+4), zero warnings; Debug and Release build.
+
+**Known limitation.** The generated legacy store lives outside the repository, so
+`RealStoreMigrationTests` still skips by default on a fresh checkout. ADR 0005 records how to make
+another in a few minutes; committing a binary fixture is the alternative and was not taken.
 
 ---
 
-## S5 — Canonical action layer
+## S5 — Canonical action layer · **next**
 
 **Goal.** ADR 0007. One owner for validate → save → undo → index. Capture becomes undoable.
 

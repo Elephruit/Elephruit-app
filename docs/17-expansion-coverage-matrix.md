@@ -129,7 +129,8 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 | T11 | Calendar day/week grid, planned vs actual | Absent | The `calendar` destination is declared-but-unavailable | Deferred |
 | T12 | Split / merge | Absent | No repository method | S12 |
 | T13 | Overlap detected, never silently changed | Absent | Two manual entries covering the same hour are accepted silently | S12 |
-| T14 | Estimate vs actual | Absent | `Item` has no estimate field — **blocked on the schema freeze** | S4 → S12 |
+| T14 | Estimate vs actual — the stored field | **Met** (S4) | `Item.estimateMinutes`, optional so absence is not a zero; survives a real legacy-store migration | — |
+| T14b | Estimate vs actual — surfaced in the interface | Absent | — | S12 |
 | T15 | Reports with filters and presets | Partial | 5 fixed windows, 4 groupings, top-6 bars. No arbitrary ranges, no destination | S12 |
 | T16 | Archive of time | **Met** (S3) | `ArchiveTimeEntry`; exact intervals, links, tags, source; a running timer re-imports running |  — |
 | T16b | CSV export of a time report | Absent | — | S12 |
@@ -153,3 +154,5 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 | I5 | UI tests | Absent | No XCUITest target; `AccessibilityID`s consumed by nothing | S15 |
 | I6 | One search engine | Partial | Legacy `DefaultSearchEngine` still compiled, tested, and referenced at `ElephruitApp.swift:397` | S15 |
 | I7 | Four published v2 performance targets instrumented | Absent | Cold launch, rebuild main-thread blocking, resident memory, 200k keystroke p95 — none has an instrument | S15 |
+| I8 | Full index rebuild under 6 s at 50k | **Met** (S4) | 5734 ms with `#Index<Item>([\.createdAt])`, down from 6150 ms. The project's only known miss, now closed |  — |
+| I9 | A real cross-version migration is exercised | **Met** (S4) | A store generated from commit `71f49ae` (pre-`TimeEntry`) migrates to V3 via `RealStoreMigrationTests`, which had never run before |  — |

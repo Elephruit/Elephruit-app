@@ -15,6 +15,14 @@ import SwiftData
 /// rule is `.deny`.
 @Model
 public final class Item {
+    /// Ordering by creation date, for the index rebuild.
+    ///
+    /// `IndexWorker` streams the whole store in cursor-paged batches ordered by `createdAt`, and
+    /// without an index every page was a sort over the table: a 50,000-item rebuild measured 6.15 s
+    /// against a 6 s budget, the one published figure the project has missed. The fix was known and
+    /// declined at the time because it is a schema change to real user data — which this slice is.
+    #Index<Item>([\.createdAt])
+
     // MARK: Identity
 
     /// Stable across export and import.
@@ -96,6 +104,16 @@ public final class Item {
 
     /// ``Priority`` raw value.
     public var priorityRaw: String = Priority.normal.rawValue
+
+    /// How long this was expected to take, in minutes. `nil` means no estimate was given.
+    ///
+    /// Deliberately not a `TimeInterval`: an estimate is something a person types, and nobody
+    /// estimates in seconds. Minutes make the stored value the same one that was entered.
+    ///
+    /// This is an *estimate*, and the actual is derived from ``Item/timeEntries``. The two are never
+    /// reconciled into a single number — a plan and what happened are different facts, and averaging
+    /// them would destroy both.
+    public var estimateMinutes: Int?
 
     public var isFavorite: Bool = false
     public var isPinned: Bool = false
