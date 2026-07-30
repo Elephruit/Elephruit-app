@@ -135,8 +135,21 @@ public final class AppServices {
             dateProvider: dateProvider,
             container: stack.container
         )
-        self.exporter = Exporter(items: items, context: context, dateProvider: dateProvider)
-        self.importer = Importer(items: items, tags: tags, context: context, dateProvider: dateProvider)
+        // The location, so an export can carry attachment bytes out and an import can bring them
+        // back. Without it both still handle every record and simply have no files to move.
+        self.exporter = Exporter(
+            items: items,
+            context: context,
+            dateProvider: dateProvider,
+            location: stack.location
+        )
+        self.importer = Importer(
+            items: items,
+            tags: tags,
+            context: context,
+            dateProvider: dateProvider,
+            location: stack.location
+        )
         self.counts = CountsService(container: stack.container, dateProvider: dateProvider)
         self.capture = CaptureService(items: items, context: context, dateProvider: dateProvider)
 

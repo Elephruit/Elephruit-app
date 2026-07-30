@@ -173,15 +173,20 @@ public enum MarkdownFrontMatter {
 ///   elephruit-archive.json   ← the lossless companion
 ///   Notes/…                   ← one .md per item, grouped by kind
 ///   Tasks/…
-///   Attachments/<uuid>/…      ← Phase 2
+///   Attachments/<uuid>/…      ← the bytes of every copied-in file
 /// ```
+///
+/// A *referenced* attachment has no bytes here. Elephruit does not own that file, so an export
+/// records that it existed and leaves it where the user put it.
 @MainActor
 struct MarkdownBundleWriter {
     let archive: ArchiveDocument
+    let exporter: Exporter
 
     func write(to destination: URL) throws(AppError) -> ExportReport {
         let fileManager = FileManager.default
         var fileCount = 0
+        var warnings: [String] = []
 
         // Tag slugs are resolved once so each file's front-matter can name tags readably while
         // the archive keeps identifiers.
@@ -229,6 +234,14 @@ struct MarkdownBundleWriter {
                 )
                 fileCount += 1
             }
+
+            // The bytes the archive names. Until this existed, every bundle wrote a `bundlePath`
+            // for each attachment and no file at it.
+            fileCount += try exporter.copyAttachmentBytes(
+                for: archive,
+                into: destination,
+                warnings: &warnings
+            )
         } catch let error as AppError {
             throw error
         } catch {
@@ -240,7 +253,7 @@ struct MarkdownBundleWriter {
             destination: destination,
             itemCount: archive.items.count,
             fileCount: fileCount,
-            summary: archive.summary
+            summary: warnings.isEmpty ? archive.summary : "\(archive.summary) · \(warnings.count) file(s) missing"
         )
     }
 
@@ -260,11 +273,14 @@ struct MarkdownBundleWriter {
         - **Markdown files**, grouped into folders by kind. Each has YAML front-matter carrying
           its identifier, dates, state, and tags. These are plain text and will outlive any app.
         - **`elephruit-archive.json`** — the complete, lossless record, including links,
-          collection order, and saved searches. Import this file back into Elephruit to restore
-          everything exactly, identifiers included.
+          collection order, saved searches, and tracked time. Import this file back into
+          Elephruit to restore everything exactly, identifiers included.
+        - **`Attachments/`** — the bytes of every file copied into Elephruit, one folder per
+          attachment. Files you *referenced* rather than copied in are recorded in the JSON and
+          are not here: those belong to you and stayed where you put them.
 
-        The Markdown files are for reading and for other tools. The JSON archive is the one to
-        keep if you keep only one.
+        The Markdown files are for reading and for other tools. Keep the whole folder if you keep
+        anything: the JSON alone restores every record, but only the folder has your files.
         """
     }
 }
