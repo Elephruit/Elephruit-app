@@ -55,10 +55,24 @@ final class SQLiteConnection {
         // WAL keeps readers from blocking on the writer, which matters because a rebuild writes for
         // seconds at a time while the user is still typing into the search field.
         try execute("PRAGMA journal_mode = WAL")
-        try execute("PRAGMA synchronous = NORMAL")
+
+        // `OFF`, not `NORMAL`. This is the one place in the app where durability genuinely does not
+        // matter: every row is derived from the store, so a power cut mid-write costs a rebuild and
+        // nothing else. Paying for fsync here would slow every write to protect data that is already
+        // safe somewhere else.
+        try execute("PRAGMA synchronous = OFF")
+
         try execute("PRAGMA temp_store = MEMORY")
-        // The index is derived. A torn write costs a rebuild, never data.
         try execute("PRAGMA foreign_keys = OFF")
+
+        // No `mmap_size` or `cache_size` tuning here on purpose. Both were tried while chasing a
+        // fifty-fold slowdown and neither moved the numbers — the cause turned out to be a failed
+        // checkpoint silently switching search onto the store fallback. Left at SQLite's defaults
+        // rather than kept as cargo, since nothing measured says they help.
+
+        // Wait rather than fail if the writer holds the lock. A search running during a rebuild
+        // should be a little slower, never an error.
+        try execute("PRAGMA busy_timeout = 2000")
     }
 
     deinit {

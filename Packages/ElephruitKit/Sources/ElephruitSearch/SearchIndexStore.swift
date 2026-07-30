@@ -24,7 +24,7 @@ import SQLite3
 actor SearchIndexStore {
     /// Bumped when the table shapes change. A mismatch drops and rebuilds rather than migrating —
     /// there is nothing here worth migrating.
-    static let schemaVersion = 1
+    static let schemaVersion = 2
 
     /// Separates tag slugs inside the denormalised column. A control character, so it can never
     /// occur in a slug and never needs escaping.
@@ -36,6 +36,16 @@ actor SearchIndexStore {
     /// How far a rebuild has got. Read by the search field so a query mid-rebuild can say
     /// "still indexing" instead of showing an empty list that looks like an answer.
     private(set) var rebuildProgress: RebuildProgress = .idle
+
+    /// Stamped on every row written, and bumped at the start of each rebuild.
+    ///
+    /// This is how a rebuild knows what to sweep. The alternative — asking the store for every
+    /// identifier it still holds — meant a second full pass over the library at the end of a job
+    /// that had just walked all of it, and it had a race in it besides: an item created *during* a
+    /// rebuild was indexed incrementally and then deleted by the sweep for not having been streamed.
+    /// A generation stamp has neither problem, because an incremental write during a rebuild carries
+    /// the current generation and therefore survives it.
+    private var generation = 0
 
     init(url: URL) {
         self.url = url
@@ -65,6 +75,13 @@ actor SearchIndexStore {
             let fresh = try SQLiteConnection(url: url)
             try createSchema(in: fresh)
             self.connection = fresh
+        }
+
+        // Carry the stamp across launches. Restarting at zero would let a new rebuild reuse a
+        // generation that rows already carry, and those rows would then survive a sweep that should
+        // have removed them.
+        if let stored = try readState(try requireConnection(), key: "generation").flatMap(Int.init) {
+            generation = stored
         }
     }
 
@@ -205,7 +222,8 @@ actor SearchIndexStore {
                 has_tags        INTEGER NOT NULL,
                 is_filed        INTEGER NOT NULL,
                 has_links       INTEGER NOT NULL,
-                in_content_views INTEGER NOT NULL
+                in_content_views INTEGER NOT NULL,
+                generation      INTEGER NOT NULL DEFAULT 0
             );
             """
         )
@@ -226,11 +244,24 @@ actor SearchIndexStore {
         for statement in [
             "CREATE INDEX IF NOT EXISTS entries_item_id ON entries(item_id);",
             "CREATE INDEX IF NOT EXISTS entries_scope ON entries(is_trashed, is_archived, in_content_views);",
+            // Scope *and* the default order, in one index.
+            //
+            // A query with filters but no words — `is:favorite`, `due:<7d` — has no full-text index
+            // to drive it, so without this SQLite scans every row and then sorts the whole matching
+            // set to return two hundred. The benchmark showed that as an 18 ms outlier on a corpus a
+            // tenth of the target size. With the sort columns in the index the scan is already in
+            // order and stops at the limit.
+            """
+            CREATE INDEX IF NOT EXISTS entries_scope_recent
+            ON entries(is_trashed, is_archived, in_content_views, is_pinned DESC, updated_at DESC);
+            """,
+            "CREATE INDEX IF NOT EXISTS entries_status ON entries(status, is_trashed, is_archived);",
             "CREATE INDEX IF NOT EXISTS entries_kind ON entries(kind);",
             "CREATE INDEX IF NOT EXISTS entries_due ON entries(due_at);",
             "CREATE INDEX IF NOT EXISTS entries_updated ON entries(updated_at);",
             "CREATE INDEX IF NOT EXISTS entries_title ON entries(title);",
             "CREATE INDEX IF NOT EXISTS entry_tags_slug ON entry_tags(slug, entry_rowid);",
+            "CREATE INDEX IF NOT EXISTS entries_generation ON entries(generation);",
         ] {
             try connection.execute(statement)
         }
@@ -331,7 +362,7 @@ actor SearchIndexStore {
         "parent_id", "parent_title", "symbol_name", "color_name", "day_key", "sort_order",
         "created_at", "updated_at", "start_at", "due_at", "defer_until", "completed_at",
         "archived_at", "deleted_at", "is_favorite", "is_pinned", "is_archived", "is_trashed",
-        "has_tags", "is_filed", "has_links", "in_content_views",
+        "has_tags", "is_filed", "has_links", "in_content_views", "generation",
     ]
 
     private func bindEntry(_ document: IndexDocument, to statement: SQLiteStatement) {
@@ -365,6 +396,7 @@ actor SearchIndexStore {
         statement.bind(document.isFiled, at: 27)
         statement.bind(document.hasLinks, at: 28)
         statement.bind(snapshot.kind.participatesInContentViews, at: 29)
+        statement.bind(generation, at: 30)
     }
 
     private func insertEntry(_ document: IndexDocument, in connection: SQLiteConnection) throws(AppError) -> Int {
@@ -475,7 +507,10 @@ actor SearchIndexStore {
     func beginRebuild(expecting total: Int) throws(AppError) {
         let connection = try requireConnection()
         try writeState(connection, key: "complete", value: "0")
-        try writeState(connection, key: "rebuild_generation", value: UUID().uuidString)
+
+        generation += 1
+        try writeState(connection, key: "generation", value: String(generation))
+
         rebuildProgress = RebuildProgress(indexed: 0, expected: total, isRebuilding: true)
     }
 
@@ -484,19 +519,18 @@ actor SearchIndexStore {
         rebuildProgress.indexed = indexed
     }
 
-    /// Removes rows for items that no longer exist, and marks the index complete.
-    func finishRebuild(keeping liveIDs: Set<UUID>) throws(AppError) {
+    /// Sweeps rows this rebuild did not touch, and marks the index complete.
+    func finishRebuild() throws(AppError) {
         let connection = try requireConnection()
+        let current = generation
 
         try connection.transaction {
-            let statement = try connection.prepared("SELECT rowid, item_id FROM entries;")
+            let statement = try connection.prepared("SELECT rowid FROM entries WHERE generation <> ?1;")
+            statement.bind(current, at: 1)
+
             var stale: [Int] = []
             while try statement.step() {
-                let rowid = statement.int(at: 0)
-                guard let id = UUID(uuidString: statement.string(at: 1)), liveIDs.contains(id) else {
-                    stale.append(rowid)
-                    continue
-                }
+                stale.append(statement.int(at: 0))
             }
 
             for rowid in stale {
@@ -508,8 +542,41 @@ actor SearchIndexStore {
         }
 
         try writeState(connection, key: "complete", value: "1")
-        try connection.execute("INSERT INTO documents(documents) VALUES('optimize');")
         rebuildProgress = .idle
+
+        // Everything past this point is housekeeping, and **none of it may fail the rebuild**.
+        //
+        // The index is complete and correct as of the line above. An error here would previously
+        // propagate out, the engine would mark the index unavailable, and every search would quietly
+        // fall back to scanning the store — fifty times slower, for an index that was fine. That is
+        // the worst kind of bug: a working thing switched off by the failure of an optimisation.
+        //
+        // `wal_checkpoint` in particular returns `SQLITE_BUSY` whenever a reader is mid-query, which
+        // is a normal thing to happen and not an error at all.
+        optimise(connection)
+    }
+
+    /// Compacts the index and folds the write-ahead log back into the database.
+    ///
+    /// Best-effort by design. Skipping it costs a slower first query, never a wrong answer.
+    ///
+    /// The checkpoint matters because without it the first search after a rebuild pays to read a log
+    /// the size of the whole index — which the benchmark caught as a single 1.9-second outlier
+    /// hiding behind a 7 ms p95. The cost has not gone away; it has moved into the rebuild, which is
+    /// background work with a budget in seconds, and out of the keystroke, which is not.
+    private func optimise(_ connection: SQLiteConnection) {
+        // Deliberately no `optimize`.
+        //
+        // FTS5's `optimize` merges the b-tree segments that accumulate as rows are added one at a
+        // time. A rebuild has just written the whole index in a few large transactions, so there is
+        // very little to merge — and measured, it was most of the margin by which the rebuild missed
+        // its budget. It buys nothing here that the rebuild has not already done.
+
+        do {
+            try connection.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+        } catch {
+            Diagnostics.search.debug("Index checkpoint skipped: \(error.summary, privacy: .public)")
+        }
     }
 
     /// Abandons a rebuild without claiming completeness.
@@ -522,6 +589,7 @@ actor SearchIndexStore {
     /// Runs a compiled query and returns ranked rows.
     func query(_ compiled: CompiledSearch) throws(AppError) -> [SearchResult] {
         let connection = try requireConnection()
+
         let statement = try connection.makeTransient(compiled.sql)
         compiled.bind(to: statement.statement)
 

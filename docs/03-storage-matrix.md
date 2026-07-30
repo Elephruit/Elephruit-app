@@ -12,7 +12,7 @@ else is a derived cache that can be deleted and rebuilt without loss.
 | Attachment **metadata** (filename, UTI, size, hash, thumbnail ref) | **SwiftData** (`Attachment` entity) | CloudKit private DB | No | It is graph data; the bytes are the payload |
 | Thumbnails / previews | **Caches directory** | Never | **Yes** | Purgeable by the OS by design |
 | References to files the user keeps *outside* the app | **SwiftData** — security-scoped bookmark `Data` + last-known path | CloudKit (bookmark may fail to resolve on another Mac; handled as a stale-reference state) | No | Sandbox requires bookmarks; the user owns the file, we own the pointer |
-| Search index | **Derived** — in-memory index + Core Spotlight | Never (each device indexes locally) | **Yes** | A cache. Full rebuild is a menu command. |
+| Search index | **Derived** — a SQLite FTS5 sidecar, `Application Support/Elephruit/SearchIndex.sqlite` | Never (each device indexes locally) | **Yes** | A cache. Full rebuild is a menu command. See the note below on why it is not under Caches. |
 | Full-text search text (`searchText` projection) | **SwiftData**, denormalised column on each item | Rides along with the item | **Yes** (recomputed from fields) | Makes predicate-based search fast without a join |
 | Window layout, sidebar width, selected view, sort order, inspector visibility | **UserDefaults** via `@AppStorage` + `SceneStorage` | No (deliberately per-device) | Yes | Lightweight, per-device preference — not user content |
 | Feature flags / dev-mode toggle | **UserDefaults** | No | Yes | — |
@@ -52,3 +52,29 @@ A single indexed string column per item lets the fast path be one `#Predicate`
 `localizedStandardContains` scan, keeping search useful before the in-memory index
 warms and after a cache purge. It is recomputed on every save from the item's own
 fields, so it can never drift into being a second source of truth.
+
+## The search index does not live under Caches
+
+Phase B replaced the in-memory index with a SQLite FTS5 database. It is still **derived** in every
+sense that matters — every row is a projection of an `Item`, deleting the file loses nothing, and the
+app rebuilds it in the background if it is missing — but it is stored beside the store rather than
+under `Caches`.
+
+The matrix's "purgeable" column is about *authority*, and nothing has changed there. What changed is
+the practical consequence of a purge. On a fifty-thousand-item library the index runs to hundreds of
+megabytes, which makes it exactly the sort of file the system reclaims first under pressure, and
+losing it costs a rebuild measured in seconds during which search is degraded. Search is a primary
+way of using this app rather than a convenience, so it does not get to disappear when the disk fills.
+
+The recovery a purge would have provided is still available, deliberately: **Rebuild Search Index**
+discards the file and rebuilds from the store.
+
+## What the index stores, and what it does not
+
+A search result renders from the index alone, without touching SwiftData — asserted by
+`SearchCostTests`, not assumed. That requires the index to hold every column a result row draws.
+
+It holds a short **excerpt** of each body rather than the whole thing. The full text is indexed for
+matching and is authoritative in the store; a result row shows a preview and nothing more, and
+keeping every body twice over would multiply the file for no gain. Anything that needs the real body
+— the editor — loads the item.
