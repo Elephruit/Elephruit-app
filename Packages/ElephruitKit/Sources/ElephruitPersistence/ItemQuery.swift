@@ -203,8 +203,6 @@ extension ItemQuery {
             || hasNoParent != nil
             || isFavorite != nil
             || isPinned != nil
-            || dueFrom != nil
-            || dueBefore != nil
             || notDeferredAfter != nil
             || requiresNoTags
             || inboxEligibleKindsOnly
@@ -239,7 +237,11 @@ extension ItemQuery {
         ItemPredicateBuilder.make(
             scope: scope,
             kindRaws: effectiveKindRaws,
-            statusRaws: statuses.map { $0.rawValue }
+            statusRaws: statuses.map { $0.rawValue },
+            // Only the active scope pushes the due bound to the store; elsewhere post-filtering
+            // still applies, so both paths stay correct.
+            dueFrom: scope == .active ? dueFrom : nil,
+            dueBefore: scope == .active ? dueBefore : nil
         )
     }
 
@@ -302,14 +304,16 @@ extension ItemQuery {
             result = result.filter { $0.isPinned == isPinned }
         }
 
-        if let dueFrom {
+        // Applied here only for the scopes the predicate does not cover; in the active scope the
+        // store has already done it and these are no-ops over an already-narrow set.
+        if let dueFrom, scope != .active {
             result = result.filter { item in
                 guard let dueAt = item.dueAt else { return false }
                 return dueAt >= dueFrom
             }
         }
 
-        if let dueBefore {
+        if let dueBefore, scope != .active {
             result = result.filter { item in
                 guard let dueAt = item.dueAt else { return false }
                 return dueAt < dueBefore

@@ -98,6 +98,13 @@ let package = Package(
             dependencies: ["ElephruitSearch", "ElephruitPersistence", "ElephruitModel", "ElephruitCore"],
             swiftSettings: .strict
         ),
+        // Benchmarks. Excluded from the default plan and gated on ELEPHRUIT_BENCHMARKS=1, so an
+        // ordinary `swift test` never runs them and a busy machine never reddens a build.
+        .testTarget(
+            name: "ElephruitBenchmarks",
+            dependencies: ["ElephruitCore", "ElephruitModel", "ElephruitPersistence", "ElephruitSearch"],
+            swiftSettings: .strict
+        ),
         .testTarget(
             name: "ElephruitFeaturesTests",
             dependencies: ["ElephruitFeatures", "ElephruitPersistence", "ElephruitModel", "ElephruitCore"],
