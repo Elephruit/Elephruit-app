@@ -57,7 +57,15 @@ struct NoteDetailView: View {
                     .padding(.vertical, Theme.Spacing.medium)
                     .frame(maxHeight: 180)
             }
+
+            Divider()
+            AttachmentSection(item: item)
+                .padding(.horizontal, Theme.Spacing.large)
+                .padding(.vertical, Theme.Spacing.small)
         }
+        // Dropping a file anywhere on a note attaches it, which is what someone dragging a PDF onto
+        // a window expects. Copied, never moved.
+        .acceptsAttachmentDrops(on: item)
         .accessibilityIdentifier(AccessibilityID.Detail.root)
     }
 
@@ -279,6 +287,9 @@ struct PersonDetailView: View {
                         }
                         .padding(.horizontal, Theme.Spacing.large)
                     }
+
+                    AttachmentSection(item: item)
+                        .padding(.horizontal, Theme.Spacing.large)
                 }
                 .padding(.bottom, Theme.Spacing.large)
             }

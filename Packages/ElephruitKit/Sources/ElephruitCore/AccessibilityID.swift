@@ -104,6 +104,13 @@ public enum AccessibilityID {
         public static func itemToggle(id: String) -> String { "time.toggle.\(id)" }
     }
 
+    public enum Attachments {
+        public static let section = "attachments"
+        public static let addButton = "attachments.add"
+
+        public static func row(id: String) -> String { "attachments.row.\(id)" }
+    }
+
     public enum People {
         public static let relationshipSummary = "people.summary"
         public static let recordInteraction = "people.recordInteraction"
