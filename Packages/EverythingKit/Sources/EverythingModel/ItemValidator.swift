@@ -64,6 +64,12 @@ public enum ItemValidator {
         if !item.children.isEmpty, !fields.contains(.children) {
             throw fieldFailure("children", kind)
         }
+        if !item.body.isEmpty, !fields.contains(.body) {
+            throw fieldFailure("body", kind)
+        }
+        if !item.tags.isEmpty, !fields.contains(.tags) {
+            throw fieldFailure("tags", kind)
+        }
     }
 
     private static func fieldFailure(_ field: String, _ kind: ItemKind) -> AppError {
@@ -177,6 +183,14 @@ public enum ItemValidator {
         if item.dayKey != nil, !fields.contains(.dayKey) {
             item.dayKey = nil
             cleared.append("day")
+        }
+        if !item.body.isEmpty, !fields.contains(.body) {
+            item.body = ""
+            cleared.append("body")
+        }
+        if !item.tags.isEmpty, !fields.contains(.tags) {
+            item.tags = []
+            cleared.append("tags")
         }
 
         if !newKind.supportsStatus {

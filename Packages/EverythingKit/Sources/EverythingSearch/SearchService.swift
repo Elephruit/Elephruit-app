@@ -168,6 +168,10 @@ public final class DefaultSearchEngine: SearchEngine {
 
         if !query.kinds.isEmpty, !query.kinds.contains(item.kind) { return false }
 
+        // Structural kinds stay out of global results unless the query names them — `type:heading`.
+        // Searching *within* an open project is a different surface and does match them.
+        if !item.kind.participatesInContentViews, !query.kinds.contains(item.kind) { return false }
+
         if !query.tagSlugs.isEmpty {
             let slugs = Set(item.tags.map(\.slug))
             // A parent tag matches its descendants: `tag:work` finds `work/clients` too, which
