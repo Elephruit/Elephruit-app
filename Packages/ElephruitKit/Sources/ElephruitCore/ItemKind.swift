@@ -168,34 +168,47 @@ extension ItemKind {
 
     /// Whether an item of `childKind` may sit beneath an item of this kind.
     ///
-    /// This is the single containment hierarchy: Area ▸ Project ▸ Task ▸ Subtask,
-    /// with notes and reference material attachable to any container.
+    /// Containment is **the work-breakdown structure, and nothing else**:
+    ///
+    /// ```
+    /// Area ▸ Project, Goal        Project ▸ Heading, Task
+    /// Goal ▸ Project              Heading ▸ Task            Task ▸ Task
+    /// ```
+    ///
+    /// Everything else — notes, bookmarks, meetings, interactions, daily entries — contains nothing
+    /// and is contained by nothing. It associates by *link* instead.
+    ///
+    /// The reason is ownership. Containment implies exactly one owner and cascades on archive and
+    /// trash. That is right for a task inside a project and wrong for a note: a note can relate to
+    /// three projects at once, and archiving one of them should not sweep the note away with it.
+    /// Making that a link rather than a parent gives every kind exactly one answer to "where does
+    /// this live?", and it merges cleanly under future sync where a single `parent` would not.
     public func canContain(_ childKind: ItemKind) -> Bool {
         guard supportedFields.contains(.children) else { return false }
 
         switch self {
         case .area:
-            return childKind == .project || childKind == .goal || childKind.isAttachableContent
+            return childKind == .project || childKind == .goal
+        case .goal:
+            return childKind == .project
         case .project:
-            return childKind == .heading || childKind == .task || childKind == .meeting
-                || childKind.isAttachableContent
+            return childKind == .heading || childKind == .task
         case .heading:
             return childKind == .task
         case .task:
             return childKind == .task
-        case .goal:
-            return childKind == .project || childKind.isAttachableContent
-        case .meeting, .dailyEntry:
-            return childKind == .task || childKind.isAttachableContent
         default:
             return false
         }
     }
 
-    /// Content that can live inside any container without changing its meaning.
-    private var isAttachableContent: Bool {
+    /// Whether this kind is a container in the work-breakdown structure.
+    ///
+    /// Used by the migration to tell "was contained, should now be linked" from "was never
+    /// contained".
+    public var isWorkBreakdownContainer: Bool {
         switch self {
-        case .note, .idea, .reference, .bookmark, .decision, .interaction: true
+        case .area, .goal, .project, .heading, .task: true
         default: false
         }
     }

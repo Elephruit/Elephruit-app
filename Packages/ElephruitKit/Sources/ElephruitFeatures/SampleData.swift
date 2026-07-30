@@ -185,10 +185,10 @@ public enum SampleData {
                     The third is why export matters more than it looks like it should.
                     See [[Q3 Product Launch]] for how this lands in the announcement.
                     """,
-                tagSlugs: ["work", "writing"],
-                parentID: launch.id
+                tagSlugs: ["work", "writing"]
             )
         )
+        try items.fileItem(positioning, under: launch)
         try items.update(positioning) { subject in
             subject.isPinned = true
             subject.isFavorite = true
@@ -196,7 +196,7 @@ public enum SampleData {
         }
 
         // Deliberately links to something that does not exist, so the unresolved-link state shows.
-        _ = try items.create(
+        let runbook = try items.create(
             ItemDraft(
                 kind: .note,
                 title: "Migration runbook",
@@ -208,10 +208,22 @@ public enum SampleData {
                     The second link is deliberately unresolved — it shows what an unwritten
                     note looks like before you write it.
                     """,
-                tagSlugs: ["work/infrastructure"],
-                parentID: migration.id
+                tagSlugs: ["work/infrastructure"]
             )
         )
+        try items.fileItem(runbook, under: migration)
+
+        // Filed under two projects at once — the thing containment could never express.
+        let sharedNote = try items.create(
+            ItemDraft(
+                kind: .note,
+                title: "Pricing history at Acme",
+                body: "Relevant to both the launch and the migration billing work.",
+                tagSlugs: ["work"]
+            )
+        )
+        try items.fileItem(sharedNote, under: launch)
+        try items.fileItem(sharedNote, under: migration)
 
         _ = try items.create(
             ItemDraft(

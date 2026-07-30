@@ -106,6 +106,13 @@ public enum LinkKind: String, Codable, Sendable, Hashable, CaseIterable {
     /// This item cannot proceed until that one is resolved.
     case blockedBy
 
+    /// Deliberately filed with a project or area.
+    ///
+    /// Distinct from ``LinkKind/wiki`` and ``LinkKind/related`` because the project workspace shows
+    /// them separately: *Project notes* are what you filed here, *Related notes* merely mention it.
+    /// The user never sees either phrase as a link type — only as those two headings.
+    case filedUnder
+
     /// This item is the next occurrence of that recurring series.
     case recurrenceSeries
 
@@ -119,7 +126,7 @@ public enum LinkKind: String, Codable, Sendable, Hashable, CaseIterable {
     /// Whether a link of this kind should appear in the Backlinks section.
     public var appearsInBacklinks: Bool {
         switch self {
-        case .wiki, .related, .mentions, .participant, .blockedBy: true
+        case .wiki, .related, .mentions, .participant, .blockedBy, .filedUnder: true
         case .recurrenceSeries, .conflictCopy: false
         }
     }
@@ -127,6 +134,7 @@ public enum LinkKind: String, Codable, Sendable, Hashable, CaseIterable {
     public var displayName: String {
         switch self {
         case .wiki: "Link"
+        case .filedUnder: "Filed under"
         case .related: "Related"
         case .mentions: "Mentions"
         case .participant: "Participant"
