@@ -34,6 +34,16 @@ public final class AppServices {
     /// Capture, callable without a view — see ``CaptureService``.
     public let capture: CaptureService
 
+    /// Structural undo — move, delete, retag, status, archive.
+    ///
+    /// One per `AppServices`, sharing the window's `UndoManager`, so `⌘Z` reverses the last
+    /// structural change the same way it reverses typing. The text editor keeps its own manager, and
+    /// which one responds is decided by focus — standard AppKit behaviour.
+    public let undo: StructuralUndoCoordinator
+
+    /// The undo manager the shell installs on its window.
+    public let undoManager: UndoManager
+
     /// Pinned items, tags, and saved searches, computed away from the view.
     public let sidebar: SidebarModel
 
@@ -76,6 +86,13 @@ public final class AppServices {
         self.importer = Importer(items: items, tags: tags, context: context, dateProvider: dateProvider)
         self.counts = CountsService(container: stack.container, dateProvider: dateProvider)
         self.capture = CaptureService(items: items, context: context, dateProvider: dateProvider)
+
+        let undoManager = UndoManager()
+        // Off, so one operation is one undo step regardless of run-loop timing. Every coordinator
+        // method opens its own group.
+        undoManager.groupsByEvent = false
+        self.undoManager = undoManager
+        self.undo = StructuralUndoCoordinator(items: items, undoManager: undoManager)
         self.sidebar = SidebarModel(
             items: items,
             tags: tags,
