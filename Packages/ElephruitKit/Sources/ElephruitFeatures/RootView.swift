@@ -44,9 +44,6 @@ public struct RootView: View {
                 navigation.selectItem(id)
             }
         }
-        .sheet(isPresented: searchBinding) {
-            SearchView(navigation: navigation)
-        }
         .sheet(isPresented: commandPaletteBinding) {
             CommandPaletteView(navigation: navigation, commands: paletteCommands)
         }
@@ -213,8 +210,8 @@ public struct RootView: View {
             PaletteCommand(id: "quick-capture", title: "Quick Capture", category: .create, symbolName: "square.and.pencil", shortcut: ["⌘", "⇧", "N"]) {
                 navigation.isQuickCaptureVisible = true
             },
-            PaletteCommand(id: "search", title: "Search Everything", category: .navigate, symbolName: "magnifyingglass", shortcut: ["⌘", "⇧", "F"]) {
-                navigation.isSearchVisible = true
+            PaletteCommand(id: "search", title: "Search Everything", category: .navigate, symbolName: "magnifyingglass", shortcut: ["⌘", "F"]) {
+                navigation.beginSearch()
             },
             PaletteCommand(id: "toggle-inspector", title: "Toggle Inspector", category: .view, symbolName: "sidebar.trailing", shortcut: ["⌘", "⌥", "I"]) {
                 navigation.isInspectorVisible.toggle()
@@ -278,10 +275,6 @@ public struct RootView: View {
 
     private var quickCaptureBinding: Binding<Bool> {
         Binding(get: { navigation.isQuickCaptureVisible }, set: { navigation.isQuickCaptureVisible = $0 })
-    }
-
-    private var searchBinding: Binding<Bool> {
-        Binding(get: { navigation.isSearchVisible }, set: { navigation.isSearchVisible = $0 })
     }
 
     private var commandPaletteBinding: Binding<Bool> {
