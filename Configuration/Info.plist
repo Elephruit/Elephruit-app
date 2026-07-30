@@ -68,5 +68,16 @@
 			</dict>
 		</dict>
 	</array>
+	<!--
+	  Shown in the macOS permission prompt. Says what is read and, as importantly, that nothing is
+	  written — because EventKit forces the request to be for full access even though this app only
+	  ever reads.
+
+	  `NSCalendarsFullAccessUsageDescription` is the key that pairs with
+	  `requestFullAccessToEvents()` on macOS 14 and later; the older `NSCalendarsUsageDescription`
+	  pairs with the deprecated request and is deliberately not used.
+	-->
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Elephruit shows your events alongside your tasks and notes. It only reads your calendar and never changes it.</string>
 </dict>
 </plist>

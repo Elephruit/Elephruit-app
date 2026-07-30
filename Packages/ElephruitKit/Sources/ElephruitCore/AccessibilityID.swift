@@ -104,6 +104,13 @@ public enum AccessibilityID {
         public static func itemToggle(id: String) -> String { "time.toggle.\(id)" }
     }
 
+    public enum Calendar {
+        public static let statusBanner = "calendar.status"
+        public static let enableToggle = "calendar.enable"
+
+        public static func eventRow(id: String) -> String { "calendar.event.\(id)" }
+    }
+
     public enum Trash {
         public static let restoreButton = "trash.restore"
         public static let deletePermanentlyButton = "trash.deletePermanently"

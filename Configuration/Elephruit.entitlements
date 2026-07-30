@@ -5,7 +5,7 @@
 	<!--
 	  Milestone 1 entitlements. Three, and only three.
 
-	  Deliberately ABSENT: network client, network server, iCloud, CloudKit, Calendars, Contacts,
+	  Deliberately ABSENT: network client, network server, iCloud, CloudKit, Contacts,
 	  Reminders, Photos, Camera, Microphone, Location, Bluetooth, USB, Downloads folder, Apple Events,
 	  JIT, and every temporary exception.
 
@@ -23,6 +23,20 @@
 
 	<!-- Security-scoped bookmarks for files the user keeps outside the app. -->
 	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
+
+	<!--
+	  Phase D: reading the calendar.
+
+	  This entitlement lets the sandbox reach CalendarAgent at all. The TCC prompt is separate and is
+	  triggered only when the user turns the feature on in Settings — until then the app holds an
+	  inert provider and never touches EventKit.
+
+	  EventKit has no read-only tier: its only requests are full access and write-only, so a
+	  read-only feature must ask for full access. Elephruit never writes. `CalendarProviding` has no
+	  write method, and `CalendarWriteSafetyTests` fails if the EventKit adapter ever calls one.
+	-->
+	<key>com.apple.security.personal-information.calendars</key>
 	<true/>
 </dict>
 </plist>

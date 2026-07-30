@@ -213,7 +213,18 @@ public final class EventReference {
     public var id: UUID = UUID()
 
     /// EventKit's `calendarItemIdentifier`.
+    ///
+    /// Kept for stores written before occurrence-stable identity existed. New references use
+    /// ``EventReference/identityKey``; this is never written now, only read.
     public var calendarItemIdentifier: String = ""
+
+    /// ``EventIdentity/storageKey`` — the external identifier plus, for a recurring event, which
+    /// occurrence.
+    ///
+    /// A single column rather than two, so matching a stored link is one equality test rather than a
+    /// compound predicate, and so a `#Predicate` comparing it stays within the clause ceiling
+    /// documented on `ItemPredicateBuilder`.
+    public var identityKey: String = ""
 
     public var cachedTitle: String = ""
     public var startAt: Date?
@@ -233,16 +244,59 @@ public final class EventReference {
 
     public init(
         id: UUID = UUID(),
+        identityKey: String = "",
         calendarItemIdentifier: String = "",
         cachedTitle: String = "",
         startAt: Date? = nil,
         endAt: Date? = nil
     ) {
         self.id = id
+        self.identityKey = identityKey
         self.calendarItemIdentifier = calendarItemIdentifier
         self.cachedTitle = cachedTitle
         self.startAt = startAt
         self.endAt = endAt
+    }
+}
+
+extension EventReference {
+    /// The occurrence this reference points at.
+    ///
+    /// Falls back to the legacy identifier column for references written before occurrence identity
+    /// existed, so an old link resolves to its series rather than to nothing.
+    public var identity: EventIdentity? {
+        if let parsed = EventIdentity.fromStorageKey(identityKey) { return parsed }
+        guard !calendarItemIdentifier.isEmpty else { return nil }
+        return EventIdentity(externalIdentifier: calendarItemIdentifier)
+    }
+
+    /// Whether the event this points at could not be found the last time it was checked.
+    public var isLost: Bool { referenceLostAt != nil }
+
+    /// Copies the current state of an event into the cached columns.
+    ///
+    /// The cache is what lets a linked meeting still render its title and time when the calendar is
+    /// switched off or permission is revoked — a link that goes blank the moment access is withdrawn
+    /// would make the note it is attached to unreadable.
+    public func absorb(_ event: CalendarEventSummary, at now: Date) {
+        identityKey = event.identity.storageKey
+        cachedTitle = event.title
+        startAt = event.startAt
+        endAt = event.endAt
+        isAllDay = event.isAllDay
+        calendarName = event.calendarName
+        locationName = event.locationName
+        lastRefreshedAt = now
+        referenceLostAt = nil
+    }
+
+    /// Records that the event could not be found.
+    ///
+    /// A state rather than a deletion: the cached title and time stay, so the user sees *what* they
+    /// linked to and that it is gone, rather than an empty row.
+    public func markLost(at now: Date) {
+        referenceLostAt = now
+        lastRefreshedAt = now
     }
 }
 
