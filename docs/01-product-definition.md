@@ -1,8 +1,8 @@
-# Everything — Product Definition
+# Elephruit — Product Definition
 
 ## One-line
 
-**Everything** is a private, local-first macOS app that holds one person's entire
+**Elephruit** is a private, local-first macOS app that holds one person's entire
 working memory — notes, tasks, projects, people, and reference material — in a
 single linked graph, with the speed and calm of a native Mac tool.
 

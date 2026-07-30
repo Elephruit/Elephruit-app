@@ -1,0 +1,247 @@
+// !$*UTF8*$!
+//
+// Hand-written, and deliberately small.
+//
+// Two things keep it that way:
+//
+//   1. `PBXFileSystemSynchronizedRootGroup` — the `Elephruit` folder is synchronised with the file
+//      system, so source files are never enumerated here. Adding a file to the app shell requires no
+//      change to this file at all.
+//   2. All build settings live in `Configuration/Elephruit.xcconfig`.
+//
+// Every module lives in the local Swift package, so `swift build` and `swift test` provide a second,
+// generator-independent build path. If this file were lost, only the shell would need recreating.
+// See risk R9 in docs/08-risks.md.
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		E7A1000000000000000000E7 /* ElephruitKit in Frameworks */ = {isa = PBXBuildFile; productRef = E7A1000000000000000000E6 /* ElephruitKit */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		E7A1000000000000000000F5 /* Elephruit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Elephruit.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E7A1000000000000000000F8 /* Elephruit.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Elephruit.xcconfig; sourceTree = "<group>"; };
+		E7A1000000000000000000F9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E7A1000000000000000000FA /* Elephruit.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Elephruit.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		E7A1000000000000000000F6 /* Elephruit */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Elephruit;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E7A1000000000000000000FC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E7A1000000000000000000E7 /* ElephruitKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		E7A1000000000000000000F2 = {
+			isa = PBXGroup;
+			children = (
+				E7A1000000000000000000F6 /* Elephruit */,
+				E7A1000000000000000000F7 /* Configuration */,
+				E7A1000000000000000000F3 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E7A1000000000000000000F3 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E7A1000000000000000000F5 /* Elephruit.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		E7A1000000000000000000F7 /* Configuration */ = {
+			isa = PBXGroup;
+			children = (
+				E7A1000000000000000000F8 /* Elephruit.xcconfig */,
+				E7A1000000000000000000F9 /* Info.plist */,
+				E7A1000000000000000000FA /* Elephruit.entitlements */,
+			);
+			path = Configuration;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E7A1000000000000000000F4 /* Elephruit */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E7A1000000000000000000E2 /* Build configuration list for PBXNativeTarget "Elephruit" */;
+			buildPhases = (
+				E7A1000000000000000000FB /* Sources */,
+				E7A1000000000000000000FC /* Frameworks */,
+				E7A1000000000000000000FD /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				E7A1000000000000000000F6 /* Elephruit */,
+			);
+			name = Elephruit;
+			packageProductDependencies = (
+				E7A1000000000000000000E6 /* ElephruitKit */,
+			);
+			productName = Elephruit;
+			productReference = E7A1000000000000000000F5 /* Elephruit.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E7A1000000000000000000F1 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					E7A1000000000000000000F4 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+				};
+			};
+			buildConfigurationList = E7A1000000000000000000FE /* Build configuration list for PBXProject "Elephruit" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = E7A1000000000000000000F2;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E7A1000000000000000000E5 /* XCLocalSwiftPackageReference "Packages/ElephruitKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E7A1000000000000000000F3 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E7A1000000000000000000F4 /* Elephruit */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E7A1000000000000000000FD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E7A1000000000000000000FB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		E7A1000000000000000000FF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E7A1000000000000000000F8 /* Elephruit.xcconfig */;
+			buildSettings = {
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E7A1000000000000000000E1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E7A1000000000000000000F8 /* Elephruit.xcconfig */;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		E7A1000000000000000000E3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E7A1000000000000000000F8 /* Elephruit.xcconfig */;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		E7A1000000000000000000E4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E7A1000000000000000000F8 /* Elephruit.xcconfig */;
+			buildSettings = {
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		E7A1000000000000000000FE /* Build configuration list for PBXProject "Elephruit" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E7A1000000000000000000FF /* Debug */,
+				E7A1000000000000000000E1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E7A1000000000000000000E2 /* Build configuration list for PBXNativeTarget "Elephruit" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E7A1000000000000000000E3 /* Debug */,
+				E7A1000000000000000000E4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		E7A1000000000000000000E5 /* XCLocalSwiftPackageReference "Packages/ElephruitKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/ElephruitKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E7A1000000000000000000E6 /* ElephruitKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ElephruitKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = E7A1000000000000000000F1 /* Project object */;
+}

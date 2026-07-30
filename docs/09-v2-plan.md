@@ -1,4 +1,4 @@
-# Everything v2 — navigation, search, time, calendar
+# Elephruit v2 — navigation, search, time, calendar
 
 The milestone-1 foundation stands. This plan keeps Core, Model, Persistence, Transfer, and the
 design tokens; rebuilds the Features layer's information architecture; replaces the search engine;
@@ -12,14 +12,14 @@ Companion to `docs/01`–`08`, which remain accurate except where noted here.
 
 | Layer | Verdict | Reasoning |
 |---|---|---|
-| `EverythingCore` | **Keep**, extend | Pure, tested, no known defects. Adds: `TimeEntry` value types, event identity types, heading kind |
-| `EverythingModel` | **Keep**, extend | `SchemaV1` → `SchemaV2` via additive lightweight migration. No entity changes shape |
-| `EverythingPersistence` | **Keep**, fix three hot paths | Repositories and validation are sound; specific queries are not (§2) |
-| `EverythingTransfer` | **Keep**, extend | Round-trip is proven. New entities join the archive |
-| `EverythingDesign` | **Keep tokens**, rework components | Spacing/type/colour scale is fine. `InspectorRow` is broken; `ItemRow` needs an event variant |
-| `EverythingSearch` | **Replace the engine** | In-memory index cannot meet the targets. Grammar and `SearchQuery` are kept verbatim |
-| `EverythingFeatures` | **Rebuild the IA**, keep the parts | Editor bridge, quick capture, palette survive. Sidebar, list, detail, inspector are reworked |
-| `EverythingIntegrations` | **Fill in** | Protocols already exist with inert defaults; EventKit becomes a real conformance |
+| `ElephruitCore` | **Keep**, extend | Pure, tested, no known defects. Adds: `TimeEntry` value types, event identity types, heading kind |
+| `ElephruitModel` | **Keep**, extend | `SchemaV1` → `SchemaV2` via additive lightweight migration. No entity changes shape |
+| `ElephruitPersistence` | **Keep**, fix three hot paths | Repositories and validation are sound; specific queries are not (§2) |
+| `ElephruitTransfer` | **Keep**, extend | Round-trip is proven. New entities join the archive |
+| `ElephruitDesign` | **Keep tokens**, rework components | Spacing/type/colour scale is fine. `InspectorRow` is broken; `ItemRow` needs an event variant |
+| `ElephruitSearch` | **Replace the engine** | In-memory index cannot meet the targets. Grammar and `SearchQuery` are kept verbatim |
+| `ElephruitFeatures` | **Rebuild the IA**, keep the parts | Editor bridge, quick capture, palette survive. Sidebar, list, detail, inspector are reworked |
+| `ElephruitIntegrations` | **Fill in** | Protocols already exist with inert defaults; EventKit becomes a real conformance |
 
 Nothing is thrown away. The heaviest change is the Features layer, which is the newest and least
 load-bearing code in the project.

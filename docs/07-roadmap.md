@@ -76,17 +76,17 @@ NL/Vision enrichment, notifications.
 Six ordered steps. Each ends with a build, a test run, and zero warnings.
 
 ### Step 1 — Project skeleton
-Hand-written `Everything.xcodeproj` using file-system-synchronized groups (no
-generator, no third-party tooling), `Packages/EverythingKit` with eight targets and
+Hand-written `Elephruit.xcodeproj` using file-system-synchronized groups (no
+generator, no third-party tooling), `Packages/ElephruitKit` with eight targets and
 four test targets, `xcconfig` for identifiers and versions, entitlements, asset
 catalogue, `.gitignore`. **Exit:** `xcodebuild` succeeds; `swift test` runs an empty
 suite; the app launches to an empty window.
 
 ### Step 2 — Core and Model
-`EverythingCore`: `ItemKind`, `ItemStatus`, `Priority`, `LinkKind`, `SourceKind`,
+`ElephruitCore`: `ItemKind`, `ItemStatus`, `Priority`, `LinkKind`, `SourceKind`,
 `RecurrenceRule`, `MetadataValue`, `ContentItem` view protocol, `Clock`, `AppError`,
-`AccessibilityID`. `EverythingModel`: eight `@Model` entities, `SchemaV1`,
-`EverythingMigrationPlan`. **Exit:** every CloudKit constraint asserted by test;
+`AccessibilityID`. `ElephruitModel`: eight `@Model` entities, `SchemaV1`,
+`ElephruitMigrationPlan`. **Exit:** every CloudKit constraint asserted by test;
 kind-containment and status invariants tested.
 
 ### Step 3 — Persistence
@@ -119,7 +119,7 @@ survive export → import; full journey walkthrough in both appearances.
 ## Definition of done for milestone 1
 
 1. `xcodebuild -scheme Everything build` — succeeds, **zero warnings**.
-2. `swift test` in `Packages/EverythingKit` — all tests pass.
+2. `swift test` in `Packages/ElephruitKit` — all tests pass.
 3. No `!` force unwrap, no `try!`, no `fatalError` on a recoverable path, no
    `TODO` standing in for production behaviour. Enforced by a source-scan test.
 4. All nine journeys J1–J9 performable, with J6 (People) explicitly deferred and

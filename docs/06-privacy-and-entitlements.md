@@ -49,10 +49,10 @@ not asked for.
 Written when the corresponding entitlement is added, in plain language that says
 what the app does with the access and that it is optional:
 
-- `NSCalendarsUsageDescription` — "Everything can show your events alongside your
+- `NSCalendarsUsageDescription` — "Elephruit can show your events alongside your
   daily notes and link meetings to projects. Your calendar stays on your Mac and in
-  iCloud; Everything never sends it anywhere."
-- `NSContactsUsageDescription` — "Everything can link the people in your notes to
+  iCloud; Elephruit never sends it anywhere."
+- `NSContactsUsageDescription` — "Elephruit can link the people in your notes to
   your existing contacts, so you do not have to retype them. Contacts are read on
   demand and never copied out of your Mac."
 - `NSRemindersFullAccessUsageDescription` — written only if Reminders import ships.
