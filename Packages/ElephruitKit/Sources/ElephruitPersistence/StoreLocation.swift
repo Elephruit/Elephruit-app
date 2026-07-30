@@ -23,6 +23,21 @@ public struct StoreLocation: Sendable, Hashable {
     /// right for a rebuildable index. See `docs/03-storage-matrix.md`.
     public let cachesRoot: URL
 
+    /// The full-text search index.
+    ///
+    /// Derived, and safe to delete: everything in it is a projection of the store, and the app
+    /// rebuilds it in the background if it is missing.
+    ///
+    /// **Beside the store rather than under Caches**, which is a deliberate departure from the
+    /// storage matrix. On a large library the index runs to hundreds of megabytes, so it is exactly
+    /// the kind of file the system reclaims first under pressure — and losing it costs a rebuild
+    /// during which search is degraded. Search is a primary way of using this app, not a
+    /// convenience, so it does not get to disappear when the disk fills. The recovery it would have
+    /// bought is available deliberately instead, from Settings.
+    public var searchIndexURL: URL {
+        root.appending(path: "SearchIndex.sqlite", directoryHint: .notDirectory)
+    }
+
     public init(root: URL, cachesRoot: URL) {
         self.root = root
         self.cachesRoot = cachesRoot
