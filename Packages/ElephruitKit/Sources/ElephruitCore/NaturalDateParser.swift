@@ -220,10 +220,42 @@ public enum NaturalDateParser {
             dayWords.removeLast()
             // "3pm" on its own, or "at 3pm".
             if dayWords.last == "at" { dayWords.removeLast() }
+        } else if dayWords.count >= 2,
+                  let last = dayWords.last,
+                  dayWords[dayWords.count - 2] == "at",
+                  let parsed = appointmentTime(last) {
+            // "at 2" — the preposition is what makes a bare number a time. Without it the token
+            // rule still applies and "Review 3 documents" acquires nothing.
+            time = parsed
+            dayWords.removeLast(2)
         }
 
         guard !dayWords.isEmpty, let day = parseDayPhrase(dayWords) else { return nil }
         return DateInterpretation(day: day, time: time)
+    }
+
+    /// A bare hour that followed the word `at` — "meet Maya next Tuesday at 2".
+    ///
+    /// ### Why the hour is guessed at all, and how
+    /// `2` could be either two in the morning or two in the afternoon, and refusing to choose would
+    /// mean the phrase people actually type produces no time at all. So it is read the way an
+    /// appointment is meant: **1 to 6 in the afternoon, 7 to 11 in the morning, 12 at noon**. Nobody
+    /// arranges to meet at two in the morning, and nobody means eight in the evening by "at 8"
+    /// without saying so.
+    ///
+    /// The guess is visible before it is acted on — the command bar shows the resolved time in its
+    /// preview, and a meeting is never created without a confirmation — so a wrong reading costs a
+    /// correction rather than a missed appointment.
+    ///
+    /// Only reachable from ``interpret(_:)`` when the preceding word is `at`. A bare number on its
+    /// own is still not a time; see ``parseTimeOfDay(_:)``.
+    static func appointmentTime(_ token: String) -> TimeOfDay? {
+        guard let hour = Int(token), (0...23).contains(hour) else { return nil }
+
+        return switch hour {
+        case 1...6: TimeOfDay(hour: hour + 12, minute: 0)
+        default: TimeOfDay(hour: hour, minute: 0)
+        }
     }
 
     /// `9am`, `3pm`, `10:30am`, `14:30`, `9.30pm`.

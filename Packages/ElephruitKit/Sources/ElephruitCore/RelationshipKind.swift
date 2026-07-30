@@ -1,0 +1,298 @@
+import Foundation
+
+/// How two people are related.
+///
+/// ### Why every kind names its own inverse
+/// A relationship is one fact seen from two sides. Storing "Maya is Jack's parent" without storing
+/// the other half means Jack's page has to search every person in the library for someone who
+/// claims him — and storing both halves as independent rows means they can disagree, which is worse.
+///
+/// The resolution is that ``RelationshipKind/inverse`` is total: every kind has one, and the
+/// repository maintains the pair as a unit. `ReciprocalRelationshipTests` asserts the involution —
+/// that `a.inverse.inverse == a` for every case — so a kind added later cannot quietly break it.
+public enum RelationshipKind: String, Codable, Sendable, Hashable, CaseIterable {
+    case partner
+    case parent
+    case child
+    case sibling
+    case friend
+    case colleague
+    case manager
+    case directReport
+
+    /// The person who introduced the subject to somebody.
+    case introducedBy
+
+    /// The other side of ``introducedBy``.
+    case introduced
+
+    case worksWith
+    case householdMember
+
+    /// The subject keeps this animal. Pets are lightweight person records — see
+    /// `docs/21-people-module-scope.md` — because "Pepper is terrified of thunderstorms" is a fact
+    /// that needs a subject, and inventing a second subject type for it would double every query.
+    case petOwner
+
+    /// The other side of ``petOwner``.
+    case pet
+
+    /// The relationship seen from the other person's side.
+    ///
+    /// Total by construction: adding a case without a mapping fails to compile, which is the whole
+    /// reason this is a `switch` rather than a dictionary.
+    public var inverse: RelationshipKind {
+        switch self {
+        case .partner: .partner
+        case .parent: .child
+        case .child: .parent
+        case .sibling: .sibling
+        case .friend: .friend
+        case .colleague: .colleague
+        case .manager: .directReport
+        case .directReport: .manager
+        case .introducedBy: .introduced
+        case .introduced: .introducedBy
+        case .worksWith: .worksWith
+        case .householdMember: .householdMember
+        case .petOwner: .pet
+        case .pet: .petOwner
+        }
+    }
+
+    /// Whether the relationship reads the same from both sides.
+    public var isSymmetric: Bool {
+        inverse == self
+    }
+
+    /// "parent" · "direct report".
+    public var displayName: String {
+        switch self {
+        case .partner: "partner"
+        case .parent: "parent"
+        case .child: "child"
+        case .sibling: "sibling"
+        case .friend: "friend"
+        case .colleague: "colleague"
+        case .manager: "manager"
+        case .directReport: "direct report"
+        case .introducedBy: "introduced by"
+        case .introduced: "introduced"
+        case .worksWith: "works with"
+        case .householdMember: "household"
+        case .petOwner: "owner"
+        case .pet: "pet"
+        }
+    }
+
+    /// How the relationship reads on the subject's page — "Jack · Maya's son".
+    ///
+    /// Distinct from ``displayName`` because a label and a possessive phrase are not the same string,
+    /// and because a gendered variant belongs here rather than in a view: the app only uses one when
+    /// the user has recorded it themselves, through ``RelationshipKind/gendered(_:)``.
+    public func possessivePhrase(subject: String) -> String {
+        "\(subject)'s \(displayName)"
+    }
+
+    public var symbolName: String {
+        switch self {
+        case .partner: "heart"
+        case .parent, .child: "figure.2.and.child.holdinghands"
+        case .sibling: "figure.2"
+        case .friend: "hand.wave"
+        case .colleague, .worksWith: "person.2"
+        case .manager: "arrow.up.forward.square"
+        case .directReport: "arrow.down.forward.square"
+        case .introducedBy, .introduced: "arrow.triangle.branch"
+        case .householdMember: "house"
+        case .petOwner, .pet: "pawprint"
+        }
+    }
+
+    /// A gendered word for this relationship, when the user supplied one.
+    ///
+    /// The app never infers gender — not from a name, not from a pronoun, not from anything. This
+    /// exists only so that a user who typed "Maya's son Jack" gets "son" back rather than "child",
+    /// and the word is carried as free text on the relationship rather than derived here.
+    public static func gendered(_ word: String) -> RelationshipKind? {
+        switch word.lowercased() {
+        case "son", "daughter", "kid", "child": .child
+        case "mother", "father", "mum", "mom", "dad", "parent": .parent
+        case "brother", "sister", "sibling": .sibling
+        case "husband", "wife", "spouse", "partner", "boyfriend", "girlfriend": .partner
+        case "boss", "manager": .manager
+        case "report", "reports": .directReport
+        case "colleague", "coworker", "co-worker", "teammate": .colleague
+        case "friend": .friend
+        case "dog", "cat", "pet": .pet
+        case "roommate", "housemate", "flatmate": .householdMember
+        default: nil
+        }
+    }
+}
+
+// MARK: - Charts
+
+/// Which view of somebody's relationships is on screen.
+///
+/// Four charts rather than one, because a family tree and an organisation chart answer different
+/// questions and drawing both at once produces a hairball that answers neither.
+public enum RelationshipChartKind: String, Sendable, Hashable, CaseIterable, Identifiable {
+    case family
+    case household
+    case professional
+    case network
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .family: "Family"
+        case .household: "Household"
+        case .professional: "Organisation"
+        case .network: "Network"
+        }
+    }
+
+    public var symbolName: String {
+        switch self {
+        case .family: "figure.2.and.child.holdinghands"
+        case .household: "house"
+        case .professional: "building.2"
+        case .network: "point.3.connected.trianglepath.dotted"
+        }
+    }
+
+    /// The relationship kinds this chart draws.
+    public var includedKinds: Set<RelationshipKind> {
+        switch self {
+        case .family: [.partner, .parent, .child, .sibling, .petOwner, .pet]
+        case .household: [.householdMember, .partner, .child, .parent, .petOwner, .pet]
+        case .professional: [.manager, .directReport, .colleague, .worksWith]
+        case .network: Set(RelationshipKind.allCases)
+        }
+    }
+
+    /// Whether this chart is hierarchical, which decides whether it is laid out in ranked rows or
+    /// as a ring around the subject.
+    public var isHierarchical: Bool {
+        switch self {
+        case .family, .professional: true
+        case .household, .network: false
+        }
+    }
+
+    /// The empty-state sentence for a person with no relationships of this kind.
+    public var emptyMessage: String {
+        switch self {
+        case .family: "No family recorded yet. Add a partner, a parent, or a child to see them here."
+        case .household: "Nobody else recorded in this household."
+        case .professional: "No colleagues, manager, or reports recorded yet."
+        case .network: "No relationships recorded yet."
+        }
+    }
+}
+
+/// One person in a chart.
+///
+/// A value type carrying only what the drawing needs, so the chart can be laid out, snapshot-tested,
+/// and reasoned about without a `ModelContext` in sight.
+public struct RelationshipNode: Sendable, Hashable, Identifiable {
+    public var id: UUID
+    public var name: String
+
+    /// Distance from the subject in relationship hops. The subject is zero.
+    public var depth: Int
+
+    /// Vertical rank for a hierarchical chart: negative is above the subject (parents, managers),
+    /// positive is below (children, reports), zero is level (partners, siblings, colleagues).
+    public var rank: Int
+
+    /// How this person reaches the subject, for the accessibility label.
+    public var relationToSubject: RelationshipKind?
+
+    /// A gendered or user-written label, when there is one — "son", "step-mother".
+    public var customLabel: String?
+
+    /// A record with no contact details of its own, created only so somebody could be mentioned.
+    public var isPlaceholder: Bool
+
+    public init(
+        id: UUID,
+        name: String,
+        depth: Int,
+        rank: Int,
+        relationToSubject: RelationshipKind? = nil,
+        customLabel: String? = nil,
+        isPlaceholder: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.depth = depth
+        self.rank = rank
+        self.relationToSubject = relationToSubject
+        self.customLabel = customLabel
+        self.isPlaceholder = isPlaceholder
+    }
+
+    /// The label shown under the node, preferring what the user actually wrote.
+    public var roleLabel: String? {
+        customLabel ?? relationToSubject?.displayName
+    }
+}
+
+/// One line in a chart.
+public struct RelationshipEdge: Sendable, Hashable, Identifiable {
+    public var id: UUID
+    public var fromID: UUID
+    public var toID: UUID
+    public var kind: RelationshipKind
+
+    public init(id: UUID = UUID(), fromID: UUID, toID: UUID, kind: RelationshipKind) {
+        self.id = id
+        self.fromID = fromID
+        self.toID = toID
+        self.kind = kind
+    }
+}
+
+/// A laid-out chart, ready to draw.
+public struct RelationshipChart: Sendable, Hashable {
+    public var kind: RelationshipChartKind
+    public var subjectID: UUID
+    public var nodes: [RelationshipNode]
+    public var edges: [RelationshipEdge]
+
+    public init(kind: RelationshipChartKind, subjectID: UUID, nodes: [RelationshipNode], edges: [RelationshipEdge]) {
+        self.kind = kind
+        self.subjectID = subjectID
+        self.nodes = nodes
+        self.edges = edges
+    }
+
+    public var isEmpty: Bool { nodes.count <= 1 }
+
+    /// Nodes grouped into ranked rows, top to bottom.
+    ///
+    /// Rank ordering is what makes a family tree legible: parents above, the subject and their
+    /// partner and siblings level, children below. A force-directed blob would be prettier in a
+    /// screenshot and useless for answering "who is Jack's mother".
+    public var rows: [(rank: Int, nodes: [RelationshipNode])] {
+        Dictionary(grouping: nodes, by: \.rank)
+            .sorted { $0.key < $1.key }
+            .map { (rank: $0.key, nodes: $0.value.sorted { $0.name < $1.name }) }
+    }
+
+    /// The rank a relationship places somebody at, relative to the subject.
+    ///
+    /// Pure and shared, so the family chart and the organisation chart cannot come to different
+    /// conclusions about which way is up.
+    public static func rank(for kind: RelationshipKind) -> Int {
+        switch kind {
+        case .parent, .manager: -1
+        case .child, .directReport, .pet: 1
+        case .partner, .sibling, .friend, .colleague, .worksWith, .householdMember,
+             .introducedBy, .introduced, .petOwner: 0
+        }
+    }
+}
