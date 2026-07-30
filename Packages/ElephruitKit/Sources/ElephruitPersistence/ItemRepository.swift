@@ -86,6 +86,15 @@ public protocol ItemRepository: AnyObject {
     /// Rebuilds `.wiki` links from an item's body text.
     func reconcileWikiLinks(for item: Item) throws(AppError)
 
+    /// Files an item under a container, or removes it from one.
+    ///
+    /// Filing replaces any previous filing under the *same* container only; an item filed under three
+    /// projects stays filed under the other two. Passing `nil` removes every filing.
+    func fileItem(_ item: Item, under container: Item?) throws(AppError)
+
+    /// Removes one filing without touching the others.
+    func unfileItem(_ item: Item, from container: Item) throws(AppError)
+
     // MARK: Headings
 
     /// Moves a heading's tasks up to the project, leaving the heading empty.
@@ -290,6 +299,46 @@ public final class SwiftDataItemRepository: ItemRepository {
         }
 
         apply(item)
+        try save()
+    }
+
+    // MARK: - Filing
+
+    public func fileItem(_ item: Item, under container: Item?) throws(AppError) {
+        guard let container else {
+            for link in item.outgoingLinks where link.kind == .filedUnder {
+                context.delete(link)
+            }
+            try save()
+            return
+        }
+
+        guard container.kind.isWorkBreakdownContainer else {
+            throw .validation(
+                ValidationFailure(
+                    reason: .invalidContainment(parentKind: container.kind, childKind: item.kind),
+                    field: "filedUnder"
+                )
+            )
+        }
+
+        // Already filed there — filing twice is not an error, it is a no-op.
+        let existing = item.outgoingLinks.contains {
+            $0.kind == .filedUnder && $0.target?.id == container.id
+        }
+        guard !existing else { return }
+
+        context.insert(
+            ItemLink(kind: .filedUnder, source: item, target: container, createdAt: dateProvider.now)
+        )
+        try save()
+    }
+
+    public func unfileItem(_ item: Item, from container: Item) throws(AppError) {
+        for link in item.outgoingLinks
+        where link.kind == .filedUnder && link.target?.id == container.id {
+            context.delete(link)
+        }
         try save()
     }
 

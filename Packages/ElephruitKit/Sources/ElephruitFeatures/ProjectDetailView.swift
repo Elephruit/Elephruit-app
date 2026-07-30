@@ -316,21 +316,16 @@ public struct ProjectDetailView: View {
 
     /// Notes deliberately filed with this project.
     ///
-    /// In A1 that means contained; A2 replaces the source with `filedUnder` links without changing
-    /// this view. The user-facing distinction — **Project notes** against **Related notes** — is the
-    /// same either way, and the link type is never named in the interface.
+    /// Filed by link, not by containment: a note may be filed under several projects at once, and
+    /// nothing here is owned by this one. Archiving or completing the project leaves every one of
+    /// them untouched.
     private var projectNotes: [Item] {
-        project.children
-            .filter { $0.kind.participatesInContentViews && $0.kind != .task && $0.deletedAt == nil }
-            .sorted { $0.updatedAt > $1.updatedAt }
+        project.filedItems().filter { $0.kind != .task && $0.kind != .heading }
     }
 
     /// Notes that merely mention this project.
     private var relatedNotes: [Item] {
-        project.visibleBacklinks()
-            .compactMap(\.source)
-            .filter { $0.kind != .person && $0.kind != .task }
-            .uniqued()
+        project.mentioningItems().filter { $0.kind != .person && $0.kind != .task }
     }
 
     private var relatedPeople: [Item] {

@@ -432,6 +432,41 @@ extension Item {
             && !hasOpenTasks
     }
 
+    /// Containers this item is deliberately filed under.
+    ///
+    /// A note may be filed under several projects at once — that is the whole reason filing is a link
+    /// rather than a parent.
+    public func filedUnderContainers() -> [Item] {
+        outgoingLinks
+            .filter { $0.kind == .filedUnder }
+            .compactMap(\.target)
+            .filter { $0.deletedAt == nil }
+    }
+
+    /// Content deliberately filed under this container — the project's **Project notes**.
+    ///
+    /// Distinct from what merely mentions it. Nothing here is *owned* by the container, so archiving
+    /// or completing it leaves all of this untouched.
+    public func filedItems() -> [Item] {
+        incomingLinks
+            .filter { $0.kind == .filedUnder }
+            .compactMap(\.source)
+            .filter { $0.deletedAt == nil }
+            .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    /// Content that mentions this container without being filed under it — **Related notes**.
+    public func mentioningItems() -> [Item] {
+        var seen = Set<UUID>()
+        let filed = Set(filedItems().map(\.id))
+
+        return incomingLinks
+            .filter { $0.kind != .filedUnder && $0.kind.appearsInBacklinks }
+            .compactMap(\.source)
+            .filter { $0.deletedAt == nil && !filed.contains($0.id) && seen.insert($0.id).inserted }
+            .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
     /// The project this item sits inside, if any.
     public func enclosingProject() -> Item? {
         ancestors().first { $0.kind == .project }
