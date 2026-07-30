@@ -79,7 +79,7 @@ which arrives in S15. What is asserted is everything the notification calls into
 
 ---
 
-## S3 — Archive completeness · **next**
+## S3 — Archive completeness · **done**
 
 **Goal.** ADR 0009. Bugs 5–6: attachment bytes and `TimeEntry` enter the archive contract.
 
@@ -97,9 +97,29 @@ which arrives in S15. What is asserted is everything the notification calls into
 **Risk.** Medium — a format version bump. Ships separately from S1 so the correctness fix stays
 revertable.
 
+**Outcome — and a correction to this plan.** No version bump was needed. The format's own stated
+rule is that "additive changes keep the version and rely on tolerant decoding"
+(`ArchiveFormat.swift:20`), and both additions are additive. What that rule required, and did not
+have, was decoding that is genuinely tolerant: `ArchiveDocument` used synthesised `Codable`, so a
+missing `timeEntries` key would have failed the whole read and made an additive change breaking
+after all. It now decodes every collection with a default.
+
+`TimeEntry` is in the archive with exact intervals, links, tags and source; a running timer
+re-imports as running rather than being given an end it never had. Attachment bytes are written
+into the bundle at the path the archive names, and `bundlePath` is now `nil` for a reference —
+Elephruit does not own those bytes and must not claim a path it never wrote. `Importer.importBundle`
+restores them; without the folder, an attachment arrives as a lost reference with a warning, which
+is the existing "a missing file is a state" behaviour rather than a new failure.
+
+**545 tests pass** (+11), zero warnings; Debug and Release build.
+
+**Deliberate limitation.** The single-file JSON archive still carries attachment *metadata* only —
+bytes need a folder to live in. The bundle README now says which format is the complete backup
+rather than leaving the user to find out.
+
 ---
 
-## S4 — Schema freeze + first additive stage · **ships alone**
+## S4 — Schema freeze + first additive stage · **next, ships alone**
 
 **Goal.** ADR 0005. Snapshot the V1 and V2 entity shapes as frozen types, restore a non-empty
 `stages`, and land `Item.estimateMinutes` plus the `@Index` on `Item.createdAt` in that one stage.

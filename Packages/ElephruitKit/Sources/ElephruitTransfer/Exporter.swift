@@ -80,10 +80,22 @@ public struct Exporter {
     private let context: ModelContext
     private let dateProvider: any DateProvider
 
-    public init(items: any ItemRepository, context: ModelContext, dateProvider: any DateProvider) {
+    /// Where managed attachment bytes live, so a bundle export can copy them.
+    ///
+    /// Optional because an in-memory library — previews, tests — has no file storage. Without it an
+    /// export still carries every record; it simply has no bytes to copy.
+    private let location: StoreLocation?
+
+    public init(
+        items: any ItemRepository,
+        context: ModelContext,
+        dateProvider: any DateProvider,
+        location: StoreLocation? = nil
+    ) {
         self.items = items
         self.context = context
         self.dateProvider = dateProvider
+        self.location = location
     }
 
     // MARK: - Building the archive
@@ -100,6 +112,7 @@ public struct Exporter {
         let collections: [ItemCollection]
         let savedSearches: [SavedSearch]
         let attachments: [ElephruitModel.Attachment]
+        let timeEntries: [TimeEntry]
 
         do {
             tags = try context.fetch(FetchDescriptor<ElephruitModel.Tag>(sortBy: [SortDescriptor(\.slug)]))
@@ -107,6 +120,9 @@ public struct Exporter {
             collections = try context.fetch(FetchDescriptor<ItemCollection>(sortBy: [SortDescriptor(\.sortOrder)]))
             savedSearches = try context.fetch(FetchDescriptor<SavedSearch>(sortBy: [SortDescriptor(\.sortOrder)]))
             attachments = try context.fetch(FetchDescriptor<ElephruitModel.Attachment>())
+            // Including soft-deleted entries, for the same reason the Trash is included: an export
+            // is a backup, and one that quietly drops what is still recoverable is not.
+            timeEntries = try context.fetch(FetchDescriptor<TimeEntry>(sortBy: [SortDescriptor(\.startedAt)]))
         } catch {
             throw .exportFailed(reason: error.localizedDescription)
         }
@@ -119,7 +135,8 @@ public struct Exporter {
             links: links.map(Self.record(for:)),
             collections: collections.map(Self.record(for:)),
             savedSearches: savedSearches.map(Self.record(for:)),
-            attachments: attachments.map(Self.record(for:))
+            attachments: attachments.map(Self.record(for:)),
+            timeEntries: timeEntries.map(Self.record(for:))
         )
     }
 
@@ -228,9 +245,71 @@ public struct Exporter {
             contentHash: attachment.contentHash,
             createdAt: attachment.createdAt,
             storageKind: attachment.storageKindRaw,
-            bundlePath: attachment.exportRelativePath,
+            // A path only where bytes will actually be there. A reference belongs to the user, not
+            // to Elephruit, so an export records that it existed and does not copy it — and must
+            // not claim a path it never wrote. Every archive used to name one regardless.
+            bundlePath: attachment.storageKind == .managedCopy ? attachment.exportRelativePath : nil,
             extractedText: attachment.extractedText
         )
+    }
+
+    static func record(for entry: TimeEntry) -> ArchiveTimeEntry {
+        ArchiveTimeEntry(
+            id: entry.id,
+            startedAt: entry.startedAt,
+            endedAt: entry.endedAt,
+            entryDescription: entry.entryDescription,
+            itemID: entry.item?.id,
+            tagIDs: entry.tags.map(\.id),
+            source: entry.sourceRaw,
+            isBillable: entry.isBillable,
+            createdAt: entry.createdAt,
+            updatedAt: entry.updatedAt,
+            deletedAt: entry.deletedAt,
+            lastHeartbeatAt: entry.lastHeartbeatAt
+        )
+    }
+
+    /// Copies managed attachment bytes into a bundle, at the path the archive names.
+    ///
+    /// Returns the number of files written, and appends a warning for each attachment whose bytes
+    /// were expected and absent — that is a state worth reporting, not a reason to fail an export
+    /// that is otherwise complete.
+    func copyAttachmentBytes(
+        for archive: ArchiveDocument,
+        into destination: URL,
+        warnings: inout [String]
+    ) throws(AppError) -> Int {
+        guard let location else { return 0 }
+        var written = 0
+
+        for record in archive.attachments {
+            guard let relativePath = record.bundlePath else { continue }
+
+            let source = location.attachmentDirectory(id: record.id)
+                .appending(path: record.filename, directoryHint: .notDirectory)
+            guard FileManager.default.fileExists(atPath: source.path(percentEncoded: false)) else {
+                warnings.append("The file for “\(record.filename)” was missing and could not be exported.")
+                continue
+            }
+
+            let target = destination.appending(path: relativePath, directoryHint: .notDirectory)
+            do {
+                try FileManager.default.createDirectory(
+                    at: target.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                if FileManager.default.fileExists(atPath: target.path(percentEncoded: false)) {
+                    try FileManager.default.removeItem(at: target)
+                }
+                try FileManager.default.copyItem(at: source, to: target)
+                written += 1
+            } catch {
+                throw .writeFailed(path: relativePath, reason: error.localizedDescription)
+            }
+        }
+
+        return written
     }
 
     // MARK: - Writing
@@ -256,7 +335,7 @@ public struct Exporter {
             )
 
         case .markdownBundle:
-            return try MarkdownBundleWriter(archive: archive).write(to: destination)
+            return try MarkdownBundleWriter(archive: archive, exporter: self).write(to: destination)
 
         case .csv:
             return try CSVWriter(archive: archive).write(to: destination)

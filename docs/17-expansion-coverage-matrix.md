@@ -84,7 +84,7 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 | R14 | Multi-window revision handling | Absent | "New Window" is `.disabled(true)` | S14 |
 | R15 | Export plain text and Markdown | Met | ~35 round-trip tests | — |
 | R16 | Export RTF / HTML / PDF | Absent | `ExportFormat` has three cases | S14 |
-| R17 | Archive preserves attachment identity and content | Absent | **Bug.** `bundlePath` named, bytes never written, `Importer` never reads them | S3 |
+| R17 | Archive preserves attachment identity and content | **Met** (S3) | Bytes written into the bundle; SHA-256 asserted equal after a round trip through two libraries | — |
 | R18 | A capture commits everything it wrote | **Met** (S1) | `captureCommitsEverythingItWrote`; `@person` links were never saved before | — |
 
 ## People
@@ -131,7 +131,8 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 | T13 | Overlap detected, never silently changed | Absent | Two manual entries covering the same hour are accepted silently | S12 |
 | T14 | Estimate vs actual | Absent | `Item` has no estimate field — **blocked on the schema freeze** | S4 → S12 |
 | T15 | Reports with filters and presets | Partial | 5 fixed windows, 4 groupings, top-6 bars. No arbitrary ranges, no destination | S12 |
-| T16 | Export CSV / archive of time | Absent | **Bug.** `TimeEntry` appears nowhere in `ElephruitTransfer` | S3, S12 |
+| T16 | Archive of time | **Met** (S3) | `ArchiveTimeEntry`; exact intervals, links, tags, source; a running timer re-imports running |  — |
+| T16b | CSV export of a time report | Absent | — | S12 |
 | T17 | Raw interval fidelity despite display rounding | Met | Duration is derived; no rounding is stored | — |
 | T18 | Idle detection with inspectable decisions | Absent | The heartbeat makes it possible; nothing uses it | Deferred |
 | T19 | Long-timer warnings, reminders, Pomodoro, breaks | Absent | — | Deferred |

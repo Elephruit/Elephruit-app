@@ -32,6 +32,13 @@ public struct ArchiveDocument: Codable, Sendable, Hashable {
     public var savedSearches: [ArchiveSavedSearch]
     public var attachments: [ArchiveAttachment]
 
+    /// Tracked time.
+    ///
+    /// Absent from the format until this was noticed: an export claimed to be a backup and
+    /// destroyed every interval the user had recorded. Additive, so an older build reading a
+    /// newer archive ignores it and a newer build reading an older one sees none.
+    public var timeEntries: [ArchiveTimeEntry]
+
     public init(
         formatVersion: Int = ArchiveDocument.currentFormatVersion,
         generator: String = "Elephruit",
@@ -42,7 +49,8 @@ public struct ArchiveDocument: Codable, Sendable, Hashable {
         links: [ArchiveLink] = [],
         collections: [ArchiveCollection] = [],
         savedSearches: [ArchiveSavedSearch] = [],
-        attachments: [ArchiveAttachment] = []
+        attachments: [ArchiveAttachment] = [],
+        timeEntries: [ArchiveTimeEntry] = []
     ) {
         self.formatVersion = formatVersion
         self.generator = generator
@@ -54,6 +62,25 @@ public struct ArchiveDocument: Codable, Sendable, Hashable {
         self.collections = collections
         self.savedSearches = savedSearches
         self.attachments = attachments
+        self.timeEntries = timeEntries
+    }
+
+    /// Decoding is tolerant of a missing collection, so an archive written before a record type
+    /// existed still reads. Synthesised decoding would have made adding `timeEntries` a breaking
+    /// change to a format already in users' hands — which is the opposite of point 4 above.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        formatVersion = try container.decode(Int.self, forKey: .formatVersion)
+        generator = try container.decodeIfPresent(String.self, forKey: .generator) ?? "Elephruit"
+        schemaVersion = try container.decodeIfPresent(String.self, forKey: .schemaVersion) ?? "unknown"
+        exportedAt = try container.decodeIfPresent(Date.self, forKey: .exportedAt) ?? Date(timeIntervalSince1970: 0)
+        items = try container.decodeIfPresent([ArchiveItem].self, forKey: .items) ?? []
+        tags = try container.decodeIfPresent([ArchiveTag].self, forKey: .tags) ?? []
+        links = try container.decodeIfPresent([ArchiveLink].self, forKey: .links) ?? []
+        collections = try container.decodeIfPresent([ArchiveCollection].self, forKey: .collections) ?? []
+        savedSearches = try container.decodeIfPresent([ArchiveSavedSearch].self, forKey: .savedSearches) ?? []
+        attachments = try container.decodeIfPresent([ArchiveAttachment].self, forKey: .attachments) ?? []
+        timeEntries = try container.decodeIfPresent([ArchiveTimeEntry].self, forKey: .timeEntries) ?? []
     }
 
     /// A count summary, for the import and export confirmation UI.
@@ -65,6 +92,7 @@ public struct ArchiveDocument: Codable, Sendable, Hashable {
         if !collections.isEmpty { parts.append("\(collections.count) collections") }
         if !savedSearches.isEmpty { parts.append("\(savedSearches.count) saved searches") }
         if !attachments.isEmpty { parts.append("\(attachments.count) attachments") }
+        if !timeEntries.isEmpty { parts.append("\(timeEntries.count) time entries") }
         return parts.isEmpty ? "nothing" : parts.joined(separator: ", ")
     }
 }
@@ -373,6 +401,73 @@ public struct ArchiveAttachment: Codable, Sendable, Hashable {
         self.storageKind = storageKind
         self.bundlePath = bundlePath
         self.extractedText = extractedText
+    }
+}
+
+/// A tracked interval, as written to an archive.
+///
+/// `endedAt` is optional and `nil` means **still running**, exactly as in the store. A timer that
+/// was running when the export was taken re-imports as running rather than being silently closed —
+/// closing it would invent an end time the user never recorded.
+///
+/// There is no duration field. Duration is derived from the two instants and storing it separately
+/// would create a second version of the truth that could disagree with them.
+public struct ArchiveTimeEntry: Codable, Sendable, Hashable {
+    public var id: UUID
+    public var startedAt: Date
+    public var endedAt: Date?
+    public var entryDescription: String
+    public var itemID: UUID?
+    public var tagIDs: [UUID]
+    public var source: String
+    public var isBillable: Bool
+    public var createdAt: Date
+    public var updatedAt: Date
+    public var deletedAt: Date?
+    public var lastHeartbeatAt: Date?
+
+    public init(
+        id: UUID,
+        startedAt: Date,
+        endedAt: Date? = nil,
+        entryDescription: String = "",
+        itemID: UUID? = nil,
+        tagIDs: [UUID] = [],
+        source: String,
+        isBillable: Bool = false,
+        createdAt: Date,
+        updatedAt: Date,
+        deletedAt: Date? = nil,
+        lastHeartbeatAt: Date? = nil
+    ) {
+        self.id = id
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.entryDescription = entryDescription
+        self.itemID = itemID
+        self.tagIDs = tagIDs
+        self.source = source
+        self.isBillable = isBillable
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
+        self.lastHeartbeatAt = lastHeartbeatAt
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        startedAt = try container.decode(Date.self, forKey: .startedAt)
+        endedAt = try container.decodeIfPresent(Date.self, forKey: .endedAt)
+        entryDescription = try container.decodeIfPresent(String.self, forKey: .entryDescription) ?? ""
+        itemID = try container.decodeIfPresent(UUID.self, forKey: .itemID)
+        tagIDs = try container.decodeIfPresent([UUID].self, forKey: .tagIDs) ?? []
+        source = try container.decodeIfPresent(String.self, forKey: .source) ?? "manual"
+        isBillable = try container.decodeIfPresent(Bool.self, forKey: .isBillable) ?? false
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? startedAt
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? startedAt
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
+        lastHeartbeatAt = try container.decodeIfPresent(Date.self, forKey: .lastHeartbeatAt)
     }
 }
 

@@ -46,6 +46,8 @@ public struct ImportReport: Sendable, Hashable {
     public var linksCreated: Int = 0
     public var collectionsCreated: Int = 0
     public var savedSearchesCreated: Int = 0
+    public var attachmentsCreated: Int = 0
+    public var timeEntriesCreated: Int = 0
 
     /// Non-fatal problems: a record that could not be read, a relationship whose target was
     /// absent. Surfaced rather than swallowed.
@@ -66,6 +68,8 @@ public struct ImportReport: Sendable, Hashable {
         if itemsSkipped > 0 { parts.append("\(itemsSkipped) skipped") }
         if tagsCreated > 0 { parts.append("\(tagsCreated) new tags") }
         if linksCreated > 0 { parts.append("\(linksCreated) links") }
+        if attachmentsCreated > 0 { parts.append("\(attachmentsCreated) files") }
+        if timeEntriesCreated > 0 { parts.append("\(timeEntriesCreated) time entries") }
         return parts.isEmpty ? "Nothing to import" : parts.joined(separator: ", ")
     }
 }
@@ -86,16 +90,22 @@ public struct Importer {
     private let context: ModelContext
     private let dateProvider: any DateProvider
 
+    /// Where restored attachment bytes should land. `nil` for an in-memory library, which imports
+    /// every record and has nowhere to put files.
+    private let location: StoreLocation?
+
     public init(
         items: any ItemRepository,
         tags: TagRepository,
         context: ModelContext,
-        dateProvider: any DateProvider
+        dateProvider: any DateProvider,
+        location: StoreLocation? = nil
     ) {
         self.items = items
         self.tags = tags
         self.context = context
         self.dateProvider = dateProvider
+        self.location = location
     }
 
     // MARK: - JSON archive
@@ -109,10 +119,39 @@ public struct Importer {
         return try apply(archive, policy: policy)
     }
 
+    /// Imports a bundle written by ``ExportFormat/markdownBundle``.
+    ///
+    /// The JSON companion carries every record; the `Attachments` folder beside it carries the
+    /// bytes. Passing the bundle is what lets an attachment come back as a file rather than as a
+    /// row describing one.
+    public func importBundle(
+        at bundle: URL,
+        policy: DuplicatePolicy = .skip
+    ) throws(AppError) -> ImportReport {
+        let archiveURL = bundle.appending(path: "elephruit-archive.json", directoryHint: .notDirectory)
+        let data: Data
+        do {
+            data = try Data(contentsOf: archiveURL)
+        } catch {
+            throw .importFailed(
+                format: "Elephruit bundle",
+                reason: "No elephruit-archive.json was found in this folder."
+            )
+        }
+
+        let archive = try ArchiveDocument.decoded(from: data)
+        return try apply(archive, policy: policy, bundle: bundle)
+    }
+
     /// Applies a decoded archive.
+    ///
+    /// `bundle` is the folder the archive came from, when it came from one. Without it the records
+    /// still import; attachments arrive as rows whose bytes are recorded missing, which is the
+    /// existing "a lost file is a state, not an error" behaviour rather than a new failure.
     public func apply(
         _ archive: ArchiveDocument,
-        policy: DuplicatePolicy = .skip
+        policy: DuplicatePolicy = .skip,
+        bundle: URL? = nil
     ) throws(AppError) -> ImportReport {
         var report = ImportReport(format: "JSON archive")
 
@@ -238,6 +277,76 @@ public struct Importer {
             )
             context.insert(search)
             report.savedSearchesCreated += 1
+        }
+
+        // Attachments. Bytes first, then the row — the ordering from ADR 0003, so an interruption
+        // leaves an orphan file rather than a row pointing at nothing.
+        let existingAttachmentIDs = try fetchExistingAttachmentIDs()
+        for record in archive.attachments where !existingAttachmentIDs.contains(record.id) {
+            guard let owner = record.ownerID.flatMap({ itemsByArchiveID[$0] }) else {
+                report.warnings.append("“\(record.filename)” was dropped because the item it belonged to was missing.")
+                continue
+            }
+
+            let attachment = ElephruitModel.Attachment(
+                id: record.id,
+                filename: record.filename,
+                typeIdentifier: record.typeIdentifier,
+                byteCount: record.byteCount,
+                createdAt: record.createdAt
+            )
+            attachment.storageKindRaw = record.storageKind
+            attachment.contentHash = record.contentHash
+            attachment.extractedText = record.extractedText
+            attachment.owner = owner
+
+            switch restoreBytes(for: record, from: bundle) {
+            case .restored(let relativePath):
+                attachment.relativePath = relativePath
+                attachment.referenceLostAt = nil
+
+            case .notInThisArchive:
+                // A reference. Elephruit never had the bytes, so there is nothing to restore and
+                // nothing has gone wrong — the row records what it pointed at.
+                attachment.referenceLostAt = dateProvider.now
+
+            case .missing(let reason):
+                attachment.referenceLostAt = dateProvider.now
+                report.warnings.append("“\(record.filename)” imported without its file: \(reason)")
+            }
+
+            context.insert(attachment)
+            report.attachmentsCreated += 1
+        }
+
+        // Tracked time.
+        let existingEntryIDs = try fetchExistingTimeEntryIDs()
+        let tagsBySlugID = tagsByArchiveID
+        for record in archive.timeEntries where !existingEntryIDs.contains(record.id) {
+            // A start after its end is not an interval. Reject rather than import something the
+            // duration arithmetic would have to defend itself against forever.
+            if let endedAt = record.endedAt, endedAt < record.startedAt {
+                report.warnings.append("A time entry was dropped because it ended before it started.")
+                continue
+            }
+
+            let entry = TimeEntry(
+                id: record.id,
+                startedAt: record.startedAt,
+                endedAt: record.endedAt,
+                entryDescription: record.entryDescription,
+                isBillable: record.isBillable,
+                source: TimeEntrySource(rawValue: record.source) ?? .manual,
+                lastHeartbeatAt: record.lastHeartbeatAt,
+                createdAt: record.createdAt
+            )
+            entry.updatedAt = record.updatedAt
+            entry.deletedAt = record.deletedAt
+            entry.item = record.itemID.flatMap { itemsByArchiveID[$0] }
+            entry.tags = record.tagIDs.compactMap { tagsBySlugID[$0] }
+
+            context.insert(entry)
+            report.timeEntriesCreated += 1
         }
 
         // Search text depends on tags, which were attached above.
@@ -488,6 +597,66 @@ public struct Importer {
     private func fetchExistingCollectionIDs() throws(AppError) -> Set<UUID> {
         do {
             return Set(try context.fetch(FetchDescriptor<ItemCollection>()).map(\.id))
+        } catch {
+            throw .storeUnavailable(underlying: error.localizedDescription)
+        }
+    }
+
+    /// What happened when an attachment's bytes were looked for.
+    private enum ByteRestoration {
+        /// Copied into the library; carries the new relative path.
+        case restored(String)
+        /// The archive never claimed to carry them — a reference.
+        case notInThisArchive
+        /// The archive claimed them and they were not there.
+        case missing(String)
+    }
+
+    /// Copies one attachment's bytes out of a bundle and into the library.
+    ///
+    /// Never throws. A file that cannot be restored is a *state* on the row — the same decision the
+    /// attachment store already makes for a reference whose file has moved — and failing the whole
+    /// import over one missing file would be a much worse trade than importing everything else.
+    private func restoreBytes(for record: ArchiveAttachment, from bundle: URL?) -> ByteRestoration {
+        guard let relativePath = record.bundlePath else { return .notInThisArchive }
+        guard let bundle else { return .missing("this archive was imported without its folder") }
+        guard let location else { return .missing("this library has no file storage") }
+
+        let source = bundle.appending(path: relativePath, directoryHint: .notDirectory)
+        guard FileManager.default.fileExists(atPath: source.path(percentEncoded: false)) else {
+            return .missing("the file was not in the folder")
+        }
+
+        let directory = location.attachmentDirectory(id: record.id)
+        let target = directory.appending(
+            path: record.filename.isEmpty ? record.id.uuidString : record.filename,
+            directoryHint: .notDirectory
+        )
+
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            if FileManager.default.fileExists(atPath: target.path(percentEncoded: false)) {
+                try FileManager.default.removeItem(at: target)
+            }
+            try FileManager.default.copyItem(at: source, to: target)
+        } catch {
+            return .missing(error.localizedDescription)
+        }
+
+        return .restored("\(record.id.uuidString)/\(target.lastPathComponent)")
+    }
+
+    private func fetchExistingAttachmentIDs() throws(AppError) -> Set<UUID> {
+        do {
+            return Set(try context.fetch(FetchDescriptor<ElephruitModel.Attachment>()).map(\.id))
+        } catch {
+            throw .storeUnavailable(underlying: error.localizedDescription)
+        }
+    }
+
+    private func fetchExistingTimeEntryIDs() throws(AppError) -> Set<UUID> {
+        do {
+            return Set(try context.fetch(FetchDescriptor<TimeEntry>()).map(\.id))
         } catch {
             throw .storeUnavailable(underlying: error.localizedDescription)
         }
