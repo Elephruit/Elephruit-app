@@ -87,10 +87,12 @@ public struct RootView: View {
     private var splitView: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(navigation: navigation)
+                // Derived, not fixed: the minimum is whatever primary navigation needs at the current
+                // text size, so a long or localised title widens the sidebar rather than truncating.
                 .navigationSplitViewColumnWidth(
-                    min: Theme.Size.sidebarMinWidth,
-                    ideal: Theme.Size.sidebarIdealWidth,
-                    max: Theme.Size.sidebarMaxWidth
+                    min: SidebarMetrics.minimumWidth(fittingTitles: SidebarRegistry.nonTruncatingTitles),
+                    ideal: SidebarMetrics.idealWidth(fittingTitles: SidebarRegistry.nonTruncatingTitles),
+                    max: SidebarMetrics.maximumWidth
                 )
         } content: {
             ItemListView(navigation: navigation)

@@ -397,6 +397,9 @@ public final class SwiftDataItemRepository: ItemRepository {
         var query = ItemQuery()
         query.scope = .all
         query.sort = .manual
+        // Ordering is structural, so it must see *every* sibling. Excluding headings here would give
+        // two headings in the same project an identical sort order.
+        query.includesNonContentKinds = true
         if let parentID {
             query.parentID = parentID
         } else {
@@ -413,6 +416,7 @@ public final class SwiftDataItemRepository: ItemRepository {
         var query = ItemQuery()
         query.scope = .all
         query.sort = .manual
+        query.includesNonContentKinds = true
         if let parent = item.parent {
             query.parentID = parent.id
         } else {

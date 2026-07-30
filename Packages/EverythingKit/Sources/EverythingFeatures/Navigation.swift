@@ -151,6 +151,9 @@ public final class NavigationModel {
     public var isCommandPaletteVisible = false
     public var isSearchVisible = false
 
+    /// The full tag list, reached from the sidebar's bounded disclosure group.
+    public var isTagBrowserVisible = false
+
     /// Sort override for the current list. Reset when the selection changes, because a sort that
     /// made sense for Tasks rarely makes sense for Notes.
     public var sortOverride: ItemQuery.Sort?
