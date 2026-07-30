@@ -4,6 +4,13 @@ import SwiftData
 
 /// The first released schema.
 ///
+/// ### On the numbering
+/// Schema versions are `0.0.x` and only the patch component moves. The major and minor components
+/// are held at zero deliberately: nothing here has shipped, and a version number that climbs by
+/// whole integers implies a compatibility story this project has not made yet. A schema version
+/// exists to be *different from its predecessor* so the store can be identified — it is not a
+/// statement about how big the change was.
+///
 /// Versioned from day one, and opened through a ``ElephruitMigrationPlan`` even though
 /// there is only one version, so the first real migration is an *added stage* rather than
 /// the introduction of a mechanism. See `docs/05-cloudkit-and-migrations.md`.
@@ -14,7 +21,7 @@ import SwiftData
 /// and its migration stays testable forever. Until then, referencing the live types is
 /// correct and avoids duplicating nine entities for no benefit.
 public enum SchemaV1: VersionedSchema {
-    public static var versionIdentifier: Schema.Version { Schema.Version(1, 0, 0) }
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 1) }
 
     public static var models: [any PersistentModel.Type] {
         [
@@ -59,7 +66,7 @@ public enum SchemaV1: VersionedSchema {
 /// to *data* under unchanged shapes is a repair, and repairs live outside the migration plan, which
 /// is where ``ContainmentRepair`` already is.
 public enum SchemaV2: VersionedSchema {
-    public static var versionIdentifier: Schema.Version { Schema.Version(2, 0, 0) }
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 2) }
 
     public static var models: [any PersistentModel.Type] {
         SchemaV1.models + [TimeEntry.self]
@@ -89,7 +96,7 @@ public enum SchemaV2: VersionedSchema {
 /// needs more than one version in `schemas`, and more than one version needs distinct checksums —
 /// which live shared types cannot provide. See ADR 0005 for the trigger and the procedure.
 public enum SchemaV3: VersionedSchema {
-    public static var versionIdentifier: Schema.Version { Schema.Version(3, 0, 0) }
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 3) }
 
     public static var models: [any PersistentModel.Type] {
         SchemaV2.models

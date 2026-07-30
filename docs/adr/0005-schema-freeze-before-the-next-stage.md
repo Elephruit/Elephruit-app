@@ -73,6 +73,15 @@ that populates a store at a known path; `ELEPHRUIT_LEGACY_STORE` then points
 `RealStoreMigrationTests` at it. That is how the store used above was made, and doing it again is
 cheap.
 
+## Numbering
+
+Schema versions are `0.0.x`, and only the patch component moves.
+
+Major and minor are held at zero deliberately. Nothing here has shipped, and a number that climbs
+by whole integers implies a compatibility story this project has not made yet. A schema version
+exists so a store can be *identified as different from its predecessor* — it is not a claim about
+how large the change was, and the two should not be conflated.
+
 ## Consequences
 
 1. Every released version stays in source forever, per `SchemaV1.swift:75-78`.

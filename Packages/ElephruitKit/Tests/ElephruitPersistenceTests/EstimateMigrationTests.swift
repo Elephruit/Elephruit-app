@@ -121,7 +121,7 @@ struct EstimateMigrationTests {
 
         // Stamp the store as the previous version, which is what an older build would have left.
         let stamp = location.root.appending(path: ".schema-version", directoryHint: .notDirectory)
-        try "2.0.0".write(to: stamp, atomically: true, encoding: .utf8)
+        try "0.0.2".write(to: stamp, atomically: true, encoding: .utf8)
 
         _ = try PersistenceStack.open(mode: .onDisk(location))
 
@@ -132,6 +132,6 @@ struct EstimateMigrationTests {
 
         let restamped = try String(contentsOf: stamp, encoding: .utf8)
         #expect(restamped == CurrentSchema.versionString)
-        #expect(restamped == "3.0.0")
+        #expect(restamped == "0.0.3")
     }
 }

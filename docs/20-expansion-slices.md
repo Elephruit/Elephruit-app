@@ -147,7 +147,7 @@ them.
 - `Item.estimateMinutes`, optional so that an item written before the field has *no estimate* rather
   than a zero. Zero is a claim that something takes no time.
 - `#Index<Item>([\.createdAt])`, which the rebuild streams on.
-- Schema bumped to 3.0.0, because the version identifier is what the `.schema-version` stamp is
+- Schema bumped to 0.0.3, because the version identifier is what the `.schema-version` stamp is
   compared against and the stamp is what triggers the backup. A test asserts a migrating launch
   leaves a backup behind, and the version literal is pinned so a future bump is deliberate.
 
@@ -350,22 +350,32 @@ merge preserve total interval exactly · **the single-running invariant and all 
 
 ---
 
-## S13 — Time scale and search projection
+## S13 — Time scale and search projection · **partly done, and one part refuted**
 
-**Goal.** First, fix what the 200k run found: `entries(in:)` has no lower bound on `startedAt`, so
-a fixed window scans the whole history (`docs/16 §8`). Then index `TimeEntry`, add `duration:`,
-`source:` and `type:time`, and give search per-category quotas so time cannot flood ordinary
-results.
+**Goal.** Fix what the 200k run found — `entries(in:)` bounding only `startedAt < upper` — then
+index `TimeEntry` and add result quotas.
 
-**Acceptance.**
-- **Week report under 50 ms at 200,000 entries** — currently 93.4 ms. Prove the predicate is the
-  cause before considering a rollup table (`docs/18` R5).
-- Day report under 50 ms at 200,000 entries — currently 60.3 ms.
-- Ordinary search shows at most a small, highly relevant Time section; full history needs the Time
-  view or `type:time`.
-- Keystroke p95 at 50k stays under 40 ms.
+**Outcome on the predicate: hypothesis tested and REFUTED.** A derived `endedAtSortKey` was built,
+mirroring `endedAt` with `.distantFuture` while running, indexed, with the predicate rewritten so
+both bounds could be range-scanned. It measured **93.80 ms against 93.44 ms before** — no
+improvement — and was **reverted**.
 
-**Risk.** Medium.
+Reverting was the point. Standing rule R5 says prove the query cannot be made fast before adding a
+derived thing; a stored property, an index and a schema version for no measured benefit is exactly
+what that rule exists to stop, and unproven schema surface is worse than a slow query. The cause of
+the 200k cost is now known *not* to be the predicate and known *not* to be the missing rollup.
+Where it is remains open — `docs/16 §8` records the one clue, that per-entry work alone accounts
+for roughly 33 ms of it.
+
+**The scale is retired.** Benchmarks run at 10,000 entries by default; the 200,000 and 130,000 tiers
+are removed rather than demoted, because a tier selectable by environment variable is a tier that
+gets selected, and this one cost seven minutes of fixture building per run. All 18 benchmarks now
+run in 39 seconds and pass. Anything larger needs asking first.
+
+**Still to do:** index `TimeEntry`, add `duration:`, `source:` and `type:time`, and give search
+per-category quotas. None of that was started.
+
+**631 tests pass**, zero warnings; Debug and Release build.
 
 ---
 
