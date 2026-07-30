@@ -58,6 +58,13 @@ public struct ItemQuery: Sendable, Hashable {
     /// `true` restricts to items with no parent — the basis of the Inbox.
     public var hasNoParent: Bool?
 
+    /// `true` restricts to items carrying no tags. A tag is a home, so a tagged item has been filed.
+    public var requiresNoTags = false
+
+    /// `true` restricts to kinds that can meaningfully sit in the Inbox — see
+    /// ``ItemKind/appearsInInbox``.
+    public var inboxEligibleKindsOnly = false
+
     public var isFavorite: Bool?
     public var isPinned: Bool?
 
@@ -82,13 +89,16 @@ public struct ItemQuery: Sendable, Hashable {
 // MARK: - Named queries
 
 extension ItemQuery {
-    /// Unfiled captures: active, top-level, untagged, and not a container.
+    /// Unprocessed captures: active, unfiled, untagged, and not a container.
     ///
-    /// "Unfiled" is the definition of Inbox — an item leaves the Inbox by acquiring a
-    /// home, whether that is a project, a tag, or a collection.
+    /// An item leaves the Inbox by acquiring a home — a container or a tag. Kinds that are never
+    /// "processed" are excluded outright by ``ItemKind/appearsInInbox``: a top-level project is not an
+    /// unprocessed capture, and a person never becomes one.
     public static func inbox() -> ItemQuery {
         var query = ItemQuery()
         query.hasNoParent = true
+        query.requiresNoTags = true
+        query.inboxEligibleKindsOnly = true
         query.sort = .createdNewestFirst
         return query
     }
@@ -183,6 +193,8 @@ extension ItemQuery {
             || dueFrom != nil
             || dueBefore != nil
             || notDeferredAfter != nil
+            || requiresNoTags
+            || inboxEligibleKindsOnly
             || (text?.isEmpty == false)
     }
 
@@ -280,6 +292,14 @@ extension ItemQuery {
             }
         }
 
+        if inboxEligibleKindsOnly {
+            result = result.filter { $0.kind.appearsInInbox }
+        }
+
+        if requiresNoTags {
+            result = result.filter { $0.tags.isEmpty }
+        }
+
         if !tagSlugs.isEmpty {
             let required = tagSlugs
             result = result.filter { item in
@@ -299,5 +319,15 @@ extension ItemQuery {
         }
 
         return result
+    }
+}
+
+extension ItemQuery {
+    /// Archived items — kept deliberately, out of the way, and never in the Trash.
+    public static func archive() -> ItemQuery {
+        var query = ItemQuery()
+        query.scope = .archived
+        query.sort = .updatedNewestFirst
+        return query
     }
 }

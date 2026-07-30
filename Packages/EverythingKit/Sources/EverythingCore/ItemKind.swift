@@ -184,6 +184,29 @@ extension ItemKind {
     public static let shippingInMilestoneOne: [ItemKind] = [
         .note, .task, .project, .area, .bookmark, .dailyEntry,
     ]
+
+    /// Whether an unfiled item of this kind belongs in the Inbox.
+    ///
+    /// Inbox means *unprocessed*, not *unparented*. A project with no area above it is not an
+    /// unprocessed capture — it is a container that happens to sit at the top level, and listing it
+    /// beside a half-formed thought is what made the Inbox useless. Containers organise; they are
+    /// never themselves the thing awaiting triage.
+    public var appearsInInbox: Bool {
+        switch self {
+        case .project, .area, .goal:
+            // Containers.
+            false
+        case .person, .organization:
+            // These accumulate over time and are never "processed", so they would fill the Inbox
+            // permanently and never leave it.
+            false
+        case .dailyEntry:
+            // Created by the calendar, not captured by the user.
+            false
+        default:
+            true
+        }
+    }
 }
 
 // MARK: - Presentation

@@ -15,7 +15,16 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
     case tag(slug: String)
     case savedSearch(id: UUID)
     case item(id: UUID)
+    case archive
     case trash
+
+    // Declared for destinations that later phases build. `SidebarRegistry` marks them unavailable, so
+    // they are never enumerated and never reachable — but declaring them now means the phase that
+    // builds one flips a flag instead of widening this enum, and a scene restored from a future
+    // version decodes without loss.
+    case home
+    case calendar
+    case time
 
     /// The query this selection shows.
     ///
@@ -37,8 +46,14 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .savedSearch:
             // Saved searches run through the search engine, not a store query.
             ItemQuery()
+        case .archive:
+            .archive()
         case .trash:
             .trash()
+        case .home, .calendar, .time:
+            // Unreachable while these destinations are unavailable; an empty query is the honest
+            // answer rather than a crash if one is ever restored from a newer scene.
+            ItemQuery()
         }
     }
 
@@ -56,7 +71,8 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .today, .upcoming: .task
         case .inbox: .note
         case .kind(let kind): kind
-        case .tag, .savedSearch, .item, .trash: .note
+        case .tag, .savedSearch, .item, .archive, .trash: .note
+        case .home, .calendar, .time: .note
         }
     }
 
@@ -69,7 +85,11 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .tag(let slug): "#" + (TextNormalizer.slugComponents(slug).last ?? slug)
         case .savedSearch: "Saved Search"
         case .item: "Contents"
+        case .archive: "Archive"
         case .trash: "Trash"
+        case .home: "Home"
+        case .calendar: "Calendar"
+        case .time: "Time"
         }
     }
 
@@ -82,7 +102,11 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .tag: "number"
         case .savedSearch: "line.3.horizontal.decrease.circle"
         case .item: "square.stack.3d.up"
+        case .archive: "archivebox"
         case .trash: "trash"
+        case .home: "house"
+        case .calendar: "calendar.day.timeline.left"
+        case .time: "timer"
         }
     }
 
@@ -95,7 +119,11 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .tag(let slug): AccessibilityID.Sidebar.tag(slug: slug)
         case .savedSearch(let id): AccessibilityID.Sidebar.savedSearch(name: id.uuidString)
         case .item(let id): "sidebar.item.\(id.uuidString)"
+        case .archive: "sidebar.archive"
         case .trash: AccessibilityID.Sidebar.trash
+        case .home: "sidebar.home"
+        case .calendar: "sidebar.calendar"
+        case .time: "sidebar.time"
         }
     }
 
