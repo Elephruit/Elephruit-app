@@ -85,6 +85,21 @@ public protocol ItemRepository: AnyObject {
 
     /// Rebuilds `.wiki` links from an item's body text.
     func reconcileWikiLinks(for item: Item) throws(AppError)
+
+    // MARK: Headings
+
+    /// Moves a heading's tasks up to the project, leaving the heading empty.
+    ///
+    /// The non-destructive half of removing a heading: the section goes, the work stays.
+    func moveTasksOut(of heading: Item) throws(AppError)
+
+    // MARK: Project completion
+
+    /// Records that the user declined to complete this project.
+    func dismissCompletionSuggestion(for project: Item) throws(AppError)
+
+    /// Marks a project complete, along with nothing else.
+    func completeProject(_ project: Item) throws(AppError)
 }
 
 /// The SwiftData implementation.
@@ -205,6 +220,11 @@ public final class SwiftDataItemRepository: ItemRepository {
         }
 
         try reconcileWikiLinks(for: item)
+
+        if item.kind == .task, item.status == .open {
+            rearmCompletionSuggestion(above: item)
+        }
+
         try save()
 
         Diagnostics.persistence.debug("Created item kind=\(draft.kind.rawValue, privacy: .public)")
@@ -250,8 +270,68 @@ public final class SwiftDataItemRepository: ItemRepository {
         try save()
     }
 
+    /// Archives or unarchives an item and everything it contains.
+    ///
+    /// Cascades for the same reason trashing does: a heading without its tasks, or a project without
+    /// its tasks, is not a coherent thing to leave behind. The interface names the count before
+    /// calling this — "Archive *Planning* and its 4 tasks?" — so the cascade is never a surprise.
+    ///
+    /// Linked content is untouched: only `children` cascade, and notes are linked rather than
+    /// contained.
     public func setArchived(_ item: Item, _ archived: Bool) throws(AppError) {
-        try update(item) { $0.archivedAt = archived ? self.dateProvider.now : nil }
+        let stamp = archived ? dateProvider.now : nil
+        var visited: Set<UUID> = []
+
+        func apply(_ subject: Item) {
+            guard visited.insert(subject.id).inserted else { return }
+            subject.archivedAt = stamp
+            subject.updatedAt = dateProvider.now
+            for child in subject.children { apply(child) }
+        }
+
+        apply(item)
+        try save()
+    }
+
+    /// Moves a heading's tasks up to whatever contains the heading.
+    public func moveTasksOut(of heading: Item) throws(AppError) {
+        guard heading.kind == .heading else { return }
+        let destination = heading.parent
+
+        for task in heading.children.filter({ $0.kind == .task }) {
+            task.parent = destination
+            task.updatedAt = dateProvider.now
+        }
+
+        try save()
+        Diagnostics.persistence.debug("Moved tasks out of a heading")
+    }
+
+    // MARK: - Project completion
+
+    public func dismissCompletionSuggestion(for project: Item) throws(AppError) {
+        guard project.kind == .project else { return }
+        project.completionPromptDismissedAt = dateProvider.now
+        try save()
+    }
+
+    public func completeProject(_ project: Item) throws(AppError) {
+        guard project.kind == .project, project.status != .completed else { return }
+        try update(project) { subject in
+            subject.status = .completed
+            subject.completedAt = self.dateProvider.now
+        }
+    }
+
+    /// Re-arms the completion suggestion on every enclosing project.
+    ///
+    /// Called on exactly one transition — a project gaining an open task, whether by creation, by a
+    /// move, or by un-completing one. Nothing else re-arms it, so an unrelated edit cannot make a
+    /// dismissed suggestion reappear.
+    private func rearmCompletionSuggestion(above item: Item) {
+        for ancestor in item.ancestors() where ancestor.kind == .project {
+            ancestor.completionPromptDismissedAt = nil
+        }
     }
 
     /// Completing a task also completes nothing else and un-completing restores nothing —
@@ -273,6 +353,12 @@ public final class SwiftDataItemRepository: ItemRepository {
                 subject.status = .completed
                 subject.completedAt = self.dateProvider.now
             }
+        }
+
+        // Re-opening work is one of the three transitions that re-arms the suggestion.
+        if wasCompleted, item.kind == .task {
+            rearmCompletionSuggestion(above: item)
+            try save()
         }
 
         if !wasCompleted, let rule = item.recurrence {
@@ -354,6 +440,12 @@ public final class SwiftDataItemRepository: ItemRepository {
         try update(item) { subject in
             subject.parent = parent
             subject.sortOrder = try self.nextSortOrder(parentID: parent?.id)
+        }
+
+        // Moving open work into a project is the third re-arming transition.
+        if item.kind == .task, item.status == .open {
+            rearmCompletionSuggestion(above: item)
+            try save()
         }
     }
 

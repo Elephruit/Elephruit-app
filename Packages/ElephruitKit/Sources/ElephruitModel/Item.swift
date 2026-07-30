@@ -112,6 +112,14 @@ public final class Item {
     /// `yyyy-MM-dd`, for ``ItemKind/dailyEntry``. Indexed.
     public var dayKey: String?
 
+    /// When the user last declined the suggestion to complete this project.
+    ///
+    /// An optional attribute with a `nil` default, so it migrates lightweightly and satisfies every
+    /// CloudKit constraint. It lives on the project rather than in a preference because a dismissal
+    /// is a property of *that project* — declining on one Mac should be a decline everywhere, not a
+    /// per-device setting that re-asks the moment you sit at the other machine.
+    public var completionPromptDismissedAt: Date?
+
     // MARK: Relationships
 
     /// The containing item. The one containment hierarchy:
@@ -374,6 +382,31 @@ extension Item {
     /// Whether any task beneath this item is still open.
     public var hasOpenTasks: Bool {
         descendantTasks().contains { $0.status == .open }
+    }
+
+    /// Whether to offer completing this project.
+    ///
+    /// Every condition is deliberate:
+    ///
+    /// - **A project.** Areas are ongoing by definition and are never "finished".
+    /// - **Still open.** Nothing to suggest about a project already completed.
+    /// - **Not dismissed.** "Not yet" means not yet, and is remembered.
+    /// - **Has at least one task.** An empty project is not a finished one — and a project holding
+    ///   only empty headings has no tasks, because headings are not work.
+    /// - **Nothing open.** The actual trigger.
+    public var shouldSuggestCompletion: Bool {
+        kind == .project
+            && status == .open
+            && deletedAt == nil
+            && archivedAt == nil
+            && completionPromptDismissedAt == nil
+            && hasAnyTasks
+            && !hasOpenTasks
+    }
+
+    /// The project this item sits inside, if any.
+    public func enclosingProject() -> Item? {
+        ancestors().first { $0.kind == .project }
     }
 
     /// Ancestors, outermost last. Bounded, so a cycle introduced by a bug cannot hang
