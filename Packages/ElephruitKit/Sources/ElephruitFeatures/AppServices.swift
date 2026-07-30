@@ -50,6 +50,14 @@ public final class AppServices {
     /// Files attached to items — copied in, or referenced where they already live.
     public let attachments: AttachmentStore
 
+    /// Keyboard shortcuts — the one place a binding is decided.
+    ///
+    /// Held here rather than read from `UserDefaults` at each lookup, so rebuilding a menu is not an
+    /// I/O operation and so a test can hand in a registry without touching the user's preferences.
+    public var shortcuts: ShortcutRegistry {
+        didSet { shortcuts.save(to: .standard) }
+    }
+
     /// Whether Home offers follow-up suggestions.
     ///
     /// **Off by default.** An app that starts telling you who you have neglected, unprompted, is a
@@ -113,6 +121,7 @@ public final class AppServices {
         self.stack = stack
         self.dateProvider = dateProvider
         self.isDevelopmentMode = isDevelopmentMode
+        self.shortcuts = ShortcutRegistry.load(from: .standard)
 
         // The main-actor context. Background work creates its own from the container.
         let context = ModelContext(stack.container)

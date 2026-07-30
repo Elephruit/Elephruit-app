@@ -181,14 +181,17 @@ public struct RootView: View {
     /// Built here rather than in a global registry so that every command closes over *this* window's
     /// navigation model — a palette action in one window must not move another window.
     private var paletteCommands: [PaletteCommand] {
+        // Glyphs come from the registry, never from a literal beside the row.
+        let registry = services?.shortcuts ?? ShortcutRegistry()
+
         var commands: [PaletteCommand] = [
-            PaletteCommand(id: "go-today", title: "Go to Today", category: .navigate, symbolName: "sun.max", shortcut: ["⌘", "0"]) {
+            PaletteCommand(id: "go-today", title: "Go to Today", category: .navigate, symbolName: "sun.max", command: .goToday, in: registry) {
                 navigation.select(.today)
             },
             PaletteCommand(id: "go-upcoming", title: "Go to Upcoming", category: .navigate, symbolName: "calendar") {
                 navigation.select(.upcoming)
             },
-            PaletteCommand(id: "go-inbox", title: "Go to Inbox", category: .navigate, symbolName: "tray", shortcut: ["⌘", "1"]) {
+            PaletteCommand(id: "go-inbox", title: "Go to Inbox", category: .navigate, symbolName: "tray", command: .goInbox, in: registry) {
                 navigation.select(.inbox)
             },
             PaletteCommand(id: "go-trash", title: "Go to Trash", category: .navigate, symbolName: "trash") {
@@ -220,13 +223,13 @@ public struct RootView: View {
         }
 
         commands.append(contentsOf: [
-            PaletteCommand(id: "quick-capture", title: "Quick Capture", category: .create, symbolName: "square.and.pencil", shortcut: ["⌘", "⇧", "N"]) {
+            PaletteCommand(id: "quick-capture", title: "Quick Capture", category: .create, symbolName: "square.and.pencil", command: .quickCapture, in: registry) {
                 navigation.isQuickCaptureVisible = true
             },
-            PaletteCommand(id: "search", title: "Search Everything", category: .navigate, symbolName: "magnifyingglass", shortcut: ["⌘", "F"]) {
+            PaletteCommand(id: "search", title: "Search Everything", category: .navigate, symbolName: "magnifyingglass", command: .search, in: registry) {
                 navigation.beginSearch()
             },
-            PaletteCommand(id: "start-timer", title: "Start Timer", category: .create, symbolName: "play.circle", shortcut: ["⌃", "⌘", "T"]) {
+            PaletteCommand(id: "start-timer", title: "Start Timer", category: .create, symbolName: "play.circle", command: .toggleTimer, in: registry) {
                 services?.timer.switchTo(item: nil)
             },
             PaletteCommand(id: "stop-timer", title: "Stop Timer", category: .create, symbolName: "stop.circle") {
@@ -235,16 +238,16 @@ public struct RootView: View {
             PaletteCommand(id: "go-time", title: "Go to Time", category: .navigate, symbolName: "timer") {
                 navigation.select(.time)
             },
-            PaletteCommand(id: "toggle-inspector", title: "Toggle Inspector", category: .view, symbolName: "sidebar.trailing", shortcut: ["⌘", "⌥", "I"]) {
+            PaletteCommand(id: "toggle-inspector", title: "Toggle Inspector", category: .view, symbolName: "sidebar.trailing", command: .toggleInspectorAlternate, in: registry) {
                 navigation.isInspectorVisible.toggle()
             },
-            PaletteCommand(id: "toggle-sidebar", title: "Toggle Sidebar", category: .view, symbolName: "sidebar.leading", shortcut: ["⌘", "⌃", "S"]) {
+            PaletteCommand(id: "toggle-sidebar", title: "Toggle Sidebar", category: .view, symbolName: "sidebar.leading", command: .toggleSidebar, in: registry) {
                 navigation.toggleSidebar()
             },
-            PaletteCommand(id: "focus-mode", title: "Focus Mode", category: .view, symbolName: "rectangle.center.inset.filled", shortcut: ["⌘", "⌥", "F"]) {
+            PaletteCommand(id: "focus-mode", title: "Focus Mode", category: .view, symbolName: "rectangle.center.inset.filled", command: .focusMode, in: registry) {
                 navigation.toggleFocusMode()
             },
-            PaletteCommand(id: "export", title: "Export Library…", category: .transfer, symbolName: "square.and.arrow.up", shortcut: ["⌘", "⇧", "E"]) {
+            PaletteCommand(id: "export", title: "Export Library…", category: .transfer, symbolName: "square.and.arrow.up", command: .exportLibrary, in: registry) {
                 isExportPresented = true
             },
             PaletteCommand(id: "import", title: "Import Files…", category: .transfer, symbolName: "square.and.arrow.down") {

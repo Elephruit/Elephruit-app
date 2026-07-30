@@ -210,7 +210,7 @@ manual-entry work in S12.
 
 ---
 
-## S8 — Shortcut registry
+## S8 — Shortcut registry · **done**
 
 **Goal.** ADR 0008. One source of truth for 40 `.keyboardShortcut` literals; the palette reads real
 bindings instead of its cosmetic glyph arrays; collision detection and a Settings status row.
@@ -221,9 +221,24 @@ the command unbound and says so.
 
 **Risk.** Low-medium.
 
+**Outcome.** `ShortcutRegistry` lives in `ElephruitCore`, so the whole thing is testable without a
+window and one binding can drive a menu item, a palette row and — in S9 — a Carbon registration
+from a single description. All twenty menu literals in `ElephruitApp` now resolve through it;
+`grep keyboardShortcut` there returns nothing. The palette's hard-coded glyph arrays are gone.
+
+Two decisions worth keeping. **Unbound and untouched are different states**, so a command the user
+deliberately cleared does not quietly come back next launch. And **a collision is reported, not
+refused** — refusing would mean two shortcuts cannot be swapped without an impossible intermediate
+state, and silently dropping one would be worse than either.
+
+**602 tests pass** (+15), zero warnings; Debug and Release build.
+
+**Not yet done, and belonging to S9:** the Settings row that surfaces a collision, and the global
+registration itself. The registry is the foundation both need.
+
 ---
 
-## S9 — Quick Jot surface
+## S9 — Quick Jot surface · **next**
 
 **Goal.** The plan's first vertical slice, on a foundation that now holds. `NSPanel`; the opt-in
 hotkey picker; a menu-bar Quick Jot entry alongside the timer; caret autocomplete for `#`, `@`,

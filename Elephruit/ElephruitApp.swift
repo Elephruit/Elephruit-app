@@ -131,23 +131,30 @@ struct ElephruitCommands: Commands {
     @FocusedValue(\.navigationModel) private var navigation
     @FocusedValue(\.transferActions) private var transfer
 
+    /// The bindings, from the one place that decides them.
+    ///
+    /// Read from preferences rather than held, because `Commands` is a value rebuilt on change and
+    /// has no services in its environment. The registry is small and the read is rare — a menu is
+    /// not rebuilt on a keystroke.
+    private var shortcuts: ShortcutRegistry { ShortcutRegistry.load(from: .standard) }
+
     var body: some Commands {
         // MARK: File
 
         CommandGroup(replacing: .newItem) {
             Button("New Note") { create(.note) }
-                .keyboardShortcut("n")
+                .shortcut(.newItem, in: shortcuts)
 
             Button("New Task") { create(.task) }
-                .keyboardShortcut("n", modifiers: [.command, .option])
+                .shortcut(.newTask, in: shortcuts)
 
             Button("New Project") { create(.project) }
-                .keyboardShortcut("n", modifiers: [.command, .shift, .option])
+                .shortcut(.newProject, in: shortcuts)
 
             Divider()
 
             Button("Quick Capture…") { navigation?.isQuickCaptureVisible = true }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .shortcut(.quickCapture, in: shortcuts)
 
             Divider()
 
@@ -158,7 +165,7 @@ struct ElephruitCommands: Commands {
                     NSWorkspace.shared.open(url)
                 }
             }
-            .keyboardShortcut("n", modifiers: [.command, .control])
+            .shortcut(.newWindow, in: shortcuts)
             .disabled(true)  // Enabled with the URL scheme in Phase 2.
         }
 
@@ -166,11 +173,11 @@ struct ElephruitCommands: Commands {
             Divider()
 
             Button("Import Files…") { transfer?.importFiles() }
-                .keyboardShortcut("i", modifiers: [.command, .shift])
+                .shortcut(.toggleInspector, in: shortcuts)
                 .disabled(transfer == nil)
 
             Button("Export Library…") { transfer?.export() }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .shortcut(.exportLibrary, in: shortcuts)
                 .disabled(transfer == nil)
         }
 
@@ -180,7 +187,7 @@ struct ElephruitCommands: Commands {
             Divider()
 
             Button("Move to Trash") { /* Handled per-list in Phase 2's multi-select work. */ }
-                .keyboardShortcut(.delete, modifiers: .command)
+                .shortcut(.moveToTrash, in: shortcuts)
                 .disabled(true)
         }
 
@@ -190,11 +197,11 @@ struct ElephruitCommands: Commands {
             // ⌘F, not ⌘⇧F. Search is no longer a separate place with its own shortcut — it is what
             // the list becomes — so it takes the shortcut everyone already reaches for.
             Button("Search Everything") { navigation?.beginSearch() }
-                .keyboardShortcut("f")
+                .shortcut(.search, in: shortcuts)
                 .disabled(navigation == nil)
 
             Button("Command Palette…") { navigation?.isCommandPaletteVisible = true }
-                .keyboardShortcut("k")
+                .shortcut(.commandPalette, in: shortcuts)
                 .disabled(navigation == nil)
         }
 
@@ -204,17 +211,17 @@ struct ElephruitCommands: Commands {
             Divider()
 
             Button("Today") { navigation?.select(.today) }
-                .keyboardShortcut("0", modifiers: .command)
+                .shortcut(.goToday, in: shortcuts)
             Button("Inbox") { navigation?.select(.inbox) }
-                .keyboardShortcut("1", modifiers: .command)
+                .shortcut(.goInbox, in: shortcuts)
             Button("Notes") { navigation?.select(.kind(.note)) }
-                .keyboardShortcut("2", modifiers: .command)
+                .shortcut(.goUpcoming, in: shortcuts)
             Button("Tasks") { navigation?.select(.kind(.task)) }
-                .keyboardShortcut("3", modifiers: .command)
+                .shortcut(.goNotes, in: shortcuts)
             Button("Projects") { navigation?.select(.kind(.project)) }
-                .keyboardShortcut("4", modifiers: .command)
+                .shortcut(.goProjects, in: shortcuts)
             Button("Areas") { navigation?.select(.kind(.area)) }
-                .keyboardShortcut("5", modifiers: .command)
+                .shortcut(.goPeople, in: shortcuts)
 
             Divider()
 
@@ -224,23 +231,23 @@ struct ElephruitCommands: Commands {
             Divider()
 
             Button("Toggle Sidebar") { navigation?.toggleSidebar() }
-                .keyboardShortcut("s", modifiers: [.command, .control])
+                .shortcut(.toggleSidebar, in: shortcuts)
                 .disabled(navigation == nil)
 
             Button("Toggle Inspector") { navigation?.isInspectorVisible.toggle() }
-                .keyboardShortcut("i", modifiers: [.command, .option])
+                .shortcut(.toggleInspectorAlternate, in: shortcuts)
                 .disabled(navigation == nil)
 
             Button(navigation?.layoutMode == .focus ? "Leave Focus Mode" : "Focus Mode") {
                 navigation?.toggleFocusMode()
             }
-            .keyboardShortcut("f", modifiers: [.command, .option])
+            .shortcut(.focusMode, in: shortcuts)
             .disabled(navigation == nil)
 
             Divider()
 
             Button("Focus Sidebar") { navigation?.focus(.sidebar) }
-                .keyboardShortcut("l", modifiers: .command)
+                .shortcut(.clearSelection, in: shortcuts)
                 .disabled(navigation == nil)
         }
 
