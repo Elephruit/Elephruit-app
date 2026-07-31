@@ -284,6 +284,17 @@ struct PeopleListView: View {
 }
 
 /// One compact row.
+///
+/// ### Three lines, and only the ones that have something to say
+/// Who they are, then how to reach them. The middle line used to be role-and-organisation with a
+/// relationship summary behind it, which produced rows reading "Caroline Howe / Caroline Howe" for
+/// every record whose company field holds the person's own name — a thing address books imported
+/// from elsewhere do constantly. ``ContactCard/identityLine(name:role:organization:location:)``
+/// drops anything that merely repeats the name, so that line is now either informative or absent.
+///
+/// The contact line is the answer to what the list is usually open for: an address and a number,
+/// each carrying the label the user gave it, so which one is work and which is home is visible
+/// without opening anybody.
 struct PersonRow: View {
     @Environment(\.services) private var services
 
@@ -294,19 +305,20 @@ struct PersonRow: View {
     var isSelected: Bool = false
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.small) {
+        HStack(alignment: .top, spacing: Theme.Spacing.small) {
             PersonAvatar(name: person.displayTitle, colorName: person.colorName, size: 28)
 
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 HStack(spacing: Theme.Spacing.tight) {
                     Text(person.displayTitle)
                         .font(Theme.Text.rowTitle)
+                        .rowForeground(.primary)
                         .lineLimit(1)
 
                     if person.isFavorite {
                         Image(systemName: "star.fill")
                             .font(.system(size: 8))
-                            .foregroundStyle(Theme.Colors.dueToday)
+                            .rowTint(Theme.Colors.dueToday)
                     }
 
                     if let state = linkState {
@@ -314,16 +326,31 @@ struct PersonRow: View {
                     }
                 }
 
-                if let subtitle {
-                    Text(subtitle)
+                if let identityLine {
+                    Text(identityLine)
                         .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.secondaryText)
+                        .rowForeground(.secondary)
+                        .lineLimit(1)
+                }
+
+                if !rowDetails.isEmpty {
+                    // Wrapped rather than truncated: two details on a narrow list column are worth a
+                    // second line, and a middle-truncated email address is worth nothing.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: Theme.Spacing.medium) { detailLabels }
+                        VStack(alignment: .leading, spacing: Theme.Spacing.hairline) { detailLabels }
+                    }
+                } else if let relationshipLine {
+                    Text(relationshipLine)
+                        .font(Theme.Text.metadata)
+                        .rowForeground(.tertiary)
                         .lineLimit(1)
                 }
             }
 
             Spacer(minLength: 0)
         }
+        .padding(.vertical, Theme.Spacing.tight)
         .frame(minHeight: Theme.Size.rowHeightExpanded)
         .hoverHighlight(isEnabled: !isSelected, extending: Theme.Spacing.small)
         // Name *and* the line beneath it. The subtitle is truncated to one line in the row, and it
@@ -331,7 +358,14 @@ struct PersonRow: View {
         // without opening somebody.
         .help(tooltip)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(subtitle.map { "\(person.displayTitle), \($0)" } ?? person.displayTitle)
+        .accessibilityLabel(accessibilityDescription)
+    }
+
+    @ViewBuilder
+    private var detailLabels: some View {
+        ForEach(rowDetails) { detail in
+            ContactDetailLabel(detail)
+        }
     }
 
     private var tooltip: String {
@@ -345,15 +379,42 @@ struct PersonRow: View {
         return (try? services.contactImports.link(for: person))?.state
     }
 
-    /// Role and organisation if known, otherwise where the relationship stands.
-    private var subtitle: String? {
-        let role = [person.personProfile?.roleTitle, person.personProfile?.organizationName]
-            .compactMap { $0 }
-            .filter { !$0.isEmpty }
-        if !role.isEmpty { return role.joined(separator: " · ") }
+    /// Role, organisation, and place — never a second copy of the name.
+    private var identityLine: String? {
+        ContactCard.identityLine(
+            name: person.displayTitle,
+            role: person.personProfile?.roleTitle,
+            organization: person.personProfile?.organizationName,
+            location: person.personProfile?.locationText
+        )
+    }
 
+    /// The email and the number, or whichever two details exist.
+    private var rowDetails: [ContactDetail] {
+        guard let profile = person.personProfile else { return [] }
+        return ContactCard.rowDetails(from: profile.contactDetails())
+    }
+
+    /// Where the relationship stands, shown only when there is nothing to reach them by — a row with
+    /// an address and "Nothing recorded yet" would spend its last line on the less useful of the two.
+    private var relationshipLine: String? {
         guard let services else { return nil }
         return services.people.context(for: person).summary(using: dateProvider)
+    }
+
+    private var accessibilityDescription: String {
+        var parts = [person.displayTitle]
+        if let identityLine { parts.append(identityLine) }
+        if rowDetails.isEmpty {
+            if let relationshipLine { parts.append(relationshipLine) }
+        } else {
+            parts.append(
+                contentsOf: rowDetails.map {
+                    "\($0.displayLabel) \($0.kind.displayName.lowercased()), \($0.value)"
+                }
+            )
+        }
+        return parts.joined(separator: ", ")
     }
 }
 
