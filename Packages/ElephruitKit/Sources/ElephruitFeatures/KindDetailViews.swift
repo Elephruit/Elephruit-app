@@ -110,6 +110,11 @@ struct TaskDetailView: View {
                     )
                     .frame(minHeight: 120)
 
+                    // Scheduling, steps, waiting, and the sync notice. Above the subtasks because
+                    // they describe *this* task; the subtasks are other tasks that happen to live
+                    // beneath it.
+                    TaskDetailPanels(task: item, navigation: navigation)
+
                     subtasks
 
                     if !item.visibleBacklinks().isEmpty {

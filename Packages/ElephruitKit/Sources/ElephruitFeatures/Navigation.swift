@@ -26,6 +26,19 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
     case calendar
     case time
 
+    /// One of the Tasks module's system views.
+    ///
+    /// One case carrying a ``TaskSystemView`` rather than nine cases, on the same terms as
+    /// ``people(_:)``: adding a view does not widen this enum, and a scene restored from a newer
+    /// version still decodes.
+    case taskView(TaskSystemView)
+
+    /// A saved task smart list.
+    case smartList(id: UUID)
+
+    /// A built-in smart list, named by its stable identifier rather than by an index.
+    case builtInSmartList(id: String)
+
     /// A slice of the People module — all, favourites, celebrations, a group.
     ///
     /// One case carrying a ``PeopleScope`` rather than seven cases, so adding a scope does not widen
@@ -65,6 +78,12 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
             // profiles. A kind query would return them but would also return the sketches nobody
             // asked to see.
             ItemQuery()
+        case .taskView, .smartList, .builtInSmartList:
+            // Every task view is assembled by `TaskViewService`, whose rules compare against today
+            // in the user's calendar and read a lifecycle derived from four columns and a traversal.
+            // None of that is a predicate, and an empty query is the honest answer rather than a
+            // half-right one that a view might use by mistake.
+            ItemQuery()
         }
     }
 
@@ -85,6 +104,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .tag, .savedSearch, .item, .archive, .trash: .note
         case .home, .calendar, .time: .note
         case .people: .person
+        case .taskView, .smartList, .builtInSmartList: .task
         }
     }
 
@@ -103,6 +123,9 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .calendar: "Calendar"
         case .time: "Time"
         case .people(let scope): scope.title
+        case .taskView(let view): view.title
+        case .smartList: "Smart List"
+        case .builtInSmartList(let id): BuiltInSmartList.list(id: id)?.title ?? "Smart List"
         }
     }
 
@@ -121,6 +144,9 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .calendar: "calendar.day.timeline.left"
         case .time: "timer"
         case .people(let scope): scope.symbolName
+        case .taskView(let view): view.symbolName
+        case .smartList: "line.3.horizontal.decrease.circle"
+        case .builtInSmartList(let id): BuiltInSmartList.list(id: id)?.symbolName ?? "line.3.horizontal.decrease.circle"
         }
     }
 
@@ -139,6 +165,22 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .calendar: "sidebar.calendar"
         case .time: "sidebar.time"
         case .people(let scope): "sidebar.people.\(scope.title.lowercased().replacingOccurrences(of: " ", with: "-"))"
+        case .taskView(let view): "sidebar.tasks.\(view.rawValue)"
+        case .smartList(let id): "sidebar.smartList.\(id.uuidString)"
+        case .builtInSmartList(let id): "sidebar.smartList.\(id)"
+        }
+    }
+
+    /// Whether this selection is one the Tasks workspace draws.
+    public var taskSystemView: TaskSystemView? {
+        if case .taskView(let view) = self { return view }
+        return nil
+    }
+
+    public var isTaskDestination: Bool {
+        switch self {
+        case .taskView, .smartList, .builtInSmartList: true
+        default: false
         }
     }
 
@@ -176,6 +218,14 @@ public final class NavigationModel {
 
     public var isInspectorVisible = false
     public var isQuickCaptureVisible = false
+
+    /// The task entry surface.
+    ///
+    /// A different panel from Quick Jot, because the two answer different questions. Quick Jot takes
+    /// a thought and files it as a note; this one reads a sentence about a *task* and shows what it
+    /// understood — dates, a repeat, a destination — before anything is created. Merging them would
+    /// mean one field whose behaviour changed depending on what the first word turned out to be.
+    public var isTaskEntryVisible = false
     public var isCommandPaletteVisible = false
 
     /// The People command bar, which is a different surface from the general ⌘K palette.
@@ -287,7 +337,8 @@ public final class NavigationModel {
 
     public var shellState: ShellState {
         ShellState(
-            hasOverlay: isQuickCaptureVisible || isCommandPaletteVisible || isTagBrowserVisible,
+            hasOverlay: isQuickCaptureVisible || isCommandPaletteVisible || isTagBrowserVisible
+                || isTaskEntryVisible,
             isSearchActive: isSearchActive,
             focusedPane: focusedPane,
             layoutMode: layoutMode
@@ -305,6 +356,7 @@ public final class NavigationModel {
             isQuickCaptureVisible = false
             isCommandPaletteVisible = false
             isTagBrowserVisible = false
+            isTaskEntryVisible = false
 
         case .leaveSearch:
             endSearch()
