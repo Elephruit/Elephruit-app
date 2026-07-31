@@ -26,11 +26,38 @@ struct EscapeLadderTests {
         #expect(EscapeLadder.outcome(for: state) == .dismissOverlay)
     }
 
+    @Test("Revealed swipe actions are put away before search is left")
+    func revealedRowActionsOutrankSearch() {
+        // The more transient of the two, and the more likely to be what the hand is currently
+        // doing. A sheet still outranks it, because a sheet is modal and a half-open row is not.
+        let state = ShellState(
+            hasRevealedRowActions: true,
+            isSearchActive: true,
+            focusedPane: .list
+        )
+        #expect(EscapeLadder.outcome(for: state) == .closeRowActions)
+
+        let withSheet = ShellState(hasOverlay: true, hasRevealedRowActions: true)
+        #expect(EscapeLadder.outcome(for: withSheet) == .dismissOverlay)
+    }
+
+    @Test("Closing swipe actions moves focus nowhere")
+    func closingRowActionsIsNotAFocusChange() {
+        // Escape means *move one rung outward*. Putting a row back is a rung; it is not a reason to
+        // take the keyboard away from wherever it was.
+        #expect(EscapeLadder.destination(for: .closeRowActions) == nil)
+    }
+
     @Test("Search is left before focus moves anywhere")
     func searchOutranksFocus() {
         for pane in ShellPane.allCases {
             for mode in LayoutMode.allCases {
-                let state = ShellState(isSearchActive: true, focusedPane: pane, layoutMode: mode)
+                let state = ShellState(
+                    hasRevealedRowActions: false,
+                    isSearchActive: true,
+                    focusedPane: pane,
+                    layoutMode: mode
+                )
                 #expect(
                     EscapeLadder.outcome(for: state) == .leaveSearch,
                     "Search should be left from \(pane) in \(mode)"
@@ -109,14 +136,17 @@ struct EscapeLadderTests {
             for mode in LayoutMode.allCases {
                 for searching in [true, false] {
                     for overlay in [true, false] {
-                        let state = ShellState(
-                            hasOverlay: overlay,
-                            isSearchActive: searching,
-                            focusedPane: pane,
-                            layoutMode: mode
-                        )
-                        // Reaching here without trapping is the assertion; the ladder is total.
-                        _ = EscapeLadder.outcome(for: state)
+                        for revealed in [true, false] {
+                            let state = ShellState(
+                                hasOverlay: overlay,
+                                hasRevealedRowActions: revealed,
+                                isSearchActive: searching,
+                                focusedPane: pane,
+                                layoutMode: mode
+                            )
+                            // Reaching here without trapping is the assertion; the ladder is total.
+                            _ = EscapeLadder.outcome(for: state)
+                        }
                     }
                 }
             }

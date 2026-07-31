@@ -18,6 +18,13 @@ public struct RootView: View {
 
     @State private var navigation = NavigationModel()
 
+    /// The window's swipe coordinator.
+    ///
+    /// One per window, because "only one row is open at a time" is a fact about a window and two
+    /// windows are entitled to have a row open each. It installs the event monitors that make a
+    /// two-finger trackpad swipe reach a list row at all.
+    @State private var swipes = SwipeActionCoordinator()
+
     /// Where this window was, encoded.
     ///
     /// `@SceneStorage` rather than `@AppStorage`, because "where am I" is a property of a window and
@@ -67,6 +74,14 @@ public struct RootView: View {
             }
         }
         .environment(navigation)
+        .swipeActionCoordinator(swipes)
+        // Changing what is selected puts away anything a row was offering. The actions were about
+        // the row you were on, and you are no longer on it.
+        .onChange(of: navigation.selection) { _, _ in swipes.closeAll() }
+        .onChange(of: navigation.selectedItemIDs) { _, _ in swipes.closeAll() }
+        .onChange(of: swipes.openRow) { _, open in
+            navigation.hasRevealedRowActions = open != nil
+        }
         .sheet(isPresented: quickCaptureBinding) {
             QuickCaptureView { id in
                 navigation.selectItem(id)
@@ -121,6 +136,9 @@ public struct RootView: View {
             storedNavigationState = encoded
         }
         .task {
+            // The ladder decides that Escape should close a revealed row; this is what does it.
+            navigation.onCloseRowActions = { swipes.closeAll() }
+
             // Before the calendar request, so a link that arrived at launch wins over the place the
             // window was last left rather than being overwritten by it.
             restoreNavigation()
