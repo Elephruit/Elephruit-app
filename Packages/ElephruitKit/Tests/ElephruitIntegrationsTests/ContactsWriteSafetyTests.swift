@@ -3,24 +3,28 @@ import ElephruitIntegrations
 import Foundation
 import Testing
 
-/// The People module's equivalent of the calendar's promise: **no system contact is ever written.**
+/// The People module's promise about the address book: **one write, and it can only say five things.**
 ///
-/// ### Why this needs asserting rather than reviewing
-/// The requirement is that system contacts change "only with explicit user intent". The strongest
-/// available reading of that is not a confirmation dialog — it is not having the capability at all,
-/// and a user who wants Elephruit's profile in their address book exporting a vCard through a save
-/// panel they opened themselves.
+/// ### What changed, and what did not
+/// This suite used to assert that no system contact could ever be written, on the reasoning that the
+/// strongest reading of "system contacts change only with explicit user intent" is not having the
+/// capability at all. What that cost was a linked person whose number could not be corrected
+/// anywhere — an edit kept locally was discarded by the next refresh, silently — so the capability
+/// now exists and the intent is what constrains it.
 ///
-/// Contacts, unlike EventKit, has a single access tier: granting read access grants write access
-/// too. So the permission the user gives is broader than what the app uses, the user has no way to
-/// give less, and the only thing making "read-only" true is the code.
+/// The reason the assertions did not simply go away is unchanged. Contacts, unlike EventKit, has a
+/// single access tier: granting read access grants write access too. The permission the user gives is
+/// broader than what the app uses, the user has no way to give less, and the only thing keeping the
+/// app inside it is the code.
 ///
-/// Two independent guards, because either alone can be defeated:
+/// So the guards moved rather than lifted:
 ///
-/// 1. **`ContactsProviding` has no write method**, so calling one is a compile error rather than a
-///    policy somebody remembers.
-/// 2. **The Contacts adapter's source contains no mutating call**, checked here — which catches the
-///    case where someone reaches past the protocol to `CNContactStore` directly.
+/// 1. **``ContactWrite`` can express five fields**, so a name, a birthday, a photograph, or a postal
+///    address cannot be altered — not because nothing does, but because nothing *can*.
+/// 2. **Only `write(_:)` mutates.** The adapter's source contains no other mutating call, checked
+///    here — which catches somebody reaching past the protocol to `CNContactStore` directly.
+/// 3. **Nothing creates or deletes.** `CNSaveRequest.add` and `.delete` stay forbidden outright: this
+///    app corrects records the user already has and is never the reason one appears or vanishes.
 @Suite("Contacts write safety")
 struct ContactsWriteSafetyTests {
     private static func sourceRoot() -> URL {
@@ -39,22 +43,21 @@ struct ContactsWriteSafetyTests {
         return enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
     }
 
-    /// Every Contacts call that changes something.
+    /// Calls that remain forbidden outright, at any count.
     ///
-    /// Named individually rather than matched by pattern, on the same terms as the calendar list: a
-    /// roster of exact symbols says what is forbidden, and anybody adding one has to add it here too.
-    private static let mutatingCalls = [
-        "CNSaveRequest",
-        "store.execute(",
-        ".add(contact",
-        ".update(contact",
+    /// Creation and deletion are the two things a correction never needs, and the two whose damage
+    /// cannot be undone from inside the app. `CNMutableGroup` is here because reorganising somebody's
+    /// groups is not something this app has any business doing.
+    private static let forbiddenCalls = [
+        "CNSaveRequest().add",
+        "request.add(",
+        "request.delete(",
         ".delete(contact",
-        "CNMutableContact",
         "CNMutableGroup",
     ]
 
-    @Test("The Contacts adapter contains no call that could change a contact")
-    func adapterNeverWrites() throws {
+    @Test("Nothing in the adapter can create or delete a contact")
+    func adapterNeverCreatesOrDeletes() throws {
         let files = Self.swiftFiles(under: "ElephruitIntegrations")
         #expect(!files.isEmpty, "The integrations source must be findable, or this test proves nothing")
 
@@ -71,7 +74,7 @@ struct ContactsWriteSafetyTests {
                 let trimmed = text.trimmingCharacters(in: .whitespaces)
                 guard !trimmed.hasPrefix("//"), !trimmed.hasPrefix("///") else { continue }
 
-                for call in Self.mutatingCalls where text.contains(call) {
+                for call in Self.forbiddenCalls where text.contains(call) {
                     offenders.append("\(file.lastPathComponent):\(number + 1) — \(call)")
                 }
             }
@@ -80,8 +83,74 @@ struct ContactsWriteSafetyTests {
         #expect(
             offenders.isEmpty,
             """
-            Elephruit holds full Contacts access because Contacts offers nothing narrower, and never \
-            writes. These would: \(offenders)
+            Elephruit corrects contacts the user already has. It is never the reason one appears or \
+            disappears. These would be: \(offenders)
+            """
+        )
+    }
+
+    /// The write is meant to be one method, not a capability that spread.
+    ///
+    /// Counting occurrences rather than forbidding them is the whole point: `CNSaveRequest` and
+    /// `store.execute` each belong in exactly one place, and a second appearance means a second way
+    /// to change somebody's address book that nothing reviewed.
+    @Test("Saving happens in exactly one place")
+    func savingIsNotSpreadAround() throws {
+        var saveRequests = 0
+        var executes = 0
+        var mutableContacts = 0
+
+        for file in Self.swiftFiles(under: "ElephruitIntegrations") {
+            guard let contents = try? String(contentsOf: file, encoding: .utf8) else { continue }
+
+            for line in contents.components(separatedBy: .newlines) {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.hasPrefix("//"), !trimmed.hasPrefix("///") else { continue }
+
+                if trimmed.contains("CNSaveRequest") { saveRequests += 1 }
+                if trimmed.contains("store.execute(") { executes += 1 }
+                if trimmed.contains("CNMutableContact") { mutableContacts += 1 }
+            }
+        }
+
+        #expect(saveRequests <= 1, "`CNSaveRequest` appears \(saveRequests) times; it belongs only in `write(_:)`")
+        #expect(executes <= 1, "`store.execute` appears \(executes) times; it belongs only in `write(_:)`")
+        #expect(
+            mutableContacts <= 1,
+            "`CNMutableContact` appears \(mutableContacts) times; it belongs only in `write(_:)`"
+        )
+    }
+
+    /// The narrowness of the write, asserted against the type rather than against the prose.
+    ///
+    /// `ContactWrite` is the reason a write cannot touch a birthday, and a field added to it in a
+    /// hurry is exactly the change that would pass review. Setting every property this test knows
+    /// about and comparing against a fresh value proves the list is complete: a new field would leave
+    /// the two equal and fail here.
+    @Test("A write can only say the five things it is allowed to say")
+    func writeCarriesNothingElse() {
+        var change = ContactWrite(identifier: "abc")
+
+        change.jobTitle = "Head of Design"
+        change.organizationName = "Northwind"
+        change.emailAddresses = [ContactLabelledValue(label: "work", value: "maya@northwind.example")]
+        change.phoneNumbers = [ContactLabelledValue(label: "mobile", value: "+15125550192")]
+        change.urlAddresses = [ContactLabelledValue(label: "homepage", value: "northwind.example")]
+
+        #expect(change != ContactWrite(identifier: "abc"), "every writable field must be reachable")
+        #expect(
+            change == ContactWrite(
+                identifier: "abc",
+                jobTitle: "Head of Design",
+                organizationName: "Northwind",
+                emailAddresses: [ContactLabelledValue(label: "work", value: "maya@northwind.example")],
+                phoneNumbers: [ContactLabelledValue(label: "mobile", value: "+15125550192")],
+                urlAddresses: [ContactLabelledValue(label: "homepage", value: "northwind.example")]
+            ),
+            """
+            A `ContactWrite` built from every field this test knows about differs from the one it \
+            assembled, which means the type has grown a field. Anything writable must be deliberate: \
+            add it here, and to `ContactWriteBackSheet`, which has to show it before it is written.
             """
         )
     }
@@ -170,6 +239,106 @@ struct ContactsWriteSafetyTests {
     func unconfiguredProviderIsHonest() async {
         #expect(await NoContactsProvider().requestAccess() == .unavailable)
         #expect(IntegrationAuthorization.unavailable.explanation?.isEmpty == false)
+    }
+
+    // MARK: - Writing
+
+    private static func linkedContact(id: String = "maya", container: String? = nil) -> SystemContact {
+        var contact = SystemContact(id: id)
+        contact.givenName = "Maya"
+        contact.familyName = "Chen"
+        contact.jobTitle = "Designer"
+        contact.emailAddresses = [ContactLabelledValue(label: "work", value: "maya@northwind.example")]
+        contact.postalAddresses = [ContactLabelledValue(label: "home", value: "12 Rosewood Lane, Austin")]
+        contact.containerIdentifier = container
+        return contact
+    }
+
+    @Test("A confirmed write reaches the contact")
+    func writeApplies() async {
+        let provider = FixtureContactsProvider(contacts: [Self.linkedContact()], authorization: .authorized)
+
+        let outcome = await provider.write(
+            ContactWrite(
+                identifier: "maya",
+                jobTitle: "Head of Design",
+                phoneNumbers: [ContactLabelledValue(label: "mobile", value: "+15125550192")]
+            )
+        )
+
+        #expect(outcome == .written)
+
+        let updated = await provider.systemContact(withIdentifier: "maya")
+        #expect(updated?.jobTitle == "Head of Design")
+        #expect(updated?.phoneNumbers.first?.value == "+15125550192")
+    }
+
+    @Test("A write clears the values it was given none of, because that is what removing one looks like")
+    func writeRemovesOmittedValues() async {
+        let provider = FixtureContactsProvider(contacts: [Self.linkedContact()], authorization: .authorized)
+
+        _ = await provider.write(ContactWrite(identifier: "maya"))
+
+        let updated = await provider.systemContact(withIdentifier: "maya")
+        #expect(updated?.emailAddresses.isEmpty == true, "an address deleted in the sheet must actually go")
+    }
+
+    @Test("A write cannot touch a postal address even when the contact has one")
+    func postalAddressesSurviveAWrite() async {
+        let provider = FixtureContactsProvider(contacts: [Self.linkedContact()], authorization: .authorized)
+
+        _ = await provider.write(ContactWrite(identifier: "maya", jobTitle: "Head of Design"))
+
+        let updated = await provider.systemContact(withIdentifier: "maya")
+        #expect(
+            updated?.postalAddresses.first?.value == "12 Rosewood Lane, Austin",
+            """
+            Elephruit reads an address as one formatted line and cannot put it back into the fields \
+            Contacts keeps it in, so it must leave the stored address exactly as it found it.
+            """
+        )
+    }
+
+    @Test("Writing without access does nothing and says so")
+    func writeNeedsAccess() async {
+        let provider = FixtureContactsProvider(contacts: [Self.linkedContact()], authorization: .denied)
+
+        let outcome = await provider.write(ContactWrite(identifier: "maya", jobTitle: "Head of Design"))
+
+        #expect(outcome == .notPermitted)
+        #expect(outcome.explanation?.isEmpty == false)
+    }
+
+    @Test("Writing to a contact that has gone reports it rather than recreating it")
+    func writeToMissingRecord() async {
+        let provider = FixtureContactsProvider(contacts: [], authorization: .authorized)
+
+        let outcome = await provider.write(ContactWrite(identifier: "maya"))
+
+        #expect(outcome == .recordMissing)
+        #expect(await provider.systemContact(withIdentifier: "maya") == nil, "a write must never create")
+    }
+
+    @Test("A read-only account refuses instead of appearing to succeed")
+    func writeToReadOnlyAccount() async {
+        let account = ContactAccount(id: "directory", name: "Company Directory", contactCount: 1, isReadOnly: true)
+        let provider = FixtureContactsProvider(
+            contacts: [Self.linkedContact(container: "directory")],
+            containers: [account],
+            authorization: .authorized
+        )
+
+        let outcome = await provider.write(ContactWrite(identifier: "maya", jobTitle: "Head of Design"))
+
+        #expect(outcome == .accountIsReadOnly)
+
+        let unchanged = await provider.systemContact(withIdentifier: "maya")
+        #expect(unchanged?.jobTitle == "Designer", "a refused write must leave the record alone")
+    }
+
+    @Test("A provider with nothing behind it refuses rather than pretending")
+    func nullProviderRefusesWrites() async {
+        #expect(await NoContactsProvider().write(ContactWrite(identifier: "maya")) == .notPermitted)
     }
 }
 
