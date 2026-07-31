@@ -298,8 +298,7 @@ struct ModuleHeader: View {
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .keyboardShortcut("[", modifiers: .command)
-            .help("Back to the main navigation (⌘[)")
+            .help("Back to the main navigation")
             .accessibilityLabel("Back to all modules")
             .accessibilityIdentifier("sidebar.module.back")
 
