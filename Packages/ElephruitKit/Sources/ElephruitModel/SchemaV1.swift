@@ -167,7 +167,31 @@ public enum SchemaV5: VersionedSchema {
     }
 }
 
-/// The sixth schema: the Tasks module.
+/// The sixth schema: the fields a linked contact needs in order to be corrected in full.
+///
+/// Four nullable columns on `PersonProfile` — `departmentName`, `middleName`, `namePrefix`,
+/// `nameSuffix` — and no new entity. **Additive**, so a store opened under this version gains four
+/// empty columns and keeps every byte it had.
+///
+/// ### Why it exists at all
+/// Contacts has held these since long before this app did, so a person imported from the address book
+/// arrived with a department and a suffix that the CRM simply dropped. That was tolerable while the
+/// integration was read-only — nothing was going to be written back, so nothing was going to be lost
+/// on the way out. It stopped being tolerable the moment an edit could travel in the other direction:
+/// a write assembled from a model missing these fields would offer to blank them.
+///
+/// ### Why lightweight inference is still right
+/// The same argument as `SchemaV4` and `SchemaV5`, and a weaker case than either: no entity, no
+/// relationship, no rename, no type change. Nullable columns are precisely what Core Data's inference
+/// exists for. ADR 0005 still reserves the model-type freeze for the first change that cannot be
+/// inferred, and this is not it.
+public enum SchemaV6: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 6) }
+
+    public static var models: [any PersistentModel.Type] { SchemaV5.models }
+}
+
+/// The seventh schema: the Tasks module.
 ///
 /// **No new entities.** Twenty-one new attributes on ``Item`` — the reminder and its ownership, the
 /// planning marks, the checklist blob, the recurrence-series identity, the external-reminder link,
@@ -197,11 +221,11 @@ public enum SchemaV5: VersionedSchema {
 /// stamp beside the store is compared against, and a mismatch is what triggers the backup in
 /// `PersistenceStack`. A schema change that did not bump the version would migrate real user data
 /// with no backup taken.
-public enum SchemaV6: VersionedSchema {
-    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 6) }
+public enum SchemaV7: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 7) }
 
     public static var models: [any PersistentModel.Type] {
-        SchemaV5.models
+        SchemaV6.models
     }
 }
 
@@ -217,7 +241,7 @@ public enum SchemaV6: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV6.self]
+        [SchemaV7.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -237,13 +261,13 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV6.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV7.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV6.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV7.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {
-        let version = SchemaV6.versionIdentifier
+        let version = SchemaV7.versionIdentifier
         return "\(version.major).\(version.minor).\(version.patch)"
     }
 }

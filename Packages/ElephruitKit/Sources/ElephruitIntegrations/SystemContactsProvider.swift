@@ -16,11 +16,13 @@ import Foundation
 /// - `CNChangeHistoryFetchRequest` and `CNFetchResult.currentHistoryToken` — `API_AVAILABLE(macos(13.0))`
 /// - `CNContactStoreDidChange` — the change notification, posted for any mutation
 ///
-/// ### What it deliberately cannot do
-/// The `CNContactStore` is `private` and never escapes, and ``ContactsProviding`` has no write
-/// method. No method here calls `execute(_:)` with a `CNSaveRequest`, and
+/// ### What it can change, and what it still cannot
+/// The `CNContactStore` is `private` and never escapes. Exactly one method — ``write(_:)`` — changes
+/// anything, and it can only change what a ``ContactWrite`` can express: emails, numbers, sites, job
+/// title, organisation. Names, birthdays, relations, photographs, and postal addresses are not
+/// expressible and so cannot be altered, and no method here can create or delete a contact at all.
 /// `ContactsWriteSafetyTests` asserts that against the source rather than trusting review — the same
-/// arrangement, and for the same reason, as the calendar provider.
+/// arrangement, and for the same reason, as the calendar provider, which remains read-only outright.
 ///
 /// ### Why an actor
 /// `CNContactStore` is not `Sendable`, and the two usual escapes are banned by this project's source
@@ -189,8 +191,14 @@ public actor SystemContactsProvider: ContactsProviding {
             CNContactIdentifierKey,
             CNContactGivenNameKey,
             CNContactFamilyNameKey,
+            // The remaining name parts and the department are fetched because they are writable:
+            // a value the app can clear and never reads is a value it deletes without meaning to.
+            CNContactMiddleNameKey,
+            CNContactNamePrefixKey,
+            CNContactNameSuffixKey,
             CNContactNicknameKey,
             CNContactOrganizationNameKey,
+            CNContactDepartmentNameKey,
             CNContactJobTitleKey,
             CNContactEmailAddressesKey,
             CNContactPhoneNumbersKey,
@@ -492,9 +500,13 @@ public actor SystemContactsProvider: ContactsProviding {
             id: contact.identifier,
             givenName: contact.givenName,
             familyName: contact.familyName,
+            middleName: contact.middleName,
+            namePrefix: contact.namePrefix,
+            nameSuffix: contact.nameSuffix,
             nickname: contact.nickname.isEmpty ? nil : contact.nickname,
             organizationName: contact.organizationName.isEmpty ? nil : contact.organizationName,
             jobTitle: contact.jobTitle.isEmpty ? nil : contact.jobTitle,
+            departmentName: contact.departmentName.isEmpty ? nil : contact.departmentName,
             emailAddresses: contact.emailAddresses.map {
                 ContactLabelledValue(label: Self.label($0.label), value: $0.value as String)
             },
@@ -541,5 +553,142 @@ public actor SystemContactsProvider: ContactsProviding {
     static func label(_ raw: String?) -> String {
         guard let raw, !raw.isEmpty else { return "" }
         return CNLabeledValue<NSString>.localizedString(forLabel: raw)
+    }
+
+    /// The inverse: a display label back into the constant Contacts stores, where one exists.
+    ///
+    /// Round-tripping matters more than it looks. Reading gives "Mobile"; writing that back verbatim
+    /// would store the literal string "Mobile" as a custom label, so the number would show correctly
+    /// in English and stop being *the mobile number* — it would no longer localise, and Contacts would
+    /// no longer group it. Matching against the localisation of each known constant catches the label
+    /// whatever language it was read in. Anything unmatched is a label the user invented and is
+    /// written through untouched.
+    static func labelConstant(for display: String) -> String? {
+        let trimmed = display.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let known = [
+            CNLabelHome,
+            CNLabelWork,
+            CNLabelSchool,
+            CNLabelOther,
+            CNLabelPhoneNumberMobile,
+            CNLabelPhoneNumberMain,
+            CNLabelPhoneNumberiPhone,
+            CNLabelPhoneNumberHomeFax,
+            CNLabelPhoneNumberWorkFax,
+            CNLabelPhoneNumberPager,
+            CNLabelURLAddressHomePage,
+        ]
+
+        return known.first { constant in
+            CNLabeledValue<NSString>.localizedString(forLabel: constant)
+                .caseInsensitiveCompare(trimmed) == .orderedSame
+        }
+    }
+
+    // MARK: - Writing
+
+    /// The one method in this actor that changes anything.
+    ///
+    /// Every guard is here rather than at the call site, because a call site can be added and this
+    /// cannot be got around: no access means nothing is attempted, a vanished record is reported
+    /// rather than recreated, and a read-only account is refused before the save is built. The
+    /// contact is re-fetched immediately before mutating so the write applies to the record as it is
+    /// now, not as it was when the sheet opened.
+    public func write(_ change: ContactWrite) async -> ContactWriteOutcome {
+        guard CNContactStore.authorizationStatus(for: .contacts) == .authorized else {
+            return .notPermitted
+        }
+
+        // Exactly the keys a write can change. Fetching more would mean holding more of somebody's
+        // record in memory than the operation needs, and fetching fewer makes `mutableCopy()` throw
+        // the moment the save touches an unfetched property.
+        let keys: [CNKeyDescriptor] = [
+            CNContactGivenNameKey as CNKeyDescriptor,
+            CNContactMiddleNameKey as CNKeyDescriptor,
+            CNContactFamilyNameKey as CNKeyDescriptor,
+            CNContactNamePrefixKey as CNKeyDescriptor,
+            CNContactNameSuffixKey as CNKeyDescriptor,
+            CNContactNicknameKey as CNKeyDescriptor,
+            CNContactEmailAddressesKey as CNKeyDescriptor,
+            CNContactPhoneNumbersKey as CNKeyDescriptor,
+            CNContactUrlAddressesKey as CNKeyDescriptor,
+            CNContactJobTitleKey as CNKeyDescriptor,
+            CNContactDepartmentNameKey as CNKeyDescriptor,
+            CNContactOrganizationNameKey as CNKeyDescriptor,
+            CNContactBirthdayKey as CNKeyDescriptor,
+        ]
+
+        let existing: CNContact
+        do {
+            // The unified contact, matching every read in this file. Contacts supports saving the
+            // mutable copy of a unified record and distributes the change across the records it was
+            // merged from, which is the behaviour wanted here: the user edited the person they see in
+            // the Contacts app, not one of the accounts underneath.
+            existing = try store.unifiedContact(withIdentifier: change.identifier, keysToFetch: keys)
+        } catch {
+            return .recordMissing
+        }
+
+        guard let mutable = existing.mutableCopy() as? CNMutableContact else {
+            return .failed("the record could not be prepared for editing")
+        }
+
+        mutable.givenName = change.givenName
+        mutable.middleName = change.middleName
+        mutable.familyName = change.familyName
+        mutable.namePrefix = change.namePrefix
+        mutable.nameSuffix = change.nameSuffix
+        mutable.nickname = change.nickname
+
+        mutable.jobTitle = change.jobTitle
+        mutable.departmentName = change.departmentName
+        mutable.organizationName = change.organizationName
+
+        // `DateComponents` with no year is what Contacts stores for a birthday entered without one,
+        // so an unknown year is written as an absence rather than as a year nobody supplied.
+        if let birthday = change.birthday {
+            var components = DateComponents()
+            components.year = birthday.year
+            components.month = birthday.month
+            components.day = birthday.day
+            mutable.birthday = components
+        } else {
+            mutable.birthday = nil
+        }
+
+        mutable.emailAddresses = change.emailAddresses.map {
+            CNLabeledValue(label: Self.writeLabel(for: $0.label), value: $0.value as NSString)
+        }
+        mutable.phoneNumbers = change.phoneNumbers.map {
+            CNLabeledValue(label: Self.writeLabel(for: $0.label), value: CNPhoneNumber(stringValue: $0.value))
+        }
+        mutable.urlAddresses = change.urlAddresses.map {
+            CNLabeledValue(label: Self.writeLabel(for: $0.label), value: $0.value as NSString)
+        }
+
+        let request = CNSaveRequest()
+        request.update(mutable)
+
+        do {
+            try store.execute(request)
+            return .written
+        } catch let error as NSError {
+            // Contacts reports a subscribed or otherwise unwritable account as a save failure rather
+            // than refusing up front, so this is where "read-only" is actually discovered.
+            if error.domain == CNErrorDomain, error.code == CNError.policyViolation.rawValue {
+                return .accountIsReadOnly
+            }
+            return .failed(error.localizedDescription)
+        }
+    }
+
+    /// A label ready for storage: the Contacts constant when one matches, the user's own words when
+    /// none does.
+    private static func writeLabel(for display: String) -> String? {
+        let trimmed = display.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return labelConstant(for: trimmed) ?? trimmed
     }
 }
