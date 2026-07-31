@@ -34,6 +34,8 @@ struct PersonWorkspaceView: View {
     @State private var chartKind: RelationshipChartKind?
     @State private var pendingAction: ContactActionRequest?
     @State private var correctionTarget: PortraitValue?
+    @State private var isEditingContactDetails = false
+    @State private var pendingWriteBack: ContactDetailsEdit?
     @State private var loadFailure: AppError?
 
     var body: some View {
@@ -66,7 +68,11 @@ struct PersonWorkspaceView: View {
                         onOpenSource: { navigation.selectItem($0) }
                     )
 
-                    PersonContactSection(person: person, onAction: { pendingAction = $0 })
+                    PersonContactSection(
+                        person: person,
+                        onAction: { pendingAction = $0 },
+                        onEdit: { isEditingContactDetails = true }
+                    )
 
                     PersonRelationshipsSection(
                         person: person,
@@ -124,6 +130,22 @@ struct PersonWorkspaceView: View {
                 chartKind = nil
                 navigation.selectItem(id)
             }
+        }
+        .sheet(isPresented: $isEditingContactDetails) {
+            EditContactDetailsSheet(
+                person: person,
+                onSave: { edit in
+                    isEditingContactDetails = false
+                    reload()
+                    // Saved here either way. The address book is a separate question, and only one
+                    // worth asking for somebody whose record came from there.
+                    if person.personProfile?.contactsIdentifier != nil { pendingWriteBack = edit }
+                },
+                onCancel: { isEditingContactDetails = false }
+            )
+        }
+        .sheet(item: $pendingWriteBack) { edit in
+            ContactWriteBackSheet(person: person, edit: edit) { pendingWriteBack = nil }
         }
         .sheet(item: $correctionTarget) { value in
             CorrectFactSheet(

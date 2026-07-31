@@ -192,6 +192,43 @@ public actor FixtureContactsProvider: ContactsProviding {
         }
     }
 
+    // MARK: - Writing
+
+    /// Applies a write to the synthetic store, with the same refusals the real one makes.
+    ///
+    /// Faithful about the refusals in particular: a fixture that always succeeds would let the
+    /// caller's handling of a read-only account or a vanished record go untested, and those are the
+    /// paths nobody exercises by hand.
+    public func write(_ change: ContactWrite) async -> ContactWriteOutcome {
+        guard currentAuthorization == .authorized else { return .notPermitted }
+
+        guard let index = contacts.firstIndex(where: { $0.id == change.identifier }) else {
+            return .recordMissing
+        }
+
+        let container = contacts[index].containerIdentifier
+        if let container, containers.first(where: { $0.id == container })?.isReadOnly == true {
+            return .accountIsReadOnly
+        }
+
+        var updated = contacts[index]
+        updated.jobTitle = change.jobTitle
+        updated.organizationName = change.organizationName
+        updated.emailAddresses = change.emailAddresses
+        updated.phoneNumbers = change.phoneNumbers
+        updated.urlAddresses = change.urlAddresses
+
+        // Postal addresses are untouched because a write cannot carry them — the same guarantee the
+        // real provider makes, asserted here by there being nothing to assign.
+        contacts[index] = updated
+
+        version += 1
+        history[version] = ContactChangeSet(changedIdentifiers: [change.identifier])
+        announceChange()
+
+        return .written
+    }
+
     // MARK: - Mutation, for tests
 
     /// Adds or replaces a contact, as an edit in the Contacts app would.

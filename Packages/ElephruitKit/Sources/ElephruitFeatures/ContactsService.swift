@@ -117,6 +117,22 @@ public final class ContactsService {
         authorization = await provider.authorization
     }
 
+    // MARK: - Writing
+
+    /// Passes a confirmed edit to the address book.
+    ///
+    /// A passthrough on purpose: every guard that matters — access, a vanished record, a read-only
+    /// account, what a write is even able to say — belongs to the provider, where it cannot be got
+    /// around by adding a call site. What this adds is the one thing the provider cannot know, which
+    /// is that the integration is switched off entirely; in that case the provider is already a
+    /// `NoContactsProvider` and refuses, so this needs no branch of its own.
+    ///
+    /// The only caller is `ContactWriteBackSheet`, and it has already shown the user each line that
+    /// would change and waited for a click.
+    public func write(_ change: ContactWrite) async -> ContactWriteOutcome {
+        await provider.write(change)
+    }
+
     public func refreshAccounts() async {
         isLoading = true
         defer { isLoading = false }

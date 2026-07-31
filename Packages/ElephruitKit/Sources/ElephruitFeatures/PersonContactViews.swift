@@ -17,32 +17,54 @@ import SwiftUI
 /// kind — all emails, then all numbers — answers a question nobody asks and buries that one. See
 /// ``ContactAffinity``.
 ///
-/// Nothing here is editable in place. These values belong to the address book for anybody who has
-/// linked one, and offering an edit that a refresh would silently discard would be worse than
-/// offering none.
+/// ### Editing, and what happens to a linked record
+/// These values were read-only for a long time, on the grounds that they belong to the address book
+/// for anybody who has linked one and that an edit a refresh would silently discard is worse than no
+/// edit at all. The second half of that is still true; the conclusion no longer follows, because the
+/// edit is now offered back to the address book rather than only kept here. An unlinked person is
+/// simply edited. A linked one is edited here and then asked about there — see
+/// ``ContactWriteBackSheet``, which is the only thing in the app that can change a system contact and
+/// does nothing at all without a click.
 struct PersonContactSection: View {
     let person: Item
     let onAction: (ContactActionRequest) -> Void
+    let onEdit: () -> Void
 
     var body: some View {
-        if !groups.isEmpty {
-            VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+        // The header stays even with nothing under it: a person with no number at all is exactly who
+        // needs the Add button, and hiding the whole section from them was why there was no way in.
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            HStack {
                 SectionHeader("Contact", count: details.count)
 
-                ForEach(groups) { group in
-                    VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-                        ContactAffinityChip(group.affinity)
+                Button(action: onEdit) {
+                    Label(details.isEmpty ? "Add" : "Edit", systemImage: details.isEmpty ? "plus" : "pencil")
+                }
+                .buttonStyle(.borderless)
+                .font(Theme.Text.metadata)
+                .help("Edit these details")
+                .accessibilityIdentifier(AccessibilityID.People.editContactDetails)
+            }
 
-                        ForEach(group.details) { detail in
-                            ContactDetailRow(detail: detail) { act(on: detail) }
-                        }
+            if groups.isEmpty {
+                Text("No address, number, or site recorded.")
+                    .font(Theme.Text.rowSubtitle)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+            }
+
+            ForEach(groups) { group in
+                VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                    ContactAffinityChip(group.affinity)
+
+                    ForEach(group.details) { detail in
+                        ContactDetailRow(detail: detail) { act(on: detail) }
                     }
                 }
             }
-            .padding(.horizontal, Theme.Spacing.large)
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier(AccessibilityID.People.contactDetails)
         }
+        .padding(.horizontal, Theme.Spacing.large)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(AccessibilityID.People.contactDetails)
     }
 
     private var details: [ContactDetail] {
