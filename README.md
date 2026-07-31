@@ -14,9 +14,10 @@ phase plan and its definition of done.
 |---|---|
 | `xcodebuild` Debug and Release | Succeeds, zero warnings |
 | `swift build` (all eight modules) | Succeeds, zero warnings |
-| `swift test` | 922 tests, all passing |
+| `swift test` | 1,027 tests, all passing |
 | Sandboxed, five entitlements only | Verified against the signed binary |
-| Store opens on disk, all fifteen entities materialise | Verified against the running app |
+| Store opens on disk, all eighteen entities materialise | Sixteen verified against the running app; the two communication entities by the persistence suite only |
+| Handing a message to Mail, Messages, or the phone | Needs no new entitlement — see [docs/19](docs/19-permissions-matrix.md) |
 | Light visual review | Done — People workspace, estimates, groups, duplicates |
 | Dark visual review | **Not done** — see below |
 
@@ -109,6 +110,8 @@ Read these before changing anything structural.
 | [22 — People module record](docs/22-people-module-record.md) | What was built, the bugs found, what was deliberately left |
 | [23 — Contacts import scope](docs/23-contacts-import-scope.md) | The six decisions behind reading the address book |
 | [24 — Contacts import record](docs/24-contacts-import-record.md) | Permission, provenance, refresh, and two SDK facts worth knowing |
+| [25 — Communication tracking scope](docs/25-communication-tracking-scope.md) | The six decisions behind recording that you reached out |
+| [26 — Communication tracking record](docs/26-communication-tracking-record.md) | What each callback means, what is never claimed, platform limits |
 
 Phase records: [10 — A scope](docs/10-phase-a-scope.md) ·
 [11 — B](docs/11-phase-b-record.md) · [12 — C](docs/12-phase-c-record.md) ·

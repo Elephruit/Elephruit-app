@@ -63,6 +63,9 @@ The deprecated `NSCalendarsUsageDescription` is deliberately not used, and the f
 | **Camera / Continuity Camera** (business-card scan) | `device.camera` *(not present)* | `NSCameraUsageDescription` *(not present)* | Would be **off** | Invoked only from "Scan a card" | Feature hidden, not broken | To be written: scan never creates a contact silently |
 | **Idle detection** | none — `IOKit` idle time needs no entitlement | none | Would be **off** | Settings | Timer behaves exactly as today | Must never delete time silently |
 | **Activity suggestions** | would need Accessibility | — | **Rejected for now** | — | — | Requires a separate privacy review before it is even designed |
+| **Handing a message to another app** | **none** — `NSSharingService` and `NSWorkspace.open` need none, inside the sandbox | none | On | Every externally-visible action is confirmed on a sheet first | — | `CommunicationSafetyTests` bans 14 Messages symbols and 5 scripting ones. Nothing may set `delivered` |
+| **Email provider API** (Gmail, Graph) | would need **network** | — | Would be **off** | OAuth, never a password; preview and confirm before any send | Everything tops out at "confirmed by you", which is the shipping behaviour | `ConfirmedSendRequest` cannot be built without a `SendConfirmation`. Tokens in the Keychain only |
+| **MailKit compose extension** | its own target and provisioning | — | Would be **off** | Installed deliberately | **Must never be required.** Correlation falls through to recipient, subject, and time | The header carries a bare UUID — no person, no address, no subject |
 | **Network** | **none, ever** | — | — | — | — | Absence of the entitlement is the proof |
 
 ---
