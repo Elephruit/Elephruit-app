@@ -262,18 +262,37 @@ public enum SidebarRegistry {
 
     /// Available destinations in a band, in display order.
     public static func destinations(in band: SidebarDestination.Band) -> [SidebarDestination] {
-        allDeclared.filter { $0.isAvailable && $0.band == band }
+        destinationsByBand[band] ?? []
     }
 
     /// The destinations a module draws at the top of its own sidebar, in display order.
     public static func destinations(in module: AppModule) -> [SidebarDestination] {
-        allDeclared.filter { $0.isAvailable && $0.module == module }
+        destinationsByModule[module] ?? []
     }
 
     /// Every available destination, in display order.
-    public static var available: [SidebarDestination] {
-        SidebarDestination.Band.allCases.flatMap { destinations(in: $0) }
-    }
+    public static let available: [SidebarDestination] = SidebarDestination.Band.allCases
+        .flatMap { band in allDeclared.filter { $0.isAvailable && $0.band == band } }
+
+    // MARK: Derived once
+    //
+    // ``allDeclared`` is a constant, so every answer derived from it is one too. These were `filter`
+    // calls behind function and computed-property faces, which read as free and were not: each
+    // sidebar row asks for its band on every evaluation of its body, and the shell asks for
+    // ``nonTruncatingTitles`` twice per evaluation of the window's. Deriving them once at first use
+    // costs the same work one time and removes it from every frame.
+
+    private static let destinationsByBand: [SidebarDestination.Band: [SidebarDestination]] =
+        Dictionary(grouping: available, by: \.band)
+
+    private static let destinationsByModule: [AppModule: [SidebarDestination]] = {
+        var grouped: [AppModule: [SidebarDestination]] = [:]
+        for destination in available {
+            guard let module = destination.module else { continue }
+            grouped[module, default: []].append(destination)
+        }
+        return grouped
+    }()
 
     /// The destination a numeric shortcut selects, if any.
     ///
@@ -287,19 +306,15 @@ public enum SidebarRegistry {
     }
 
     /// Global destinations, then each module's front door.
-    public static var shortcutOrder: [SidebarDestination] {
-        destinations(in: .primary) + AppModule.displayOrder.compactMap { module in
-            destinations(in: module).first
-        }
-    }
+    public static let shortcutOrder: [SidebarDestination] = destinations(in: .primary)
+        + AppModule.displayOrder.compactMap { destinations(in: $0).first }
 
     /// Titles that must never be truncated, so the sidebar's minimum width can be derived from them.
     ///
     /// Module names are included alongside the destinations: the module list is primary navigation
     /// now, and "Bookm…" would be exactly the ambiguity the rule exists to prevent.
-    public static var nonTruncatingTitles: [String] {
+    public static let nonTruncatingTitles: [String] =
         available.filter { !$0.mayTruncate }.map(\.title) + AppModule.displayOrder.map(\.title)
-    }
 }
 
 /// A row derived from the store rather than declared: a pinned item, a tag, or a saved search.
