@@ -102,7 +102,7 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 | P8 | Merged reverse-chronological timeline | **Met** (S16) | `PersonWorkspaceService.timeline` walks both link directions, grouped by month, five filters | — |
 | P9 | Celebrations | **Met** (S16) | `CelebrationCalendar`; partial dates, leap days compared by year, memorials never celebratory | — |
 | P10 | Attendee → person matching | **Met** (calendar module) | `EventInspectorView.unmatchedAttendees` matches by email then name and *offers* the link rather than making it — two people called James Wilson is not a rare case | — |
-| P11 | Contacts identity and linking | **Met** (S17) | Onboarding, full import with review, `SystemContactLink` + `ImportedContactValue` provenance, ongoing refresh, unlink/relink. Read-only by construction | — |
+| P11 | Contacts identity and linking | **Met** (S17) | Onboarding, full import with review, `SystemContactLink` + `ImportedContactValue` provenance, ongoing refresh, unlink/relink. Writes are confirmed per edit and limited to five fields by construction | — |
 | P12 | Reciprocal relationships | **Met** (S16) | `PersonRelationship` written as a pair; involution asserted over `allCases`; the user's own word is never mirrored | — |
 | P13 | Observations with history and provenance | **Met** (S16) | `PersonObservationRecord` + `FactLedger`; correction appends and never deletes | — |
 | P14 | Temporal estimates labelled as estimates | **Met** (S16) | `AgeEstimator`, `GradeEstimator`, `EstimateProvenance`; 25 tests including the summer school-year gap | — |

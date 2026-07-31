@@ -88,9 +88,16 @@ let package = Package(
         // MARK: - Tests
 
         .testTarget(name: "ElephruitCoreTests", dependencies: ["ElephruitCore"], swiftSettings: .strict),
+        // `ElephruitIntegrations` is here for `FixtureRemindersProvider` — the in-memory Reminders
+        // store. It is what makes "no automated test touches the developer's real Reminders
+        // database" true by construction: the fake is the only implementation these tests can
+        // reach, because they never import EventKit and never construct the adapter that does.
         .testTarget(
             name: "ElephruitPersistenceTests",
-            dependencies: ["ElephruitPersistence", "ElephruitModel", "ElephruitCore", "ElephruitDesign"],
+            dependencies: [
+                "ElephruitPersistence", "ElephruitModel", "ElephruitCore", "ElephruitDesign",
+                "ElephruitIntegrations",
+            ],
             swiftSettings: .strict
         ),
         .testTarget(

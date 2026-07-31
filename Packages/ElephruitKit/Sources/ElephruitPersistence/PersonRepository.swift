@@ -9,6 +9,17 @@ public struct PersonDraft: Sendable, Hashable {
     public var fullName: String
     public var givenName: String?
     public var familyName: String?
+
+    /// The parts of a name Contacts keeps separately.
+    ///
+    /// Read on import for the same reason they are writable: **anything a write can clear, a read has
+    /// to learn.** Without these the app would import somebody as "Dr Maya Lin Chen PhD", store only
+    /// "Maya" and "Chen", and then offer the address book a write that blanked the three parts it
+    /// never knew about. `contactWriteCanOnlyClearWhatImportReads` asserts the pairing.
+    public var middleName: String?
+    public var namePrefix: String?
+    public var nameSuffix: String?
+    public var departmentName: String?
     public var nickname: String?
     public var pronouns: String?
     public var pronunciation: String?
@@ -34,6 +45,10 @@ public struct PersonDraft: Sendable, Hashable {
         fullName: String,
         givenName: String? = nil,
         familyName: String? = nil,
+        middleName: String? = nil,
+        namePrefix: String? = nil,
+        nameSuffix: String? = nil,
+        departmentName: String? = nil,
         nickname: String? = nil,
         pronouns: String? = nil,
         pronunciation: String? = nil,
@@ -55,6 +70,10 @@ public struct PersonDraft: Sendable, Hashable {
         self.fullName = fullName
         self.givenName = givenName
         self.familyName = familyName
+        self.middleName = middleName
+        self.namePrefix = namePrefix
+        self.nameSuffix = nameSuffix
+        self.departmentName = departmentName
         self.nickname = nickname
         self.pronouns = pronouns
         self.pronunciation = pronunciation
@@ -257,6 +276,10 @@ public final class SwiftDataPersonRepository: PersonRepository {
         }
 
         // Everything else fills a gap rather than replacing a value.
+        if let middleName = draft.middleName { profile.middleName = middleName }
+        if let namePrefix = draft.namePrefix { profile.namePrefix = namePrefix }
+        if let nameSuffix = draft.nameSuffix { profile.nameSuffix = nameSuffix }
+        if let department = draft.departmentName { profile.departmentName = department }
         if let nickname = draft.nickname { profile.nickname = nickname }
         if let pronouns = draft.pronouns { profile.pronouns = pronouns }
         if let pronunciation = draft.pronunciation { profile.pronunciation = pronunciation }

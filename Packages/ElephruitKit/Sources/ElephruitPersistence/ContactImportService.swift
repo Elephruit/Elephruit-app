@@ -212,6 +212,12 @@ public final class ContactImportService {
             fullName: contact.displayName,
             givenName: contact.givenName.isEmpty ? nil : contact.givenName,
             familyName: contact.familyName.isEmpty ? nil : contact.familyName,
+            // Read because they are writable. A field the app can clear and cannot learn is a field
+            // it silently deletes the first time somebody edits an imported person.
+            middleName: contact.middleName.isEmpty ? nil : contact.middleName,
+            namePrefix: contact.namePrefix.isEmpty ? nil : contact.namePrefix,
+            nameSuffix: contact.nameSuffix.isEmpty ? nil : contact.nameSuffix,
+            departmentName: contact.departmentName.isEmpty ? nil : contact.departmentName,
             nickname: contact.nickname.isEmpty ? nil : contact.nickname,
             pronunciation: contact.phoneticName,
             roleTitle: contact.roleTitle,

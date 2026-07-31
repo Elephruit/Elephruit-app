@@ -167,7 +167,69 @@ public enum SchemaV5: VersionedSchema {
     }
 }
 
-/// The sixth schema: the calendar module.
+/// The sixth schema: the fields a linked contact needs in order to be corrected in full.
+///
+/// Four nullable columns on `PersonProfile` — `departmentName`, `middleName`, `namePrefix`,
+/// `nameSuffix` — and no new entity. **Additive**, so a store opened under this version gains four
+/// empty columns and keeps every byte it had.
+///
+/// ### Why it exists at all
+/// Contacts has held these since long before this app did, so a person imported from the address book
+/// arrived with a department and a suffix that the CRM simply dropped. That was tolerable while the
+/// integration was read-only — nothing was going to be written back, so nothing was going to be lost
+/// on the way out. It stopped being tolerable the moment an edit could travel in the other direction:
+/// a write assembled from a model missing these fields would offer to blank them.
+///
+/// ### Why lightweight inference is still right
+/// The same argument as `SchemaV4` and `SchemaV5`, and a weaker case than either: no entity, no
+/// relationship, no rename, no type change. Nullable columns are precisely what Core Data's inference
+/// exists for. ADR 0005 still reserves the model-type freeze for the first change that cannot be
+/// inferred, and this is not it.
+public enum SchemaV6: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 6) }
+
+    public static var models: [any PersistentModel.Type] { SchemaV5.models }
+}
+
+/// The seventh schema: the Tasks module.
+///
+/// **No new entities.** Twenty-one new attributes on ``Item`` — the reminder and its ownership, the
+/// planning marks, the checklist blob, the recurrence-series identity, the external-reminder link,
+/// and the migration's review marker — plus one on ``SavedSearch`` for a smart list's rules. Every
+/// one is optional or defaulted, so this is additive throughout: a store opened under this version
+/// gains a set of nullable columns it is free to ignore, and nothing existing changes shape.
+///
+/// ### Why so many columns rather than a satellite entity
+/// A `TaskDetail` entity hanging off `Item` was the alternative, and it is worse in the two places
+/// that matter. Every task view would fault in a second row to decide whether a task is in Today —
+/// which is the query that runs most often and has the tightest budget — and every one of these
+/// fields would have to be optional *twice*: once because the column is nullable and once because
+/// the satellite might be absent. `Item` is already a wide row by decision (ADR 0002), and
+/// `ItemFields` plus `ItemValidator` are the mechanism that stops a note acquiring a task's columns.
+/// That mechanism is extended here rather than worked around.
+///
+/// ### What is deliberately *not* here
+/// - **No new date column.** `dueAt` becomes the deadline and `startAt` the availability date; both
+///   already existed. Adding a third would have meant migrating live data on a guess about what an
+///   old value meant, which is exactly what `TaskDateMigration` refuses to do.
+/// - **No entity for smart lists.** A `SavedSearch` already carries a name, a symbol, a colour, a
+///   sidebar place, an order, and a soft delete. See the note on `SavedSearch.taskFilterData`.
+/// - **No entity for checklist items.** They are never queried, linked, or listed on their own.
+///
+/// ### Why it is a version at all
+/// For the reason spelled out on ``SchemaV3``: the version identifier is what the `.schema-version`
+/// stamp beside the store is compared against, and a mismatch is what triggers the backup in
+/// `PersistenceStack`. A schema change that did not bump the version would migrate real user data
+/// with no backup taken.
+public enum SchemaV7: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 7) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV6.models
+    }
+}
+
+/// The eighth schema: the calendar module.
 ///
 /// Two new entities — ``CalendarSetRecord`` and ``EventTemplateRecord`` — and nothing else.
 /// **Additive**, so a store opened under this version gains two empty tables and keeps everything it
@@ -195,11 +257,11 @@ public enum SchemaV5: VersionedSchema {
 /// bytes correctly; `SchemaV4` did it three times over and `SchemaV5` three more. ADR 0005 reserves
 /// the model-type freeze for the first change that cannot be inferred — a rename, a type change, a
 /// computed value — and there is none.
-public enum SchemaV6: VersionedSchema {
-    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 6) }
+public enum SchemaV8: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 8) }
 
     public static var models: [any PersistentModel.Type] {
-        SchemaV5.models + [
+        SchemaV7.models + [
             CalendarSetRecord.self,
             EventTemplateRecord.self,
         ]
@@ -218,7 +280,7 @@ public enum SchemaV6: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV6.self]
+        [SchemaV8.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -238,13 +300,13 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV6.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV8.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV6.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV8.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {
-        let version = SchemaV6.versionIdentifier
+        let version = SchemaV8.versionIdentifier
         return "\(version.major).\(version.minor).\(version.patch)"
     }
 }
