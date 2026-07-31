@@ -62,6 +62,21 @@ struct SearchModeTests {
         #expect(navigation.shouldSelectSearchQuery == false)
     }
 
+    @Test("Command-F requests focus every time, even while search is active")
+    func repeatedSearchRequestsRemainObservable() {
+        let navigation = NavigationModel()
+
+        navigation.beginSearch()
+        let firstRequest = navigation.searchFocusRequest
+        navigation.searchQuery = "people in Austin"
+
+        navigation.beginSearch()
+
+        #expect(navigation.searchFocusRequest == firstRequest + 1)
+        #expect(navigation.isSearchActive)
+        #expect(navigation.searchQuery == "people in Austin", "refocusing must not replace the live query")
+    }
+
     @Test("Leaving search restores the selection it began with")
     func selectionIsRestored() {
         let navigation = NavigationModel()

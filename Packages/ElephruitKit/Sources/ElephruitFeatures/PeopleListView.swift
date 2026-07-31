@@ -171,6 +171,10 @@ struct PeopleListView: View {
             guard isActive, navigation.selection.isPeopleDestination else { return }
             isSearchFocused = true
         }
+        .onChange(of: navigation.searchFocusRequest) { _, _ in
+            guard navigation.isSearchActive, navigation.selection.isPeopleDestination else { return }
+            isSearchFocused = true
+        }
         .navigationTitle(navigation.windowTitle)
         .accessibilityIdentifier(AccessibilityID.People.list)
         .task(id: scope) { reload() }

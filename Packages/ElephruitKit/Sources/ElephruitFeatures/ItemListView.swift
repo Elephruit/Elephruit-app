@@ -67,6 +67,10 @@ public struct ItemListView: View {
             .onChange(of: navigation.isSearchActive) { _, isActive in
                 searchModeDidChange(isActive: isActive)
             }
+            .onChange(of: navigation.searchFocusRequest) { _, _ in
+                guard navigation.isSearchActive else { return }
+                isSearchFieldFocused = true
+            }
             .accessibilityIdentifier(AccessibilityID.ItemList.root)
     }
 
