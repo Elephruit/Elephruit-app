@@ -635,7 +635,7 @@ public enum PendingCalendarRequest: Sendable, Hashable {
 /// list where ⌫ already worked — a shortcut printed in a menu that does not fire is worse than an
 /// absent one. Each middle column publishes its own, because what "delete" means differs between
 /// them and the menu should not have to know.
-public struct RowActions: Sendable {
+public struct RowActions: Sendable, Equatable {
     public var moveToTrash: @MainActor () -> Void
 
     /// Whether there is anything selected to act on.
@@ -644,6 +644,20 @@ public struct RowActions: Sendable {
     public init(isEnabled: Bool, moveToTrash: @escaping @MainActor () -> Void) {
         self.isEnabled = isEnabled
         self.moveToTrash = moveToTrash
+    }
+
+    /// Equal when they would look the same in the menu.
+    ///
+    /// The closure is deliberately not part of this, and cannot be: closures do not compare. A fresh
+    /// one is built on every body evaluation of the list that publishes it, so without an `==` that
+    /// ignores it SwiftUI sees a new focused value on every frame and raises
+    /// *"FocusedValue update tried to update multiple times per frame"* — which is what it did.
+    ///
+    /// Ignoring it is also correct rather than merely convenient. Every one of those closures acts
+    /// on whatever the list currently holds, so they are interchangeable; the only thing that
+    /// changes what the *menu* does is whether it is enabled.
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.isEnabled == rhs.isEnabled
     }
 }
 
