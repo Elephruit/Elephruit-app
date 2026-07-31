@@ -13,23 +13,30 @@ import Foundation
 
 // MARK: - Calendar
 
-/// Reading the user's calendar.
+/// Reading and writing the user's calendar.
 ///
-/// ### Read-only by construction, not by promise
-/// There is **no write method on this protocol**, and no way to reach the underlying `EKEventStore`
-/// through it. Writing to a calendar from Elephruit is therefore a compile error rather than a rule
-/// someone might forget — which matters more than usual here, because of what EventKit makes us ask
-/// for.
-///
-/// ### The permission is broader than the use, and that is Apple's model, not a choice
+/// ### The permission is broader than most uses, and that is Apple's model, not a choice
 /// EventKit offers exactly two requests: `requestFullAccessToEvents()` and
 /// `requestWriteOnlyAccessToEvents()`. **There is no read-only tier.** Write-only is for apps that
-/// only add events, so an app that merely *reads* has to ask for full access — verified against the
+/// only add events, so an app that reads at all has to ask for full access — verified against the
 /// macOS SDK headers, where `requestAccessToEntityType:` is deprecated as of macOS 14.
 ///
-/// So the app asks for more than it uses, and cannot avoid it. What it can do is make the unused
-/// half unreachable, which is what this protocol does, and prove it, which is what
-/// `CalendarWriteSafetyTests` does.
+/// ### What the write half is, and what it deliberately is not
+/// The calendar module creates and edits events, so the write half is now used rather than left
+/// unreachable. What replaces "there is no write method" as the guarantee is narrower and, for a
+/// calendar app, more useful:
+///
+/// 1. **Writes take an ``EventDraft`` and nothing else.** A draft holds only the fields a person can
+///    decide. It cannot carry a linked person, a private note, a project, or any other Elephruit
+///    record, so no amount of later editing can leak the CRM into a synced calendar event — the type
+///    has nowhere to put it. `CalendarWriteSafetyTests` fails if a field is added to it.
+/// 2. **Every mutating EventKit call lives in one of three named methods** on the adapter, and a
+///    source check fails if one appears anywhere else — including in a method whose name says it
+///    reads.
+/// 3. **Scope is always explicit.** Nothing may be saved or deleted across a recurring series
+///    without an ``EventEditScope``, so "this one" can never silently mean "all of them".
+///
+/// The `EKEventStore` itself remains private and never escapes.
 public protocol CalendarProviding: Sendable, AnyObject {
     /// The current authorisation, read without prompting.
     var authorization: IntegrationAuthorization { get async }
@@ -41,18 +48,60 @@ public protocol CalendarProviding: Sendable, AnyObject {
     /// ``IntegrationAuthorization/isWorthAsking`` exists.
     func requestAccess() async -> IntegrationAuthorization
 
+    // MARK: Discovery
+
+    /// Every calendar configured on this Mac, across every account.
+    ///
+    /// Empty when access has not been granted, which is a legitimate state rather than an error.
+    func calendars() async -> [CalendarInfo]
+
+    /// The store's own default calendar for new events, when there is one.
+    func defaultCalendarIdentifier() async -> String?
+
+    // MARK: Reading
+
     /// Events overlapping `range`, in start order.
+    ///
+    /// - Parameter calendarIdentifiers: Which calendars to read. `nil` means all of them; an empty
+    ///   array means none, and returns nothing without touching the store — which is what a Calendar
+    ///   Set with everything switched off should cost.
     ///
     /// Returns an empty array rather than failing when access has not been granted: an unauthorised
     /// calendar is a legitimate state with nothing in it, not an error to be handled at every call
     /// site.
-    func events(in range: Range<Date>) async -> [CalendarEventSummary]
+    func events(in range: Range<Date>, calendarIdentifiers: [String]?) async -> [CalendarEventSummary]
 
     /// One occurrence, if it still exists.
     ///
     /// Used to refresh a stored link. `nil` means the occurrence is gone — deleted, or the calendar
     /// was removed — which is a state the app records rather than an error.
     func event(matching identity: EventIdentity) async -> CalendarEventSummary?
+
+    // MARK: Writing
+
+    /// Creates an event and returns it as it was actually saved.
+    ///
+    /// The returned summary is re-read from the store rather than assembled from the draft, so the
+    /// caller sees what the calendar did with it — a rounded time, a rejected alarm, an identifier.
+    func createEvent(_ draft: EventDraft) async -> Result<CalendarEventSummary, CalendarWriteFailure>
+
+    /// Applies a draft to an event that already exists.
+    ///
+    /// - Parameter scope: Which occurrences the change reaches. Required, and never defaulted: the
+    ///   choice belongs to the user, and a default here would be the app making it for them.
+    func updateEvent(
+        matching identity: EventIdentity,
+        with draft: EventDraft,
+        scope: EventEditScope
+    ) async -> Result<CalendarEventSummary, CalendarWriteFailure>
+
+    /// Removes an event, or part of a series.
+    func deleteEvent(
+        matching identity: EventIdentity,
+        scope: EventEditScope
+    ) async -> Result<Void, CalendarWriteFailure>
+
+    // MARK: Changes
 
     /// Fires when the calendar database changes, so views can re-read.
     ///
@@ -61,11 +110,19 @@ public protocol CalendarProviding: Sendable, AnyObject {
     var changes: AsyncStream<Void> { get }
 }
 
+extension CalendarProviding {
+    /// Every calendar, for the common case where no set is applied.
+    public func events(in range: Range<Date>) async -> [CalendarEventSummary] {
+        await events(in: range, calendarIdentifiers: nil)
+    }
+}
+
 /// The default, and what the app uses until calendar access is deliberately enabled.
 ///
 /// Reports ``IntegrationAuthorization/notRequested`` and returns nothing. Every path through the
 /// interface therefore runs against a real implementation from the first launch, rather than a `nil`
-/// branch that only executes for users who grant permission.
+/// branch that only executes for users who grant permission — including the write paths, which
+/// refuse in the same shape a revoked permission would.
 public final class NoCalendarProvider: CalendarProviding {
     public init() {}
 
@@ -76,9 +133,33 @@ public final class NoCalendarProvider: CalendarProviding {
         return .unavailable
     }
 
-    public func events(in range: Range<Date>) async -> [CalendarEventSummary] { [] }
+    public func calendars() async -> [CalendarInfo] { [] }
+    public func defaultCalendarIdentifier() async -> String? { nil }
+
+    public func events(in range: Range<Date>, calendarIdentifiers: [String]?) async -> [CalendarEventSummary] {
+        []
+    }
 
     public func event(matching identity: EventIdentity) async -> CalendarEventSummary? { nil }
+
+    public func createEvent(_ draft: EventDraft) async -> Result<CalendarEventSummary, CalendarWriteFailure> {
+        .failure(.notAuthorized)
+    }
+
+    public func updateEvent(
+        matching identity: EventIdentity,
+        with draft: EventDraft,
+        scope: EventEditScope
+    ) async -> Result<CalendarEventSummary, CalendarWriteFailure> {
+        .failure(.notAuthorized)
+    }
+
+    public func deleteEvent(
+        matching identity: EventIdentity,
+        scope: EventEditScope
+    ) async -> Result<Void, CalendarWriteFailure> {
+        .failure(.notAuthorized)
+    }
 
     /// A stream that never yields and never finishes, which is the honest shape: nothing will change,
     /// and a finished stream would make a consumer think it should stop listening.
