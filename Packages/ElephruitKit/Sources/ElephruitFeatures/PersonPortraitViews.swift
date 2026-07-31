@@ -573,29 +573,40 @@ private struct ChildProfileCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            Button(action: onOpen) {
-                HStack(spacing: Theme.Spacing.small) {
-                    PersonAvatar(name: child.displayTitle, colorName: child.colorName, size: 34)
+            HStack(spacing: Theme.Spacing.tight) {
+                Button(action: onOpen) {
+                    HStack(spacing: Theme.Spacing.small) {
+                        PersonAvatar(name: child.displayTitle, colorName: child.colorName, size: 34)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(child.displayTitle)
-                            .font(.system(.callout, weight: .semibold))
-                            .foregroundStyle(Theme.Colors.primaryText)
-                            .lineLimit(1)
-                        Text(detail)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(child.displayTitle)
+                                .font(.system(.callout, weight: .semibold))
+                                .foregroundStyle(Theme.Colors.primaryText)
+                                .lineLimit(1)
+                            Text(detail)
+                                .font(Theme.Text.metadata)
+                                .foregroundStyle(Theme.Colors.secondaryText)
+                                .lineLimit(2)
+                        }
+
+                        Spacer(minLength: Theme.Spacing.tight)
+                        Image(systemName: "chevron.right")
                             .font(Theme.Text.metadata)
-                            .foregroundStyle(Theme.Colors.secondaryText)
-                            .lineLimit(2)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
                     }
-
-                    Spacer(minLength: Theme.Spacing.tight)
-                    Image(systemName: "chevron.right")
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.tertiaryText)
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+
+                Button(action: onEdit) {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                }
+                .buttonStyle(.borderless)
+                .help("Edit or delete relationship")
+                .accessibilityLabel("Edit relationship with \(child.displayTitle)")
             }
-            .buttonStyle(.plain)
 
             ForEach(summaryFacts) { fact in
                 HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.tight) {
@@ -686,26 +697,39 @@ struct RelatedPersonChip: View {
     let onEdit: () -> Void
 
     var body: some View {
-        Button(action: onOpen) {
-            HStack(spacing: Theme.Spacing.small) {
-                PersonAvatar(name: name, colorName: colorName, size: 26)
+        HStack(spacing: Theme.Spacing.hairline) {
+            Button(action: onOpen) {
+                HStack(spacing: Theme.Spacing.small) {
+                    PersonAvatar(name: name, colorName: colorName, size: 26)
 
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(name)
-                        .font(Theme.Text.rowSubtitle)
-                        .lineLimit(1)
-                    Text(isPlaceholder ? "\(label) · sketch" : label)
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.tertiaryText)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(name)
+                            .font(Theme.Text.rowSubtitle)
+                            .lineLimit(1)
+                        Text(isPlaceholder ? "\(label) · sketch" : label)
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
+                            .lineLimit(1)
+                    }
                 }
+                .padding(.leading, Theme.Spacing.small)
+                .padding(.vertical, Theme.Spacing.tight)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, Theme.Spacing.small)
-            .padding(.vertical, Theme.Spacing.tight)
-            .background(Theme.Colors.subtleFill, in: Capsule())
-            .contentShape(Capsule())
+            .buttonStyle(.plain)
+
+            Button(action: onEdit) {
+                Image(systemName: "ellipsis")
+                    .font(Theme.Text.metadata)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.borderless)
+            .help("Edit or delete relationship")
+            .accessibilityLabel("Edit relationship with \(name)")
         }
-        .buttonStyle(.plain)
+        .padding(.trailing, Theme.Spacing.tight)
+        .background(Theme.Colors.subtleFill, in: Capsule())
         .help(isPlaceholder ? "\(name) — a lightweight record with no details yet" : name)
         .accessibilityLabel("\(name), \(label)")
         .contextMenu {
