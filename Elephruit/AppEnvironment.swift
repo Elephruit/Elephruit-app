@@ -136,11 +136,7 @@ final class AppEnvironment {
     /// launched *by* the intent.
     private(set) var pendingCalendarRequest: CalendarRequest?
 
-    enum CalendarRequest: Equatable {
-        case open
-        case quickEntry
-        case day(Date)
-    }
+    typealias CalendarRequest = PendingCalendarRequest
 
     func openCalendar() {
         pendingCalendarRequest = .open

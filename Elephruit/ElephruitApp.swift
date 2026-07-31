@@ -96,7 +96,7 @@ private struct RootWindow: View {
                     .accessibilityLabel("Opening your library")
 
             case .ready(let services):
-                RootView()
+                RootView(pendingCalendarRequest: environment.consumeCalendarRequest())
                     .appServices(services)
                     .environment(\.prefersMonospacedEditor, prefersMonospacedEditor)
 
@@ -111,6 +111,8 @@ private struct RootWindow: View {
             if case .opening = environment.state {
                 environment.start()
             }
+            // Anything an intent left behind while the app was not running, or not frontmost.
+            environment.adoptIntentRouting()
         }
     }
 

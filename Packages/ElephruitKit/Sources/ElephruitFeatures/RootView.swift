@@ -25,7 +25,15 @@ public struct RootView: View {
     /// Held for the window's lifetime so the observation is not cancelled the moment `task` returns.
     @State private var contactRefresh: ContactRefreshCoordinator?
 
-    public init() {}
+    /// What the menu bar or an intent asked for, when the window is opening because of one.
+    ///
+    /// Passed in rather than read from a shared place, because a request belongs to the window that
+    /// is about to act on it — and an app with two windows open should not have both react.
+    private let pendingCalendarRequest: PendingCalendarRequest?
+
+    public init(pendingCalendarRequest: PendingCalendarRequest? = nil) {
+        self.pendingCalendarRequest = pendingCalendarRequest
+    }
 
     public var body: some View {
         Group {
@@ -83,6 +91,18 @@ public struct RootView: View {
             Text(transferSummary ?? "")
         }
         .task {
+            if let pendingCalendarRequest {
+                navigation.select(.calendar)
+                switch pendingCalendarRequest {
+                case .open:
+                    break
+                case .quickEntry:
+                    navigation.isCalendarQuickEntryVisible = true
+                case .day(let day):
+                    navigation.requestedCalendarDay = day
+                }
+            }
+
             // Watching for address-book changes, so a number edited in Contacts reaches the CRM
             // without anybody pressing anything. Coalesced inside the coordinator, and a no-op until
             // the integration is turned on.
@@ -517,6 +537,16 @@ extension AppServices {
         await search.invalidateIndex()
         await warmSearchIndex()
     }
+}
+
+/// What the menu bar or an intent asked the calendar to do.
+///
+/// Declared here rather than in the app target so a window can be handed one without the shell
+/// depending on the app's own types — and so the same request can be produced by a test.
+public enum PendingCalendarRequest: Sendable, Hashable {
+    case open
+    case quickEntry
+    case day(Date)
 }
 
 /// Export and import, exposed to the menu bar through the focused scene.

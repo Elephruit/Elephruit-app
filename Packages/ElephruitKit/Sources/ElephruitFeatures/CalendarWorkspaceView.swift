@@ -41,6 +41,15 @@ public struct CalendarWorkspaceView: View {
                 calendar: services.calendar.displayCalendar
             )
             workspace = model
+
+            // A day asked for before this view existed — which is the case when the app was
+            // launched by the link rather than merely brought forward by it.
+            if let day = navigation.requestedCalendarDay {
+                navigation.requestedCalendarDay = nil
+                model.go(to: day)
+                model.setViewKind(.day)
+            }
+
             await services.calendar.start()
             await reload(services: services, workspace: model)
         }
@@ -79,6 +88,12 @@ public struct CalendarWorkspaceView: View {
         }
         .onChange(of: services.calendar.events.count) { _, _ in
             refreshAnnotations(services: services)
+        }
+        .onChange(of: navigation.requestedCalendarDay) { _, day in
+            guard let day else { return }
+            navigation.requestedCalendarDay = nil
+            workspace.go(to: day)
+            workspace.setViewKind(.day)
         }
         .onChange(of: navigation.isCalendarQuickEntryVisible) { _, wanted in
             guard wanted else { return }
@@ -145,6 +160,10 @@ public struct CalendarWorkspaceView: View {
             EventTemplateListView()
         }
         .focusedSceneValue(\.calendarWorkspace, workspace)
+        .onOpenURL { url in
+            guard let link = CalendarDeepLink.parse(url) else { return }
+            Task { await follow(link, services: services, workspace: workspace) }
+        }
         .onKeyPress(action: { press in handle(press, services: services, workspace: workspace) })
     }
 
@@ -316,6 +335,47 @@ public struct CalendarWorkspaceView: View {
         case .resize(let event, let target):
             await services.calendar.resize(event, newEnd: target, scope: scope)
         }
+        await reload(services: services, workspace: workspace)
+    }
+
+    // MARK: Deep links
+
+    /// Acts on a link.
+    ///
+    /// Every case navigates. The one with a side effect — switching a Calendar Set — changes which
+    /// calendars are on screen and nothing about their contents, is reversible with one click, and
+    /// is visible the moment it happens. See ``ElephruitCore/CalendarDeepLink``.
+    private func follow(
+        _ link: CalendarDeepLink,
+        services: AppServices,
+        workspace: CalendarWorkspaceModel
+    ) async {
+        navigation.select(.calendar)
+
+        switch link {
+        case .calendar:
+            break
+
+        case .day(let components):
+            // Resolved in the zone the calendar is *drawn* in, which is the only one that gives the
+            // day somebody meant when they wrote the link.
+            guard let day = components.resolve(in: services.calendar.displayCalendar) else { return }
+            workspace.go(to: day)
+            workspace.setViewKind(.day)
+
+        case .event(let identity):
+            guard let event = await services.calendar.event(matching: identity) else { return }
+            workspace.go(to: event.startAt)
+            workspace.setViewKind(.day)
+            workspace.selectedEventID = event.id
+
+        case .set(let name):
+            let match = services.calendar.sets.first {
+                TextNormalizer.foldedForMatching($0.name) == TextNormalizer.foldedForMatching(name)
+            }
+            await services.calendar.activate(setID: match?.id)
+        }
+
         await reload(services: services, workspace: workspace)
     }
 
