@@ -32,6 +32,26 @@ public struct RootView: View {
     /// runs when the window appears.
     @SceneStorage("navigation.state") private var storedNavigationState = ""
 
+    /// What each module has been left set to.
+    ///
+    /// Per window like everything else here, but backed by one preference file, so a divider dragged
+    /// in this window is where the next window and the next launch find it. See ``ModuleLayoutStore``.
+    @State private var moduleLayout = ModuleLayoutStore()
+
+    /// The window's own width, so a restored column width can be clamped to what there is.
+    @State private var windowWidth: CGFloat = 0
+
+    /// Widths held fixed for one turn of the run loop while a module change lands.
+    ///
+    /// AppKit's split view keeps its divider position across everything: changing the constraints
+    /// alone moves a column only when its *current* width breaks them, so a People pane at 520 would
+    /// happily sit at 520 in Notes, which allows up to 960. Pinning min, ideal and max to the value
+    /// this module wants forces the move; relaxing them a moment later gives the divider back.
+    @State private var pinnedWidths: [ModuleShellLayout.Column: CGFloat] = [:]
+
+    /// Tells a divider the user dragged from one the window moved. See ``PaneDragDetector``.
+    @State private var dragDetectors: [ModuleShellLayout.Column: PaneDragDetector] = [:]
+
     @State private var isExportPresented = false
     @State private var isImportPresented = false
     @State private var transferSummary: String?
@@ -204,6 +224,9 @@ public struct RootView: View {
         }
     }
 
+    /// The column widths the module this window is in has asked for.
+    private var shellLayout: ModuleShellLayout { navigation.activeModule.shellLayout }
+
     private var splitView: some View {
         NavigationSplitView(columnVisibility: columnVisibilityBinding) {
             SidebarView(navigation: navigation)
@@ -248,28 +271,71 @@ public struct RootView: View {
                     ItemListView(navigation: navigation)
                 }
             }
-            .navigationSplitViewColumnWidth(
-                min: Theme.Size.listMinWidth,
-                ideal: Theme.Size.listIdealWidth
+            .moduleColumnWidth(
+                .primary,
+                layout: shellLayout,
+                store: moduleLayout,
+                module: navigation.activeModule,
+                windowWidth: windowWidth,
+                pinned: pinnedWidths[.primary]
             )
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                recordDrag(of: .primary, to: width)
+            }
         } detail: {
-            ItemDetailView(navigation: navigation)
-                .frame(
-                    // Focus mode caps the measure: long lines are hard to read, and the point of the
-                    // mode is reading and writing rather than filling the window.
-                    maxWidth: navigation.layoutMode == .focus ? Theme.Size.editorMaxWidth : .infinity
-                )
-                .frame(maxWidth: .infinity)
-                .navigationSplitViewColumnWidth(min: Theme.Size.detailMinWidth, ideal: 720)
+            // A canvas module — the calendar, the time sheet — has nothing to put in a third column,
+            // and the honest expression of that is no column rather than a narrow one. What used to
+            // be here was 720 points of "Nothing selected" sitting where the month should have been.
+            if shellLayout.detail.isAvailable {
+                ItemDetailView(navigation: navigation)
+                    .frame(
+                        // Focus mode caps the measure: long lines are hard to read, and the point of
+                        // the mode is reading and writing rather than filling the window.
+                        maxWidth: navigation.layoutMode == .focus ? Theme.Size.editorMaxWidth : .infinity
+                    )
+                    .frame(maxWidth: .infinity)
+                    .moduleColumnWidth(
+                        .detail,
+                        layout: shellLayout,
+                        store: moduleLayout,
+                        module: navigation.activeModule,
+                        windowWidth: windowWidth,
+                        pinned: pinnedWidths[.detail]
+                    )
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                        recordDrag(of: .detail, to: width)
+                    }
+            } else {
+                Color.clear
+                    .navigationSplitViewColumnWidth(0)
+            }
         }
         .navigationSplitViewStyle(.balanced)
         .inspector(isPresented: inspectorBinding) {
             InspectorView(navigation: navigation)
                 .inspectorColumnWidth(
-                    min: InspectorLayout.minimumWidth,
-                    ideal: InspectorLayout.idealWidth,
-                    max: InspectorLayout.maximumWidth
+                    min: shellLayout.inspector.width.minimum,
+                    ideal: moduleLayout.width(
+                        of: .inspector,
+                        in: navigation.activeModule,
+                        available: windowWidth
+                    ),
+                    max: shellLayout.inspector.width.maximum ?? windowWidth
                 )
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            guard width > 0 else { return }
+            windowWidth = width
+        }
+        // Applying a module's own widths on arrival is the whole point: AppKit's split view keeps
+        // its divider wherever it was last put, so without this, widening the pane to read somebody's
+        // profile also moved the calendar's divider — and the calendar had no say in it.
+        .task(id: navigation.activeModule) { await applyModuleLayout() }
+        // A pane that closed itself for want of anything to show comes back when there is something.
+        // A pane the *user* closed stays closed — see `shouldOpenAfterSelection`.
+        .onChange(of: hasInspectableSelection) { _, hasSelection in
+            guard hasSelection, shellLayout.inspector.shouldOpenAfterSelection() else { return }
+            navigation.isInspectorVisible = true
         }
         .focusedSceneValue(\.navigationModel, navigation)
         .focusedSceneValue(\.transferActions, TransferActions(
@@ -413,6 +479,43 @@ public struct RootView: View {
         return commands
     }
 
+    // MARK: - Module layout
+
+    /// Snaps every column to what the module being entered asks for, then hands the dividers back.
+    ///
+    /// The pause is a single turn of the run loop rather than an animation: the split view needs one
+    /// layout pass to adopt the pinned constraints, and relaxing them in the same pass would leave
+    /// the old width in place. It is short enough to read as the module arriving rather than as the
+    /// window rearranging itself afterwards.
+    private func applyModuleLayout() async {
+        let module = navigation.activeModule
+        let available = windowWidth
+
+        // A drag detector that saw the old module's widths would read the snap as a preference.
+        for column in dragDetectors.keys { dragDetectors[column]?.reset() }
+
+        pinnedWidths = [
+            .primary: moduleLayout.width(of: .primary, in: module, available: available),
+            .detail: moduleLayout.width(of: .detail, in: module, available: available),
+        ]
+
+        try? await Task.sleep(for: .milliseconds(50))
+        guard !Task.isCancelled else { return }
+        pinnedWidths = [:]
+    }
+
+    /// Remembers a width the user chose, and ignores one the window imposed.
+    private func recordDrag(of column: ModuleShellLayout.Column, to width: CGFloat) {
+        guard width > 0, windowWidth > 0, pinnedWidths.isEmpty else { return }
+
+        var detector = dragDetectors[column] ?? PaneDragDetector()
+        let isDrag = detector.isUserDrag(columnWidth: width, windowWidth: windowWidth)
+        dragDetectors[column] = detector
+
+        guard isDrag else { return }
+        moduleLayout.setWidth(width, of: column, in: navigation.activeModule, available: windowWidth)
+    }
+
     // MARK: - Bindings
 
     /// Layout mode drives column visibility, rather than the two states drifting apart.
@@ -444,8 +547,34 @@ public struct RootView: View {
         )
     }
 
+    /// The inspector is open when the user asked for it *and* the module's policy allows it here.
+    ///
+    /// Three things can close it and only one of them is the user: a module whose inspector is about
+    /// a selection has nothing to show when nothing is selected, and a window too narrow to hold the
+    /// module's primary column and an inspector should keep the primary column. Both are decisions
+    /// the module makes about itself — see ``DetailPanePolicy/isVisible(userWants:hasSelection:windowWidth:)`` —
+    /// and neither overwrites what the user asked for, so widening the window again brings the
+    /// inspector back rather than making them ask twice.
     private var inspectorBinding: Binding<Bool> {
-        Binding(get: { navigation.isInspectorVisible }, set: { navigation.isInspectorVisible = $0 })
+        Binding(
+            get: {
+                shellLayout.inspector.isVisible(
+                    userWants: navigation.isInspectorVisible,
+                    hasSelection: hasInspectableSelection,
+                    windowWidth: windowWidth
+                )
+            },
+            set: { navigation.isInspectorVisible = $0 }
+        )
+    }
+
+    /// Whether there is anything for the inspector to be about.
+    ///
+    /// An event is not an `Item`, so the calendar's selection lives on its own workspace model —
+    /// which is why this asks two questions rather than reading one identifier.
+    private var hasInspectableSelection: Bool {
+        if navigation.selectedItemID != nil { return true }
+        return navigation.calendarWorkspace?.selectedEventID != nil
     }
 
     private var quickCaptureBinding: Binding<Bool> {
