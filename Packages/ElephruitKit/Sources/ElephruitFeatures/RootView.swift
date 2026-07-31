@@ -484,7 +484,7 @@ public struct RootView: View {
             PaletteCommand(id: "stop-timer", title: "Stop Timer", category: .create, symbolName: "stop.circle") {
                 services?.timer.stop()
             },
-            PaletteCommand(id: "new-event", title: "New Event…", category: .create, symbolName: "calendar.badge.plus") {
+            PaletteCommand(id: "new-event", title: "New Event…", category: .create, symbolName: "calendar.badge.plus", command: .newEvent, in: registry) {
                 navigation.select(.calendar)
                 navigation.isCalendarQuickEntryVisible = true
             },
