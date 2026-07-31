@@ -368,9 +368,21 @@ struct PersonRow: View {
         }
     }
 
+    /// The name, then every line the row had to shorten or drop.
+    ///
+    /// The row truncates its identity line to one line and shows at most two ways of reaching
+    /// somebody; a middle-truncated address is exactly the thing a tooltip is for. Details are
+    /// written one per line rather than run together, because an email and a phone number side by
+    /// side read as one string.
     private var tooltip: String {
-        guard let subtitle, !subtitle.isEmpty else { return person.displayTitle }
-        return "\(person.displayTitle)\n\(subtitle)"
+        var lines = [person.displayTitle]
+        if let identityLine { lines.append(identityLine) }
+        if rowDetails.isEmpty {
+            if let relationshipLine { lines.append(relationshipLine) }
+        } else {
+            lines.append(contentsOf: rowDetails.map { "\($0.displayLabel): \($0.value)" })
+        }
+        return lines.joined(separator: "\n")
     }
 
     /// Whether this person's details come from the address book, and whether that still works.
