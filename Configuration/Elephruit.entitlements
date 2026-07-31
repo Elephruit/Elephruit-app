@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Milestone 1 entitlements. Three, and only three.
+
+	  Deliberately ABSENT: network client, network server, iCloud, CloudKit, Contacts,
+	  Reminders, Photos, Camera, Microphone, Location, Bluetooth, USB, Downloads folder, Apple Events,
+	  JIT, and every temporary exception.
+
+	  Without the network-client entitlement the sandbox refuses outbound connections at the kernel
+	  boundary, which is what makes "this app makes no network requests" verifiable rather than a
+	  promise. An entitlement is added in the same commit as the feature that needs it and no earlier.
+	  See docs/06-privacy-and-entitlements.md.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+
+	<!-- Open and save panels: import, export, and attaching files. -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+
+	<!-- Security-scoped bookmarks for files the user keeps outside the app. -->
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
+
+	<!--
+	  Phase D: reading the calendar.
+
+	  This entitlement lets the sandbox reach CalendarAgent at all. The TCC prompt is separate and is
+	  triggered only when the user turns the feature on in Settings — until then the app holds an
+	  inert provider and never touches EventKit.
+
+	  EventKit has no read-only tier: its only requests are full access and write-only, so a
+	  read-only feature must ask for full access. Elephruit never writes. `CalendarProviding` has no
+	  write method, and `CalendarWriteSafetyTests` fails if the EventKit adapter ever calls one.
+	-->
+	<key>com.apple.security.personal-information.calendars</key>
+	<true/>
+
+	<!--
+	  The People module: reading the address book.
+
+	  This entitlement lets the sandbox reach the Contacts daemon at all. The TCC prompt is separate
+	  and is triggered only when the user turns the integration on in Settings — until then the app
+	  holds an inert `NoContactsProvider` and never touches `CNContactStore`.
+
+	  Contacts, unlike EventKit, has a single access tier: granting read access grants write access
+	  with it, and the user has no way to give less. Elephruit never writes. `ContactsProviding` has
+	  no write method, and `ContactsWriteSafetyTests` fails if the adapter ever reaches past it to
+	  `CNSaveRequest` — and a second test fails if the adapter fetches a key nothing displays.
+
+	  Still deliberately ABSENT: network client, network server, iCloud, CloudKit, Reminders, Photos,
+	  Camera, Microphone, Location, Bluetooth, USB, Apple Events, JIT, and every temporary exception.
+	  Business-card scanning needs no camera entitlement: Continuity Camera is presented by the
+	  system, which hands back a file, and Vision reads it on-device.
+	-->
+	<key>com.apple.security.personal-information.addressbook</key>
+	<true/>
+</dict>
+</plist>
