@@ -163,6 +163,9 @@ struct PeopleListView: View {
         }
         .searchable(text: $searchText, placement: .toolbar, prompt: "people in Austin · likes natural wine")
         .searchFocused($isSearchFocused)
+        .onKeyPress(.downArrow) { moveSearchSelection(by: 1) }
+        .onKeyPress(.upArrow) { moveSearchSelection(by: -1) }
+        .onSubmit(of: .search) { openSearchSelection() }
         .toolbar { sortMenu }
         .onChange(of: searchText) { _, query in beginSearch(query) }
         // ⌘F belongs to the list it is looking at. Without this it opened the app-wide search field
@@ -543,6 +546,42 @@ struct PeopleListView: View {
             if let id = selectionBeforeSearch.first { pendingScroll = .person(id) }
         }
         selectionBeforeSearch = []
+    }
+
+    /// Lets the search field and its results behave as one keyboard surface.
+    ///
+    /// The search field remains first responder while arrows move the highlighted result. Return
+    /// then commits that highlight and hands focus to the list, so finding somebody never requires
+    /// a mouse or trackpad.
+    private func moveSearchSelection(by direction: Int) -> KeyPress.Result {
+        guard isSearchFocused, model.isSearching else { return .ignored }
+        let ids = model.flattenedIDs
+        guard !ids.isEmpty else { return .handled }
+
+        let target: Int
+        if let selected = selection.first, let current = ids.firstIndex(of: selected) {
+            target = min(ids.count - 1, max(0, current + direction))
+        } else {
+            target = direction > 0 ? 0 : ids.count - 1
+        }
+
+        selectSearchResult(ids[target])
+        return .handled
+    }
+
+    private func openSearchSelection() {
+        guard model.isSearching else { return }
+        let ids = model.flattenedIDs
+        guard let id = selection.first.flatMap({ ids.contains($0) ? $0 : nil }) ?? ids.first else { return }
+        selectSearchResult(id)
+        isSearchFocused = false
+        isListFocused = true
+    }
+
+    private func selectSearchResult(_ id: UUID) {
+        selection = [id]
+        navigation.selectedItemIDs = selection
+        pendingScroll = .person(id)
     }
 
     /// Reloads the scope and re-runs any live search, so a change is reflected in whichever of the

@@ -39,6 +39,7 @@ struct PersonWorkspaceView: View {
     @State private var pendingWriteBack: ContactDetailsEdit?
     @State private var loadFailure: AppError?
     @State private var isAddingRelationship = false
+    @State private var presentedTimelineEntry: PersonTimelineEntry?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -96,7 +97,9 @@ struct PersonWorkspaceView: View {
                         entries: timeline,
                         filter: $timelineFilter,
                         dateProvider: services?.dateProvider ?? SystemDateProvider(),
-                        onOpen: { navigation.selectItem($0) }
+                        onOpen: { id in
+                            presentedTimelineEntry = timeline.first(where: { $0.id == id })
+                        }
                     )
                 }
                 .padding(.vertical, Theme.Spacing.large)
@@ -118,6 +121,17 @@ struct PersonWorkspaceView: View {
                     isRecordingInteraction = false
                 },
                 onCancel: { isRecordingInteraction = false }
+            )
+        }
+        .sheet(item: $presentedTimelineEntry) { entry in
+            PersonTimelineDetailSheet(
+                entry: entry,
+                personID: person.id,
+                personName: person.displayTitle,
+                onClose: {
+                    presentedTimelineEntry = nil
+                    reload()
+                }
             )
         }
         .sheet(isPresented: $isAddingNote) {
