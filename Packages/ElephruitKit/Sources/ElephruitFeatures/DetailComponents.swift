@@ -60,12 +60,24 @@ struct DetailDisclosure<Content: View>: View {
     let title: String
     let count: Int?
     let systemImage: String
+
+    /// Whether the group is open the first time it is drawn.
+    ///
+    /// The rule everywhere this is used is "is there anything in it?" rather than "is it
+    /// important?". Importance is a judgement the app would be making for the user; whether a
+    /// section holds a value is a fact it can read.
+    var startsExpanded = false
+
     @ViewBuilder let content: Content
 
-    @State private var isExpanded = false
+    @State private var isExpanded: Bool?
+
+    private var expansion: Binding<Bool> {
+        Binding(get: { isExpanded ?? startsExpanded }, set: { isExpanded = $0 })
+    }
 
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
+        DisclosureGroup(isExpanded: expansion) {
             content
                 .padding(.top, Theme.Spacing.small)
         } label: {

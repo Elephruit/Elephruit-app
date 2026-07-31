@@ -405,6 +405,16 @@ public struct ItemListView: View {
                 headline: "No one yet",
                 message: "Press ⌘⇧K and type a name."
             )
+        case .taskView, .smartList, .builtInSmartList:
+            // Unreachable: `RootView` routes every task destination to `TaskWorkspaceView`, which
+            // has an empty state per view — "your day is clear" and "nothing is waiting on anybody"
+            // are different pieces of news and must not share a sentence.
+            EmptyStateView(
+                symbolName: "checkmark.circle",
+                headline: "Nothing here",
+                message: "This list is empty."
+            )
+
         case .home, .calendar, .time:
             // Unreachable: these destinations are declared but unavailable, so nothing selects them.
             EmptyStateView(
