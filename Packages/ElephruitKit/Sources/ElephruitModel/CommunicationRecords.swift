@@ -103,6 +103,14 @@ public final class CommunicationIntentRecord {
     public var failureTechnicalDetail: String?
     public var failureWasCanceledByUser: Bool = false
 
+    /// ``ElephruitCore/CallOutcome`` raw value, once the user has said how a call went.
+    ///
+    /// Separate from the state because it answers a different question. The state says whether the
+    /// communication went out — for a call, whether it was placed and reported — and the outcome says
+    /// what happened when it did. Collapsing them made a call that reached voicemail read as "Call
+    /// sent · confirmed by you" and count toward the last-contact line.
+    public var callOutcomeRaw: String?
+
     // MARK: Identity and reconciliation
 
     /// The token a Mail extension would stamp on the outgoing message. A bare UUID naming this
@@ -220,6 +228,11 @@ extension CommunicationIntentRecord {
         }
     }
 
+    public var callOutcome: CallOutcome? {
+        get { callOutcomeRaw.flatMap(CallOutcome.init(rawValue:)) }
+        set { callOutcomeRaw = newValue?.rawValue }
+    }
+
     public var source: CommunicationSourceContext {
         get {
             CommunicationSourceContext(
@@ -258,6 +271,7 @@ extension CommunicationIntentRecord {
             finalRecipients: finalRecipients,
             submittedAt: submittedAt,
             failure: failure,
+            callOutcome: callOutcome,
             privacy: privacy,
             correlationToken: correlationToken,
             interactionID: interactionID,

@@ -134,10 +134,10 @@ public struct PersonTimelineEntry: Sendable, Hashable, Identifiable {
     ///
     /// A communication answers first and answers more precisely: a message whose only evidence is
     /// that a composer opened is not contact no matter what provenance the interaction carries, and
-    /// ``CommunicationState/countsAsReachingOut`` is where that line is drawn.
+    /// ``CommunicationIntent/countsAsContact`` is where that line is drawn.
     public var isContact: Bool {
         guard kind == .meeting || kind == .interaction else { return false }
-        if let communication { return communication.state.countsAsReachingOut }
+        if let communication { return communication.countsAsContact }
         guard let provenance else { return true }
         return provenance.countsAsContact
     }

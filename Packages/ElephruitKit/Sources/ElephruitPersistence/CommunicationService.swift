@@ -108,6 +108,21 @@ public final class CommunicationService {
             : nil
 
         context.insert(record)
+
+        // The intent is itself the first of the five signals a message can produce, and the event log
+        // is only an explanation of a record's history if it contains the beginning of it.
+        context.insert(
+            CommunicationEventRecord(
+                state: .draftPrepared,
+                evidence: .inference,
+                occurredAt: now,
+                recordedAt: now,
+                didApply: true,
+                matchBasis: .intentIdentifier,
+                intent: record
+            )
+        )
+
         try save(because: "preparing a communication")
 
         Diagnostics.persistence.info(
@@ -125,9 +140,24 @@ public final class CommunicationService {
     ///
     /// The report already carries the intent identifier, so this needs no matching at all — which is
     /// the reason ``ElephruitCore/CommunicationLaunchReport`` carries it.
+    ///
+    /// ### Why the mechanism is corrected here
+    /// ``prepare(channel:people:recipients:subject:body:attachments:source:)`` writes the mechanism
+    /// it *expects* to use, because a record has to exist before anything is launched. What actually
+    /// happened is only known once the launcher returns, and the two differ whenever a sharing
+    /// service declines and the URL scheme takes over.
+    ///
+    /// That difference is not cosmetic: the mechanism decides whether a callback will ever arrive,
+    /// which decides whether the user is asked, which decides whether the message can ever get past
+    /// "status unknown". Leaving the correction to the caller — which is where it lived first — meant
+    /// a record written by any other call site silently claimed a callback that was never coming.
     @discardableResult
     public func record(_ report: CommunicationLaunchReport) throws(AppError) -> CommunicationIntentRecord? {
-        try record(signal: report.signal)
+        guard let record = try record(id: report.intentID) else { return nil }
+
+        record.mechanism = report.mechanism
+        try apply(report.signal, to: record, basis: .intentIdentifier)
+        return record
     }
 
     /// Applies one signal to whichever record it belongs to, and to no other.
@@ -334,7 +364,14 @@ public final class CommunicationService {
             basis: .intentIdentifier
         )
 
-        guard outcome != .canceled else { return nil }
+        // Recorded before the interaction is written, because the outcome is what the interaction's
+        // title and its contact-ness are derived from — see `CommunicationIntent.countsAsContact`.
+        record.callOutcome = outcome
+
+        guard outcome != .canceled else {
+            try save(because: "logging a canceled call")
+            return nil
+        }
 
         let interaction = try promoteToInteraction(record, provenance: .logged)
 

@@ -140,10 +140,9 @@ public final class InteractionConfirmationCoordinator {
                 )
             )
 
-            // The mechanism is recorded from what the launcher actually did, not from what was asked
-            // for. A sharing service that declined and fell back to a URL changes what can ever be
-            // known about this message, and the timeline has to say so.
-            record.mechanism = report.mechanism
+            // The record is corrected from what the launcher actually did — including the mechanism,
+            // which decides what can ever be known about this message. That correction belongs to the
+            // service rather than here; see `CommunicationService.record(_:)`.
             try communications.record(report)
 
             let value = record.asValue()

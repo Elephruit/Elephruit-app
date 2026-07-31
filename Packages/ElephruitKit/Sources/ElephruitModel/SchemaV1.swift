@@ -199,6 +199,34 @@ public enum SchemaV6: VersionedSchema {
     }
 }
 
+/// The seventh schema: how a call actually went.
+///
+/// One optional attribute — ``CommunicationIntentRecord/callOutcomeRaw`` — and nothing else.
+///
+/// ### Why this is a version rather than an edit to `SchemaV6`
+/// `SchemaV6` introduced the entity this attribute sits on, and both arrive in the same body of
+/// work, so folding one into the other is tempting. It is also exactly what standing rule R1 forbids,
+/// and for a reason that applies here: a development build has already opened a store and stamped it
+/// `0.0.6`, and changing what `0.0.6` means afterwards leaves a store whose stamp no longer describes
+/// its shape. The stamp is what decides whether a migrating launch takes a backup, so a stamp that
+/// lies is a backup that does not happen on the launch that needed it.
+///
+/// A version costs a paragraph. Getting this wrong costs somebody's library.
+///
+/// ### What the attribute is for
+/// A call the user reports on reaches ``ElephruitCore/CommunicationState/userConfirmedSent`` whether
+/// or not anybody picked up — they confirmed the call was placed. Without a separate outcome the
+/// record then described a call that reached voicemail as "Call sent · confirmed by you" and counted
+/// it as contact, which put a conversation that never happened into the one figure the People module
+/// is trusted for. The state and the outcome are two facts, so they are two columns.
+public enum SchemaV7: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 7) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV6.models
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -211,7 +239,7 @@ public enum SchemaV6: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV6.self]
+        [SchemaV7.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -231,13 +259,13 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV6.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV7.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV6.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV7.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {
-        let version = SchemaV6.versionIdentifier
+        let version = SchemaV7.versionIdentifier
         return "\(version.major).\(version.minor).\(version.patch)"
     }
 }

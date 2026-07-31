@@ -46,9 +46,13 @@ public struct CommunicationRecipient: Sendable, Hashable, Codable, Identifiable 
     /// The handle reduced to a form two spellings of the same address share.
     ///
     /// Case and surrounding whitespace for an address; digits only for a number, so that
-    /// `+1 (512) 555-0192` and `5125550192` match. Deliberately does **not** strip a country code:
-    /// two numbers differing by one are two numbers, and this value is used to decide whether two
-    /// records are the same message.
+    /// `(512) 555-0192` and `512-555-0192` match.
+    ///
+    /// Deliberately does **not** strip a country code. Making `+15125550192` equal `5125550192`
+    /// means deciding that a leading `1` is a dialling code rather than part of the number, which is
+    /// true in North America and false elsewhere — and this value decides whether two records are
+    /// the same message. The cost of the strictness is nil in practice: email is the only channel
+    /// with a provider that reports sends, and email addresses normalise cleanly.
     public var matchKey: String {
         let trimmed = handle.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.contains("@") { return trimmed.lowercased() }
@@ -183,6 +187,18 @@ public struct CommunicationIntent: Sendable, Hashable, Identifiable, Codable {
 
     public var failure: CommunicationFailure?
 
+    /// How a call actually went, once the user has said.
+    ///
+    /// ### Why the state alone was not enough
+    /// A call the user placed and reported reaches ``CommunicationState/userConfirmedSent`` — they
+    /// confirmed the communication went out — and that is true whether anybody picked up. Without
+    /// this field the record then said "Call sent · confirmed by you" about a call that reached
+    /// voicemail, and ``countsAsContact`` returned `true` for it, which put a conversation that never
+    /// happened into the one figure the People module is trusted for.
+    ///
+    /// The outcome is a separate fact from the state, so it is a separate field.
+    public var callOutcome: CallOutcome?
+
     public var privacy: CommunicationPrivacyPreference
 
     /// The token an external system can carry back to identify this intent.
@@ -231,6 +247,7 @@ public struct CommunicationIntent: Sendable, Hashable, Identifiable, Codable {
         finalRecipients: [CommunicationRecipient] = [],
         submittedAt: Date? = nil,
         failure: CommunicationFailure? = nil,
+        callOutcome: CallOutcome? = nil,
         privacy: CommunicationPrivacyPreference = .metadataOnly,
         correlationToken: String = CommunicationCorrelation.makeToken(),
         interactionID: UUID? = nil,
@@ -258,6 +275,7 @@ public struct CommunicationIntent: Sendable, Hashable, Identifiable, Codable {
         self.finalRecipients = finalRecipients
         self.submittedAt = submittedAt
         self.failure = failure
+        self.callOutcome = callOutcome
         self.privacy = privacy
         self.correlationToken = correlationToken
         self.interactionID = interactionID
@@ -269,6 +287,17 @@ public struct CommunicationIntent: Sendable, Hashable, Identifiable, Codable {
     /// The handles this was addressed to, normalised for comparison.
     public var recipientMatchKeys: Set<String> {
         Set(intendedRecipients.map(\.matchKey))
+    }
+
+    /// Whether this counts as having actually been in touch.
+    ///
+    /// Two rules, and the call one wins where it applies. A message the user says they sent is
+    /// reaching out; a call the user says reached voicemail is not, no matter that the same user
+    /// confirmed the same state for both — see ``CallOutcome/countsAsContact``, which is the rule
+    /// the People module already applied to a call logged by hand.
+    public var countsAsContact: Bool {
+        if let callOutcome { return callOutcome.countsAsContact }
+        return state.countsAsReachingOut
     }
 
     /// Whether the app should put the "did you send this?" question, given the time now.
@@ -420,6 +449,13 @@ extension CommunicationStatusLabel {
     public static func make(for intent: CommunicationIntent) -> CommunicationStatusLabel {
         let channel = intent.channel
 
+        // A call the user has reported on is described by what happened on it, not by the state it
+        // moved the record to. "Call sent · confirmed by you" is both odd and, for a voicemail,
+        // misleading; "Call logged · left voicemail · confirmed manually" is what occurred.
+        if let outcome = intent.callOutcome, outcome != .canceled {
+            return make(for: outcome, channel: channel)
+        }
+
         switch intent.state {
         case .draftPrepared:
             return CommunicationStatusLabel(
@@ -429,8 +465,11 @@ extension CommunicationStatusLabel {
             )
 
         case .composerOpened:
+            // The mechanism decides the word, not the channel. "Composer opened" is a claim that
+            // something is open and will report back; a `mailto:` opens a composer too and will
+            // never report anything, so it gets the weaker "initiated" and says why.
             return CommunicationStatusLabel(
-                headline: channel.hasSharingService
+                headline: intent.launchMechanism.reportsCompletion
                     ? "\(channel.noun) composer opened"
                     : "\(channel.noun) initiated",
                 detail: intent.launchMechanism.reportsCompletion ? "nothing sent yet" : "final sending status unknown",
