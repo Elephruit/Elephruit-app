@@ -31,14 +31,24 @@ struct ShortcutRegistryTests {
         #expect(registry.command(for: quickCapture) == .quickCapture)
     }
 
+    /// Pinned rather than left to `defaultBinding`, because this is the one shortcut pressed from
+    /// inside *other* applications: changing it silently would leave somebody's muscle memory
+    /// opening whatever the keys now belong to, in an app that is not this one.
+    @Test("Quick Jot is ⌘⇧J")
+    func quickJotKeepsItsKeys() {
+        let registry = ShortcutRegistry()
+        #expect(registry.binding(for: .quickCapture) == KeyBinding("j", [.command, .shift]))
+        #expect(ShortcutCommand.quickCapture.title == "Quick Jot")
+    }
+
     // MARK: - Overrides
 
     @Test("An override replaces the default")
     func overridesApply() {
         var registry = ShortcutRegistry()
-        registry.setBinding(KeyBinding("j", [.command, .shift]), for: .quickCapture)
+        registry.setBinding(KeyBinding("y", [.command, .shift]), for: .quickCapture)
 
-        #expect(registry.binding(for: .quickCapture) == KeyBinding("j", [.command, .shift]))
+        #expect(registry.binding(for: .quickCapture) == KeyBinding("y", [.command, .shift]))
         #expect(registry.binding(for: .search) == ShortcutCommand.search.defaultBinding)
     }
 
@@ -56,7 +66,7 @@ struct ShortcutRegistryTests {
     @Test("Setting a command back to its default stops it being an override")
     func settingTheDefaultClearsTheOverride() {
         var registry = ShortcutRegistry()
-        registry.setBinding(KeyBinding("j", [.command, .shift]), for: .quickCapture)
+        registry.setBinding(KeyBinding("y", [.command, .shift]), for: .quickCapture)
         registry.setBinding(ShortcutCommand.quickCapture.defaultBinding, for: .quickCapture)
 
         #expect(registry.overrides.isEmpty)
@@ -129,12 +139,12 @@ struct ShortcutRegistryTests {
         defer { defaults.removeSuite(named: defaults.description) }
 
         var registry = ShortcutRegistry()
-        registry.setBinding(KeyBinding("j", [.command, .shift]), for: .quickCapture)
+        registry.setBinding(KeyBinding("y", [.command, .shift]), for: .quickCapture)
         registry.setBinding(nil, for: .focusMode)
         registry.save(to: defaults)
 
         let loaded = ShortcutRegistry.load(from: defaults)
-        #expect(loaded.binding(for: .quickCapture) == KeyBinding("j", [.command, .shift]))
+        #expect(loaded.binding(for: .quickCapture) == KeyBinding("y", [.command, .shift]))
         #expect(loaded.binding(for: .focusMode) == nil, "a deliberate unbinding came back")
         #expect(loaded.binding(for: .search) == ShortcutCommand.search.defaultBinding)
     }
