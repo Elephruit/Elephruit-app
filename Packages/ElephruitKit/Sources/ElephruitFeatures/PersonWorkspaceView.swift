@@ -140,19 +140,25 @@ struct PersonWorkspaceView: View {
                 navigation.selectItem(id)
             }
         }
-        .sheet(isPresented: $isEditingContactDetails) {
-            EditContactDetailsSheet(
-                person: person,
-                onSave: { edit in
+        .sheet(isPresented: $isEditingContactDetails, onDismiss: { pendingWriteBack = nil }) {
+            // One sheet owns the whole transaction. Dismissing the editor and racing to present a
+            // second sheet could lose the write-back prompt while SwiftUI was still completing the
+            // first dismissal, which made a linked edit look saved while Contacts kept the old value.
+            if let edit = pendingWriteBack {
+                ContactWriteBackSheet(person: person, edit: edit) {
+                    pendingWriteBack = nil
                     isEditingContactDetails = false
-                    reload()
-                    offerContactWriteBack(for: edit)
-                },
-                onCancel: { isEditingContactDetails = false }
-            )
-        }
-        .sheet(item: $pendingWriteBack) { edit in
-            ContactWriteBackSheet(person: person, edit: edit) { pendingWriteBack = nil }
+                }
+            } else {
+                EditContactDetailsSheet(
+                    person: person,
+                    onSave: { edit in
+                        reload()
+                        offerContactWriteBack(for: edit)
+                    },
+                    onCancel: { isEditingContactDetails = false }
+                )
+            }
         }
         .sheet(item: $correctionTarget) { value in
             CorrectFactSheet(
@@ -183,11 +189,17 @@ struct PersonWorkspaceView: View {
     /// therefore cannot decide whether to show a write prompt. Re-reading macOS authorization here
     /// also avoids trusting the state captured when the app launched.
     private func offerContactWriteBack(for edit: ContactDetailsEdit) {
-        guard let services, person.personProfile?.contactsIdentifier != nil else { return }
+        guard let services, person.personProfile?.contactsIdentifier != nil else {
+            isEditingContactDetails = false
+            return
+        }
 
         Task {
             await services.contacts.refreshAuthorization()
-            guard services.contacts.isEnabled, services.contacts.authorization.canRead else { return }
+            guard services.contacts.isEnabled, services.contacts.authorization.canRead else {
+                isEditingContactDetails = false
+                return
+            }
             pendingWriteBack = edit
         }
     }
