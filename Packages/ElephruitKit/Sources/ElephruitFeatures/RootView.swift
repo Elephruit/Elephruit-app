@@ -236,6 +236,30 @@ public struct RootView: View {
         SidebarMetrics.widths(fittingTitles: SidebarRegistry.nonTruncatingTitles)
     }
 
+    /// Every column's width, decided together.
+    ///
+    /// ### Why one value rather than a question per pane
+    /// Because the panes were asked separately and each was told about the *window*. Each one then
+    /// helped itself to the space the window had spare, and there is only one lot of spare space —
+    /// so the list took it, the editor got 118 points of it, and the empty state in there wrapped a
+    /// syllable to a line. Which columns fit, and how wide each is, is one calculation over all of
+    /// them; this is where the window asks for it and
+    /// ``ElephruitDesign/ModuleShellLayout/widths(windowWidth:sidebarWidth:showsList:userWantsInspector:hasSelection:stored:)``
+    /// is where it is worked out and where it is tested.
+    private var shellWidths: ModuleShellLayout.Widths {
+        shellLayout.widths(
+            // Before the window has been measured, assume the size it opens at rather than zero —
+            // a window of no width holds no columns, and the first frame would drop the editor and
+            // then put it back.
+            windowWidth: windowWidth > 0 ? windowWidth : Theme.Size.assumedWindowWidth,
+            sidebarWidth: navigation.layoutMode.showsSidebar ? sidebarWidths.minimum : nil,
+            showsList: navigation.layoutMode.showsList,
+            userWantsInspector: navigation.isInspectorVisible,
+            hasSelection: hasInspectableSelection,
+            stored: moduleLayout.storedWidths(in: navigation.activeModule)
+        )
+    }
+
     private var splitView: some View {
         NavigationSplitView(columnVisibility: columnVisibilityBinding) {
             SidebarView(navigation: navigation)
@@ -285,9 +309,7 @@ public struct RootView: View {
             .moduleColumnWidth(
                 .primary,
                 layout: shellLayout,
-                store: moduleLayout,
-                module: navigation.activeModule,
-                windowWidth: windowWidth,
+                resolved: shellWidths.primary,
                 pinned: pinnedWidths[.primary]
             )
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
@@ -297,7 +319,10 @@ public struct RootView: View {
             // A canvas module — the calendar, the time sheet — has nothing to put in a third column,
             // and the honest expression of that is no column rather than a narrow one. What used to
             // be here was 720 points of "Nothing selected" sitting where the month should have been.
-            if shellLayout.detail.isAvailable {
+            //
+            // A window too narrow to hold a usable editor gets no editor, on the same terms: a strip
+            // of wrapped fragments is not a smaller editor, it is a broken one.
+            if let detailWidth = shellWidths.detail {
                 ItemDetailView(navigation: navigation)
                     .frame(
                         // Focus mode caps the measure: long lines are hard to read, and the point of
@@ -308,9 +333,7 @@ public struct RootView: View {
                     .moduleColumnWidth(
                         .detail,
                         layout: shellLayout,
-                        store: moduleLayout,
-                        module: navigation.activeModule,
-                        windowWidth: windowWidth,
+                        resolved: detailWidth,
                         pinned: pinnedWidths[.detail]
                     )
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
@@ -326,12 +349,8 @@ public struct RootView: View {
             InspectorView(navigation: navigation)
                 .inspectorColumnWidth(
                     min: shellLayout.inspector.width.minimum,
-                    ideal: moduleLayout.width(
-                        of: .inspector,
-                        in: navigation.activeModule,
-                        available: windowWidth
-                    ),
-                    max: shellLayout.inspector.width.maximum ?? windowWidth
+                    ideal: shellWidths.inspector ?? shellLayout.inspector.width.ideal,
+                    max: shellWidths.inspector ?? shellLayout.inspector.width.ideal
                 )
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
@@ -589,15 +608,17 @@ public struct RootView: View {
     /// the module makes about itself — see ``DetailPanePolicy/isVisible(userWants:hasSelection:windowWidth:)`` —
     /// and neither overwrites what the user asked for, so widening the window again brings the
     /// inspector back rather than making them ask twice.
+    /// The inspector is open when the user asked for it *and* the shell found room for a usable one.
+    ///
+    /// Both halves are decided in one place now. The module's policy still says whether an inspector
+    /// belongs here at all and whether it needs a selection to be about; what is new is that the
+    /// arithmetic gets a say — a pane that would have to be squeezed below its minimum is not shown
+    /// at all, because a strip of wrapped fragments is not a narrower inspector, it is a broken one.
+    /// Nothing here overwrites what the user asked for, so widening the window brings it back rather
+    /// than making them ask twice.
     private var inspectorBinding: Binding<Bool> {
         Binding(
-            get: {
-                shellLayout.inspector.isVisible(
-                    userWants: navigation.isInspectorVisible,
-                    hasSelection: hasInspectableSelection,
-                    windowWidth: windowWidth
-                )
-            },
+            get: { shellWidths.inspector != nil },
             set: { navigation.isInspectorVisible = $0 }
         )
     }
