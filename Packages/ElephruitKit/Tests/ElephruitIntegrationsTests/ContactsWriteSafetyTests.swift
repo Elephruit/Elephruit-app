@@ -127,30 +127,84 @@ struct ContactsWriteSafetyTests {
     /// hurry is exactly the change that would pass review. Setting every property this test knows
     /// about and comparing against a fresh value proves the list is complete: a new field would leave
     /// the two equal and fail here.
-    @Test("A write can only say the five things it is allowed to say")
+    @Test("A write can only say the things it is allowed to say")
     func writeCarriesNothingElse() {
         var change = ContactWrite(identifier: "abc")
 
+        change.givenName = "Maya"
+        change.middleName = "Lin"
+        change.familyName = "Chen"
+        change.namePrefix = "Dr"
+        change.nameSuffix = "PhD"
+        change.nickname = "May"
         change.jobTitle = "Head of Design"
+        change.departmentName = "Design"
         change.organizationName = "Northwind"
         change.emailAddresses = [ContactLabelledValue(label: "work", value: "maya@northwind.example")]
         change.phoneNumbers = [ContactLabelledValue(label: "mobile", value: "+15125550192")]
         change.urlAddresses = [ContactLabelledValue(label: "homepage", value: "northwind.example")]
+        change.birthday = PartialDate(month: 10, day: 12)
 
         #expect(change != ContactWrite(identifier: "abc"), "every writable field must be reachable")
         #expect(
             change == ContactWrite(
                 identifier: "abc",
+                givenName: "Maya",
+                middleName: "Lin",
+                familyName: "Chen",
+                namePrefix: "Dr",
+                nameSuffix: "PhD",
+                nickname: "May",
                 jobTitle: "Head of Design",
+                departmentName: "Design",
                 organizationName: "Northwind",
                 emailAddresses: [ContactLabelledValue(label: "work", value: "maya@northwind.example")],
                 phoneNumbers: [ContactLabelledValue(label: "mobile", value: "+15125550192")],
-                urlAddresses: [ContactLabelledValue(label: "homepage", value: "northwind.example")]
+                urlAddresses: [ContactLabelledValue(label: "homepage", value: "northwind.example")],
+                birthday: PartialDate(month: 10, day: 12)
             ),
             """
             A `ContactWrite` built from every field this test knows about differs from the one it \
             assembled, which means the type has grown a field. Anything writable must be deliberate: \
             add it here, and to `ContactWriteBackSheet`, which has to show it before it is written.
+            """
+        )
+    }
+
+    /// The fields that stay unwritable, asserted by there being nowhere to put them.
+    ///
+    /// Prose in a doc comment is not a guarantee; a compile error is. This test exists to be *broken*
+    /// by somebody adding one of these to `ContactWrite`, at which point they have to come here and
+    /// argue for it rather than discovering later that a photograph went missing.
+    @Test("A write has nowhere to put the fields that must stay untouched")
+    func unwritableFieldsHaveNoHome() {
+        let change = ContactWrite(identifier: "abc")
+        let mirrored = Set(Mirror(reflecting: change).children.compactMap(\.label))
+
+        let mustNotExist = [
+            "postalAddresses",   // reads as a formatted line; the projection does not invert
+            "note",              // needs an Apple-granted entitlement, and the CRM has its own notes
+            "imageData",         // the largest thing Contacts holds, and never displayed here
+            "thumbnailImageData",
+            "socialProfiles",
+            "instantMessageAddresses",
+            "contactRelations",
+            "dates",             // anniversaries are the user's to keep in Contacts
+            "previousFamilyName",
+            "phoneticGivenName", // "rhymes with papaya" does not split into these
+            "phoneticFamilyName",
+            "nonGregorianBirthday",
+            "contactType",
+        ]
+
+        let offenders = mustNotExist.filter { mirrored.contains($0) }
+
+        #expect(
+            offenders.isEmpty,
+            """
+            `ContactWrite` has grown a field that was deliberately excluded: \(offenders). Each of \
+            these was left out for a stated reason — see `ContactsProviding.write(_:)`. Adding one \
+            means changing that reasoning on purpose, not in passing.
             """
         )
     }
@@ -339,6 +393,97 @@ struct ContactsWriteSafetyTests {
     @Test("A provider with nothing behind it refuses rather than pretending")
     func nullProviderRefusesWrites() async {
         #expect(await NoContactsProvider().write(ContactWrite(identifier: "maya")) == .notPermitted)
+    }
+
+    @Test("A name is written in the parts it was edited in")
+    func nameIsWrittenInParts() async {
+        let provider = FixtureContactsProvider(contacts: [Self.linkedContact()], authorization: .authorized)
+
+        _ = await provider.write(
+            ContactWrite(
+                identifier: "maya",
+                givenName: "Maya",
+                middleName: "Lin",
+                familyName: "Chen",
+                namePrefix: "Dr",
+                nameSuffix: "PhD",
+                nickname: "May"
+            )
+        )
+
+        let updated = await provider.systemContact(withIdentifier: "maya")
+        #expect(updated?.givenName == "Maya")
+        #expect(updated?.middleName == "Lin")
+        #expect(updated?.namePrefix == "Dr")
+        #expect(updated?.nameSuffix == "PhD")
+        #expect(updated?.nickname == "May")
+    }
+
+    @Test("A birthday without a year is written without one, not with a made-up one")
+    func birthdayWithoutAYear() async {
+        let provider = FixtureContactsProvider(contacts: [Self.linkedContact()], authorization: .authorized)
+
+        _ = await provider.write(
+            ContactWrite(identifier: "maya", birthday: PartialDate(month: 10, day: 12))
+        )
+
+        let updated = await provider.systemContact(withIdentifier: "maya")
+        #expect(updated?.birthday?.month == 10)
+        #expect(updated?.birthday?.day == 12)
+        #expect(updated?.birthday?.year == nil, "a year nobody supplied must not be invented")
+    }
+
+    /// The pairing that stops a write from deleting something nobody saw.
+    ///
+    /// A field the app can *write* but never *reads* starts empty on every imported person, and the
+    /// first edit sends that emptiness to the address book — so somebody's middle name and suffix
+    /// disappear because they corrected a phone number. The rule is therefore: anything writable is
+    /// readable. This asserts it against the two types rather than against anybody's memory.
+    @Test("A write can only clear fields the import actually reads")
+    func contactWriteCanOnlyClearWhatImportReads() {
+        let writable = Set(
+            Mirror(reflecting: ContactWrite(identifier: "abc")).children.compactMap(\.label)
+        ).subtracting(["identifier"])
+
+        var contact = SystemContact(id: "abc")
+        let readable = Set(Mirror(reflecting: contact).children.compactMap(\.label))
+
+        // The two disagree only in spelling, which is where a genuine gap would hide.
+        let spellings = [
+            "emailAddresses": "emailAddresses",
+            "phoneNumbers": "phoneNumbers",
+            "urlAddresses": "urlAddresses",
+            "birthday": "birthday",
+        ]
+
+        let unreadable = writable.filter { field in
+            !readable.contains(spellings[field] ?? field)
+        }
+
+        #expect(
+            unreadable.isEmpty,
+            """
+            \(unreadable) can be written but is never read from a contact, so every imported person \
+            has it empty and the first edit they make wipes it from their address book. Read it on \
+            import, or take it off `ContactWrite`.
+            """
+        )
+
+        // Not a dead binding: proves the mirror above described a populated record rather than an
+        // empty one whose properties happened to exist.
+        contact.middleName = "Lin"
+        #expect(contact.middleName == "Lin")
+    }
+
+    @Test("A birthday with a year keeps it")
+    func birthdayWithAYear() async {
+        let provider = FixtureContactsProvider(contacts: [Self.linkedContact()], authorization: .authorized)
+
+        _ = await provider.write(
+            ContactWrite(identifier: "maya", birthday: PartialDate(year: 1987, month: 10, day: 12))
+        )
+
+        #expect(await provider.systemContact(withIdentifier: "maya")?.birthday?.year == 1987)
     }
 }
 

@@ -91,10 +91,10 @@
 	  It named a stricter promise until the People module learned to correct a linked contact: "only
 	  reads your contacts and never changes them" was true then and would be a lie now. A permission
 	  prompt that overstates the restraint is worse than one that states a real limit plainly, so this
-	  now names the five fields a change can touch and the two things — creating and deleting — that
-	  remain impossible.
+	  now names what a change can touch and the two things — creating and deleting — that remain
+	  impossible.
 	-->
 	<key>NSContactsUsageDescription</key>
-	<string>Elephruit can link the people you keep notes about to your existing contacts, so you do not type their details twice. It changes a contact only when you edit that person in Elephruit and confirm the change, and only their email addresses, phone numbers, websites, job title, and company — never their name, birthday, photo, or postal address. It never creates or deletes contacts. Your notes, reflections, and relationship history stay in Elephruit and are never written back.</string>
+	<string>Elephruit can link the people you keep notes about to your existing contacts, so you do not type their details twice. It changes a contact only when you edit that person in Elephruit and confirm the change, and only their name, nickname, birthday, email addresses, phone numbers, websites, job title, department, and company. It never touches their photo, postal address, or notes, and it never creates or deletes contacts. Your own notes, reflections, and relationship history stay in Elephruit and are never written back.</string>
 </dict>
 </plist>

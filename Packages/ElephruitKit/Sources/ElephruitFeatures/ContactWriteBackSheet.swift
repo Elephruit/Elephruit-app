@@ -92,8 +92,19 @@ struct ContactWriteBackSheet: View {
     @ViewBuilder
     private var changeList: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+            // The name in parts, because that is how it will be stored and because a split the app
+            // made is exactly the thing worth showing before it is written to somebody's record.
+            row("Name prefix", edit.namePrefix)
+            row("First name", edit.givenName)
+            row("Middle name", edit.middleName)
+            row("Last name", edit.familyName)
+            row("Name suffix", edit.nameSuffix)
+            row("Nickname", edit.nickname)
+
             row("Role", edit.roleTitle)
+            row("Department", edit.departmentName)
             row("Organisation", edit.organizationName)
+            row("Birthday", birthdayDescription)
 
             ForEach(writableGroups, id: \.title) { group in
                 ForEach(Array(group.values.enumerated()), id: \.offset) { _, value in
@@ -103,6 +114,22 @@ struct ContactWriteBackSheet: View {
         }
         .padding(Theme.Spacing.small)
         .background(Theme.Colors.subtleFill, in: RoundedRectangle(cornerRadius: Theme.Radius.small))
+    }
+
+    /// The birthday as it will be stored — without inventing a year that was never supplied.
+    private var birthdayDescription: String {
+        guard let date = edit.partialBirthday else { return "" }
+
+        var components = DateComponents()
+        components.month = date.month
+        components.day = date.day
+        components.year = date.year
+
+        guard let resolved = Calendar.current.date(from: components) else { return "" }
+
+        return resolved.formatted(
+            .dateTime.day().month(.wide).year(date.year == nil ? .omitted : .defaultDigits)
+        )
     }
 
     private var writableGroups: [(title: String, values: [LabelledValue])] {
@@ -140,11 +167,19 @@ struct ContactWriteBackSheet: View {
             let result = await services.contacts.write(
                 ContactWrite(
                     identifier: identifier,
+                    givenName: edit.givenName,
+                    middleName: edit.middleName,
+                    familyName: edit.familyName,
+                    namePrefix: edit.namePrefix,
+                    nameSuffix: edit.nameSuffix,
+                    nickname: edit.nickname,
                     jobTitle: edit.roleTitle,
+                    departmentName: edit.departmentName,
                     organizationName: edit.organizationName,
                     emailAddresses: edit.emails.map { ContactLabelledValue(label: $0.label, value: $0.value) },
                     phoneNumbers: edit.phones.map { ContactLabelledValue(label: $0.label, value: $0.value) },
-                    urlAddresses: edit.websites.map { ContactLabelledValue(label: $0.label, value: $0.value) }
+                    urlAddresses: edit.websites.map { ContactLabelledValue(label: $0.label, value: $0.value) },
+                    birthday: edit.partialBirthday
                 )
             )
 

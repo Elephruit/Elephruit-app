@@ -42,10 +42,36 @@ struct EditContactDetailsSheet: View {
                 .font(Theme.Text.title)
 
             Form {
-                Section("Identity") {
+                Section("Name") {
+                    // In parts, because Contacts keeps them in parts and the header's single field
+                    // is what makes them drift. Somebody whose family name comes first, or who has a
+                    // suffix, can say so here instead of having it guessed from a rename.
+                    TextField("Prefix", text: $edit.namePrefix)
+                    TextField("First", text: $edit.givenName)
+                    TextField("Middle", text: $edit.middleName)
+                    TextField("Last", text: $edit.familyName)
+                    TextField("Suffix", text: $edit.nameSuffix)
+                    TextField("Nickname", text: $edit.nickname)
+                }
+
+                Section("Work") {
                     TextField("Role", text: $edit.roleTitle)
+                    TextField("Department", text: $edit.departmentName)
                     TextField("Organisation", text: $edit.organizationName)
                     TextField("Location", text: $edit.locationText)
+                }
+
+                Section("Birthday") {
+                    Toggle("Has a birthday recorded", isOn: $edit.hasBirthday)
+
+                    if edit.hasBirthday {
+                        DatePicker("Date", selection: $edit.birthday, displayedComponents: .date)
+
+                        // The year is genuinely often unknown, and both this app and Contacts store
+                        // that as an absence. A toggle rather than a blank field, so "I do not know
+                        // the year" is a thing somebody can say rather than a thing they leave.
+                        Toggle("The year is known", isOn: $edit.birthdayHasYear)
+                    }
                 }
 
                 ForEach(ContactDetailKind.allCases, id: \.rawValue) { kind in
@@ -111,9 +137,16 @@ struct EditContactDetailsSheet: View {
             try services.persons.updateProfile(of: person) { profile in
                 cleaned.apply(to: profile)
             }
-            // Emails and the organisation feed the item's search projection, so a person renamed
-            // here stays findable by the new value rather than the old one.
-            try services.items.update(person) { $0.refreshSearchText() }
+
+            // The person is shown under the item's title everywhere outside this sheet, so a name
+            // edited here has to reach it or the header would still read the old one. Assembled from
+            // the parts rather than typed as a line, which is the direction that does not guess.
+            let assembled = cleaned.displayName
+            try services.items.update(person) { subject in
+                if !assembled.isEmpty { subject.title = assembled }
+                subject.refreshSearchText()
+            }
+
             services.refreshDerivedState()
             onSave(cleaned)
         } catch {
@@ -199,7 +232,15 @@ struct ContactDetailsEdit: Equatable, Identifiable {
     /// are still two separate decisions about the address book.
     let id = UUID()
 
+    var givenName: String
+    var middleName: String
+    var familyName: String
+    var namePrefix: String
+    var nameSuffix: String
+    var nickname: String
+
     var roleTitle: String
+    var departmentName: String
     var organizationName: String
     var locationText: String
 
@@ -208,14 +249,52 @@ struct ContactDetailsEdit: Equatable, Identifiable {
     var addresses: [LabelledValue]
     var websites: [LabelledValue]
 
-    init(profile: PersonProfile?) {
+    /// Whether a birthday is recorded at all, kept separately so the picker can hold a sensible date
+    /// while the answer is still "none".
+    var hasBirthday: Bool
+    var birthday: Date
+    var birthdayHasYear: Bool
+
+    init(profile: PersonProfile?, calendar: Calendar = .current, today: Date = Date()) {
+        givenName = profile?.givenName ?? ""
+        middleName = profile?.middleName ?? ""
+        familyName = profile?.familyName ?? ""
+        namePrefix = profile?.namePrefix ?? ""
+        nameSuffix = profile?.nameSuffix ?? ""
+        nickname = profile?.nickname ?? ""
+
         roleTitle = profile?.roleTitle ?? ""
+        departmentName = profile?.departmentName ?? ""
         organizationName = profile?.organizationName ?? ""
         locationText = profile?.locationText ?? ""
+
         emails = profile?.emails ?? []
         phones = profile?.phones ?? []
         addresses = profile?.addresses ?? []
         websites = profile?.websites ?? []
+
+        hasBirthday = profile?.birthday != nil
+        birthday = profile?.birthday ?? today
+        birthdayHasYear = profile?.birthdayHasYear ?? false
+        self.calendar = calendar
+    }
+
+    /// Held so the birthday can be read into parts without the view supplying one.
+    private var calendar: Calendar
+
+    /// The birthday as the rest of the app models it: day and month always, year only when known.
+    var partialBirthday: PartialDate? {
+        guard hasBirthday else { return nil }
+        let parts = calendar.dateComponents([.year, .month, .day], from: birthday)
+        guard let month = parts.month, let day = parts.day else { return nil }
+        return PartialDate(year: birthdayHasYear ? parts.year : nil, month: month, day: day)
+    }
+
+    /// The name as one line, for anywhere that needs to show it whole.
+    var displayName: String {
+        [namePrefix, givenName, middleName, familyName, nameSuffix]
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
     }
 
     /// The edit with blank rows and surrounding whitespace removed.
@@ -224,7 +303,14 @@ struct ContactDetailsEdit: Equatable, Identifiable {
     /// it falls back to the kind's usual label rather than rendering as a gap.
     func cleaned() -> ContactDetailsEdit {
         var result = self
+        result.givenName = givenName.trimmed()
+        result.middleName = middleName.trimmed()
+        result.familyName = familyName.trimmed()
+        result.namePrefix = namePrefix.trimmed()
+        result.nameSuffix = nameSuffix.trimmed()
+        result.nickname = nickname.trimmed()
         result.roleTitle = roleTitle.trimmed()
+        result.departmentName = departmentName.trimmed()
         result.organizationName = organizationName.trimmed()
         result.locationText = locationText.trimmed()
         result.emails = Self.clean(emails, kind: .email)
@@ -246,13 +332,25 @@ struct ContactDetailsEdit: Equatable, Identifiable {
     /// Writes the edit onto a profile. Empty identity fields become `nil` rather than `""`, which is
     /// what the rest of the app tests for when deciding whether a line has anything to say.
     func apply(to profile: PersonProfile) {
+        profile.givenName = givenName
+        profile.familyName = familyName
+        profile.middleName = middleName.isEmpty ? nil : middleName
+        profile.namePrefix = namePrefix.isEmpty ? nil : namePrefix
+        profile.nameSuffix = nameSuffix.isEmpty ? nil : nameSuffix
+        profile.nickname = nickname.isEmpty ? nil : nickname
+
         profile.roleTitle = roleTitle.isEmpty ? nil : roleTitle
+        profile.departmentName = departmentName.isEmpty ? nil : departmentName
         profile.organizationName = organizationName.isEmpty ? nil : organizationName
         profile.locationText = locationText.isEmpty ? nil : locationText
+
         profile.emails = emails
         profile.phones = phones
         profile.addresses = addresses
         profile.websites = websites
+
+        profile.birthday = hasBirthday ? birthday : nil
+        profile.birthdayHasYear = hasBirthday && birthdayHasYear
     }
 }
 

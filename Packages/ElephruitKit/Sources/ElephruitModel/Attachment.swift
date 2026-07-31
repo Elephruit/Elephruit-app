@@ -173,6 +173,23 @@ public final class PersonProfile {
     public var addressesData: Data?
     public var websitesData: Data?
 
+    // MARK: Added so a linked contact can be corrected in full
+    //
+    // Contacts holds these and this model did not, which meant editing somebody here could only ever
+    // offer the address book a subset of what it already had. Nullable, so `SchemaV6` adds columns
+    // and rewrites nothing. See `ContactWrite`.
+
+    /// Which part of an organisation they work in — "Design", "Legal".
+    public var departmentName: String?
+
+    /// The parts of a name that are neither given nor family.
+    ///
+    /// Separate rather than folded into ``givenName``, because Contacts keeps them separate and a
+    /// round trip through one combined field is how "Dr" becomes somebody's first name.
+    public var middleName: String?
+    public var namePrefix: String?
+    public var nameSuffix: String?
+
     /// Which account the linked Contacts record lives in — "iCloud", "Google", "On My Mac".
     ///
     /// Stored for display and for the duplicate explanation, never used to decide anything.
@@ -258,6 +275,20 @@ extension PersonProfile {
     /// Given + family, or whichever exists.
     public var fullName: String {
         [givenName, familyName].filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
+    /// Every part of the name, in reading order.
+    ///
+    /// Distinct from ``fullName`` and used for a different question. `fullName` is what to call the
+    /// record; this is what the parts *spell*, and comparing it against the item's title is how the
+    /// app tells "the name was renamed and the parts have fallen behind" from "the parts were set
+    /// deliberately and say more than the two `fullName` covers". Without the distinction, saving a
+    /// person as "Dr Maya Chen" would be re-split on the next edit into a first name of "Dr".
+    public var assembledName: String {
+        [namePrefix, givenName, middleName, familyName, nameSuffix]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
     }
 
     /// What to call them in a sentence — the nickname if they have one.
