@@ -38,5 +38,25 @@
 	-->
 	<key>com.apple.security.personal-information.calendars</key>
 	<true/>
+
+	<!--
+	  The People module: reading the address book.
+
+	  This entitlement lets the sandbox reach the Contacts daemon at all. The TCC prompt is separate
+	  and is triggered only when the user turns the integration on in Settings — until then the app
+	  holds an inert `NoContactsProvider` and never touches `CNContactStore`.
+
+	  Contacts, unlike EventKit, has a single access tier: granting read access grants write access
+	  with it, and the user has no way to give less. Elephruit never writes. `ContactsProviding` has
+	  no write method, and `ContactsWriteSafetyTests` fails if the adapter ever reaches past it to
+	  `CNSaveRequest` — and a second test fails if the adapter fetches a key nothing displays.
+
+	  Still deliberately ABSENT: network client, network server, iCloud, CloudKit, Reminders, Photos,
+	  Camera, Microphone, Location, Bluetooth, USB, Apple Events, JIT, and every temporary exception.
+	  Business-card scanning needs no camera entitlement: Continuity Camera is presented by the
+	  system, which hands back a file, and Vision reads it on-device.
+	-->
+	<key>com.apple.security.personal-information.addressbook</key>
+	<true/>
 </dict>
 </plist>

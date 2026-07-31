@@ -79,5 +79,15 @@
 	-->
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Elephruit shows your events alongside your tasks and notes. It only reads your calendar and never changes it.</string>
+
+	<!--
+	  Shown in the macOS permission prompt for the People module.
+
+	  Says what is read and, as importantly, that nothing is written — because Contacts has a single
+	  access tier and granting read access grants write access with it. The app has no code that
+	  could write; see `ContactsWriteSafetyTests`.
+	-->
+	<key>NSContactsUsageDescription</key>
+	<string>Elephruit can link the people you keep notes about to your existing contacts, so you do not type their details twice. It only reads your contacts and never changes them. Your notes, reflections, and relationship history stay in Elephruit and are never written back.</string>
 </dict>
 </plist>
