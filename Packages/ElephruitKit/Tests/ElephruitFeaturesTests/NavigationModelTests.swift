@@ -3,6 +3,54 @@ import ElephruitFeatures
 import Foundation
 import Testing
 
+@MainActor
+@Suite("Browser-style navigation history")
+struct BrowserNavigationHistoryTests {
+    @Test("Back and forward restore the selected record")
+    func recordHistory() {
+        let navigation = NavigationModel()
+        let first = UUID()
+        let second = UUID()
+
+        navigation.selectItem(first)
+        navigation.selectItem(second)
+        navigation.goBack()
+
+        #expect(navigation.selectedItemID == first)
+        #expect(navigation.canGoForward)
+
+        navigation.goForward()
+        #expect(navigation.selectedItemID == second)
+    }
+
+    @Test("A new destination after going back clears forward history")
+    func branchingClearsForwardHistory() {
+        let navigation = NavigationModel()
+        navigation.select(.people(.all))
+        navigation.selectItem(UUID())
+        navigation.goBack()
+
+        #expect(navigation.canGoForward)
+        navigation.select(.calendar)
+        #expect(navigation.canGoForward == false)
+    }
+
+    @Test("History crosses module boundaries")
+    func moduleHistory() {
+        let navigation = NavigationModel()
+        navigation.enterModule(.people)
+
+        #expect(navigation.activeModule == .people)
+        navigation.goBack()
+        #expect(navigation.selection == .today)
+        #expect(navigation.activeModule == nil)
+
+        navigation.goForward()
+        #expect(navigation.selection == .people(.all))
+        #expect(navigation.activeModule == .people)
+    }
+}
+
 /// **Criterion A1-10** — one Escape leaves search, the query survives, and reopening restores it
 /// selected.
 ///

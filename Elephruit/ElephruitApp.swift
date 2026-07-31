@@ -267,6 +267,16 @@ struct ElephruitCommands: Commands {
         CommandGroup(after: .sidebar) {
             Divider()
 
+            Button("Back") { navigation?.goBack() }
+                .keyboardShortcut(KeyEquivalent("["), modifiers: .command)
+                .disabled(navigation?.canGoBack != true)
+
+            Button("Forward") { navigation?.goForward() }
+                .keyboardShortcut(KeyEquivalent("]"), modifiers: .command)
+                .disabled(navigation?.canGoForward != true)
+
+            Divider()
+
             // The four destinations that belong to no module, in sidebar order. `⌘1`–`⌘4` and the
             // named shortcuts both land here, and both mean the same thing they say — a binding
             // whose name and effect disagree is worse than no binding, which is why
@@ -293,7 +303,6 @@ struct ElephruitCommands: Commands {
                 Divider()
 
                 Button("Back to All Modules") { navigation?.leaveModule() }
-                    .keyboardShortcut(KeyEquivalent("["), modifiers: .command)
                     .disabled(navigation?.activeModule == nil)
             }
 

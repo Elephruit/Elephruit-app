@@ -230,11 +230,41 @@ public final class NavigationModel {
     /// a multi-selection can act on twenty items while the editor still shows something coherent
     /// rather than going blank.
     public var selectedItemIDs: Set<UUID> = [] {
-        didSet { reconcilePrimarySelection() }
+        didSet {
+            let previousPrimary = selectedItemID
+            reconcilePrimarySelection()
+            guard !isApplyingHistory, previousPrimary != selectedItemID else { return }
+            recordNavigation(
+                NavigationLocation(
+                    selection: selection,
+                    activeModule: activeModule,
+                    moduleSelections: moduleSelections,
+                    selectedItemIDs: oldValue,
+                    selectedItemID: previousPrimary
+                )
+            )
+        }
     }
 
     /// The item the detail pane shows.
     public private(set) var selectedItemID: UUID?
+
+    // MARK: Browser-style history
+
+    private struct NavigationLocation: Equatable {
+        var selection: SidebarSelection
+        var activeModule: AppModule?
+        var moduleSelections: [AppModule: SidebarSelection]
+        var selectedItemIDs: Set<UUID>
+        var selectedItemID: UUID?
+    }
+
+    private var backHistory: [NavigationLocation] = []
+    private var forwardHistory: [NavigationLocation] = []
+    @ObservationIgnored private var isApplyingHistory = false
+
+    public var canGoBack: Bool { !backHistory.isEmpty }
+    public var canGoForward: Bool { !forwardHistory.isEmpty }
 
     // MARK: Layout and focus
 
@@ -362,15 +392,18 @@ public final class NavigationModel {
     public func select(_ selection: SidebarSelection) {
         guard self.selection != selection else { return }
 
+        recordNavigation(currentLocation)
+
         // Before anything moves. A debounced editor write is the one piece of state a navigation
         // can destroy, and flushing here means it cannot matter *which* navigation happened —
         // module switch, deep link, menu command, or a click in the list.
-        flushPendingEdits()
-
-        self.selection = selection
-        applyModule(for: selection)
-        selectedItemIDs = []
-        sortOverride = nil
+        withoutRecordingHistory {
+            flushPendingEdits()
+            self.selection = selection
+            applyModule(for: selection)
+            selectedItemIDs = []
+            sortOverride = nil
+        }
     }
 
     /// Enters a module, resuming wherever it was last left.
@@ -384,15 +417,20 @@ public final class NavigationModel {
         // which is what a deleted smart list looks like from here.
         let destination = module.contains(resumed) ? resumed : module.defaultSelection
 
-        if selection != destination {
-            select(destination)
-        }
+        guard selection != destination || activeModule != module else { return }
+        recordNavigation(currentLocation)
 
-        // Set explicitly rather than relying on `select`. Stepping back into the module you just
-        // left lands on the selection you left it at, so `select` has nothing to do and would
-        // otherwise leave the sidebar outside the module it was asked to enter.
-        activeModule = module
-        moduleSelections[module] = selection
+        withoutRecordingHistory {
+            if selection != destination {
+                select(destination)
+            }
+
+            // Set explicitly rather than relying on `select`. Stepping back into the module you just
+            // left lands on the selection you left it at, so `select` has nothing to do and would
+            // otherwise leave the sidebar outside the module it was asked to enter.
+            activeModule = module
+            moduleSelections[module] = selection
+        }
     }
 
     /// Returns to the primary navigation without changing what the window is showing.
@@ -402,8 +440,62 @@ public final class NavigationModel {
     /// this select Home instead would mean the back button silently closed whatever was open.
     public func leaveModule() {
         guard let activeModule else { return }
-        moduleSelections[activeModule] = selection
-        self.activeModule = nil
+        recordNavigation(currentLocation)
+        withoutRecordingHistory {
+            moduleSelections[activeModule] = selection
+            self.activeModule = nil
+        }
+    }
+
+    /// Goes to the previous place visited in this window, including the selected record.
+    public func goBack() {
+        guard let destination = backHistory.popLast() else { return }
+        flushPendingEdits()
+        forwardHistory.append(currentLocation)
+        apply(destination)
+    }
+
+    /// Returns to a place left by ``goBack()``.
+    public func goForward() {
+        guard let destination = forwardHistory.popLast() else { return }
+        flushPendingEdits()
+        backHistory.append(currentLocation)
+        apply(destination)
+    }
+
+    private var currentLocation: NavigationLocation {
+        NavigationLocation(
+            selection: selection,
+            activeModule: activeModule,
+            moduleSelections: moduleSelections,
+            selectedItemIDs: selectedItemIDs,
+            selectedItemID: selectedItemID
+        )
+    }
+
+    private func recordNavigation(_ location: NavigationLocation) {
+        guard !isApplyingHistory else { return }
+        if backHistory.last != location { backHistory.append(location) }
+        if backHistory.count > 100 { backHistory.removeFirst(backHistory.count - 100) }
+        forwardHistory.removeAll()
+    }
+
+    private func apply(_ location: NavigationLocation) {
+        withoutRecordingHistory {
+            selection = location.selection
+            activeModule = location.activeModule
+            moduleSelections = location.moduleSelections
+            selectedItemIDs = location.selectedItemIDs
+            selectedItemID = location.selectedItemID
+            sortOverride = nil
+        }
+    }
+
+    private func withoutRecordingHistory(_ operation: () -> Void) {
+        let wasApplyingHistory = isApplyingHistory
+        isApplyingHistory = true
+        defer { isApplyingHistory = wasApplyingHistory }
+        operation()
     }
 
     /// Keeps ``activeModule`` and ``moduleSelections`` true after a selection change.
@@ -499,13 +591,17 @@ public final class NavigationModel {
     /// build where Bookmarks was its own module, restored into one where it is not, must land
     /// somewhere real rather than in a module whose sidebar would not draw it.
     public func restore(_ state: RestorationState) {
-        moduleSelections = state.moduleSelections
-        select(state.selection)
+        backHistory.removeAll()
+        forwardHistory.removeAll()
+        withoutRecordingHistory {
+            moduleSelections = state.moduleSelections
+            select(state.selection)
 
-        if let module = state.module, activeModule == nil, !GlobalDestination.contains(state.selection) {
-            // A tag or a pinned item, which belongs to no module of its own but was being read
-            // inside one.
-            activeModule = module
+            if let module = state.module, activeModule == nil, !GlobalDestination.contains(state.selection) {
+                // A tag or a pinned item, which belongs to no module of its own but was being read
+                // inside one.
+                activeModule = module
+            }
         }
     }
 
