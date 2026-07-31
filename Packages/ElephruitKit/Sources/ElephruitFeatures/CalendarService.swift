@@ -79,6 +79,7 @@ public final class CalendarService {
     static let secondaryZoneKey = "calendar.secondaryTimeZone"
     static let favouriteZonesKey = "calendar.favouriteTimeZones"
     static let travellingKey = "calendar.isTravelling"
+    static let firstWeekdayKey = "calendar.firstWeekday"
 
     public init(
         dateProvider: any DateProvider,
@@ -355,9 +356,31 @@ public final class CalendarService {
         events.filter { $0.occurs(on: date, calendar: displayCalendar) && $0.appearsInPlan }
     }
 
-    /// The calendar to lay out with: the user's own, in the display zone.
+    /// The calendar to lay out with: the user's own, in the display zone, starting on the chosen day.
+    ///
+    /// The week's first day comes from the locale unless somebody has said otherwise. Both halves
+    /// matter: a grid that always starts on Sunday is wrong across most of Europe, and one that can
+    /// never be changed is wrong for the many people whose working week does not match their
+    /// locale's convention.
     public var displayCalendar: Calendar {
-        timeZoneDisplay.calendar(basedOn: dateProvider.calendar)
+        var calendar = timeZoneDisplay.calendar(basedOn: dateProvider.calendar)
+        if let first = firstWeekdayOverride { calendar.firstWeekday = first }
+        return calendar
+    }
+
+    /// The day a week starts on, or `nil` to follow the locale.
+    public var firstWeekdayOverride: Int? {
+        get {
+            let stored = defaults.integer(forKey: Self.firstWeekdayKey)
+            return (1...7).contains(stored) ? stored : nil
+        }
+        set {
+            if let newValue, (1...7).contains(newValue) {
+                defaults.set(newValue, forKey: Self.firstWeekdayKey)
+            } else {
+                defaults.removeObject(forKey: Self.firstWeekdayKey)
+            }
+        }
     }
 
     /// Looks a stored link back up in the calendar.
