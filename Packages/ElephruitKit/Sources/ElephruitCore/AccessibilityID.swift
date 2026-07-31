@@ -120,6 +120,7 @@ public enum AccessibilityID {
         public static let workspace = "people.workspace"
         public static let header = "people.header"
         public static let quickActions = "people.quickActions"
+        public static let contactDetails = "people.contactDetails"
         public static let timeline = "people.timeline"
         public static let contextSidebar = "people.contextSidebar"
         public static let list = "people.list"
