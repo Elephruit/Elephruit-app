@@ -13,7 +13,7 @@ public struct CalendarWorkspaceView: View {
     @State private var workspace: CalendarWorkspaceModel?
     @State private var editorRequest: EditorRequest?
     @State private var quickEntryStart: Date?
-    @State private var pendingDrag: DragRequest?
+    @State private var pendingChange: ScopedChangeRequest?
     @State private var annotatedKeys: Set<String> = []
     @State private var isShowingSetEditor = false
     @State private var isShowingTemplates = false
@@ -122,16 +122,16 @@ public struct CalendarWorkspaceView: View {
                 }
             )
         }
-        .sheet(item: $pendingDrag) { request in
+        .sheet(item: $pendingChange) { request in
             EventScopeSheet(
                 confirmation: request.confirmation,
-                isDeletion: false,
+                isDeletion: request.change.isDeletion,
                 onChoose: { scope in
                     let captured = request
-                    pendingDrag = nil
-                    Task { await apply(captured, scope: scope, services: services, workspace: workspace) }
+                    pendingChange = nil
+                    Task { await perform(captured.change, scope: scope, services: services, workspace: workspace) }
                 },
-                onCancel: { pendingDrag = nil }
+                onCancel: { pendingChange = nil }
             )
         }
         .sheet(isPresented: $isShowingSetEditor) {
@@ -310,41 +310,45 @@ public struct CalendarWorkspaceView: View {
         return calendar.date(byAdding: .minute, value: start, to: calendar.startOfDay(for: day)) ?? day
     }
 
-    /// A drag that finished, and whatever has to be asked before it is applied.
-    private func request(_ drag: DragKind, services: AppServices, workspace: CalendarWorkspaceModel) {
-        let event = drag.event
+    /// A change that is ready to happen, and whatever has to be asked before it does.
+    ///
+    /// One entry point for a drag, a resize, and a deletion, because the question in front of all
+    /// three is the same and three paths would be three chances to ask it with the wrong verb — or,
+    /// as this did until a re-read caught it, to answer it and then perform the wrong operation.
+    private func request(
+        _ change: ScopedChange,
+        services: AppServices,
+        workspace: CalendarWorkspaceModel
+    ) {
+        let event = change.event
 
         guard event.isRecurring else {
-            Task { await perform(drag, scope: .thisEvent, services: services, workspace: workspace) }
+            Task { await perform(change, scope: .thisEvent, services: services, workspace: workspace) }
             return
         }
 
-        pendingDrag = DragRequest(
-            kind: drag,
-            confirmation: .changingRecurringEvent(seriesTitle: event.displayTitle, isDeletion: false)
+        pendingChange = ScopedChangeRequest(
+            change: change,
+            confirmation: .changingRecurringEvent(
+                seriesTitle: event.displayTitle,
+                isDeletion: change.isDeletion
+            )
         )
     }
 
-    private func apply(
-        _ request: DragRequest,
-        scope: EventEditScope,
-        services: AppServices,
-        workspace: CalendarWorkspaceModel
-    ) async {
-        await perform(request.kind, scope: scope, services: services, workspace: workspace)
-    }
-
     private func perform(
-        _ drag: DragKind,
+        _ change: ScopedChange,
         scope: EventEditScope,
         services: AppServices,
         workspace: CalendarWorkspaceModel
     ) async {
-        switch drag {
+        switch change {
         case .move(let event, let target):
             await services.calendar.move(event, to: target, scope: scope)
         case .resize(let event, let target):
             await services.calendar.resize(event, newEnd: target, scope: scope)
+        case .delete(let event):
+            await services.calendar.delete(event.identity, scope: scope)
         }
         await reload(services: services, workspace: workspace)
     }
@@ -458,18 +462,7 @@ public struct CalendarWorkspaceView: View {
               event.isEditable
         else { return }
 
-        guard event.isRecurring else {
-            Task {
-                await services.calendar.delete(event.identity, scope: .thisEvent)
-                await reload(services: services, workspace: workspace)
-            }
-            return
-        }
-
-        pendingDrag = DragRequest(
-            kind: .move(event: event, target: event.startAt),
-            confirmation: .changingRecurringEvent(seriesTitle: event.displayTitle, isDeletion: true)
-        )
+        request(.delete(event: event), services: services, workspace: workspace)
     }
 
     // MARK: Bindings
@@ -514,21 +507,32 @@ private struct QuickEntryRequest: Identifiable {
     var id: Date { date }
 }
 
-private enum DragKind {
+/// A change to an existing event, waiting on a scope.
+///
+/// Deletion is a case here rather than a separate path, because the question asked before it is
+/// exactly the same question — *which occurrences* — and having two paths is how one of them ends up
+/// with the wrong verb on its buttons, or performing the wrong operation.
+private enum ScopedChange {
     case move(event: CalendarEventSummary, target: Date)
     case resize(event: CalendarEventSummary, target: Date)
+    case delete(event: CalendarEventSummary)
 
     var event: CalendarEventSummary {
         switch self {
-        case .move(let event, _), .resize(let event, _): event
+        case .move(let event, _), .resize(let event, _), .delete(let event): event
         }
+    }
+
+    var isDeletion: Bool {
+        if case .delete = self { return true }
+        return false
     }
 }
 
-private struct DragRequest: Identifiable {
-    let kind: DragKind
+private struct ScopedChangeRequest: Identifiable {
+    let change: ScopedChange
     let confirmation: EventChangeConfirmation
-    var id: String { confirmation.id + kind.event.id }
+    var id: String { confirmation.id + change.event.id }
 }
 
 // MARK: - Toolbar
