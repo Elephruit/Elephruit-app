@@ -117,6 +117,34 @@ struct PersonCommandTests {
         #expect(!command.requiresConfirmation, "creating a local record is nobody else's business")
     }
 
+    /// A partial first-name match must not swallow the rest of a name.
+    ///
+    /// The library holds Danielle Okafor. `add Danielle Fournier` is a *different* person, and
+    /// matching "Danielle" and treating "Fournier" as a detail to append to Okafor is how a command
+    /// bar quietly corrupts a record.
+    @Test("add Danielle Fournier creates somebody new, despite Danielle Okafor existing")
+    func addDoesNotMatchAPartialName() {
+        let command = parse("add Danielle Fournier danielle@example.com")
+
+        guard case .createPerson(let fields) = command.intent else {
+            Issue.record("expected a creation, got \(command.intent)")
+            return
+        }
+        #expect(fields.name == "Danielle Fournier")
+        #expect(fields.emails == ["danielle@example.com"])
+    }
+
+    @Test("But adding details to a name that matches exactly still finds them")
+    func addMatchesACompleteName() {
+        let command = parse("add Danielle danielle@example.com")
+
+        guard case .addDetails(let personID, _) = command.intent else {
+            Issue.record("expected details to be added, got \(command.intent)")
+            return
+        }
+        #expect(personID == Self.danielleID)
+    }
+
     @Test("Maya birthday October 12")
     func setABirthday() {
         let command = parse("Maya birthday October 12")

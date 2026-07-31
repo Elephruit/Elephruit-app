@@ -26,6 +26,12 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
     case calendar
     case time
 
+    /// A slice of the People module — all, favourites, celebrations, a group.
+    ///
+    /// One case carrying a ``PeopleScope`` rather than seven cases, so adding a scope does not widen
+    /// this enum and a scene restored from a newer version still decodes.
+    case people(PeopleScope)
+
     /// The query this selection shows.
     ///
     /// Pure, so "what does Today mean?" is answered in one testable place rather than inside a view.
@@ -54,6 +60,11 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
             // Unreachable while these destinations are unavailable; an empty query is the honest
             // answer rather than a crash if one is ever restored from a newer scene.
             ItemQuery()
+        case .people:
+            // People are fetched through `PersonRepository`, which knows about placeholders and
+            // profiles. A kind query would return them but would also return the sketches nobody
+            // asked to see.
+            ItemQuery()
         }
     }
 
@@ -73,6 +84,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .kind(let kind): kind
         case .tag, .savedSearch, .item, .archive, .trash: .note
         case .home, .calendar, .time: .note
+        case .people: .person
         }
     }
 
@@ -90,6 +102,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .home: "Home"
         case .calendar: "Calendar"
         case .time: "Time"
+        case .people(let scope): scope.title
         }
     }
 
@@ -107,6 +120,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .home: "house"
         case .calendar: "calendar.day.timeline.left"
         case .time: "timer"
+        case .people(let scope): scope.symbolName
         }
     }
 
@@ -124,6 +138,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .home: "sidebar.home"
         case .calendar: "sidebar.calendar"
         case .time: "sidebar.time"
+        case .people(let scope): "sidebar.people.\(scope.title.lowercased().replacingOccurrences(of: " ", with: "-"))"
         }
     }
 
@@ -162,6 +177,14 @@ public final class NavigationModel {
     public var isInspectorVisible = false
     public var isQuickCaptureVisible = false
     public var isCommandPaletteVisible = false
+
+    /// The People command bar, which is a different surface from the general ⌘K palette.
+    ///
+    /// Two bars rather than one because they answer different questions. The palette runs *commands*
+    /// the app defines; this one reads a sentence about a person and shows what it understood before
+    /// anything happens. Merging them would mean one field whose behaviour changes depending on what
+    /// the first word turned out to be.
+    public var isPeopleCommandBarVisible = false
 
     /// The full tag list, reached from the sidebar's bounded disclosure group.
     public var isTagBrowserVisible = false

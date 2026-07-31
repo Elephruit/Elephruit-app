@@ -74,6 +74,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
     case focusMode
     case clearSelection
     case toggleTimer
+    case peopleCommandBar
 
     public var title: String {
         switch self {
@@ -98,6 +99,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .focusMode: "Focus Mode"
         case .clearSelection: "Clear Selection"
         case .toggleTimer: "Start or Stop Timer"
+        case .peopleCommandBar: "People Command Bar"
         }
     }
 
@@ -125,6 +127,11 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .focusMode: KeyBinding("f", [.command, .option])
         case .clearSelection: KeyBinding("l", .command)
         case .toggleTimer: KeyBinding("t", [.command, .control])
+        // ⌘⇧K, beside ⌘K for the general palette: the two are siblings, and the shift says "the one
+        // about people". Every binding still has exactly one owner — `ShortcutRegistryTests` proves
+        // it over `allCases`, so a collision introduced here fails a test rather than silently
+        // shadowing the palette.
+        case .peopleCommandBar: KeyBinding("k", [.command, .shift])
         }
     }
 }

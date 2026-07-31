@@ -101,5 +101,23 @@ struct ElephruitShortcuts: AppShortcutsProvider {
             shortTitle: "Capture",
             systemImageName: "square.and.pencil"
         )
+        AppShortcut(
+            intent: FindPersonIntent(),
+            phrases: ["Find someone in \(.applicationName)"],
+            shortTitle: "Find a Person",
+            systemImageName: "person.text.rectangle"
+        )
+        AppShortcut(
+            intent: MeetingBriefIntent(),
+            phrases: ["Brief me in \(.applicationName)"],
+            shortTitle: "Meeting Brief",
+            systemImageName: "list.bullet.rectangle"
+        )
+        AppShortcut(
+            intent: UpcomingCelebrationsIntent(),
+            phrases: ["Upcoming birthdays in \(.applicationName)"],
+            shortTitle: "Celebrations",
+            systemImageName: "birthday.cake"
+        )
     }
 }

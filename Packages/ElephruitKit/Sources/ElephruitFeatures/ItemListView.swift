@@ -396,6 +396,15 @@ public struct ItemListView: View {
                 headline: "Nothing archived",
                 message: "Archiving keeps something without leaving it in your way."
             )
+        case .people:
+            // People are shown by `PeopleListView`, which has its own per-scope empty state — "you
+            // have nobody" and "nobody is overdue" are different pieces of news and must not share
+            // a sentence.
+            EmptyStateView(
+                symbolName: "person.2",
+                headline: "No one yet",
+                message: "Press ⌘⇧K and type a name."
+            )
         case .home, .calendar, .time:
             // Unreachable: these destinations are declared but unavailable, so nothing selects them.
             EmptyStateView(

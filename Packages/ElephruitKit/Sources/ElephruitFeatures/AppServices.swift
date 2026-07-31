@@ -47,6 +47,64 @@ public final class AppServices {
     /// People, computed from the links that already exist.
     public let people: PeopleService
 
+    // MARK: The People module
+
+    /// People, their facts, their relationships, and their celebrations.
+    public let persons: any PersonRepository
+
+    /// One traversal behind the portrait, the timeline, the charts, and the brief.
+    public let personWorkspace: PersonWorkspaceService
+
+    /// Duplicate detection and merging.
+    public let personIdentity: PersonIdentityService
+
+    /// Searching people by more than their name.
+    public let personSearch: PersonSearchService
+
+    /// Groups, and what can be done to all of one at once.
+    public let personGroups: PersonGroupService
+
+    /// Reads the command bar. A protocol, so an AI-backed parser is a second conformance rather than
+    /// a rewrite — see ``ElephruitCore/PersonCommandParsing``.
+    public let commandParser: any PersonCommandParsing
+
+    /// The system address book, read-only and off until the user turns it on.
+    public let contacts: ContactsService
+
+    /// Reads text off a scanned card. Inert until the scan flow is used.
+    public let textRecognizer: any TextRecognizing
+
+    /// Named subsets of the user's own details, for handing out.
+    ///
+    /// In `UserDefaults` rather than the store because they are a preference about *this machine's*
+    /// sharing behaviour, carry no relationship data, and must not travel in an archive that somebody
+    /// might send to a colleague.
+    public var shareProfiles: [ShareProfile] {
+        get {
+            guard let data = UserDefaults.standard.data(forKey: "people.shareProfiles"),
+                  let decoded = try? JSONDecoder().decode([ShareProfile].self, from: data),
+                  !decoded.isEmpty
+            else { return ShareProfile.defaults() }
+            return decoded
+        }
+        set {
+            UserDefaults.standard.set(try? JSONEncoder().encode(newValue), forKey: "people.shareProfiles")
+        }
+    }
+
+    /// People opened recently, newest first. Session-scoped, like the search history and for the
+    /// same reason: a list of who you looked at that outlives the session is a privacy liability
+    /// nobody asked for.
+    public private(set) var recentlyViewedPeople: [UUID] = []
+
+    public func noteViewed(person: Item) {
+        recentlyViewedPeople.removeAll { $0 == person.id }
+        recentlyViewedPeople.insert(person.id, at: 0)
+        if recentlyViewedPeople.count > 12 {
+            recentlyViewedPeople.removeLast(recentlyViewedPeople.count - 12)
+        }
+    }
+
     /// Files attached to items — copied in, or referenced where they already live.
     public let attachments: AttachmentStore
 
@@ -181,6 +239,25 @@ public final class AppServices {
         // turns the calendar on never constructs an `EKEventStore` and never prompts.
         self.calendar = CalendarService(dateProvider: dateProvider) { EventKitCalendarProvider() }
         self.people = PeopleService(items: items, dateProvider: dateProvider)
+
+        let persons = SwiftDataPersonRepository(context: context, items: items, dateProvider: dateProvider)
+        self.persons = persons
+        self.personWorkspace = PersonWorkspaceService(people: persons, items: items, dateProvider: dateProvider)
+        self.personIdentity = PersonIdentityService(
+            context: context, people: persons, items: items, dateProvider: dateProvider
+        )
+        let personSearch = PersonSearchService(people: persons, items: items, dateProvider: dateProvider)
+        self.personSearch = personSearch
+        self.personGroups = PersonGroupService(
+            context: context, items: items, people: persons, search: personSearch, dateProvider: dateProvider
+        )
+        self.commandParser = DeterministicPersonCommandParser()
+
+        // Built lazily and only when the feature is enabled, on the same terms as the calendar — so
+        // an app that never turns Contacts on never constructs a `CNContactStore` and never prompts.
+        self.contacts = ContactsService(dateProvider: dateProvider) { SystemContactsProvider() }
+        self.textRecognizer = VisionTextRecognizer()
+
         self.attachments = AttachmentStore(
             context: context,
             location: stack.location,

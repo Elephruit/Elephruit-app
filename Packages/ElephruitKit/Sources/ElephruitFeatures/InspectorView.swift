@@ -23,7 +23,12 @@ public struct InspectorView: View {
 
     public var body: some View {
         Group {
-            if let item = currentItem {
+            if let item = currentItem, item.kind == .person {
+                // A person's inspector is the *context* pane the People module specifies — upcoming
+                // events, open promises, related people, stale facts — rather than the generic field
+                // editor, whose dates, status, and priority a person has none of.
+                PersonContextSidebar(person: item, navigation: navigation)
+            } else if let item = currentItem {
                 content(for: item)
             } else {
                 EmptyStateView(
