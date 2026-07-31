@@ -255,6 +255,13 @@ public struct ValidationFailure: Sendable, Hashable {
         /// A tag name normalised to nothing usable.
         case emptyTagName
 
+        /// A person's name normalised to nothing usable.
+        ///
+        /// Separate from ``emptyTagName`` because the remedy differs: a tag can be dropped, whereas a
+        /// person referred to by an unusable name is somebody the user was trying to record and the
+        /// interface has to say so rather than quietly creating a nameless record.
+        case emptyPersonName
+
         /// A date range where the end precedes the start.
         case invalidDateRange(startField: String, endField: String)
     }
@@ -283,6 +290,8 @@ public struct ValidationFailure: Sendable, Hashable {
             "An item cannot contain itself."
         case .emptyTagName:
             "A tag needs a name."
+        case .emptyPersonName:
+            "A person needs a name."
         case .invalidDateRange:
             "Those dates are the wrong way round."
         }
@@ -302,6 +311,8 @@ public struct ValidationFailure: Sendable, Hashable {
             "The chosen parent is the item itself or one of the items inside it."
         case .emptyTagName:
             "Tag names must contain at least one letter or number."
+        case .emptyPersonName:
+            "A person's name must contain at least one letter or number."
         case .invalidDateRange(let startField, let endField):
             "“\(endField)” falls before “\(startField)”."
         }

@@ -103,6 +103,44 @@ public enum SchemaV3: VersionedSchema {
     }
 }
 
+/// The fourth schema: the People module.
+///
+/// Three new entities — ``PersonObservationRecord``, ``PersonRelationship``, ``PersonCelebration`` —
+/// and thirteen new optional attributes on ``PersonProfile``. **Additive throughout.** Nothing
+/// existing changes shape, no value is rewritten, and a store opened under this version gains three
+/// empty tables and a set of nullable columns it is free to ignore.
+///
+/// ### Why lightweight inference is still the right call at three entities
+/// ADR 0005 reserves the model-type freeze for the first change that *cannot* be inferred: a rename,
+/// a type change, a value computed from old data. There is none here. The evidence that inference
+/// handles this shape is `SchemaV2`, which added a whole entity plus a relationship and migrates
+/// real bytes correctly — `RealStoreMigrationTests` demonstrates it against a store written by a
+/// build that predates `TimeEntry`. Three entities is the same operation three times.
+///
+/// ### Why it is a version at all
+/// For the reason spelled out on ``SchemaV3``: the version identifier is what the `.schema-version`
+/// stamp beside the store is compared against, and a mismatch is what triggers the backup in
+/// ``ElephruitPersistence/PersistenceStack``. A schema change that did not bump the version would
+/// migrate real user data with no backup taken.
+///
+/// ### What is deliberately *not* here
+/// No entity for groups. A static group is an ``ItemCollection`` — ordered, explicit membership,
+/// already built and already tested — and a smart group is a ``SavedSearch``, which stores a query
+/// string that survives version changes and exports as text. Standing rule R5 in `docs/18` asks for
+/// proof that the existing shape cannot do the job before a new stored one is added, and for groups
+/// there is no such proof to offer: it can.
+public enum SchemaV4: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 4) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV3.models + [
+            PersonObservationRecord.self,
+            PersonRelationship.self,
+            PersonCelebration.self,
+        ]
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -115,7 +153,7 @@ public enum SchemaV3: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV3.self]
+        [SchemaV4.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -135,13 +173,13 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV3.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV4.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV3.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV4.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {
-        let version = SchemaV3.versionIdentifier
+        let version = SchemaV4.versionIdentifier
         return "\(version.major).\(version.minor).\(version.patch)"
     }
 }
