@@ -142,6 +142,55 @@ public final class PersonProfile {
     /// A pointer only — Contacts owns the data it holds.
     public var contactsIdentifier: String?
 
+    // MARK: Added with the People module
+    //
+    // Every one of these is optional or defaulted, so the store gains nullable columns and nothing
+    // is rewritten. See `SchemaV4`.
+
+    /// What the person goes by, when it is not their given name.
+    public var nickname: String?
+
+    /// How to say their name. Free text — "MY-uh", "rhymes with papaya" — because a phonetic
+    /// alphabet nobody can read is worse than the note somebody would actually write.
+    public var pronunciation: String?
+
+    /// Recorded only when the person has stated them, and never guessed from a name.
+    public var pronouns: String?
+
+    public var organizationName: String?
+
+    /// Where they are, as free text. Not geocoded and not resolved to a place record: the app makes
+    /// no network requests, and "Austin" is enough to answer the question it is asked.
+    public var locationText: String?
+
+    /// IANA identifier, for the local-time line in the header.
+    ///
+    /// Chosen by the user rather than derived from ``locationText``, because deriving it needs a
+    /// geocoder and a wrong time zone on somebody's card is worse than none.
+    public var timeZoneIdentifier: String?
+
+    /// JSON-encoded `[LabelledValue]`, on the same terms as emails and phones.
+    public var addressesData: Data?
+    public var websitesData: Data?
+
+    /// Which account the linked Contacts record lives in — "iCloud", "Google", "On My Mac".
+    ///
+    /// Stored for display and for the duplicate explanation, never used to decide anything.
+    public var contactsAccountName: String?
+
+    /// When the linked Contacts record was last read.
+    public var contactsRefreshedAt: Date?
+
+    /// A record created only so somebody could be mentioned — Maya's son Jack, before he has any
+    /// details of his own.
+    ///
+    /// A placeholder is a real person record in every respect; the flag exists so lists can offer to
+    /// fill one in rather than showing an empty page as though something had gone wrong.
+    public var isPlaceholder: Bool = false
+
+    /// The user's own card. At most one profile in a library has this set.
+    public var isMyCard: Bool = false
+
     public var item: Item?
 
     public init(
@@ -179,11 +228,29 @@ extension PersonProfile {
         set { phonesData = Self.encode(newValue) }
     }
 
+    public var addresses: [LabelledValue] {
+        get { Self.decode(addressesData) }
+        set { addressesData = Self.encode(newValue) }
+    }
+
+    public var websites: [LabelledValue] {
+        get { Self.decode(websitesData) }
+        set { websitesData = Self.encode(newValue) }
+    }
+
     /// Names and roles, folded into ``Item/searchText`` so searching for a person finds
     /// them by any of their parts.
+    ///
+    /// Phone numbers are deliberately absent. Folding them in would put every digit of somebody's
+    /// mobile into a column that a text search over the whole library reads — and "555" would match
+    /// three people for reasons the user cannot see. Numbers are searched by the person repository,
+    /// normalised, where a match means what it says.
     public var searchableText: String {
         var parts = [givenName, familyName]
+        if let nickname { parts.append(nickname) }
         if let roleTitle { parts.append(roleTitle) }
+        if let organizationName { parts.append(organizationName) }
+        if let locationText { parts.append(locationText) }
         parts.append(contentsOf: emails.map(\.value))
         return parts.filter { !$0.isEmpty }.joined(separator: " ")
     }
@@ -191,6 +258,84 @@ extension PersonProfile {
     /// Given + family, or whichever exists.
     public var fullName: String {
         [givenName, familyName].filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
+    /// What to call them in a sentence — the nickname if they have one.
+    public var preferredName: String {
+        if let nickname, !nickname.isEmpty { return nickname }
+        if !givenName.isEmpty { return givenName }
+        return fullName
+    }
+
+    /// The birthday as a partial date, honouring the fact that the year is usually unknown.
+    ///
+    /// Reads the stored `Date` for its month and day only unless ``birthdayHasYear`` says otherwise,
+    /// so a placeholder year written by an import can never be shown as though it were real.
+    public func birthdayDate(calendar: Calendar) -> PartialDate? {
+        guard let birthday else { return nil }
+        let components = calendar.dateComponents([.year, .month, .day], from: birthday)
+        guard let month = components.month, let day = components.day else { return nil }
+        return PartialDate(year: birthdayHasYear ? components.year : nil, month: month, day: day)
+    }
+
+    /// Everything that could be dialled, written to, or opened for this person.
+    public func destinations() -> [ContactDestination] {
+        var result: [ContactDestination] = []
+
+        for (index, phone) in phones.enumerated() {
+            result.append(
+                ContactDestination(
+                    label: phone.label, value: phone.value, source: .phone,
+                    // The first of each kind is the preferred one. That is a convention the user
+                    // controls by reordering, not a judgement the app makes.
+                    isPreferred: index == 0 && phones.count > 1
+                )
+            )
+        }
+        for (index, email) in emails.enumerated() {
+            result.append(
+                ContactDestination(
+                    label: email.label, value: email.value, source: .email,
+                    isPreferred: index == 0 && emails.count > 1
+                )
+            )
+        }
+        for address in addresses {
+            result.append(ContactDestination(label: address.label, value: address.value, source: .address))
+        }
+        for site in websites {
+            result.append(ContactDestination(label: site.label, value: site.value, source: .website))
+        }
+
+        return result
+    }
+
+    /// The time where they are, when a time zone has been recorded and it differs from the user's.
+    ///
+    /// `nil` when the two match — "it is 3:42 pm there" is noise when it is 3:42 pm here, and the
+    /// header is better off short.
+    public func localTime(at instant: Date, in userZone: TimeZone = .autoupdatingCurrent) -> String? {
+        guard let timeZoneIdentifier, let zone = TimeZone(identifier: timeZoneIdentifier) else { return nil }
+        guard zone.secondsFromGMT(for: instant) != userZone.secondsFromGMT(for: instant) else { return nil }
+
+        var style = Date.FormatStyle(date: .omitted, time: .shortened)
+        style.timeZone = zone
+        return instant.formatted(style)
+    }
+
+    /// This person as the identity matcher sees them.
+    public func identityCandidate(calendar: Calendar) -> IdentityCandidate? {
+        guard let item else { return nil }
+        return IdentityCandidate(
+            id: item.id,
+            fullName: fullName.isEmpty ? item.displayTitle : fullName,
+            emails: emails.map(\.value),
+            phones: phones.map(\.value),
+            contactsIdentifier: contactsIdentifier,
+            accountName: contactsAccountName,
+            organization: organizationName,
+            birthday: birthdayDate(calendar: calendar)
+        )
     }
 
     private static func decode(_ data: Data?) -> [LabelledValue] {
