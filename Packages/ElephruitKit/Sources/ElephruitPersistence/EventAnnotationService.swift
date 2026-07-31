@@ -201,8 +201,12 @@ public final class EventAnnotationService {
             reference.absorb(event, at: dateProvider.now)
             reference.item = item
             item.eventReference = reference
+
+            // `startAt` and nothing else. A meeting's supported fields deliberately exclude a due
+            // date — an event has an end, not a deadline — and `ItemValidator` refuses one, which is
+            // how this was caught rather than shipped as a field nobody could see and nothing read.
+            // The end lives on the reference, where the calendar's own answer belongs.
             item.startAt = event.startAt
-            item.dueAt = event.endAt
         }
         return created
     }
@@ -291,7 +295,7 @@ public final class EventAnnotationService {
     /// Text written before either heading is kept as a preamble rather than being swallowed: a body
     /// that predates this feature, or one somebody typed into freehand, must not lose its first
     /// paragraph the moment a prep note is added.
-    static func split(body: String) -> (preamble: String, preparation: String, debrief: String) {
+    public static func split(body: String) -> (preamble: String, preparation: String, debrief: String) {
         var preamble: [String] = []
         var preparation: [String] = []
         var debrief: [String] = []
@@ -319,7 +323,7 @@ public final class EventAnnotationService {
         )
     }
 
-    static func compose(preamble: String, preparation: String, debrief: String) -> String {
+    public static func compose(preamble: String, preparation: String, debrief: String) -> String {
         var parts: [String] = []
         if !preamble.isEmpty { parts.append(preamble) }
         if !preparation.isEmpty { parts.append("\(preparationHeading)\n\(preparation)") }
