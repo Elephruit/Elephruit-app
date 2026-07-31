@@ -338,7 +338,7 @@ private struct ValueListSection: View {
             }
 
             Button {
-                values.append(LabelledValue(label: kind.defaultLabel, value: ""))
+                values.append(LabelledValue(label: kind.editorDefaultLabel, value: ""))
             } label: {
                 Label("Add \(kind.displayName.lowercased())", systemImage: "plus.circle")
             }
@@ -364,7 +364,7 @@ private struct LabelField: View {
                 .accessibilityLabel("Label")
 
             Menu {
-                ForEach(kind.commonLabels, id: \.self) { option in
+                ForEach(kind.editorLabelOptions, id: \.self) { option in
                     Button(option) { label = option }
                 }
             } label: {
@@ -491,7 +491,7 @@ struct ContactDetailsEdit: Equatable, Identifiable {
             let trimmed = value.value.trimmed()
             guard !trimmed.isEmpty else { return nil }
             let label = value.label.trimmed()
-            return LabelledValue(label: label.isEmpty ? kind.defaultLabel : label, value: trimmed)
+            return LabelledValue(label: label.isEmpty ? kind.editorDefaultLabel : label, value: trimmed)
         }
     }
 
@@ -524,7 +524,7 @@ private extension String {
     func trimmed() -> String { trimmingCharacters(in: .whitespacesAndNewlines) }
 }
 
-private extension ContactDetailKind {
+extension ContactDetailKind {
     var editorTint: Color {
         switch self {
         case .email: .blue
@@ -535,20 +535,18 @@ private extension ContactDetailKind {
     }
 
     /// The label a newly added row starts with.
-    var defaultLabel: String {
+    var editorDefaultLabel: String {
         switch self {
-        case .email: "home"
-        case .phone: "mobile"
+        case .email, .phone: "personal"
         case .address: "home"
         case .website: "homepage"
         }
     }
 
     /// Offered in the menu. Not a closed set — the field beside it takes anything.
-    var commonLabels: [String] {
+    var editorLabelOptions: [String] {
         switch self {
-        case .email: ["home", "work", "school", "other"]
-        case .phone: ["mobile", "home", "work", "main", "other"]
+        case .email, .phone: ["personal", "work"]
         case .address: ["home", "work", "other"]
         case .website: ["homepage", "work", "blog", "other"]
         }
