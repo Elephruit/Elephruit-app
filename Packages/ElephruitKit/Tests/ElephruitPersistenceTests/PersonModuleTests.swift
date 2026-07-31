@@ -23,12 +23,12 @@ struct PersonModuleTests {
         let groups: PersonGroupService
 
         @MainActor
-        init(dateProvider: FixedDateProvider = .reference) throws {
-            let store = try StoreFixture(dateProvider: dateProvider)
+        init(dateProvider: FixedDateProvider = .reference, audit: FetchAudit? = nil) throws {
+            let store = try StoreFixture(dateProvider: dateProvider, audit: audit)
             self.store = store
 
             let people = SwiftDataPersonRepository(
-                context: store.context, items: store.items, dateProvider: dateProvider
+                context: store.context, items: store.items, dateProvider: dateProvider, audit: audit
             )
             self.people = people
             self.workspace = PersonWorkspaceService(
@@ -799,6 +799,24 @@ struct PersonModuleTests {
         let mayasBirthdays = all.filter { $0.personID == maya.id && $0.kind == .birthday }
         #expect(mayasBirthdays.count == 1, "the profile and the celebration row must not both report it")
         #expect(maya.personProfile?.birthdayHasYear == true)
+    }
+
+    @Test("Loading all celebrations uses a bounded number of fetches")
+    func allCelebrationsDoesNotFetchPerPerson() throws {
+        let audit = FetchAudit()
+        let fixture = try Fixture(audit: audit)
+
+        for index in 0..<20 {
+            _ = try fixture.people.createPerson(PersonDraft(fullName: "Person \(index)"))
+        }
+
+        let (_, tally) = try audit.measure {
+            try fixture.people.allCelebrations()
+        }
+
+        #expect(tally.itemFetches == 1, "people should be loaded in one fetch: \(tally.description)")
+        #expect(tally.otherFetches == 1, "celebrations should be loaded in one fetch: \(tally.description)")
+        #expect(tally.total == 2, "the fetch count must not grow with the number of people: \(tally.description)")
     }
 
     @Test("My Card is exactly one person")

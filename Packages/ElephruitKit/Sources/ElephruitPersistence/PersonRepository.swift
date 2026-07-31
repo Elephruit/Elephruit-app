@@ -203,11 +203,18 @@ public final class SwiftDataPersonRepository: PersonRepository {
     private let context: ModelContext
     private let items: any ItemRepository
     private let dateProvider: any DateProvider
+    private let audit: FetchAudit?
 
-    public init(context: ModelContext, items: any ItemRepository, dateProvider: any DateProvider) {
+    public init(
+        context: ModelContext,
+        items: any ItemRepository,
+        dateProvider: any DateProvider,
+        audit: FetchAudit? = nil
+    ) {
         self.context = context
         self.items = items
         self.dateProvider = dateProvider
+        self.audit = audit
     }
 
     // MARK: - People
@@ -223,6 +230,7 @@ public final class SwiftDataPersonRepository: PersonRepository {
         query.scope = .active
         query.sort = .titleAscending
         query.limit = nil
+        query.prefetches = [.personProfile]
 
         let people = try items.items(matching: query)
         guard !includingPlaceholders else { return people }
@@ -560,6 +568,12 @@ public final class SwiftDataPersonRepository: PersonRepository {
     }
 
     public func allCelebrations() throws(AppError) -> [Celebration] {
+        var descriptor = FetchDescriptor<PersonCelebration>()
+        descriptor.relationshipKeyPathsForPrefetching = [\.person]
+        let storedByPersonID = Dictionary(
+            grouping: try fetch(descriptor),
+            by: { $0.person?.id }
+        )
         var result: [Celebration] = []
 
         for person in try allPeople(includingPlaceholders: true) {
@@ -578,7 +592,7 @@ public final class SwiftDataPersonRepository: PersonRepository {
                 )
             }
 
-            result.append(contentsOf: try celebrations(of: person).compactMap { $0.asValue() })
+            result.append(contentsOf: (storedByPersonID[person.id] ?? []).compactMap { $0.asValue() })
         }
 
         return result
@@ -635,6 +649,7 @@ public final class SwiftDataPersonRepository: PersonRepository {
     // MARK: - Store
 
     private func fetch<Model: PersistentModel>(_ descriptor: FetchDescriptor<Model>) throws(AppError) -> [Model] {
+        audit?.record(.other)
         do {
             return try context.fetch(descriptor)
         } catch {

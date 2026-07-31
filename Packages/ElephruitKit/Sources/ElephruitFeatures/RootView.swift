@@ -292,15 +292,19 @@ public struct RootView: View {
                 } else if navigation.selection == .home {
                     HomeView(navigation: navigation)
                 } else if case .people(let scope) = navigation.selection {
-                    // Celebrations and My Card are not lists of people, so they replace the column
-                    // rather than filtering it — the same arrangement Time already uses.
-                    switch scope {
-                    case .celebrations:
-                        CelebrationsView(navigation: navigation)
-                    case .duplicates:
-                        DuplicatesView(navigation: navigation)
-                    default:
-                        PeopleListView(navigation: navigation, scope: scope)
+                    if PeoplePerformanceIsolation.usesIsolatedList {
+                        IsolatedPeopleListView()
+                    } else {
+                        // Celebrations and My Card are not lists of people, so they replace the column
+                        // rather than filtering it — the same arrangement Time already uses.
+                        switch scope {
+                        case .celebrations:
+                            CelebrationsView(navigation: navigation)
+                        case .duplicates:
+                            DuplicatesView(navigation: navigation)
+                        default:
+                            PeopleListView(navigation: navigation, scope: scope)
+                        }
                     }
                 } else {
                     ItemListView(navigation: navigation)

@@ -34,6 +34,22 @@ public struct PersonGroup: Sendable, Hashable, Identifiable {
     }
 }
 
+/// The metadata needed to draw a group in navigation.
+///
+/// Deliberately excludes membership. Loading a sidebar label must not resolve every fixed-group
+/// relationship or execute every smart-group search before the user has opened either one.
+public struct PersonGroupSummary: Sendable, Hashable, Identifiable {
+    public var id: UUID
+    public var name: String
+    public var symbolName: String
+
+    public init(id: UUID, name: String, symbolName: String) {
+        self.id = id
+        self.name = name
+        self.symbolName = symbolName
+    }
+}
+
 /// What a batch action will do, shown before it does it.
 ///
 /// ### Why a preview is mandatory rather than a courtesy
@@ -156,6 +172,37 @@ public final class PersonGroupService {
 
     public func allGroups() throws(AppError) -> [PersonGroup] {
         try fixedGroups() + smartGroups()
+    }
+
+    /// Every group label, without resolving membership or running smart searches.
+    public func allGroupSummaries() throws(AppError) -> [PersonGroupSummary] {
+        let fixedDescriptor = FetchDescriptor<ItemCollection>(
+            predicate: #Predicate { $0.deletedAt == nil },
+            sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.name)]
+        )
+        let smartDescriptor = FetchDescriptor<SavedSearch>(
+            predicate: #Predicate { $0.deletedAt == nil },
+            sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.name)]
+        )
+
+        let fixed = try fetch(fixedDescriptor).compactMap { collection -> PersonGroupSummary? in
+            guard collection.name.hasPrefix(Self.groupPrefix) else { return nil }
+            return PersonGroupSummary(
+                id: collection.id,
+                name: String(collection.name.dropFirst(Self.groupPrefix.count)),
+                symbolName: collection.effectiveSymbolName
+            )
+        }
+        let smart = try fetch(smartDescriptor).compactMap { saved -> PersonGroupSummary? in
+            guard saved.name.hasPrefix(Self.groupPrefix) else { return nil }
+            return PersonGroupSummary(
+                id: saved.id,
+                name: String(saved.name.dropFirst(Self.groupPrefix.count)),
+                symbolName: saved.effectiveSymbolName
+            )
+        }
+
+        return fixed + smart
     }
 
     public func fixedGroups() throws(AppError) -> [PersonGroup] {
