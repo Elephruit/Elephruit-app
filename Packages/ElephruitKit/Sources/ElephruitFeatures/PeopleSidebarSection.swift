@@ -19,7 +19,7 @@ struct PeopleSidebarSection: View {
 
     let navigation: NavigationModel
 
-    @State private var groups: [PersonGroup] = []
+    @State private var groups: [PersonGroupSummary] = []
     @State private var duplicateCount = 0
     @State private var linkedCount = 0
     @State private var isExpanded = true
@@ -55,7 +55,7 @@ struct PeopleSidebarSection: View {
                     for: .group(id: group.id),
                     title: group.name,
                     symbolName: group.symbolName,
-                    count: group.memberCount
+                    count: nil
                 )
             }
 
@@ -183,7 +183,7 @@ struct PeopleSidebarSection: View {
 
     private func reload() {
         guard let services else { return }
-        groups = (try? services.personGroups.allGroups()) ?? []
+        groups = (try? services.personGroups.allGroupSummaries()) ?? []
         duplicateCount = ((try? services.personIdentity.duplicates()) ?? []).count
         linkedCount = (try? services.contactImports.linkedCount()) ?? 0
     }

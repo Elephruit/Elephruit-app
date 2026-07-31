@@ -9,6 +9,15 @@ import SwiftData
 /// on any actor, it can be compared for equality so a view knows when to refetch, and it
 /// keeps the mapping from *intent* to *predicate* in one testable place.
 public struct ItemQuery: Sendable, Hashable {
+    /// Relationships a caller knows it will read for every fetched item.
+    ///
+    /// SwiftData relationships are lazy by default. A list that immediately reads the same
+    /// relationship on hundreds of rows otherwise turns one item fetch into hundreds of hidden
+    /// relationship fetches.
+    public enum Prefetch: Sendable, Hashable {
+        case personProfile
+    }
+
     /// Which lifecycle states to include. Mutually exclusive by design — a list that
     /// mixed live and trashed items would be a bug, not a feature.
     public enum Scope: Sendable, Hashable, CaseIterable {
@@ -103,6 +112,7 @@ public struct ItemQuery: Sendable, Hashable {
 
     public var sort: Sort = .updatedNewestFirst
     public var limit: Int?
+    public var prefetches: Set<Prefetch> = []
 
     public init() {}
 }
@@ -292,6 +302,9 @@ extension ItemQuery {
         var descriptor = FetchDescriptor<Item>(predicate: predicate(), sortBy: sortDescriptors())
         if let limit, !requiresPostFiltering {
             descriptor.fetchLimit = limit
+        }
+        if prefetches.contains(.personProfile) {
+            descriptor.relationshipKeyPathsForPrefetching = [\.personProfile]
         }
         return descriptor
     }
