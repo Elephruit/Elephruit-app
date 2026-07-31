@@ -132,7 +132,7 @@ public struct InspectorView: View {
             InspectorRow("Flags") {
                 HStack(spacing: Theme.Spacing.small) {
                     Toggle(isOn: boolBinding(for: item, keyPath: \.isFavorite)) {
-                        Label("Favourite", systemImage: "star")
+                        Label("Favorite", systemImage: "star")
                     }
                     .toggleStyle(.button)
                     .accessibilityIdentifier(AccessibilityID.Inspector.favoriteToggle)
@@ -252,7 +252,7 @@ public struct InspectorView: View {
     }
 
     private func organisationSection(for item: Item) -> some View {
-        InspectorSection("Organisation") {
+        InspectorSection("Organization") {
             InspectorRow("Inside") {
                 Picker("Inside", selection: parentBinding(for: item)) {
                     Text("Nothing").tag(UUID?.none)

@@ -129,10 +129,10 @@ public final class PeopleService {
 
     /// Records one interaction and every action the user captured alongside it.
     ///
-    /// Follow-ups are ordinary open tasks; commitments are promises, marked both by their semantic
-    /// link and by the tag the existing People timeline uses to identify promises. Returning every
+    /// Every next step becomes an ordinary open task linked to each attendee. Returning every
     /// created item lets the feature announce each change to the index without duplicating this
-    /// persistence policy in multiple views.
+    /// persistence policy in multiple views. The second list remains in the API so drafts saved by
+    /// an older build migrate without losing their contents.
     public func recordInteractionBundle(
         with person: Item,
         summary: String,
@@ -193,9 +193,11 @@ public final class PeopleService {
             created.append(task)
         }
 
+        // Older callers may still send the second legacy action list. It now creates the same
+        // ordinary linked tasks as every other next step; no new "promise" subtype is introduced.
         for title in commitments {
-            let task = try items.create(ItemDraft(kind: .task, title: title, tagSlugs: ["promise"]))
-            for attendee in attendees { try items.link(task, to: attendee, kind: .promisedTo) }
+            let task = try items.create(ItemDraft(kind: .task, title: title))
+            for attendee in attendees { try items.link(task, to: attendee, kind: .mentions) }
             created.append(task)
         }
 

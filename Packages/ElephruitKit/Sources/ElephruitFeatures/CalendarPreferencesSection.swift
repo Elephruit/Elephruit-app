@@ -60,7 +60,7 @@ public struct CalendarPreferencesSection: View {
             }
 
             HStack {
-                Text("Favourite zones")
+                Text("Favorite zones")
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.secondaryText)
 
@@ -72,7 +72,7 @@ public struct CalendarPreferencesSection: View {
             }
 
             if services.calendar.timeZoneDisplay.favouriteZoneIdentifiers.isEmpty {
-                Text("None yet. A favourite zone appears in the pickers here, in the editor, and in the ruler.")
+                Text("None yet. A favorite zone appears in the pickers here, in the editor, and in the ruler.")
                     .font(Theme.Text.keyHint)
                     .foregroundStyle(Theme.Colors.tertiaryText)
                     .fixedSize(horizontal: false, vertical: true)

@@ -344,7 +344,7 @@ extension ItemKind {
         case .project: "Project"
         case .area: "Area"
         case .person: "Person"
-        case .organization: "Organisation"
+        case .organization: "Organization"
         case .interaction: "Interaction"
         case .meeting: "Meeting"
         case .bookmark: "Bookmark"

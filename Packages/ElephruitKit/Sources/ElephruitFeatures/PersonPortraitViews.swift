@@ -566,9 +566,9 @@ struct TimelineEntryRow: View {
                             .lineLimit(1)
 
                         if entry.isPromise {
-                            Label("promise", systemImage: "hand.raised")
+                            Label("task", systemImage: "checkmark.circle")
                                 .font(Theme.Text.chip)
-                                .foregroundStyle(Theme.Colors.dueToday)
+                                .foregroundStyle(Theme.Colors.selection)
                                 .labelStyle(.titleAndIcon)
                         }
 

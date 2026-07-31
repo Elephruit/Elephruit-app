@@ -214,7 +214,7 @@ public struct ContactsSettingsSection: View {
                 Text("""
                     Elephruit can use the contacts already on this Mac as the starting point for \
                     People. It only ever reads them. Your notes, reflections, relationship history, \
-                    promises, and tags stay here and are never written into Contacts.
+                    tasks, and tags stay here and are never written into Contacts.
                     """)
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.secondaryText)

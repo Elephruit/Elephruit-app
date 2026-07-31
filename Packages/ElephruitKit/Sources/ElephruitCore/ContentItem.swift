@@ -110,7 +110,7 @@ extension ContentItem {
         if !tagSlugs.isEmpty {
             parts.append("tagged " + tagSlugs.joined(separator: ", "))
         }
-        if isFavorite { parts.append("favourite") }
+        if isFavorite { parts.append("favorite") }
         if isPinned { parts.append("pinned") }
         if isArchived { parts.append("archived") }
         if isInTrash { parts.append("in trash") }

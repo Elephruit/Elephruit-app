@@ -569,7 +569,7 @@ public struct ItemListView: View {
                 }
             }
 
-            Button(item.isFavorite ? "Remove from Favourites" : "Add to Favourites", systemImage: "star") {
+            Button(item.isFavorite ? "Remove from Favorites" : "Add to Favorites", systemImage: "star") {
                 update(item) { $0.isFavorite.toggle() }
             }
             Button(item.isPinned ? "Unpin" : "Pin", systemImage: "pin") {

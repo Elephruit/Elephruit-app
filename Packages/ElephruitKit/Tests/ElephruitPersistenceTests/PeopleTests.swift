@@ -210,8 +210,8 @@ struct InteractionTests {
         #expect(fixture.people.context(for: ana).daysSinceLastContact(using: fixture.clock) == 3)
     }
 
-    @Test("Logging an interaction tracks its actions separately")
-    func interactionBundleCreatesTasksAndPromises() throws {
+    @Test("Logging an interaction turns every next step into a task")
+    func interactionBundleCreatesTasks() throws {
         let fixture = try PeopleFixture()
         let ana = try fixture.makePerson("Ana")
 
@@ -232,7 +232,7 @@ struct InteractionTests {
         let tasks = created.filter { $0.kind == .task }
         #expect(tasks.count == 2)
         #expect(tasks.allSatisfy { $0.status == .open })
-        #expect(tasks.first { $0.title == "Send Ana the deck" }?.tagSlugs.contains("promise") == true)
+        #expect(tasks.allSatisfy { !$0.tagSlugs.contains("promise") })
         #expect(fixture.people.context(for: ana).openItemIDs.count == 2)
     }
 

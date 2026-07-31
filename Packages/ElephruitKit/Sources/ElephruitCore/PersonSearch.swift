@@ -84,7 +84,7 @@ public struct PersonQuery: Sendable, Hashable {
             parts.append(months <= 1 ? "celebrations this month" : "celebrations in \(months) months")
         }
         if let days = notContactedForDays { parts.append("not contacted in \(days / 30) months") }
-        if hasOpenPromises { parts.append("open promises") }
+        if hasOpenPromises { parts.append("open tasks") }
         if let groupName { parts.append("in \(groupName)") }
         return parts.joined(separator: " · ")
     }
@@ -119,7 +119,7 @@ public enum PersonQueryParser {
     }
 
     private static func consumeOpenPromises(_ text: String, into query: inout PersonQuery) -> String {
-        for phrase in ["open promises", "open promise", "promises", "i promised", "owe"] {
+        for phrase in ["open tasks", "open task", "open promises", "open promise", "promises", "i promised", "owe"] {
             guard let range = wholePhraseRange(of: phrase, in: text) else { continue }
             query.hasOpenPromises = true
             return text.replacingCharacters(in: range, with: "")
@@ -299,7 +299,7 @@ public enum PersonQueryParser {
         "haven't contacted in six months",
         "works at Acme",
         "dog trainer",
-        "open promises",
+        "open tasks",
     ]
 }
 

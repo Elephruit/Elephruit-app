@@ -207,7 +207,7 @@ struct EditContactDetailsSheet: View {
                                 EditorField("Department", text: $edit.departmentName)
                             }
                             HStack(alignment: .top, spacing: Theme.Spacing.medium) {
-                                EditorField("Organisation", text: $edit.organizationName)
+                                EditorField("Organization", text: $edit.organizationName)
                                 EditorField("Location", text: $edit.locationText)
                             }
                         }
@@ -346,7 +346,7 @@ private enum ContactEditorPage: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .name: "How this person appears throughout the app"
-        case .work: "Their role, team, and organisation"
+        case .work: "Their role, team, and organization"
         case .birthday: "A date worth remembering"
         case .email: "Where you can reach them by email"
         case .phone: "Numbers for calls and messages"

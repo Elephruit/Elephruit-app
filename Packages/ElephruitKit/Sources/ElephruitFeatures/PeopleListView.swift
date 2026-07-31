@@ -29,7 +29,7 @@ public enum PeopleScope: Hashable, Sendable, Codable {
         switch self {
         case .all: "All People"
         case .recentlyViewed: "Recently Viewed"
-        case .favorites: "Favourites"
+        case .favorites: "Favorites"
         case .celebrations: "Celebrations"
         case .needsFollowUp: "Needs Follow-up"
         case .group: "Group"
@@ -281,7 +281,7 @@ struct PeopleListView: View {
         .tag(person.id)
         .contextMenu {
             Button("Open") { navigation.selectItem(person.id) }
-            Button(person.isFavorite ? "Remove from Favourites" : "Add to Favourites") {
+            Button(person.isFavorite ? "Remove from Favorites" : "Add to Favorites") {
                 toggleFavorite(person)
             }
             Divider()

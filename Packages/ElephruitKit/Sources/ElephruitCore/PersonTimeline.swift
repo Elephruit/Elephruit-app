@@ -207,7 +207,7 @@ public enum TimelineGrouping {
             case .everything: "Everything"
             case .conversations: "Conversations"
             case .notes: "Notes"
-            case .commitments: "Tasks & promises"
+            case .commitments: "Tasks"
             case .files: "Files"
             }
         }

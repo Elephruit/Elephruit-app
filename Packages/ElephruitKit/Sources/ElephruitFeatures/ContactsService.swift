@@ -296,7 +296,7 @@ public final class ContactsService {
         compare("Given name", profile.givenName, contact.givenName)
         compare("Family name", profile.familyName, contact.familyName)
         compare("Role", profile.roleTitle, contact.jobTitle)
-        compare("Organisation", profile.organizationName, contact.organizationName)
+        compare("Organization", profile.organizationName, contact.organizationName)
 
         let mineEmails = Set(profile.emails.map { ContactDetailRecognizer.normalizedEmail($0.value) })
         for email in contact.emailAddresses

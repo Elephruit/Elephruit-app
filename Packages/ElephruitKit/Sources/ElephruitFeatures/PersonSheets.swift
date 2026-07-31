@@ -202,7 +202,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
     var prompt: String {
         switch self {
         case .askAbout: "What would be thoughtful to ask next time?"
-        case .foodAndDrink: "Diet, allergies, favourite drinks, restaurants…"
+        case .foodAndDrink: "Diet, allergies, favorite drinks, restaurants…"
         case .family: "Names, ages, milestones, or family context…"
         case .interests: "Hobbies, teams, books, music, travel…"
         case .likes: "Something they enjoy or appreciate…"
