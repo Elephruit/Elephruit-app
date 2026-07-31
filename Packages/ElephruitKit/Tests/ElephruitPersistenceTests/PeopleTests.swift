@@ -236,6 +236,26 @@ struct InteractionTests {
         #expect(fixture.people.context(for: ana).openItemIDs.count == 2)
     }
 
+    @Test("One conversation appears in every attendee's history")
+    func groupInteractionLinksEveryAttendee() throws {
+        let fixture = try PeopleFixture()
+        let ana = try fixture.makePerson("Ana")
+        let maya = try fixture.makePerson("Maya")
+
+        let created = try fixture.people.recordInteractionBundle(
+            with: [ana, maya, ana],
+            summary: "Conference call",
+            kind: .video,
+            followUps: ["Share the recording"]
+        )
+
+        #expect(created.filter { $0.kind == .interaction }.count == 1)
+        #expect(fixture.people.context(for: ana).lastContact?.title == "Conference call")
+        #expect(fixture.people.context(for: maya).lastContact?.title == "Conference call")
+        #expect(fixture.people.context(for: ana).openItemIDs.count == 1)
+        #expect(fixture.people.context(for: maya).openItemIDs.count == 1)
+    }
+
     @Test("There is at most one daily entry per day")
     func oneEntryPerDay() throws {
         let fixture = try PeopleFixture()

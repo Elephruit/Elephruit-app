@@ -330,7 +330,7 @@ struct PersonDetailView: View {
             .accessibilityIdentifier(AccessibilityID.People.relationshipSummary)
             .sheet(isPresented: $isRecordingInteraction) {
                 LogInteractionSheet(
-                    personName: item.displayTitle,
+                    person: item,
                     onSave: { draft in
                         record(draft)
                         isRecordingInteraction = false
@@ -349,7 +349,7 @@ struct PersonDetailView: View {
         guard let services else { return }
         services.perform {
             let created = try services.people.recordInteractionBundle(
-                with: item,
+                with: interactionParticipants(for: draft, services: services),
                 summary: draft.cleanedSummary,
                 kind: draft.kind,
                 at: draft.occurredAt,
@@ -358,6 +358,12 @@ struct PersonDetailView: View {
                 commitments: draft.commitmentItems
             )
             for item in created { services.noteChange(to: item) }
+        }
+    }
+
+    private func interactionParticipants(for draft: PersonInteractionDraft, services: AppServices) -> [Item] {
+        draft.participantIDs.compactMap { id in
+            try? services.persons.person(id: id)
         }
     }
 

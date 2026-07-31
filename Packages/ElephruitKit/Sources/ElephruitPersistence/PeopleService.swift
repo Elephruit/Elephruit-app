@@ -142,26 +142,60 @@ public final class PeopleService {
         followUps: [String] = [],
         commitments: [String] = []
     ) throws(AppError) -> [Item] {
+        try recordInteractionBundle(
+            with: [person],
+            summary: summary,
+            kind: kind,
+            at: date,
+            discussion: discussion,
+            followUps: followUps,
+            commitments: commitments
+        )
+    }
+
+    /// Records one shared interaction for every person who took part.
+    ///
+    /// The interaction is created once and linked to each attendee. That makes a conference call
+    /// appear in every person's history without manufacturing several conversations that can later
+    /// disagree about what happened.
+    public func recordInteractionBundle(
+        with people: [Item],
+        summary: String,
+        kind: PersonInteractionKind,
+        at date: Date? = nil,
+        discussion: String = "",
+        followUps: [String] = [],
+        commitments: [String] = []
+    ) throws(AppError) -> [Item] {
+        let attendees = people.reduce(into: [Item]()) { unique, person in
+            guard person.kind == .person, !unique.contains(where: { $0.id == person.id }) else { return }
+            unique.append(person)
+        }
+        guard let firstAttendee = attendees.first else { return [] }
+
         let interaction = try recordInteraction(
-            with: person,
+            with: firstAttendee,
             summary: summary,
             at: date,
             notes: discussion,
             tagSlugs: [kind.tagSlug]
         )
+        for attendee in attendees.dropFirst() {
+            try items.link(interaction, to: attendee, kind: .mentions)
+        }
         try items.update(interaction) { $0.sourceIdentifier = InteractionProvenance.logged.rawValue }
 
         var created = [interaction]
 
         for title in followUps {
             let task = try items.create(ItemDraft(kind: .task, title: title))
-            try items.link(task, to: person, kind: .mentions)
+            for attendee in attendees { try items.link(task, to: attendee, kind: .mentions) }
             created.append(task)
         }
 
         for title in commitments {
             let task = try items.create(ItemDraft(kind: .task, title: title, tagSlugs: ["promise"]))
-            try items.link(task, to: person, kind: .promisedTo)
+            for attendee in attendees { try items.link(task, to: attendee, kind: .promisedTo) }
             created.append(task)
         }
 

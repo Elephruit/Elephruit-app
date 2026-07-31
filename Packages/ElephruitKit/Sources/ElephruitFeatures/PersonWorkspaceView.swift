@@ -112,7 +112,7 @@ struct PersonWorkspaceView: View {
         .onChange(of: services?.changeToken) { _, _ in reload() }
         .sheet(isPresented: $isRecordingInteraction) {
             LogInteractionSheet(
-                personName: person.displayTitle,
+                person: person,
                 onSave: { draft in
                     record(draft)
                     isRecordingInteraction = false
@@ -238,7 +238,7 @@ struct PersonWorkspaceView: View {
         guard let services else { return }
         services.perform {
             let created = try services.people.recordInteractionBundle(
-                with: person,
+                with: interactionParticipants(for: draft, services: services),
                 summary: draft.cleanedSummary,
                 kind: draft.kind,
                 at: draft.occurredAt,
@@ -249,6 +249,12 @@ struct PersonWorkspaceView: View {
             for item in created { services.noteChange(to: item) }
         }
         reload()
+    }
+
+    private func interactionParticipants(for draft: PersonInteractionDraft, services: AppServices) -> [Item] {
+        draft.participantIDs.compactMap { id in
+            try? services.persons.person(id: id)
+        }
     }
 
     private func saveNote(_ draft: PersonNoteDraft) {
