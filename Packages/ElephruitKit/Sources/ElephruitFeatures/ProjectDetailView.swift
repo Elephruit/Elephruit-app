@@ -118,12 +118,16 @@ public struct ProjectDetailView: View {
     }
 
     private var briefEditor: some View {
-        MarkdownTextEditor(
+        NotesField(
             text: $brief,
-            isMonospaced: false,
+            title: "Brief",
+            systemImage: "text.alignleft",
+            // A project's prose answers a different question from a task's, and a placeholder that
+            // says "Add notes…" for both would be the component's default leaking through as though
+            // it were a decision.
+            placeholder: "What does finishing this look like?",
             isEditable: !project.isInTrash
         )
-        .frame(minHeight: 72, maxHeight: 200)
         .padding(.horizontal, Theme.Spacing.medium)
     }
 

@@ -6,28 +6,31 @@ import SwiftUI
 
 /// The first column.
 ///
-/// ### Three bands, not one list
-/// The previous sidebar mixed *where I work* — Today, Upcoming, Inbox — with *where things are filed*
-/// — Notes, Tasks, Projects — in one undifferentiated list, which is precisely what made it read as a
-/// file browser rather than a workspace. The bands separate those two things:
+/// ### Two levels, not one list
+/// The previous sidebar showed every destination of every feature at the same time: the day's work,
+/// the task system's nine views, the People module's seven scopes, the library's kinds, tags, saved
+/// searches, the Archive and the Trash. Nothing was wrong with any one of those rows; what was wrong
+/// was that all of them were on screen at once, which turned the sidebar into an index of the app
+/// rather than a statement of where you are in it.
 ///
-/// - **Primary** has no header at all. It is not a category; it is simply where you are.
-/// - **Pinned** is what you chose to keep close, and is *absent* rather than empty when you have not.
-/// - **Library** is everything else, collapsible, one step quieter.
+/// So there are two levels. The first holds the four destinations that belong to no module — Home,
+/// Today, Upcoming, Inbox — and then the modules themselves. Entering one replaces the list with
+/// *that module's* navigation, and a compact header names where you are and offers the way back.
+/// Nothing about a destination changes on the way in: a module is an ordered slice of the same
+/// ``SidebarSelection`` values the app already had. See ``AppModule``.
 ///
 /// ### On native selection
-/// The spec drafted a bespoke selection treatment — accent at 12%, 6pt radius, 4pt inset. This uses
-/// `.listStyle(.sidebar)` and the system's own selection instead. macOS 26 already draws a quiet
-/// rounded accent fill, it tracks window activation, Increase Contrast, and the user's accent colour
-/// for free, and reimplementing it would mean losing keyboard navigation or rebuilding it worse.
-/// Everything else about the row — content, spacing, glyph column, counts, truncation — is ours.
+/// This uses `.listStyle(.sidebar)` and the system's own selection rather than a bespoke treatment.
+/// macOS already draws a quiet rounded accent fill, it tracks window activation, Increase Contrast,
+/// and the user's accent colour for free, and reimplementing it would mean losing keyboard
+/// navigation or rebuilding it worse. Everything else about a row — content, spacing, glyph column,
+/// counts, truncation — is ours.
 public struct SidebarView: View {
     @Environment(\.services) private var services
 
     private let navigation: NavigationModel
 
     /// Collapse state lives per scene, so a second window can be configured differently.
-    @SceneStorage("sidebar.library.expanded") private var isLibraryExpanded = true
     @SceneStorage("sidebar.tags.expanded") private var isTagsExpanded = false
     @SceneStorage("sidebar.searches.expanded") private var isSearchesExpanded = false
 
@@ -39,25 +42,74 @@ public struct SidebarView: View {
     }
 
     public var body: some View {
-        List(selection: selectionBinding) {
-            primaryBand
-            pinnedBand
-            TasksSidebarSection(navigation: navigation)
-            PeopleSidebarSection(navigation: navigation)
-            libraryBand
+        VStack(spacing: 0) {
+            if let module = navigation.activeModule {
+                ModuleHeader(module: module, navigation: navigation)
+                Divider()
+            }
+
+            levels
         }
-        .listStyle(.sidebar)
         .accessibilityIdentifier(AccessibilityID.Sidebar.root)
         .safeAreaInset(edge: .bottom, spacing: 0) { statusLine }
     }
 
-    // MARK: - Bands
+    /// The two levels, and the move between them.
+    ///
+    /// A push rather than a cross-fade, because the two levels are a hierarchy and a push is how
+    /// macOS says so. `calmAnimation` is what makes it honour Reduce Motion, where the same change
+    /// happens with no movement at all.
+    private var levels: some View {
+        ZStack {
+            if let module = navigation.activeModule {
+                ModuleSidebar(module: module, navigation: navigation)
+                    .transition(.push(from: .trailing))
+            } else {
+                primaryList
+                    .transition(.push(from: .leading))
+            }
+        }
+        .calmAnimation(Theme.Motion.appearance, value: navigation.activeModule)
+    }
+
+    // MARK: - The primary level
+
+    private var primaryList: some View {
+        List(selection: selectionBinding) {
+            globalBand
+            moduleBand
+            pinnedBand
+            crossModuleBand
+        }
+        .listStyle(.sidebar)
+        .accessibilityIdentifier("sidebar.primary")
+    }
 
     /// No header. This band is not a category the user chooses between — it is the default place.
-    private var primaryBand: some View {
+    private var globalBand: some View {
         Section {
             ForEach(SidebarRegistry.destinations(in: .primary)) { destination in
-                destinationRow(destination)
+                SidebarDestinationRow(
+                    destination: destination,
+                    count: count(for: destination),
+                    isSelected: navigation.selection == destination.selection,
+                    rowHeight: rowHeight
+                )
+            }
+        }
+    }
+
+    /// The modules.
+    ///
+    /// Buttons rather than selectable rows, and deliberately. Arrow keys in a `List` change the
+    /// selection as they move, so tagging these would mean arrowing past Calendar *entered*
+    /// Calendar and replaced the list under the cursor — the sidebar would rearrange itself while
+    /// somebody was still reading it. A module is entered by activating it: click, Return, Tab and
+    /// Space under Full Keyboard Access, `⌘1`–`⌘9`, the View menu, or the command palette.
+    private var moduleBand: some View {
+        Section("Modules") {
+            ForEach(AppModule.displayOrder) { module in
+                ModuleRow(module: module, navigation: navigation, rowHeight: rowHeight)
             }
         }
     }
@@ -68,23 +120,34 @@ public struct SidebarView: View {
         if let sidebar = services?.sidebar, !sidebar.pinned.isEmpty {
             Section("Pinned") {
                 ForEach(sidebar.pinned) { row in
-                    derivedRow(row)
+                    SidebarDerivedRowView(
+                        row: row,
+                        isSelected: navigation.selection == row.selection,
+                        rowHeight: rowHeight
+                    )
                 }
             }
         }
     }
 
-    private var libraryBand: some View {
-        Section(isExpanded: $isLibraryExpanded) {
-            ForEach(SidebarRegistry.destinations(in: .library)) { destination in
-                destinationRow(destination)
+    /// Tags and saved searches, which belong to no module because they reach across all of them.
+    ///
+    /// A tag is put on a note, a task and a bookmark alike, and a saved search runs over the whole
+    /// library. Filing either inside a module would be a claim about their scope that is not true,
+    /// so they stay at the top level — collapsed, and absent entirely when there are none.
+    @ViewBuilder
+    private var crossModuleBand: some View {
+        if hasCrossModuleRows {
+            Section("Across Everything") {
+                tagsDisclosure
+                savedSearchesDisclosure
             }
-
-            tagsDisclosure
-            savedSearchesDisclosure
-        } header: {
-            Text("Library")
         }
+    }
+
+    private var hasCrossModuleRows: Bool {
+        guard let sidebar = services?.sidebar else { return false }
+        return !sidebar.tags.isEmpty || !sidebar.savedSearches.isEmpty
     }
 
     // MARK: - Disclosure groups
@@ -99,7 +162,11 @@ public struct SidebarView: View {
         if let sidebar = services?.sidebar, !sidebar.tags.isEmpty {
             DisclosureGroup(isExpanded: $isTagsExpanded) {
                 ForEach(sidebar.tags) { row in
-                    derivedRow(row)
+                    SidebarDerivedRowView(
+                        row: row,
+                        isSelected: navigation.selection == row.selection,
+                        rowHeight: rowHeight
+                    )
                 }
 
                 if sidebar.hasMoreTags {
@@ -131,7 +198,11 @@ public struct SidebarView: View {
         if let sidebar = services?.sidebar, !sidebar.savedSearches.isEmpty {
             DisclosureGroup(isExpanded: $isSearchesExpanded) {
                 ForEach(sidebar.savedSearches) { row in
-                    derivedRow(row)
+                    SidebarDerivedRowView(
+                        row: row,
+                        isSelected: navigation.selection == row.selection,
+                        rowHeight: rowHeight
+                    )
                 }
             } label: {
                 Label("Saved Searches", systemImage: "line.3.horizontal.decrease.circle")
@@ -143,83 +214,6 @@ public struct SidebarView: View {
                     .help("Searches you kept, re-run each time you open one")
             }
         }
-    }
-
-    // MARK: - Rows
-
-    /// A declared destination. Never truncated — see ``SidebarMetrics``.
-    private func destinationRow(_ destination: SidebarDestination) -> some View {
-        HStack(spacing: SidebarMetrics.iconGap) {
-            Image(systemName: destination.symbolName)
-                .frame(width: SidebarMetrics.iconColumn)
-                .accessibilityHidden(true)
-
-            Text(destination.title)
-                .lineLimit(1)
-
-            Spacer(minLength: 0)
-
-            if destination.showsCount, let count = count(for: destination), count > 0 {
-                countLabel(count)
-            }
-        }
-        .frame(minHeight: rowHeight)
-        .hoverHighlight(
-            isEnabled: navigation.selection != destination.selection,
-            cornerRadius: SidebarMetrics.selectionRadius,
-            extending: SidebarMetrics.selectionInset
-        )
-        .tag(destination.selection)
-        // What the destination holds, rather than what it is called — the label is already on the
-        // row, and a tooltip that repeats it is a pause that teaches nothing.
-        .help(destination.hint)
-        .accessibilityIdentifier(destination.selection.accessibilityIdentifier)
-        .accessibilityLabel(accessibilityLabel(for: destination))
-        .accessibilityHint(destination.hint)
-    }
-
-    /// A row derived from the store — a pinned item, a tag, a saved search.
-    ///
-    /// These *may* truncate: they carry user-chosen names of unbounded length, and the full text is
-    /// always one hover away.
-    private func derivedRow(_ row: SidebarDerivedRow) -> some View {
-        HStack(spacing: SidebarMetrics.iconGap) {
-            Image(systemName: row.symbolName)
-                .frame(width: SidebarMetrics.iconColumn)
-                .rowTint(row.colorName == nil ? Theme.Colors.secondaryText : Theme.Palette.color(named: row.colorName))
-                .accessibilityHidden(true)
-
-            Text(row.title)
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            Spacer(minLength: 0)
-
-            if let count = row.count, count > 0 {
-                countLabel(count)
-            }
-        }
-        .frame(minHeight: rowHeight)
-        .padding(.leading, CGFloat(row.depth) * Theme.Spacing.medium)
-        .hoverHighlight(
-            isEnabled: navigation.selection != row.selection,
-            cornerRadius: SidebarMetrics.selectionRadius,
-            extending: SidebarMetrics.selectionInset
-        )
-        .tag(row.selection)
-        // The full name, because unlike a destination this one *may* have been truncated, and
-        // recovering the rest of it is what the tooltip is for here.
-        .help(row.title)
-        .accessibilityIdentifier(row.selection.accessibilityIdentifier)
-        .accessibilityLabel(row.count.map { "\(row.title), \($0) items" } ?? row.title)
-    }
-
-    private func countLabel(_ count: Int) -> some View {
-        Text("\(count)")
-            .font(Theme.Text.metadata)
-            .monospacedDigit()
-            .rowForeground(.tertiary)
-            .accessibilityHidden(true)
     }
 
     // MARK: - Status
@@ -269,13 +263,6 @@ public struct SidebarView: View {
         }
     }
 
-    private func accessibilityLabel(for destination: SidebarDestination) -> String {
-        guard destination.showsCount, let count = count(for: destination), count > 0 else {
-            return destination.title
-        }
-        return "\(destination.title), \(count) items"
-    }
-
     private var selectionBinding: Binding<SidebarSelection?> {
         Binding(
             get: { navigation.selection },
@@ -287,9 +274,252 @@ public struct SidebarView: View {
     }
 }
 
+// MARK: - Module header
+
+/// Where you are, and the two ways out of it.
+///
+/// One row: a back control that returns to the primary navigation, and the module's name as a menu
+/// that switches straight to another one. Two affordances in the space of one, because a sidebar
+/// header that takes three rows to say "Tasks" has spent the room the navigation needed.
+struct ModuleHeader: View {
+    let module: AppModule
+    let navigation: NavigationModel
+
+    @ScaledMetric(relativeTo: .body) private var rowHeight = SidebarMetrics.baseRowHeight
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.tight) {
+            Button {
+                navigation.leaveModule()
+            } label: {
+                Image(systemName: "chevron.backward")
+                    .font(Theme.Text.metadata.weight(.semibold))
+                    .frame(width: SidebarMetrics.iconColumn, height: rowHeight)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("[", modifiers: .command)
+            .help("Back to the main navigation (⌘[)")
+            .accessibilityLabel("Back to all modules")
+            .accessibilityIdentifier("sidebar.module.back")
+
+            Menu {
+                ForEach(AppModule.displayOrder) { candidate in
+                    Button {
+                        navigation.enterModule(candidate)
+                    } label: {
+                        Label(
+                            candidate.title,
+                            systemImage: candidate == module ? "checkmark" : candidate.symbolName
+                        )
+                    }
+                }
+
+                Divider()
+
+                Button("All Modules", systemImage: "square.grid.2x2") {
+                    navigation.leaveModule()
+                }
+            } label: {
+                HStack(spacing: Theme.Spacing.tight) {
+                    Image(systemName: module.symbolName)
+                        .accessibilityHidden(true)
+                    Text(module.title)
+                        .font(Theme.Text.rowTitleEmphasised)
+                        .lineLimit(1)
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help(module.hint)
+            .accessibilityLabel("\(module.title) module. Switch module")
+            .accessibilityIdentifier("sidebar.module.switcher")
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, SidebarMetrics.leadingInset)
+        .padding(.vertical, Theme.Spacing.tight)
+        .accessibilityElement(children: .contain)
+        // Announced rather than merely redrawn: the sidebar's whole contents have just been
+        // replaced, and a VoiceOver user who is not looking at it needs to be told which.
+        .onChange(of: module) { _, newValue in
+            AccessibilityNotification.Announcement("\(newValue.title) module").post()
+        }
+    }
+}
+
+// MARK: - Rows
+
+/// A declared destination. Never truncated — see ``SidebarMetrics``.
+struct SidebarDestinationRow: View {
+    let destination: SidebarDestination
+    var count: Int?
+    var isSelected: Bool
+    var rowHeight: CGFloat
+
+    var body: some View {
+        HStack(spacing: SidebarMetrics.iconGap) {
+            Image(systemName: destination.symbolName)
+                .frame(width: SidebarMetrics.iconColumn)
+                .accessibilityHidden(true)
+
+            Text(destination.title)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            if destination.showsCount, let count, count > 0 {
+                SidebarCountLabel(count: count)
+            }
+        }
+        .frame(minHeight: rowHeight)
+        .hoverHighlight(
+            isEnabled: !isSelected,
+            cornerRadius: SidebarMetrics.selectionRadius,
+            extending: SidebarMetrics.selectionInset
+        )
+        .tag(destination.selection)
+        // What the destination holds, rather than what it is called — the label is already on the
+        // row, and a tooltip that repeats it is a pause that teaches nothing.
+        .help(destination.hint)
+        .accessibilityIdentifier(destination.selection.accessibilityIdentifier)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint(destination.hint)
+    }
+
+    private var accessibilityLabel: String {
+        guard destination.showsCount, let count, count > 0 else { return destination.title }
+        return "\(destination.title), \(count) items"
+    }
+}
+
+/// One module, at the top level.
+struct ModuleRow: View {
+    @Environment(\.services) private var services
+
+    let module: AppModule
+    let navigation: NavigationModel
+    var rowHeight: CGFloat
+
+    var body: some View {
+        Button {
+            navigation.enterModule(module)
+        } label: {
+            HStack(spacing: SidebarMetrics.iconGap) {
+                Image(systemName: module.symbolName)
+                    .frame(width: SidebarMetrics.iconColumn)
+                    .accessibilityHidden(true)
+
+                Text(module.title)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+
+                if let count = badge, count > 0 {
+                    SidebarCountLabel(count: count)
+                }
+
+                Image(systemName: "chevron.forward")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+                    .accessibilityHidden(true)
+            }
+            .frame(minHeight: rowHeight)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .hoverHighlight(
+            cornerRadius: SidebarMetrics.selectionRadius,
+            extending: SidebarMetrics.selectionInset
+        )
+        .help(module.hint)
+        .accessibilityIdentifier(module.accessibilityIdentifier)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint("Opens the \(module.title) module. \(module.hint)")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    /// The one number worth carrying up to the module list.
+    ///
+    /// Only Tasks, and only what is waiting to be sorted. A count beside every module would be a
+    /// scoreboard of ten figures nobody asked for, which is the thing this app has decided not to be.
+    private var badge: Int? {
+        guard module == .tasks else { return nil }
+        return services?.taskSidebar.badges[.inbox]
+    }
+
+    private var accessibilityLabel: String {
+        guard let count = badge, count > 0 else { return module.title }
+        return "\(module.title), \(count) in the inbox"
+    }
+}
+
+/// A row derived from the store — a pinned item, a tag, a saved search.
+///
+/// These *may* truncate: they carry user-chosen names of unbounded length, and the full text is
+/// always one hover away.
+struct SidebarDerivedRowView: View {
+    let row: SidebarDerivedRow
+    var isSelected: Bool
+    var rowHeight: CGFloat
+
+    var body: some View {
+        HStack(spacing: SidebarMetrics.iconGap) {
+            Image(systemName: row.symbolName)
+                .frame(width: SidebarMetrics.iconColumn)
+                .rowTint(row.colorName == nil ? Theme.Colors.secondaryText : Theme.Palette.color(named: row.colorName))
+                .accessibilityHidden(true)
+
+            Text(row.title)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Spacer(minLength: 0)
+
+            if let count = row.count, count > 0 {
+                SidebarCountLabel(count: count)
+            }
+        }
+        .frame(minHeight: rowHeight)
+        .padding(.leading, CGFloat(row.depth) * Theme.Spacing.medium)
+        .hoverHighlight(
+            isEnabled: !isSelected,
+            cornerRadius: SidebarMetrics.selectionRadius,
+            extending: SidebarMetrics.selectionInset
+        )
+        .tag(row.selection)
+        // The full name, because unlike a destination this one *may* have been truncated, and
+        // recovering the rest of it is what the tooltip is for here.
+        .help(row.title)
+        .accessibilityIdentifier(row.selection.accessibilityIdentifier)
+        .accessibilityLabel(row.count.map { "\(row.title), \($0) items" } ?? row.title)
+    }
+}
+
+struct SidebarCountLabel: View {
+    let count: Int
+
+    var body: some View {
+        Text("\(count)")
+            .font(Theme.Text.metadata)
+            .monospacedDigit()
+            .rowForeground(.tertiary)
+            .accessibilityHidden(true)
+    }
+}
+
 #Preview("Sidebar", traits: .fixedLayout(width: 220, height: 620)) {
     let services = AppServices.inMemory()
     return SidebarView(navigation: NavigationModel())
+        .appServices(services)
+        .frame(width: 220, height: 620)
+}
+
+#Preview("Inside a module", traits: .fixedLayout(width: 220, height: 620)) {
+    let services = AppServices.inMemory()
+    let navigation = NavigationModel()
+    navigation.enterModule(.tasks)
+    return SidebarView(navigation: navigation)
         .appServices(services)
         .frame(width: 220, height: 620)
 }

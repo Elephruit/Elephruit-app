@@ -94,209 +94,29 @@ extension CaptureCompletion {
 /// The contents of the floating capture panel.
 ///
 /// Deliberately the same grammar, the same parser and the same save path as the in-window sheet —
-/// this is a different way in, not a different feature.
+/// this is a different way in, not a different feature. Everything between the title and the buttons
+/// is ``CaptureComposer``, which is that promise made structural rather than repeated.
+///
+/// What is left here is only what a panel does differently from a sheet: it cannot dismiss itself,
+/// so cancelling asks the controller to hide the window; and it stays open after a failure, so it
+/// has an error to show.
 struct QuickJotView: View {
-    @Environment(\.services) private var services
-
     @Bindable var controller: QuickJotController
-
-    @State private var caret = 0
-    @State private var suggestions: [String] = []
-    @State private var selection = 0
-    @FocusState private var isFieldFocused: Bool
-
-    private var draft: CaptureDraft { CaptureParser.parse(controller.text) }
-
-    private var completion: CaptureCompletion? {
-        CaptureCompletion.active(in: controller.text, caretAt: caret)
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-            header
+            CaptureComposerHeader()
 
-            CaptureTextField(
+            CaptureComposer(
                 text: $controller.text,
-                caret: $caret,
-                onSubmit: { save() },
-                onCancel: { controller.hide() },
-                onMove: { direction in moveSelection(direction) },
-                onAccept: { acceptSuggestion() }
+                error: controller.lastError,
+                onSave: { controller.save() },
+                onCancel: { controller.hide() }
             )
-            .frame(minHeight: 78, maxHeight: 130)
-            .accessibilityIdentifier(AccessibilityID.QuickCapture.textField)
-            .accessibilityLabel("What would you like to capture?")
-
-            if !suggestions.isEmpty {
-                suggestionList
-            } else {
-                interpretation
-            }
-
-            if let error = controller.lastError {
-                Label(error.summary, systemImage: "exclamationmark.triangle")
-                    .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.unresolvedLink)
-                    .lineLimit(2)
-            }
-
-            Divider()
-            footer
         }
         .padding(Theme.Spacing.large)
         .frame(width: 560)
         .background(.regularMaterial)
-        .onAppear { isFieldFocused = true }
-        .task(id: completion) { await refreshSuggestions() }
         .accessibilityIdentifier(AccessibilityID.QuickCapture.root)
-    }
-
-    private var header: some View {
-        HStack {
-            Label("Quick Jot", systemImage: "square.and.pencil")
-                .font(.system(.headline, design: .default, weight: .medium))
-            Spacer()
-            KeyHint("⌘", "↩")
-        }
-    }
-
-    @ViewBuilder
-    private var interpretation: some View {
-        if controller.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            HStack(spacing: Theme.Spacing.medium) {
-                ForEach(CaptureParser.grammarHints, id: \.sigil) { hint in
-                    HStack(spacing: Theme.Spacing.hairline) {
-                        Text(hint.sigil)
-                            .font(.system(.caption, design: .monospaced, weight: .semibold))
-                            .foregroundStyle(Theme.Colors.selection)
-                        Text(hint.meaning)
-                            .font(Theme.Text.metadata)
-                            .foregroundStyle(Theme.Colors.tertiaryText)
-                    }
-                }
-            }
-            .accessibilityIdentifier(AccessibilityID.QuickCapture.interpretation)
-        } else {
-            let parsed = draft
-            HStack(spacing: Theme.Spacing.small) {
-                Label(parsed.kind.displayName, systemImage: parsed.kind.symbolName)
-                if !parsed.tagSlugs.isEmpty { TagChipRow(slugs: parsed.tagSlugs, limit: 3) }
-                if let project = parsed.projectHint {
-                    Label(project, systemImage: "square.stack.3d.up")
-                }
-                if let due = parsed.dueInterpretation {
-                    Label(due.summary, systemImage: "calendar")
-                }
-                if let follow = parsed.followDate {
-                    Label(follow.summary, systemImage: "arrow.trianglehead.counterclockwise")
-                }
-                Spacer()
-            }
-            .font(Theme.Text.metadata)
-            .foregroundStyle(Theme.Colors.secondaryText)
-            .lineLimit(1)
-            .accessibilityIdentifier(AccessibilityID.QuickCapture.interpretation)
-        }
-    }
-
-    private var suggestionList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(suggestions.enumerated()), id: \.offset) { index, value in
-                HStack {
-                    Text(completion?.trigger.prefix ?? "")
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(Theme.Colors.selection)
-                    Text(value)
-                        .font(Theme.Text.metadata)
-                    Spacer()
-                }
-                .padding(.vertical, 3)
-                .padding(.horizontal, Theme.Spacing.small)
-                .background(
-                    index == selection
-                        ? Theme.Colors.selection.opacity(0.18)
-                        : Color.clear,
-                    in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                )
-                .contentShape(Rectangle())
-                .onTapGesture { selection = index; acceptSuggestion() }
-            }
-        }
-        .accessibilityLabel("\(suggestions.count) suggestions. Use the arrow keys, then Tab to accept.")
-    }
-
-    private var footer: some View {
-        HStack {
-            Text(suggestions.isEmpty ? "Saved to Inbox unless a project is named." : "Tab accepts · ↑↓ chooses")
-                .font(Theme.Text.metadata)
-                .foregroundStyle(Theme.Colors.tertiaryText)
-
-            Spacer()
-
-            Button("Cancel") { controller.hide() }
-                .accessibilityIdentifier(AccessibilityID.QuickCapture.cancelButton)
-
-            Button("Save") { save() }
-                .buttonStyle(.borderedProminent)
-                .disabled(draft.isEmpty)
-                .accessibilityIdentifier(AccessibilityID.QuickCapture.saveButton)
-        }
-    }
-
-    // MARK: - Behaviour
-
-    private func save() {
-        controller.save()
-    }
-
-    private func moveSelection(_ direction: Int) {
-        guard !suggestions.isEmpty else { return }
-        selection = max(0, min(suggestions.count - 1, selection + direction))
-    }
-
-    /// Returns whether a suggestion was taken, so the field knows whether to swallow the key.
-    @discardableResult
-    private func acceptSuggestion() -> Bool {
-        guard let completion, suggestions.indices.contains(selection) else { return false }
-        let applied = completion.applying(suggestions[selection], to: controller.text, caretAt: caret)
-        controller.text = applied.text
-        caret = applied.caret
-        suggestions = []
-        return true
-    }
-
-    private func refreshSuggestions() async {
-        guard let completion, let services else {
-            suggestions = []
-            return
-        }
-
-        selection = 0
-        let query = completion.query
-
-        switch completion.trigger {
-        case .tag:
-            let slugs = ((try? services.tags.allTags()) ?? [])
-                .map(\.slug)
-                .filter { query.isEmpty || $0.hasPrefix(query.lowercased()) }
-            suggestions = Array(slugs.prefix(6))
-
-        case .person, .project:
-            // The same index-backed lookup that already backs `[[` completion in the editor.
-            let titles = await services.search.titleSuggestions(prefix: query, limit: 12)
-            let kinds: Set<ItemKind> = completion.trigger == .person
-                ? [.person]
-                : [.project, .area, .goal]
-            let matches = titles
-                .compactMap { try? services.items.item(id: $0.id) }
-                .filter { kinds.contains($0.kind) }
-                .map(\.title)
-            suggestions = Array(matches.prefix(6))
-
-        case .dueDate, .followDate:
-            let examples = NaturalDateParser.recognisedExamples
-                .filter { query.isEmpty || $0.hasPrefix(query.lowercased()) }
-            suggestions = Array(examples.prefix(6))
-        }
     }
 }

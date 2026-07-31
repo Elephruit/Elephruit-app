@@ -70,19 +70,11 @@ struct PersonPortraitSection: View {
                 .frame(maxWidth: .infinity)
             }
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-                SectionHeader("Notes")
-                MarkdownTextEditor(
-                    text: $bodyText,
-                    isMonospaced: prefersMonospaced,
-                    isEditable: !person.isInTrash
-                )
-                .frame(minHeight: 100)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                        .strokeBorder(Theme.Colors.separator)
-                )
-            }
+            NotesField(
+                text: $bodyText,
+                placeholder: "What is worth remembering about them?",
+                isEditable: !person.isInTrash
+            )
         }
         .padding(.horizontal, Theme.Spacing.large)
     }

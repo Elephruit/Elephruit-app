@@ -26,7 +26,7 @@ struct PeopleSidebarSection: View {
     @State private var isShowingContactImport = false
 
     var body: some View {
-        Section(isExpanded: $isExpanded) {
+        Section {
             ForEach(Self.scopes, id: \.self) { scope in
                 row(for: scope, count: count(for: scope))
             }
@@ -35,44 +35,58 @@ struct PeopleSidebarSection: View {
                 row(for: scope, count: linkedCount)
             }
 
-            if !groups.isEmpty {
-                ForEach(groups) { group in
-                    row(
-                        for: .group(id: group.id),
-                        title: group.name,
-                        symbolName: group.symbolName,
-                        count: group.memberCount
-                    )
-                }
-            }
-
             // Only when there is something to reconcile. A permanently visible "0 duplicates" row is
             // a chore the interface invented for itself.
             if duplicateCount > 0 {
                 row(for: .duplicates, count: duplicateCount)
             }
-        } header: {
-            HStack {
-                Text("People")
-                Spacer()
-
-                Menu {
-                    Button("Add a Person…") { navigation.isPeopleCommandBarVisible = true }
-                    Divider()
-                    Button("Import from Contacts…") { isShowingContactImport = true }
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("Add a person, or bring in your contacts")
-                .accessibilityLabel("Add people")
-            }
         }
         .task { reload() }
         .sheet(isPresented: $isShowingContactImport) {
             ContactOnboardingView(navigation: navigation)
+        }
+
+        // Groups earn a header now that People has the sidebar to itself: a group is somebody's own
+        // organisation and belongs under a heading that says so, rather than trailing the fixed
+        // scopes as though it were another one.
+        Section(isExpanded: $isExpanded) {
+            ForEach(groups) { group in
+                row(
+                    for: .group(id: group.id),
+                    title: group.name,
+                    symbolName: group.symbolName,
+                    count: group.memberCount
+                )
+            }
+
+            Button("Import from Contacts…", systemImage: "person.crop.rectangle.stack") {
+                isShowingContactImport = true
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.Colors.secondaryText)
+            .frame(minHeight: Theme.Size.rowHeight)
+            .hoverHighlight(
+                cornerRadius: SidebarMetrics.selectionRadius,
+                extending: SidebarMetrics.selectionInset
+            )
+            .help("Bring people in from your address book. Elephruit reads it and never writes to it.")
+            .accessibilityIdentifier("sidebar.people.import")
+        } header: {
+            HStack {
+                Text("Groups")
+                Spacer()
+
+                Button {
+                    navigation.isPeopleCommandBarVisible = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+                .help("Add a person")
+                .accessibilityLabel("Add a person")
+                .accessibilityIdentifier("sidebar.people.add")
+            }
         }
     }
 

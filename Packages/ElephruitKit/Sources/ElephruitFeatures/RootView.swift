@@ -17,6 +17,41 @@ public struct RootView: View {
     @Environment(\.services) private var services
 
     @State private var navigation = NavigationModel()
+
+    /// The window's swipe coordinator.
+    ///
+    /// One per window, because "only one row is open at a time" is a fact about a window and two
+    /// windows are entitled to have a row open each. It installs the event monitors that make a
+    /// two-finger trackpad swipe reach a list row at all.
+    @State private var swipes = SwipeActionCoordinator()
+
+    /// Where this window was, encoded.
+    ///
+    /// `@SceneStorage` rather than `@AppStorage`, because "where am I" is a property of a window and
+    /// two windows are entitled to disagree. Written on every change and read once, on the task that
+    /// runs when the window appears.
+    @SceneStorage("navigation.state") private var storedNavigationState = ""
+
+    /// What each module has been left set to.
+    ///
+    /// Per window like everything else here, but backed by one preference file, so a divider dragged
+    /// in this window is where the next window and the next launch find it. See ``ModuleLayoutStore``.
+    @State private var moduleLayout = ModuleLayoutStore()
+
+    /// The window's own width, so a restored column width can be clamped to what there is.
+    @State private var windowWidth: CGFloat = 0
+
+    /// Widths held fixed for one turn of the run loop while a module change lands.
+    ///
+    /// AppKit's split view keeps its divider position across everything: changing the constraints
+    /// alone moves a column only when its *current* width breaks them, so a People pane at 520 would
+    /// happily sit at 520 in Notes, which allows up to 960. Pinning min, ideal and max to the value
+    /// this module wants forces the move; relaxing them a moment later gives the divider back.
+    @State private var pinnedWidths: [ModuleShellLayout.Column: CGFloat] = [:]
+
+    /// Tells a divider the user dragged from one the window moved. See ``PaneDragDetector``.
+    @State private var dragDetectors: [ModuleShellLayout.Column: PaneDragDetector] = [:]
+
     @State private var isExportPresented = false
     @State private var isImportPresented = false
     @State private var transferSummary: String?
@@ -59,6 +94,14 @@ public struct RootView: View {
             }
         }
         .environment(navigation)
+        .swipeActionCoordinator(swipes)
+        // Changing what is selected puts away anything a row was offering. The actions were about
+        // the row you were on, and you are no longer on it.
+        .onChange(of: navigation.selection) { _, _ in swipes.closeAll() }
+        .onChange(of: navigation.selectedItemIDs) { _, _ in swipes.closeAll() }
+        .onChange(of: swipes.openRow) { _, open in
+            navigation.hasRevealedRowActions = open != nil
+        }
         .sheet(isPresented: quickCaptureBinding) {
             QuickCaptureView { id in
                 navigation.selectItem(id)
@@ -108,7 +151,18 @@ public struct RootView: View {
         .onChange(of: pendingCalendarRequest) { _, request in
             handleCalendarRequest(request)
         }
+        .onChange(of: navigation.restorationState) { _, state in
+            guard let encoded = state.encoded else { return }
+            storedNavigationState = encoded
+        }
         .task {
+            // The ladder decides that Escape should close a revealed row; this is what does it.
+            navigation.onCloseRowActions = { swipes.closeAll() }
+
+            // Before the calendar request, so a link that arrived at launch wins over the place the
+            // window was last left rather than being overwritten by it.
+            restoreNavigation()
+
             // On launch, when the request arrived before this window existed — which is the case
             // when a Shortcut or a link started the app rather than merely bringing it forward.
             handleCalendarRequest(pendingCalendarRequest)
@@ -170,6 +224,9 @@ public struct RootView: View {
         }
     }
 
+    /// The column widths the module this window is in has asked for.
+    private var shellLayout: ModuleShellLayout { navigation.activeModule.shellLayout }
+
     private var splitView: some View {
         NavigationSplitView(columnVisibility: columnVisibilityBinding) {
             SidebarView(navigation: navigation)
@@ -214,34 +271,89 @@ public struct RootView: View {
                     ItemListView(navigation: navigation)
                 }
             }
-            .navigationSplitViewColumnWidth(
-                min: Theme.Size.listMinWidth,
-                ideal: Theme.Size.listIdealWidth
+            .moduleColumnWidth(
+                .primary,
+                layout: shellLayout,
+                store: moduleLayout,
+                module: navigation.activeModule,
+                windowWidth: windowWidth,
+                pinned: pinnedWidths[.primary]
             )
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                recordDrag(of: .primary, to: width)
+            }
         } detail: {
-            ItemDetailView(navigation: navigation)
-                .frame(
-                    // Focus mode caps the measure: long lines are hard to read, and the point of the
-                    // mode is reading and writing rather than filling the window.
-                    maxWidth: navigation.layoutMode == .focus ? Theme.Size.editorMaxWidth : .infinity
-                )
-                .frame(maxWidth: .infinity)
-                .navigationSplitViewColumnWidth(min: Theme.Size.detailMinWidth, ideal: 720)
+            // A canvas module — the calendar, the time sheet — has nothing to put in a third column,
+            // and the honest expression of that is no column rather than a narrow one. What used to
+            // be here was 720 points of "Nothing selected" sitting where the month should have been.
+            if shellLayout.detail.isAvailable {
+                ItemDetailView(navigation: navigation)
+                    .frame(
+                        // Focus mode caps the measure: long lines are hard to read, and the point of
+                        // the mode is reading and writing rather than filling the window.
+                        maxWidth: navigation.layoutMode == .focus ? Theme.Size.editorMaxWidth : .infinity
+                    )
+                    .frame(maxWidth: .infinity)
+                    .moduleColumnWidth(
+                        .detail,
+                        layout: shellLayout,
+                        store: moduleLayout,
+                        module: navigation.activeModule,
+                        windowWidth: windowWidth,
+                        pinned: pinnedWidths[.detail]
+                    )
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                        recordDrag(of: .detail, to: width)
+                    }
+            } else {
+                Color.clear
+                    .navigationSplitViewColumnWidth(0)
+            }
         }
         .navigationSplitViewStyle(.balanced)
         .inspector(isPresented: inspectorBinding) {
             InspectorView(navigation: navigation)
                 .inspectorColumnWidth(
-                    min: InspectorLayout.minimumWidth,
-                    ideal: InspectorLayout.idealWidth,
-                    max: InspectorLayout.maximumWidth
+                    min: shellLayout.inspector.width.minimum,
+                    ideal: moduleLayout.width(
+                        of: .inspector,
+                        in: navigation.activeModule,
+                        available: windowWidth
+                    ),
+                    max: shellLayout.inspector.width.maximum ?? windowWidth
                 )
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            guard width > 0 else { return }
+            windowWidth = width
+        }
+        // Applying a module's own widths on arrival is the whole point: AppKit's split view keeps
+        // its divider wherever it was last put, so without this, widening the pane to read somebody's
+        // profile also moved the calendar's divider — and the calendar had no say in it.
+        .task(id: navigation.activeModule) { await applyModuleLayout() }
+        // A pane that closed itself for want of anything to show comes back when there is something.
+        // A pane the *user* closed stays closed — see `shouldOpenAfterSelection`.
+        .onChange(of: hasInspectableSelection) { _, hasSelection in
+            guard hasSelection, shellLayout.inspector.shouldOpenAfterSelection() else { return }
+            navigation.isInspectorVisible = true
         }
         .focusedSceneValue(\.navigationModel, navigation)
         .focusedSceneValue(\.transferActions, TransferActions(
             export: { isExportPresented = true },
             importFiles: { isImportPresented = true }
         ))
+    }
+
+    /// Puts the window back where it was, if there is a where.
+    ///
+    /// Failure is silent and lands on Today: a scene string written by an older build, or one that
+    /// names a module this build does not have, is not something to raise an alert about while
+    /// somebody is opening their library.
+    private func restoreNavigation() {
+        guard !storedNavigationState.isEmpty,
+              let state = NavigationModel.RestorationState(encoded: storedNavigationState)
+        else { return }
+        navigation.restore(state)
     }
 
     /// Acts on a request from the menu bar, an intent, or a link.
@@ -281,22 +393,28 @@ public struct RootView: View {
             PaletteCommand(id: "go-inbox", title: "Go to Inbox", category: .navigate, symbolName: "tray", command: .goInbox, in: registry) {
                 navigation.select(.inbox)
             },
-            PaletteCommand(id: "go-trash", title: "Go to Trash", category: .navigate, symbolName: "trash") {
-                navigation.select(.trash)
+            PaletteCommand(id: "go-home", title: "Go to Home", category: .navigate, symbolName: "house") {
+                navigation.select(.home)
             },
         ]
 
-        for kind in ItemKind.shippingInMilestoneOne where kind != .dailyEntry {
+        // One entry per module, in sidebar order, so every module is reachable from ⌘K by name.
+        // Entering rather than selecting: the palette should leave the window in the same state a
+        // click on the module row does, including the sidebar it puts up.
+        for module in AppModule.displayOrder {
             commands.append(
                 PaletteCommand(
-                    id: "go-\(kind.rawValue)",
-                    title: "Go to \(kind.pluralDisplayName)",
+                    id: "go-module-\(module.rawValue)",
+                    title: "Go to \(module.title)",
                     category: .navigate,
-                    symbolName: kind.symbolName
+                    symbolName: module.symbolName
                 ) {
-                    navigation.select(.kind(kind))
+                    navigation.enterModule(module)
                 }
             )
+        }
+
+        for kind in ItemKind.shippingInMilestoneOne where kind != .dailyEntry {
             commands.append(
                 PaletteCommand(
                     id: "new-\(kind.rawValue)",
@@ -310,7 +428,7 @@ public struct RootView: View {
         }
 
         commands.append(contentsOf: [
-            PaletteCommand(id: "quick-capture", title: "Quick Capture", category: .create, symbolName: "square.and.pencil", command: .quickCapture, in: registry) {
+            PaletteCommand(id: "quick-capture", title: "Quick Jot", category: .create, symbolName: "square.and.pencil", command: .quickCapture, in: registry) {
                 navigation.isQuickCaptureVisible = true
             },
             PaletteCommand(id: "search", title: "Search Everything", category: .navigate, symbolName: "magnifyingglass", command: .search, in: registry) {
@@ -322,12 +440,6 @@ public struct RootView: View {
             PaletteCommand(id: "stop-timer", title: "Stop Timer", category: .create, symbolName: "stop.circle") {
                 services?.timer.stop()
             },
-            PaletteCommand(id: "go-time", title: "Go to Time", category: .navigate, symbolName: "timer") {
-                navigation.select(.time)
-            },
-            PaletteCommand(id: "go-calendar", title: "Go to Calendar", category: .navigate, symbolName: "calendar.day.timeline.left") {
-                navigation.select(.calendar)
-            },
             PaletteCommand(id: "new-event", title: "New Event…", category: .create, symbolName: "calendar.badge.plus") {
                 navigation.select(.calendar)
                 navigation.isCalendarQuickEntryVisible = true
@@ -338,9 +450,6 @@ public struct RootView: View {
             },
             PaletteCommand(id: "people-bar", title: "People Command Bar", category: .navigate, symbolName: "person.text.rectangle") {
                 navigation.isPeopleCommandBarVisible = true
-            },
-            PaletteCommand(id: "go-people", title: "Go to People", category: .navigate, symbolName: "person.2") {
-                navigation.select(.people(.all))
             },
             PaletteCommand(id: "go-celebrations", title: "Go to Celebrations", category: .navigate, symbolName: "birthday.cake") {
                 navigation.select(.people(.celebrations))
@@ -368,6 +477,43 @@ public struct RootView: View {
         ])
 
         return commands
+    }
+
+    // MARK: - Module layout
+
+    /// Snaps every column to what the module being entered asks for, then hands the dividers back.
+    ///
+    /// The pause is a single turn of the run loop rather than an animation: the split view needs one
+    /// layout pass to adopt the pinned constraints, and relaxing them in the same pass would leave
+    /// the old width in place. It is short enough to read as the module arriving rather than as the
+    /// window rearranging itself afterwards.
+    private func applyModuleLayout() async {
+        let module = navigation.activeModule
+        let available = windowWidth
+
+        // A drag detector that saw the old module's widths would read the snap as a preference.
+        for column in dragDetectors.keys { dragDetectors[column]?.reset() }
+
+        pinnedWidths = [
+            .primary: moduleLayout.width(of: .primary, in: module, available: available),
+            .detail: moduleLayout.width(of: .detail, in: module, available: available),
+        ]
+
+        try? await Task.sleep(for: .milliseconds(50))
+        guard !Task.isCancelled else { return }
+        pinnedWidths = [:]
+    }
+
+    /// Remembers a width the user chose, and ignores one the window imposed.
+    private func recordDrag(of column: ModuleShellLayout.Column, to width: CGFloat) {
+        guard width > 0, windowWidth > 0, pinnedWidths.isEmpty else { return }
+
+        var detector = dragDetectors[column] ?? PaneDragDetector()
+        let isDrag = detector.isUserDrag(columnWidth: width, windowWidth: windowWidth)
+        dragDetectors[column] = detector
+
+        guard isDrag else { return }
+        moduleLayout.setWidth(width, of: column, in: navigation.activeModule, available: windowWidth)
     }
 
     // MARK: - Bindings
@@ -401,8 +547,34 @@ public struct RootView: View {
         )
     }
 
+    /// The inspector is open when the user asked for it *and* the module's policy allows it here.
+    ///
+    /// Three things can close it and only one of them is the user: a module whose inspector is about
+    /// a selection has nothing to show when nothing is selected, and a window too narrow to hold the
+    /// module's primary column and an inspector should keep the primary column. Both are decisions
+    /// the module makes about itself — see ``DetailPanePolicy/isVisible(userWants:hasSelection:windowWidth:)`` —
+    /// and neither overwrites what the user asked for, so widening the window again brings the
+    /// inspector back rather than making them ask twice.
     private var inspectorBinding: Binding<Bool> {
-        Binding(get: { navigation.isInspectorVisible }, set: { navigation.isInspectorVisible = $0 })
+        Binding(
+            get: {
+                shellLayout.inspector.isVisible(
+                    userWants: navigation.isInspectorVisible,
+                    hasSelection: hasInspectableSelection,
+                    windowWidth: windowWidth
+                )
+            },
+            set: { navigation.isInspectorVisible = $0 }
+        )
+    }
+
+    /// Whether there is anything for the inspector to be about.
+    ///
+    /// An event is not an `Item`, so the calendar's selection lives on its own workspace model —
+    /// which is why this asks two questions rather than reading one identifier.
+    private var hasInspectableSelection: Bool {
+        if navigation.selectedItemID != nil { return true }
+        return navigation.calendarWorkspace?.selectedEventID != nil
     }
 
     private var quickCaptureBinding: Binding<Bool> {
@@ -586,6 +758,38 @@ public enum PendingCalendarRequest: Sendable, Hashable {
     case day(Date)
 }
 
+/// Deleting whatever the list has selected, exposed to the menu bar.
+///
+/// The menu item existed from milestone one and was disabled, which meant `⌘⌫` did nothing in a
+/// list where ⌫ already worked — a shortcut printed in a menu that does not fire is worse than an
+/// absent one. Each middle column publishes its own, because what "delete" means differs between
+/// them and the menu should not have to know.
+public struct RowActions: Sendable, Equatable {
+    public var moveToTrash: @MainActor () -> Void
+
+    /// Whether there is anything selected to act on.
+    public var isEnabled: Bool
+
+    public init(isEnabled: Bool, moveToTrash: @escaping @MainActor () -> Void) {
+        self.isEnabled = isEnabled
+        self.moveToTrash = moveToTrash
+    }
+
+    /// Equal when they would look the same in the menu.
+    ///
+    /// The closure is deliberately not part of this, and cannot be: closures do not compare. A fresh
+    /// one is built on every body evaluation of the list that publishes it, so without an `==` that
+    /// ignores it SwiftUI sees a new focused value on every frame and raises
+    /// *"FocusedValue update tried to update multiple times per frame"* — which is what it did.
+    ///
+    /// Ignoring it is also correct rather than merely convenient. Every one of those closures acts
+    /// on whatever the list currently holds, so they are interchangeable; the only thing that
+    /// changes what the *menu* does is whether it is enabled.
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.isEnabled == rhs.isEnabled
+    }
+}
+
 /// Export and import, exposed to the menu bar through the focused scene.
 public struct TransferActions: Sendable {
     public var export: @MainActor () -> Void
@@ -602,6 +806,9 @@ extension FocusedValues {
     @Entry public var navigationModel: NavigationModel?
 
     @Entry public var transferActions: TransferActions?
+
+    /// What the focused list can do to its selection.
+    @Entry public var rowActions: RowActions?
 }
 
 #Preview("Root", traits: .fixedLayout(width: 1180, height: 720)) {

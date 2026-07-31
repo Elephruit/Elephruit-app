@@ -219,6 +219,28 @@ public enum TimeWindow: String, Sendable, Hashable, CaseIterable {
         }
     }
 
+    public var symbolName: String {
+        switch self {
+        case .today: "circle.circle"
+        case .yesterday: "arrow.uturn.backward.circle"
+        case .thisWeek: "calendar"
+        case .lastWeek: "calendar.badge.clock"
+        case .thisMonth: "calendar.badge.exclamationmark"
+        }
+    }
+
+    /// What the window covers, for a tooltip. A rule, never a restatement of the name — the same
+    /// standard every other navigation row in this app is held to.
+    public var hint: String {
+        switch self {
+        case .today: "Everything tracked since midnight."
+        case .yesterday: "The whole of the previous day, for the correction you are about to make."
+        case .thisWeek: "From the first day of your week, as your calendar defines it."
+        case .lastWeek: "The seven days before this week began."
+        case .thisMonth: "From the first of the month to now."
+        }
+    }
+
     public func range(using dateProvider: any DateProvider) -> Range<Date> {
         let calendar = dateProvider.calendar
         let today = dateProvider.startOfToday

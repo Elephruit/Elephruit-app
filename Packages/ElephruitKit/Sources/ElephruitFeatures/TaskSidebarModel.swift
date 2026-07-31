@@ -81,7 +81,8 @@ public final class TaskSidebarModel {
                 symbolName: item.effectiveSymbolName,
                 colorName: item.colorName,
                 depth: depth,
-                progress: progress(for: item)
+                progress: progress(for: item),
+                kind: item.kind
             )
         }
 

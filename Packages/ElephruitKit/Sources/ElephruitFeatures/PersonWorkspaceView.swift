@@ -37,6 +37,7 @@ struct PersonWorkspaceView: View {
     @State private var isEditingContactDetails = false
     @State private var pendingWriteBack: ContactDetailsEdit?
     @State private var loadFailure: AppError?
+    @State private var isAddingRelationship = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -44,9 +45,14 @@ struct PersonWorkspaceView: View {
                 person: person,
                 portrait: portrait,
                 title: $title,
+                // Passed in rather than fetched again: the workspace has already loaded the
+                // timeline, and a brief assembled from nothing is a heading and three empty
+                // sections — which is worse than the action being off and saying so.
+                hasHistory: !timeline.isEmpty,
                 onAction: { pendingAction = $0 },
                 onRecordInteraction: { isRecordingInteraction = true },
-                onShowBrief: { isShowingBrief = true }
+                onShowBrief: { isShowingBrief = true },
+                onAddRelationship: { isAddingRelationship = true }
             )
 
             Divider()
@@ -124,6 +130,9 @@ struct PersonWorkspaceView: View {
         }
         .sheet(isPresented: $isShowingBrief) {
             MeetingBriefSheet(person: person) { navigation.selectItem($0) }
+        }
+        .sheet(isPresented: $isAddingRelationship) {
+            AddRelationshipSheet(person: person) { isAddingRelationship = false }
         }
         .sheet(item: $chartKind) { kind in
             RelationshipChartSheet(person: person, initialKind: kind) { id in
@@ -272,9 +281,12 @@ struct PersonHeaderView: View {
     let portrait: PersonPortrait?
     @Binding var title: String
 
+    let hasHistory: Bool
+
     let onAction: (ContactActionRequest) -> Void
     let onRecordInteraction: () -> Void
     let onShowBrief: () -> Void
+    let onAddRelationship: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
@@ -331,9 +343,11 @@ struct PersonHeaderView: View {
 
             PersonQuickActions(
                 person: person,
+                hasHistory: hasHistory,
                 onAction: onAction,
                 onRecordInteraction: onRecordInteraction,
-                onShowBrief: onShowBrief
+                onShowBrief: onShowBrief,
+                onAddRelationship: onAddRelationship
             )
         }
         .padding(.horizontal, Theme.Spacing.large)
@@ -451,85 +465,120 @@ struct PersonAvatar: View {
 
 // MARK: - Quick actions
 
-/// Call, message, email, FaceTime, schedule, note, task, record.
+/// The actions a person's record can actually support, in the order that record makes sensible.
 ///
-/// Every one that reaches another person routes through ``ContactActionConfirmationSheet`` rather
-/// than firing on click. A disabled button says *why* in its help text — "no phone number recorded" —
-/// because a control that is simply grey is indistinguishable from one that is broken.
+/// ### What this used to be
+/// Ten bordered icon-only buttons in a fixed row — telephone, speech bubble, envelope, video,
+/// telephone-with-a-waveform, map, compass, another speech bubble, a list, a tick — falling back to a
+/// horizontal scroller when the pane narrowed. Three of those glyphs are near-identical at 15 points,
+/// two of them are speech bubbles meaning different things, and the row was the same whether or not
+/// the person had a phone number, so the first thing the eye landed on was frequently the one thing
+/// that could not be pressed.
+///
+/// ### What it is now
+/// Every action carries its verb. Which ones are available is decided by
+/// ``PersonActionAvailability`` from the person's own data rather than here, so the same rule serves
+/// this row, the command bar and the context menus. Unavailable actions sink to the bottom instead of
+/// leading a row nobody can use, and they keep saying why — a control that is merely grey is
+/// indistinguishable from one that is broken. ``AdaptiveActionBar`` decides how many words survive
+/// the pane's current width, and whatever leaves the row is in the **More** menu rather than gone.
+///
+/// Everything that reaches another person still routes through ``ContactActionConfirmationSheet``
+/// rather than firing on click.
 struct PersonQuickActions: View {
     @Environment(\.services) private var services
 
     let person: Item
+    let hasHistory: Bool
+
     let onAction: (ContactActionRequest) -> Void
     let onRecordInteraction: () -> Void
     let onShowBrief: () -> Void
+    let onAddRelationship: () -> Void
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            actionRow
-            ScrollView(.horizontal, showsIndicators: false) { actionRow }
-        }
-        .accessibilityIdentifier(AccessibilityID.People.quickActions)
+        AdaptiveActionBar(actions)
+            .accessibilityIdentifier(AccessibilityID.People.quickActions)
     }
 
-    private var actionRow: some View {
-        HStack(spacing: Theme.Spacing.small) {
-            ForEach(ContactChannel.allCases) { channel in
-                let available = destinations(for: channel)
-                Button {
-                    onAction(ContactActionRequest(channel: channel, person: person, destinations: available))
-                } label: {
-                    Label(channel.displayName, systemImage: channel.symbolName)
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.bordered)
-                .disabled(available.isEmpty)
-                .help(available.isEmpty ? "No \(channel.destinationNoun) recorded" : channel.displayName)
-                .accessibilityLabel(channel.displayName)
-                .accessibilityHint(available.isEmpty ? "No \(channel.destinationNoun) recorded" : "")
-            }
-
-            Divider().frame(height: 16)
-
-            Button {
-                onRecordInteraction()
-            } label: {
-                Label("Record", systemImage: "text.bubble")
-                    .labelStyle(.iconOnly)
-            }
-            .buttonStyle(.bordered)
-            .help("Record a conversation")
-            .accessibilityLabel("Record a conversation")
-            .accessibilityIdentifier(AccessibilityID.People.recordInteraction)
-
-            Button {
-                onShowBrief()
-            } label: {
-                Label("Brief", systemImage: "list.bullet.rectangle")
-                    .labelStyle(.iconOnly)
-            }
-            .buttonStyle(.bordered)
-            .help("Meeting brief")
-            .accessibilityLabel("Meeting brief")
-            .accessibilityIdentifier(AccessibilityID.People.meetingBrief)
-
-            Button {
-                createTask()
-            } label: {
-                Label("Task", systemImage: "checkmark.circle")
-                    .labelStyle(.iconOnly)
-            }
-            .buttonStyle(.bordered)
-            .help("New task about \(person.displayTitle)")
-            .accessibilityLabel("New task")
+    private var actions: [ActionItem] {
+        availability.map { entry in
+            ActionItem(
+                id: entry.id,
+                title: entry.title,
+                symbolName: entry.symbolName,
+                priority: priority(for: entry),
+                isEnabled: entry.isAvailable,
+                unavailabilityReason: entry.unavailabilityReason,
+                detail: entry.detail,
+                perform: { perform(entry) }
+            )
         }
     }
 
-    private func destinations(for channel: ContactChannel) -> [ContactDestination] {
-        ContactDestinationPolicy.candidates(
-            for: channel,
-            from: person.personProfile?.destinations() ?? []
+    private var availability: [PersonActionAvailability] {
+        PersonActionAvailability.all(
+            destinations: person.personProfile?.destinations() ?? [],
+            hasRelationships: !relationships.isEmpty,
+            hasHistory: hasHistory
         )
+    }
+
+    private var relationships: [PersonRelationship] {
+        guard let services else { return [] }
+        return (try? services.persons.relationships(of: person)) ?? []
+    }
+
+    /// The availability rule already ranked these; this is only the coarse banding the action bar
+    /// sheds labels by, so the two cannot disagree about which action matters most.
+    private func priority(for entry: PersonActionAvailability) -> ActionItem.Priority {
+        switch entry.rank {
+        case 80...: .essential
+        case 50..<80: .common
+        default: .occasional
+        }
+    }
+
+    private func perform(_ entry: PersonActionAvailability) {
+        switch entry.kind {
+        case .contact(let channel):
+            onAction(
+                ContactActionRequest(
+                    channel: channel,
+                    person: person,
+                    destinations: ContactDestinationPolicy.candidates(
+                        for: channel,
+                        from: person.personProfile?.destinations() ?? []
+                    )
+                )
+            )
+
+        case .addNote:
+            createNote()
+
+        case .logInteraction:
+            onRecordInteraction()
+
+        case .addTask:
+            createTask()
+
+        case .meetingBrief:
+            onShowBrief()
+
+        case .addRelationship:
+            onAddRelationship()
+        }
+    }
+
+    private func createNote() {
+        guard let services else { return }
+        services.perform {
+            let note = try services.items.create(
+                ItemDraft(kind: .note, title: "Note about \(person.displayTitle)")
+            )
+            try services.items.link(note, to: person, kind: .mentions)
+            services.noteChange(to: note)
+        }
     }
 
     private func createTask() {
