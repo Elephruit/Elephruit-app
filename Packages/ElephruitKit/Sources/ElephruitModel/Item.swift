@@ -91,6 +91,32 @@ public final class Item {
 
     public var completedAt: Date?
 
+    /// When the task was deliberately abandoned.
+    ///
+    /// Distinct from ``completedAt`` because "I did it" and "I decided not to" are different facts,
+    /// and a log that cannot tell them apart is a log that makes you re-decide things. Both leave the
+    /// item resolved; only one of them is an achievement.
+    public var cancelledAt: Date?
+
+    /// When to interrupt the user. **Not** a date the item is visible from, and not a deadline.
+    ///
+    /// Never written as a side effect of setting either of the other two. Visibility and
+    /// interruption are separate requests, and an app that turns the first into the second is one
+    /// people switch notifications off in.
+    public var reminderAt: Date?
+
+    /// Whether ``reminderAt`` names a time of day, or only a day.
+    ///
+    /// Stored rather than inferred from the time component: midnight is a legitimate time, and
+    /// "is the hour zero?" is not the same question as "did the user give an hour?".
+    public var reminderIsTimed: Bool = false
+
+    /// ``ReminderOwner`` raw value: who delivers the notification.
+    ///
+    /// Recorded rather than inferred, because both this app and a linked system reminder can hold an
+    /// alarm for the same task, and the user would then be told twice.
+    public var reminderOwnerRaw: String = ReminderOwner.none.rawValue
+
     /// Non-nil means archived: kept, but out of the way.
     public var archivedAt: Date?
 
@@ -124,6 +150,91 @@ public final class Item {
 
     /// JSON-encoded ``RecurrenceRule``. `nil` means the item does not repeat.
     public var recurrenceData: Data?
+
+    // MARK: Planning
+
+    /// The day the user chose to work on this. `nil` means they have not chosen.
+    ///
+    /// A *day* rather than a flag, so a commitment made last Thursday can be told from one made this
+    /// morning. That distinction is what makes carrying work forward a fact in the data rather than
+    /// a guess in a view — and it is what lets Later Today apply only to a plan made for today.
+    public var todayCommittedOn: Date?
+
+    /// Pushed to the back half of today. Meaningful only alongside a commitment made for today.
+    public var isLaterToday: Bool = false
+
+    /// Position within Today, independent of position within the owning project.
+    ///
+    /// A second ordering rather than a reuse of ``sortOrder``, because the two answer different
+    /// questions: the order of a project's steps is the order they must happen in, and the order of
+    /// today is the order you feel like doing them. Reordering one must not disturb the other.
+    public var todayOrder: Double = 0
+
+    /// Parked by choice. Not overdue, not neglected, and never in a count.
+    public var isSomeday: Bool = false
+
+    /// Marked as worth coming back to.
+    ///
+    /// Deliberately **not** ``isFavorite``, which is library vocabulary applying to every kind. A
+    /// flag is task vocabulary and carries no implication of priority, deadline, or Today — which is
+    /// the whole value of it: it means exactly what the user decided it means.
+    public var isFlagged: Bool = false
+
+    /// When this task started waiting on somebody or something else.
+    public var waitingSince: Date?
+
+    /// When to chase. Only meaningful while waiting.
+    public var followUpAt: Date?
+
+    /// JSON-encoded ``TaskChecklist`` — lightweight steps inside a single action.
+    ///
+    /// One column rather than an entity: checklist items are never queried on their own, never
+    /// linked to, and never appear in a list of their own, so a table of them would be one whose
+    /// every row is read through its parent. Subtasks, which *are* queried and linked and listed,
+    /// are ordinary child items.
+    public var checklistData: Data?
+
+    // MARK: Recurrence series
+
+    /// Which repeating series this occurrence belongs to.
+    ///
+    /// Shared by the completed occurrences left behind as history and by the one live row that
+    /// carries the series forward, so "show me this task's history" is an indexed lookup rather than
+    /// a walk through links.
+    public var seriesID: UUID?
+
+    /// How many occurrences the series has produced, for a rule that ends after a count.
+    public var occurrenceCount: Int = 0
+
+    // MARK: External link
+
+    /// ``TaskSyncState`` raw value.
+    public var syncStateRaw: String = TaskSyncState.local.rawValue
+
+    /// EventKit's `calendarItemIdentifier` for the linked reminder.
+    public var externalIdentifier: String?
+
+    /// The reminder calendar the linked reminder lives in.
+    public var externalListIdentifier: String?
+
+    /// When the last successful reconciliation happened.
+    public var externalSyncedAt: Date?
+
+    /// The linked reminder's fingerprint at that moment — see `ReminderSnapshot.fingerprint`.
+    public var externalFingerprint: String?
+
+    /// This item's own ``updatedAt`` at that moment, so a later local edit is detectable.
+    ///
+    /// Stored rather than compared against `externalSyncedAt`: the two differ by however long the
+    /// write took, and using the wrong one makes every pass look like a local edit — which turns
+    /// every subsequent pass into a conflict.
+    public var externalLocalStamp: Date?
+
+    /// Set by the task migration when an imported date could have meant more than one thing.
+    ///
+    /// A marker, not a correction. The migration never guesses which of the three dates an old value
+    /// was, and this is how it says so without touching the value.
+    public var dateReviewRaw: String?
 
     // MARK: Presentation
 

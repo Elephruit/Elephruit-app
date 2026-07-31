@@ -106,6 +106,20 @@ public enum LinkKind: String, Codable, Sendable, Hashable, CaseIterable {
     /// This item cannot proceed until that one is resolved.
     case blockedBy
 
+    /// This task is waiting on that person.
+    ///
+    /// Its own kind rather than a column on the task, so the person's page, their timeline, and
+    /// their meeting brief all find it by the traversal they already do. A stored `waitingForPersonID`
+    /// would be a second place the same fact lived, and the first thing to go stale when somebody is
+    /// merged into a duplicate.
+    case waitingOn
+
+    /// This task is something the user owes that person.
+    ///
+    /// The mirror of ``waitingOn``: one is a promise made, the other a promise waited on, and a
+    /// relationship needs both halves to be worth anything.
+    case promisedTo
+
     /// Deliberately filed with a project or area.
     ///
     /// Distinct from ``LinkKind/wiki`` and ``LinkKind/related`` because the project workspace shows
@@ -126,7 +140,7 @@ public enum LinkKind: String, Codable, Sendable, Hashable, CaseIterable {
     /// Whether a link of this kind should appear in the Backlinks section.
     public var appearsInBacklinks: Bool {
         switch self {
-        case .wiki, .related, .mentions, .participant, .blockedBy, .filedUnder: true
+        case .wiki, .related, .mentions, .participant, .blockedBy, .filedUnder, .waitingOn, .promisedTo: true
         case .recurrenceSeries, .conflictCopy: false
         }
     }
@@ -139,6 +153,8 @@ public enum LinkKind: String, Codable, Sendable, Hashable, CaseIterable {
         case .mentions: "Mentions"
         case .participant: "Participant"
         case .blockedBy: "Blocked By"
+        case .waitingOn: "Waiting on"
+        case .promisedTo: "Promised to"
         case .recurrenceSeries: "Recurrence"
         case .conflictCopy: "Conflicted Copy"
         }

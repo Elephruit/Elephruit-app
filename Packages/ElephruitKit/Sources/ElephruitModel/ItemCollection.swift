@@ -140,6 +140,24 @@ public final class SavedSearch {
     /// Whether it appears in the sidebar as a smart view.
     public var showsInSidebar: Bool = true
 
+    /// A JSON-encoded ``TaskFilter``, when this saved search is a **task smart list**.
+    ///
+    /// ### Why this is a column here rather than an entity of its own
+    /// A smart list needs everything a saved search already has — a name, a symbol, a colour, a
+    /// place in the sidebar, an order, a soft delete — and differs in exactly one respect: how its
+    /// membership is decided. Adding an entity would have duplicated six fields and their handling
+    /// in the sidebar, the command palette, export, and trash.
+    ///
+    /// It is not the ``queryString`` because the two are genuinely different things. A saved search
+    /// stores the text the user typed, deliberately, so it survives a grammar change and can be
+    /// edited by hand. A smart list is built from menus, has to round-trip *back* into those menus,
+    /// and half its conditions name records by identity — and an identity cannot be written into a
+    /// string that is meant to survive a rename.
+    ///
+    /// `nil` means an ordinary saved search. Both are never set at once; ``isTaskSmartList`` is what
+    /// every reader asks.
+    public var taskFilterData: Data?
+
     public var deletedAt: Date?
 
     public init(
@@ -169,6 +187,23 @@ extension SavedSearch {
     }
 
     public var effectiveSymbolName: String {
-        symbolName ?? "line.3.horizontal.decrease.circle"
+        symbolName ?? (isTaskSmartList ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+    }
+
+    /// Whether this row is a task smart list rather than a saved text search.
+    public var isTaskSmartList: Bool {
+        taskFilterData != nil
+    }
+
+    /// The rules, when this is a smart list.
+    ///
+    /// Setting a filter clears the query string, because a row that carried both would have two
+    /// answers to "what is in here" and no way to say which won.
+    public var taskFilter: TaskFilter? {
+        get { TaskFilter.decode(from: taskFilterData) }
+        set {
+            taskFilterData = newValue?.encoded()
+            if newValue != nil { queryString = "" }
+        }
     }
 }
