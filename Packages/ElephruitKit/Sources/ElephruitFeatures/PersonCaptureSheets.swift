@@ -1,5 +1,6 @@
 import ElephruitCore
 import ElephruitDesign
+import ElephruitModel
 import SwiftUI
 
 enum PersonNoteCategory: String, CaseIterable, Sendable, Hashable {
@@ -214,6 +215,7 @@ struct PersonNoteSheet: View {
 
 struct PersonInteractionDraft: Sendable, Equatable {
     var kind: PersonInteractionKind = .inPerson
+    var participantIDs: Set<UUID> = []
     var summary = ""
     var discussion = ""
     var followUps = ""
@@ -234,15 +236,30 @@ struct PersonInteractionDraft: Sendable, Equatable {
 }
 
 struct LogInteractionSheet: View {
-    let personName: String
+    let person: Item
     let onSave: (PersonInteractionDraft) -> Void
     let onCancel: () -> Void
 
     @Environment(\.services) private var services
-    @State private var draft = PersonInteractionDraft()
+    @State private var draft: PersonInteractionDraft
+    @State private var availablePeople: [Item]
+    @State private var isChoosingPeople = false
+    @State private var peopleSearch = ""
     @FocusState private var focusedField: Field?
 
     private enum Field { case summary, discussion, followUps, commitments }
+
+    init(
+        person: Item,
+        onSave: @escaping (PersonInteractionDraft) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.person = person
+        self.onSave = onSave
+        self.onCancel = onCancel
+        _draft = State(initialValue: PersonInteractionDraft(participantIDs: [person.id]))
+        _availablePeople = State(initialValue: [person])
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -252,6 +269,7 @@ struct LogInteractionSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.section) {
                     kindSelector
+                    attendeeSelector
                     summaryAndDate
                     discussionField
 
@@ -287,6 +305,7 @@ struct LogInteractionSheet: View {
         .background(Theme.Colors.windowBackground)
         .onAppear {
             draft.occurredAt = services?.dateProvider.now ?? Date()
+            loadPeople()
             focusedField = .summary
         }
         .accessibilityIdentifier(AccessibilityID.People.interactionSheet)
@@ -303,7 +322,7 @@ struct LogInteractionSheet: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 Text("Log an interaction")
                     .font(Theme.Text.title)
-                Text("With \(personName)")
+                Text(attendeeSummary)
                     .font(Theme.Text.rowSubtitle)
                     .foregroundStyle(Theme.Colors.secondaryText)
             }
@@ -342,8 +361,119 @@ struct LogInteractionSheet: View {
         }
     }
 
+    private var attendeeSelector: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            HStack {
+                Text("Who was there?")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                Spacer()
+                Text("\(draft.participantIDs.count) \(draft.participantIDs.count == 1 ? "person" : "people")")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Theme.Spacing.small) {
+                    ForEach(selectedAttendees) { attendee in
+                        HStack(spacing: 6) {
+                            PersonAvatar(name: attendee.displayTitle, colorName: attendee.colorName, size: 22)
+                            Text(attendee.displayTitle)
+                                .font(Theme.Text.chip)
+                            if attendee.id != person.id {
+                                Button {
+                                    draft.participantIDs.remove(attendee.id)
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(Theme.Colors.tertiaryText)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Remove \(attendee.displayTitle)")
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                        .frame(height: 32)
+                        .background(Color.purple.opacity(0.1), in: Capsule())
+                    }
+
+                    Button {
+                        isChoosingPeople = true
+                    } label: {
+                        Label("Add people", systemImage: "person.badge.plus")
+                            .font(Theme.Text.chip)
+                            .padding(.horizontal, Theme.Spacing.small)
+                            .frame(height: 32)
+                            .background(Theme.Colors.subtleFill, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $isChoosingPeople, arrowEdge: .bottom) {
+                        peoplePicker
+                    }
+                }
+            }
+        }
+    }
+
+    private var peoplePicker: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: Theme.Spacing.small) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                TextField("Search people", text: $peopleSearch)
+                    .textFieldStyle(.plain)
+            }
+            .padding(.horizontal, Theme.Spacing.medium)
+            .frame(height: 38)
+            .background(Theme.Colors.subtleFill, in: RoundedRectangle(cornerRadius: 10))
+            .padding(Theme.Spacing.medium)
+
+            Divider()
+
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    ForEach(filteredPeople) { candidate in
+                        Button {
+                            toggle(candidate)
+                        } label: {
+                            HStack(spacing: Theme.Spacing.small) {
+                                PersonAvatar(name: candidate.displayTitle, colorName: candidate.colorName, size: 28)
+                                Text(candidate.displayTitle)
+                                    .foregroundStyle(Theme.Colors.primaryText)
+                                    .lineLimit(1)
+                                Spacer()
+                                if draft.participantIDs.contains(candidate.id) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(Color.purple)
+                                }
+                            }
+                            .padding(.horizontal, Theme.Spacing.medium)
+                            .frame(height: 40)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(candidate.id == person.id)
+                    }
+                }
+                .padding(.vertical, Theme.Spacing.small)
+            }
+
+            Divider()
+            HStack {
+                Text("Select everyone who took part")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+                Spacer()
+                Button("Done") { isChoosingPeople = false }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(Theme.Spacing.medium)
+        }
+        .frame(width: 330, height: 390)
+        .background(Theme.Colors.windowBackground)
+    }
+
     private var summaryAndDate: some View {
-        HStack(alignment: .bottom, spacing: Theme.Spacing.medium) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
             VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
                 Text("What was it about?")
                     .font(Theme.Text.metadata)
@@ -360,9 +490,35 @@ struct LogInteractionSheet: View {
                     .accessibilityLabel("Interaction summary")
             }
 
-            DatePicker("When", selection: $draft.occurredAt)
-                .datePickerStyle(.compact)
-                .frame(width: 200)
+            HStack(spacing: Theme.Spacing.medium) {
+                Image(systemName: "calendar.badge.clock")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.purple)
+                    .frame(width: 34, height: 34)
+                    .background(Color.purple.opacity(0.1), in: RoundedRectangle(cornerRadius: 9))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("When")
+                        .font(.system(.callout, weight: .semibold))
+                    Text("Date and time of the interaction")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                }
+
+                Spacer()
+
+                DatePicker("Date", selection: $draft.occurredAt, displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                DatePicker("Time", selection: $draft.occurredAt, displayedComponents: .hourAndMinute)
+                    .datePickerStyle(.compact)
+            }
+            .padding(.horizontal, Theme.Spacing.medium)
+            .frame(height: 58)
+            .background(Color.purple.opacity(0.055), in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                    .strokeBorder(Color.purple.opacity(0.16))
+            }
         }
     }
 
@@ -440,7 +596,7 @@ struct LogInteractionSheet: View {
 
     private var footer: some View {
         HStack {
-            Text("Follow-ups become tasks; commitments appear as promises.")
+            Text("Saved to every attendee; follow-ups become tasks.")
                 .font(Theme.Text.metadata)
                 .foregroundStyle(Theme.Colors.tertiaryText)
 
@@ -454,6 +610,38 @@ struct LogInteractionSheet: View {
         }
         .padding(.horizontal, Theme.Spacing.section)
         .padding(.vertical, Theme.Spacing.medium)
+    }
+
+    private var selectedAttendees: [Item] {
+        availablePeople.filter { draft.participantIDs.contains($0.id) }
+    }
+
+    private var filteredPeople: [Item] {
+        let query = peopleSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return availablePeople }
+        return availablePeople.filter { $0.displayTitle.localizedCaseInsensitiveContains(query) }
+    }
+
+    private var attendeeSummary: String {
+        let additional = max(0, draft.participantIDs.count - 1)
+        return additional == 0
+            ? "With \(person.displayTitle)"
+            : "With \(person.displayTitle) and \(additional) \(additional == 1 ? "other" : "others")"
+    }
+
+    private func toggle(_ candidate: Item) {
+        guard candidate.id != person.id else { return }
+        if draft.participantIDs.contains(candidate.id) {
+            draft.participantIDs.remove(candidate.id)
+        } else {
+            draft.participantIDs.insert(candidate.id)
+        }
+    }
+
+    private func loadPeople() {
+        guard let services else { return }
+        let people = (try? services.persons.allPeople(includingPlaceholders: false)) ?? []
+        availablePeople = people.contains(where: { $0.id == person.id }) ? people : [person] + people
     }
 
     private var captureFieldBackground: some View {
