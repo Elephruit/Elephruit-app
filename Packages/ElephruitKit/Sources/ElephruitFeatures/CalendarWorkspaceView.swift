@@ -116,7 +116,7 @@ public struct CalendarWorkspaceView: View {
         .onChange(of: navigation.isCalendarQuickEntryVisible) { _, wanted in
             guard wanted else { return }
             navigation.isCalendarQuickEntryVisible = false
-            quickEntryStart = defaultStart(workspace: workspace, services: services)
+            Task { await prepareQuickEntry(services: services, workspace: workspace) }
         }
         .sheet(item: $editorRequest) { request in
             EventEditorView(existing: request.existing, draft: request.draft) { event in
@@ -201,6 +201,24 @@ public struct CalendarWorkspaceView: View {
         .focused($isGridFocused)
         .onAppear { isGridFocused = true }
         .onKeyPress(action: { press in handle(press, services: services, workspace: workspace) })
+    }
+
+    /// Makes a global New Event request actionable before showing a field that promises it can save.
+    ///
+    /// Full EventKit access is both read and write access on macOS. The service asks for that tier,
+    /// then exposes only calendars whose account allows modification. If either part is unavailable,
+    /// the Calendar permission/read-only state remains visible instead of opening a composer whose
+    /// Add button can never work.
+    private func prepareQuickEntry(services: AppServices, workspace: CalendarWorkspaceModel) async {
+        if !services.calendar.isEnabled || !services.calendar.authorization.canRead {
+            let authorization = await services.calendar.enable()
+            guard authorization.canRead else { return }
+        } else {
+            await services.calendar.start()
+        }
+
+        guard services.calendar.defaultCalendarIdentifier != nil else { return }
+        quickEntryStart = defaultStart(workspace: workspace, services: services)
     }
 
     @ViewBuilder

@@ -126,7 +126,7 @@ public struct CalendarMenuBarContent: View {
     @ViewBuilder
     private var actions: some View {
         Button("New Event…", action: onQuickEntry)
-            .keyboardShortcut("n", modifiers: [.command, .shift])
+            .shortcut(.newEvent, in: services.shortcuts)
 
         Menu("Calendar Set") {
             Button("All Calendars") {

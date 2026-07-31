@@ -41,6 +41,14 @@ struct ShortcutRegistryTests {
         #expect(ShortcutCommand.quickCapture.title == "Quick Jot")
     }
 
+    @Test("New Event is Command-Shift-E")
+    func newEventKeepsItsKeys() {
+        let registry = ShortcutRegistry()
+
+        #expect(registry.binding(for: .newEvent) == KeyBinding("e", [.command, .shift]))
+        #expect(registry.binding(for: .exportLibrary) == KeyBinding("e", [.command, .shift, .option]))
+    }
+
     // MARK: - Overrides
 
     @Test("An override replaces the default")
