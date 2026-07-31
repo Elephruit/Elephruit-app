@@ -56,9 +56,13 @@ struct PersonCaptureSheetTests {
     func quickFactCategories() {
         #expect(QuickFactCategory.foodAndDrink.attribute == .foodAndDrink)
         #expect(QuickFactCategory.family.attribute == .family)
+        #expect(QuickFactCategory.age.attribute == .observedAge)
+        #expect(QuickFactCategory.school.attribute == .schoolGrade)
         #expect(QuickFactCategory.askAbout.attribute == .conversationTopic)
         #expect(QuickFactCategory.foodAndDrink.suggestions.contains("Vegetarian"))
         #expect(QuickFactCategory.foodAndDrink.suggestions.contains("Doesn’t drink alcohol"))
         #expect(QuickFactCategory.foodAndDrink.suggestions.contains("Likes wine"))
+        #expect(QuickFactCategory.family.suggestions.contains("Names to confirm"))
+        #expect(QuickFactCategory.school.suggestions.contains("2nd or 3rd grade"))
     }
 }

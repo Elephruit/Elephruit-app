@@ -400,7 +400,9 @@ struct PersonRelationshipsSection: View {
     let onOpenPerson: (UUID) -> Void
 
     @State private var isAddingRelationship = false
+    @State private var relationshipKind: RelationshipKind = .friend
     @State private var relationships: [PersonRelationship] = []
+    @State private var childPortraits: [UUID: PersonPortrait] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
@@ -425,6 +427,16 @@ struct PersonRelationshipsSection: View {
                 .accessibilityIdentifier(AccessibilityID.People.charts)
 
                 Button {
+                    relationshipKind = .child
+                    isAddingRelationship = true
+                } label: {
+                    Label("Add Child", systemImage: "figure.and.child.holdinghands")
+                }
+                .buttonStyle(.borderless)
+                .font(Theme.Text.rowSubtitle)
+
+                Button {
+                    relationshipKind = .friend
                     isAddingRelationship = true
                 } label: {
                     Label("Add", systemImage: "plus")
@@ -440,9 +452,28 @@ struct PersonRelationshipsSection: View {
                     .foregroundStyle(Theme.Colors.tertiaryText)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
+                if !children.isEmpty {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 210, maximum: 320), spacing: Theme.Spacing.small)],
+                        alignment: .leading,
+                        spacing: Theme.Spacing.small
+                    ) {
+                        ForEach(children, id: \.id) { relationship in
+                            if let child = relationship.other {
+                                ChildProfileCard(
+                                    child: child,
+                                    portrait: childPortraits[child.id],
+                                    onOpen: { onOpenPerson(child.id) }
+                                )
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: Theme.Spacing.small) {
-                        ForEach(relationships, id: \.id) { relationship in
+                        ForEach(otherRelationships, id: \.id) { relationship in
                             if let other = relationship.other {
                                 RelatedPersonChip(
                                     name: other.displayTitle,
@@ -462,13 +493,74 @@ struct PersonRelationshipsSection: View {
         .padding(.horizontal, Theme.Spacing.large)
         .task(id: person.id) { reload() }
         .sheet(isPresented: $isAddingRelationship) {
-            AddRelationshipSheet(person: person) { isAddingRelationship = false; reload() }
+            AddRelationshipSheet(person: person, initialKind: relationshipKind) {
+                isAddingRelationship = false
+                reload()
+            }
         }
+    }
+
+    private var children: [PersonRelationship] {
+        relationships.filter { $0.kind == .child }
+    }
+
+    private var otherRelationships: [PersonRelationship] {
+        relationships.filter { $0.kind != .child }
     }
 
     private func reload() {
         guard let services else { return }
         relationships = (try? services.persons.relationships(of: person)) ?? []
+        childPortraits = Dictionary(uniqueKeysWithValues: relationships.compactMap { relationship in
+            guard relationship.kind == .child, let child = relationship.other,
+                  let portrait = try? services.personWorkspace.portrait(of: child)
+            else { return nil }
+            return (child.id, portrait)
+        })
+    }
+}
+
+private struct ChildProfileCard: View {
+    let child: Item
+    let portrait: PersonPortrait?
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(spacing: Theme.Spacing.small) {
+                PersonAvatar(name: child.displayTitle, colorName: child.colorName, size: 34)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(child.displayTitle)
+                        .font(.system(.callout, weight: .semibold))
+                        .foregroundStyle(Theme.Colors.primaryText)
+                        .lineLimit(1)
+                    Text(detail)
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: Theme.Spacing.tight)
+                Image(systemName: "chevron.right")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+            }
+            .padding(Theme.Spacing.small)
+            .background(Color.pink.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12).strokeBorder(Color.pink.opacity(0.15))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Open (child.displayTitle) to add age, school, interests, and notes")
+    }
+
+    private var detail: String {
+        if let line = portrait?.ageAndGradeLine { return line }
+        if child.personProfile?.isPlaceholder == true { return "Sketch · add age, school, and interests" }
+        return "Add age, school, and interests"
     }
 }
 

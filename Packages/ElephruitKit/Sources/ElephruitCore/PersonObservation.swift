@@ -60,7 +60,7 @@ public struct FactAttribute: RawRepresentable, Codable, Sendable, Hashable {
 
     /// Every attribute the interface offers a dedicated card for, in the order they are shown.
     public static let curated: [FactAttribute] = [
-        .significance, .conversationTopic, .family, .foodAndDrink, .interest,
+        .significance, .conversationTopic, .family, .observedAge, .schoolGrade, .foodAndDrink, .interest,
         .like, .dislike, .lifeEvent, .location, .employer, .role,
         .giftIdea, .communicationPreference, .lookingFor, .quickFact,
         .promise, .reflection,
