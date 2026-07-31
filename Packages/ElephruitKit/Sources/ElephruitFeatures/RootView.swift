@@ -275,7 +275,10 @@ public struct RootView: View {
         } content: {
             // Time replaces the list rather than opening beside it: it *is* the middle column's
             // contents for that destination, in the same way a project's task list is.
-            Group {
+            // A concrete container is essential here. `Group` is layout-transparent, so AppKit's
+            // split view can miss the width modifier below and let this column consume half the
+            // window despite the module's declared maximum.
+            ZStack {
                 if navigation.selection.isTaskDestination {
                     // Tasks replace the middle column rather than filtering it. The sections, the
                     // headings, and the inline row are all specific to the scheduling model, and
@@ -310,6 +313,7 @@ public struct RootView: View {
                     ItemListView(navigation: navigation)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .moduleColumnWidth(
                 .primary,
                 layout: shellLayout,
