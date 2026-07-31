@@ -31,6 +31,7 @@ struct PersonWorkspaceView: View {
     @State private var isRecordingInteraction = false
     @State private var isAddingNote = false
     @State private var isAddingFact = false
+    @State private var quickFactSeed: QuickFactSeed?
     @State private var isShowingBrief = false
     @State private var chartKind: RelationshipChartKind?
     @State private var pendingAction: ContactActionRequest?
@@ -71,7 +72,10 @@ struct PersonWorkspaceView: View {
                         person: person,
                         portrait: portrait,
                         bodyText: $bodyText,
-                        onAddFact: { isAddingFact = true },
+                        onAddFact: { seed in
+                            quickFactSeed = seed
+                            isAddingFact = true
+                        },
                         onConfirm: confirm(_:),
                         onCorrect: { correctionTarget = $0 },
                         onOpenSource: { navigation.selectItem($0) }
@@ -147,11 +151,16 @@ struct PersonWorkspaceView: View {
         .sheet(isPresented: $isAddingFact) {
             AddFactSheet(
                 personName: person.displayTitle,
+                seed: quickFactSeed,
                 onSave: { draft, confidence, sensitivity, observedOn in
                     addFact(draft, confidence: confidence, sensitivity: sensitivity, observedOn: observedOn)
+                    quickFactSeed = nil
                     isAddingFact = false
                 },
-                onCancel: { isAddingFact = false }
+                onCancel: {
+                    quickFactSeed = nil
+                    isAddingFact = false
+                }
             )
         }
         .sheet(isPresented: $isShowingBrief) {

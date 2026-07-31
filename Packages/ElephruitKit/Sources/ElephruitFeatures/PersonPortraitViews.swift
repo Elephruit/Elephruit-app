@@ -18,24 +18,25 @@ struct PersonPortraitSection: View {
     let portrait: PersonPortrait?
     @Binding var bodyText: String
 
-    let onAddFact: () -> Void
+    let onAddFact: (QuickFactSeed?) -> Void
     let onConfirm: (PortraitValue) -> Void
     let onCorrect: (PortraitValue) -> Void
     let onOpenSource: (UUID) -> Void
 
-    /// Two columns on a wide window, one when narrow. A card is a paragraph, not a table row, and
-    /// stretching one across 900 points makes it unreadable.
-    private let columns = [GridItem(.adaptive(minimum: 260, maximum: 420), spacing: Theme.Spacing.medium)]
-
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
             HStack {
-                SectionHeader("What's true", count: portrait?.cards.count)
+                VStack(alignment: .leading, spacing: 2) {
+                    SectionHeader("Quick Facts", count: factCount)
+                    Text("The useful things to remember")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.tertiaryText)
+                }
                 Spacer()
                 Button {
-                    onAddFact()
+                    onAddFact(nil)
                 } label: {
-                    Label("Add a fact", systemImage: "plus")
+                    Label("Add quick fact", systemImage: "plus.circle.fill")
                 }
                 .buttonStyle(.borderless)
                 .font(Theme.Text.rowSubtitle)
@@ -47,27 +48,25 @@ struct PersonPortraitSection: View {
             }
 
             if let cards = portrait?.cards, !cards.isEmpty {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.Spacing.medium) {
-                    ForEach(cards) { card in
+                VStack(spacing: 0) {
+                    ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
                         PortraitCardView(
                             card: card,
                             onConfirm: onConfirm,
                             onCorrect: onCorrect,
                             onOpenSource: onOpenSource
                         )
+                        if index != cards.indices.last { Divider().padding(.leading, 54) }
                     }
                 }
+                .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: 16))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(Theme.Colors.separator.opacity(0.55))
+                }
+                .shadow(color: .black.opacity(0.025), radius: 10, y: 3)
             } else {
-                EmptyStateView(
-                    symbolName: "person.text.rectangle",
-                    headline: "Nothing recorded yet",
-                    message: """
-                        Add what matters about \(person.displayTitle) — why you know them, what \
-                        they like, what is going on in their life. Every fact keeps the date it \
-                        was learned.
-                        """
-                )
-                .frame(maxWidth: .infinity)
+                quickFactEmptyState
             }
 
             NotesField(
@@ -78,6 +77,69 @@ struct PersonPortraitSection: View {
         }
         .padding(.horizontal, Theme.Spacing.large)
     }
+
+    private var factCount: Int? {
+        let count = portrait?.cards.reduce(0) { $0 + $1.values.count } ?? 0
+        return count == 0 ? nil : count
+    }
+
+    private var quickFactEmptyState: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            HStack(spacing: Theme.Spacing.medium) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.selection)
+                    .frame(width: 42, height: 42)
+                    .background(Theme.Colors.selection.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Build a better mental picture")
+                        .font(.system(.headline, weight: .semibold))
+                    Text("Remember what makes time with \(person.displayTitle) thoughtful and easy.")
+                        .font(Theme.Text.rowSubtitle)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                }
+            }
+
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 145), spacing: Theme.Spacing.small)],
+                spacing: Theme.Spacing.small
+            ) {
+                ForEach(Self.starters, id: \.value) { seed in
+                    Button {
+                        onAddFact(seed)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: seed.category.symbol)
+                                .foregroundStyle(seed.category.tint)
+                            Text(seed.value)
+                                .font(Theme.Text.chip)
+                                .foregroundStyle(Theme.Colors.primaryText)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, Theme.Spacing.small)
+                        .frame(height: 32)
+                        .background(seed.category.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(Theme.Spacing.large)
+        .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.Colors.separator.opacity(0.55))
+        }
+    }
+
+    private static let starters = [
+        QuickFactSeed(category: .foodAndDrink, value: "Vegetarian"),
+        QuickFactSeed(category: .foodAndDrink, value: "Doesn’t drink alcohol"),
+        QuickFactSeed(category: .foodAndDrink, value: "Likes wine"),
+        QuickFactSeed(category: .askAbout, value: "The kids"),
+    ]
 }
 
 /// One card: an attribute, its current values, and how sure the app is about each.
@@ -94,43 +156,50 @@ struct PortraitCardView: View {
 
     @State private var isShowingHistory = false
 
+    private var category: QuickFactCategory { .category(for: card.attribute) }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            Label(card.attribute.displayName, systemImage: card.attribute.symbolName)
-                .font(Theme.Text.sectionHeader)
-                .foregroundStyle(Theme.Colors.secondaryText)
+        HStack(alignment: .top, spacing: Theme.Spacing.medium) {
+            Image(systemName: card.attribute.symbolName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(category.tint)
+                .frame(width: 34, height: 34)
+                .background(category.tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 10))
 
-            ForEach(card.values) { value in
-                PortraitValueRow(
-                    value: value,
-                    onConfirm: { onConfirm(value) },
-                    onCorrect: { onCorrect(value) },
-                    onOpenSource: onOpenSource
-                )
+            VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                Text(card.attribute.displayName)
+                    .font(Theme.Text.sectionHeader)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+
+                ForEach(card.values) { value in
+                    PortraitValueRow(
+                        value: value,
+                        onConfirm: { onConfirm(value) },
+                        onCorrect: { onCorrect(value) },
+                        onOpenSource: onOpenSource
+                    )
+                }
+
+                if card.historyCount > 0 {
+                    Button {
+                        isShowingHistory = true
+                    } label: {
+                        Text(card.historyCount == 1 ? "1 earlier value" : "\(card.historyCount) earlier values")
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Nothing is ever overwritten — see what this used to say")
+                    .popover(isPresented: $isShowingHistory) {
+                        FactHistoryPopover(attribute: card.attribute, values: card.values)
+                    }
+                }
             }
 
-            if card.historyCount > 0 {
-                Button {
-                    isShowingHistory = true
-                } label: {
-                    Text(card.historyCount == 1 ? "1 earlier value" : "\(card.historyCount) earlier values")
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.tertiaryText)
-                }
-                .buttonStyle(.plain)
-                .help("Nothing is ever overwritten — see what this used to say")
-                .popover(isPresented: $isShowingHistory) {
-                    FactHistoryPopover(attribute: card.attribute, values: card.values)
-                }
-            }
+            Spacer(minLength: 0)
         }
-        .padding(Theme.Spacing.medium)
+        .padding(Theme.Spacing.large)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.Colors.subtleFill, in: RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
-                .strokeBorder(Theme.Colors.separator.opacity(0.6))
-        )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(card.attribute.displayName)
     }
@@ -307,6 +376,7 @@ struct PersonRelationshipsSection: View {
     let onOpenPerson: (UUID) -> Void
 
     @State private var isAddingRelationship = false
+    @State private var relationships: [PersonRelationship] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
@@ -366,14 +436,15 @@ struct PersonRelationshipsSection: View {
             }
         }
         .padding(.horizontal, Theme.Spacing.large)
+        .task(id: person.id) { reload() }
         .sheet(isPresented: $isAddingRelationship) {
-            AddRelationshipSheet(person: person) { isAddingRelationship = false }
+            AddRelationshipSheet(person: person) { isAddingRelationship = false; reload() }
         }
     }
 
-    private var relationships: [PersonRelationship] {
-        guard let services else { return [] }
-        return (try? services.persons.relationships(of: person)) ?? []
+    private func reload() {
+        guard let services else { return }
+        relationships = (try? services.persons.relationships(of: person)) ?? []
     }
 }
 

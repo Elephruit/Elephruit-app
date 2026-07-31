@@ -125,11 +125,114 @@ struct ContactActionConfirmationSheet: View {
 
 // MARK: - Facts
 
-/// Recording something new about somebody.
-///
-/// The observation date is editable and defaults to today. That field is the whole reason the sheet
-/// exists rather than an inline text box: "Jack is six" learned last July means something different
-/// from "Jack is six" learned this morning, and every estimate downstream depends on which.
+struct QuickFactSeed: Equatable {
+    let category: QuickFactCategory
+    let value: String
+}
+
+enum QuickFactCategory: String, CaseIterable, Identifiable {
+    case askAbout
+    case foodAndDrink
+    case family
+    case interests
+    case likes
+    case avoid
+    case life
+    case work
+    case goodToKnow
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .askAbout: "Ask about"
+        case .foodAndDrink: "Food & drink"
+        case .family: "Family"
+        case .interests: "Interests"
+        case .likes: "Likes"
+        case .avoid: "Avoid"
+        case .life: "Life"
+        case .work: "Work"
+        case .goodToKnow: "Good to know"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .askAbout: "bubble.left.and.questionmark.bubble.right"
+        case .foodAndDrink: "fork.knife"
+        case .family: "figure.2.and.child.holdinghands"
+        case .interests: "star.fill"
+        case .likes: "hand.thumbsup.fill"
+        case .avoid: "hand.thumbsdown.fill"
+        case .life: "sparkles"
+        case .work: "briefcase.fill"
+        case .goodToKnow: "lightbulb.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .askAbout: .blue
+        case .foodAndDrink: .green
+        case .family: .pink
+        case .interests: .purple
+        case .likes: .cyan
+        case .avoid: .orange
+        case .life: .indigo
+        case .work: Theme.Colors.workDetail
+        case .goodToKnow: .yellow
+        }
+    }
+
+    var attribute: FactAttribute {
+        switch self {
+        case .askAbout: .conversationTopic
+        case .foodAndDrink: .foodAndDrink
+        case .family: .family
+        case .interests: .interest
+        case .likes: .like
+        case .avoid: .dislike
+        case .life: .lifeEvent
+        case .work: .role
+        case .goodToKnow: .quickFact
+        }
+    }
+
+    var prompt: String {
+        switch self {
+        case .askAbout: "What would be thoughtful to ask next time?"
+        case .foodAndDrink: "Diet, allergies, favourite drinks, restaurants…"
+        case .family: "Names, ages, milestones, or family context…"
+        case .interests: "Hobbies, teams, books, music, travel…"
+        case .likes: "Something they enjoy or appreciate…"
+        case .avoid: "Something they dislike or would rather skip…"
+        case .life: "Something happening in their life…"
+        case .work: "Role, project, goal, or professional context…"
+        case .goodToKnow: "Anything useful that does not fit elsewhere…"
+        }
+    }
+
+    var suggestions: [String] {
+        switch self {
+        case .askAbout: ["The kids", "Upcoming trip", "Current project", "How they’re doing"]
+        case .foodAndDrink: ["Vegetarian", "Gluten-free", "Doesn’t drink alcohol", "Likes wine"]
+        case .family: ["Has children", "Partner", "New baby", "Parents nearby"]
+        case .interests: ["Wine", "Golf", "Art", "Running"]
+        case .likes: ["Coffee", "Live music", "Thoughtful gifts"]
+        case .avoid: ["Crowded places", "Early meetings", "Spicy food"]
+        case .life: ["Moving", "Planning a trip", "New home"]
+        case .work: ["New role", "Hiring", "Launching a project"]
+        case .goodToKnow: []
+        }
+    }
+
+    static func category(for attribute: FactAttribute) -> QuickFactCategory {
+        allCases.first(where: { $0.attribute == attribute }) ?? .goodToKnow
+    }
+}
+
+/// A fast, human-shaped way to remember something useful about somebody.
 struct AddFactSheet: View {
     let personName: String
     let onSave: (ObservationDraft, FactConfidence, FactSensitivity, Date) -> Void
@@ -137,59 +240,180 @@ struct AddFactSheet: View {
 
     @Environment(\.services) private var services
 
-    @State private var attribute: FactAttribute = .lifeEvent
-    @State private var value = ""
+    @State private var category: QuickFactCategory
+    @State private var value: String
     @State private var confidence: FactConfidence = .stated
     @State private var sensitivity: FactSensitivity = .normal
     @State private var observedOn = Date()
+    @State private var showsDetails = false
     @FocusState private var isValueFocused: Bool
 
+    init(
+        personName: String,
+        seed: QuickFactSeed? = nil,
+        onSave: @escaping (ObservationDraft, FactConfidence, FactSensitivity, Date) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.personName = personName
+        self.onSave = onSave
+        self.onCancel = onCancel
+        _category = State(initialValue: seed?.category ?? .askAbout)
+        _value = State(initialValue: seed?.value ?? "")
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-            Text("About \(personName)")
-                .font(Theme.Text.title)
-
-            Form {
-                Picker("This is", selection: $attribute) {
-                    ForEach(FactAttribute.curated, id: \.rawValue) { option in
-                        Label(option.displayName, systemImage: option.symbolName).tag(option)
-                    }
+        VStack(spacing: 0) {
+            HStack(spacing: Theme.Spacing.medium) {
+                Image(systemName: category.symbol)
+                    .font(.system(size: 21, weight: .semibold))
+                    .foregroundStyle(category.tint)
+                    .frame(width: 44, height: 44)
+                    .background(category.tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 12))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Add a quick fact")
+                        .font(Theme.Text.title)
+                    Text("Something useful to remember about \(personName)")
+                        .font(Theme.Text.rowSubtitle)
+                        .foregroundStyle(Theme.Colors.secondaryText)
                 }
-
-                TextField("What is true", text: $value, axis: .vertical)
-                    .lineLimit(1...4)
-                    .focused($isValueFocused)
-
-                DatePicker("Learned on", selection: $observedOn, displayedComponents: .date)
-                    .help("Estimates advance from this date, so it matters more than when you typed it")
-
-                Picker("Confidence", selection: $confidence) {
-                    ForEach(FactConfidence.allCases, id: \.rawValue) { option in
-                        Text(option.displayName).tag(option)
-                    }
-                }
-
-                Picker("Sensitivity", selection: $sensitivity) {
-                    ForEach(FactSensitivity.allCases, id: \.rawValue) { option in
-                        Text(option.displayName).tag(option)
-                    }
-                }
+                Spacer()
             }
-            .formStyle(.grouped)
+            .padding(.horizontal, Theme.Spacing.section)
+            .padding(.vertical, Theme.Spacing.large)
 
-            if sensitivity != .normal {
-                Label("Never exported, and never included in a meeting brief.", systemImage: "lock")
-                    .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.tertiaryText)
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                        Text("What kind of detail is this?")
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+
+                        LazyVGrid(
+                            columns: [GridItem(.adaptive(minimum: 150), spacing: Theme.Spacing.small)],
+                            spacing: Theme.Spacing.small
+                        ) {
+                            ForEach(QuickFactCategory.allCases) { option in
+                                Button {
+                                    withAnimation(Theme.Motion.appearance) { category = option }
+                                } label: {
+                                    HStack(spacing: Theme.Spacing.small) {
+                                        Image(systemName: option.symbol)
+                                            .foregroundStyle(option.tint)
+                                            .frame(width: 20)
+                                        Text(option.title)
+                                            .font(.system(.callout, weight: category == option ? .semibold : .regular))
+                                            .foregroundStyle(Theme.Colors.primaryText)
+                                        Spacer()
+                                        if category == option {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundStyle(option.tint)
+                                        }
+                                    }
+                                    .padding(.horizontal, Theme.Spacing.small)
+                                    .frame(height: 38)
+                                    .background(
+                                        category == option ? option.tint.opacity(0.1) : Theme.Colors.subtleFill,
+                                        in: RoundedRectangle(cornerRadius: 10)
+                                    )
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+
+                    if !category.suggestions.isEmpty {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                            Text("QUICK PICKS")
+                                .font(.system(size: 10, weight: .bold))
+                                .tracking(0.8)
+                                .foregroundStyle(Theme.Colors.tertiaryText)
+
+                            HStack(spacing: Theme.Spacing.small) {
+                                ForEach(category.suggestions, id: \.self) { suggestion in
+                                    Button(suggestion) {
+                                        value = suggestion
+                                        isValueFocused = true
+                                    }
+                                    .buttonStyle(.plain)
+                                    .font(Theme.Text.chip)
+                                    .padding(.horizontal, Theme.Spacing.small)
+                                    .frame(height: 28)
+                                    .background(category.tint.opacity(0.1), in: Capsule())
+                                    .foregroundStyle(category.tint)
+                                }
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                        Text(category.title)
+                            .font(.system(.headline, weight: .semibold))
+                        Text(category.prompt)
+                            .font(Theme.Text.rowSubtitle)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+
+                        TextField("", text: $value, axis: .vertical)
+                            .labelsHidden()
+                            .textFieldStyle(.plain)
+                            .font(.system(.title3, weight: .medium))
+                            .lineLimit(1...4)
+                            .padding(Theme.Spacing.medium)
+                            .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: 12))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(category.tint.opacity(isValueFocused ? 0.7 : 0.2), lineWidth: isValueFocused ? 2 : 1)
+                            }
+                            .focused($isValueFocused)
+                            .accessibilityLabel(category.title)
+                    }
+
+                    DisclosureGroup("Details", isExpanded: $showsDetails) {
+                        VStack(spacing: Theme.Spacing.medium) {
+                            DatePicker("Learned on", selection: $observedOn, displayedComponents: .date)
+
+                            Picker("Confidence", selection: $confidence) {
+                                ForEach(FactConfidence.allCases, id: \.rawValue) { option in
+                                    Text(option.displayName).tag(option)
+                                }
+                            }
+
+                            Picker("Privacy", selection: $sensitivity) {
+                                ForEach(FactSensitivity.allCases, id: \.rawValue) { option in
+                                    Text(option.displayName).tag(option)
+                                }
+                            }
+
+                            if sensitivity != .normal {
+                                Label("Never exported or included in a meeting brief.", systemImage: "lock.fill")
+                                    .font(Theme.Text.metadata)
+                                    .foregroundStyle(Theme.Colors.secondaryText)
+                            }
+                        }
+                        .padding(.top, Theme.Spacing.medium)
+                    }
+                    .font(Theme.Text.rowSubtitle)
+                }
+                .padding(Theme.Spacing.section)
             }
+
+            Divider()
 
             HStack {
+                Text("Quick facts are searchable across everyone.")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
                 Spacer()
                 Button("Cancel", role: .cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
-                Button("Add") {
+                Button("Add Quick Fact") {
                     onSave(
-                        ObservationDraft(attribute: attribute, value: value.trimmingCharacters(in: .whitespaces)),
+                        ObservationDraft(
+                            attribute: category.attribute,
+                            value: value.trimmingCharacters(in: .whitespacesAndNewlines)
+                        ),
                         confidence,
                         sensitivity,
                         observedOn
@@ -197,11 +421,15 @@ struct AddFactSheet: View {
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
-                .disabled(value.trimmingCharacters(in: .whitespaces).isEmpty)
+                .tint(category.tint)
+                .disabled(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+            .padding(.horizontal, Theme.Spacing.section)
+            .frame(height: 60)
+            .background(Theme.Colors.contentBackground)
         }
-        .padding(Theme.Spacing.section)
-        .frame(width: 460)
+        .frame(width: 620, height: 650)
+        .background(Theme.Colors.windowBackground)
         .accessibilityIdentifier(AccessibilityID.People.addFactSheet)
         .onAppear {
             observedOn = services?.dateProvider.now ?? Date()
