@@ -411,11 +411,16 @@ struct TaskWorkspaceView: View {
 
     // MARK: - Data
 
-    private var reloadToken: String {
-        [
-            String(describing: navigation.selection),
-            String(services?.changeToken ?? 0),
-        ].joined(separator: "|")
+    /// Both halves are already `Equatable`, which is all `task(id:)` asks for — so there is no need
+    /// to reflect over the selection and build a string on every evaluation of this body just to
+    /// compare it with the last one.
+    private struct ReloadToken: Equatable {
+        var selection: SidebarSelection
+        var changeToken: Int
+    }
+
+    private var reloadToken: ReloadToken {
+        ReloadToken(selection: navigation.selection, changeToken: services?.changeToken ?? 0)
     }
 
     private func reload() {
