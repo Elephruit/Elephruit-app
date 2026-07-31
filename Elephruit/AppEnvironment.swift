@@ -173,10 +173,12 @@ final class AppEnvironment {
         NSApplication.shared.activate()
     }
 
-    /// Consumed by the window that acted on it, so a request cannot fire twice.
-    func consumeCalendarRequest() -> CalendarRequest? {
-        defer { pendingCalendarRequest = nil }
-        return pendingCalendarRequest
+    /// Cleared by the window that acted on it, so a request cannot fire twice.
+    ///
+    /// Called *after* the window has acted rather than while it is rendering: consuming during a
+    /// view's body is a mutation SwiftUI is entitled to run at any time and more than once.
+    func clearCalendarRequest() {
+        pendingCalendarRequest = nil
     }
 
     /// Picks up anything an intent left behind while the app was not frontmost.
