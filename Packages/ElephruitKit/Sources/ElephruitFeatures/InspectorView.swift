@@ -389,7 +389,9 @@ public struct InspectorView: View {
     /// time. The answer changes when the selection changes or when something is written; those are
     /// the two things this is keyed on.
     private func loadPossibleParents(for item: Item?) {
-        guard let services, let item else {
+        // A person gets the People module's context pane rather than the field editor, so there is
+        // no picker to fill and no reason to ask.
+        guard let services, let item, item.kind != .person else {
             possibleParents = []
             return
         }

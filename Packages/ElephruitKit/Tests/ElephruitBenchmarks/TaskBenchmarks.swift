@@ -147,10 +147,25 @@ struct TaskBenchmarks {
             _ = try? views.tasks(matching: filter)
         }
 
-        for measurement in [fetch, today, anytime, upcoming, smartList] {
+        // What the workspace actually asks for on arrival: the grouping and the flat list together.
+        // It used to ask for them separately, which fetched every open task twice and ran the rules
+        // over all of it twice — so this must stay close to `tasks.today`, not to twice it.
+        let contents = Benchmark.measure("tasks.contents.today", budget: .milliseconds(500)) {
+            _ = try? views.contents(of: .today)
+        }
+
+        for measurement in [fetch, today, anytime, upcoming, smartList, contents] {
             print(measurement.report)
             #expect(measurement.passes, "\(measurement.report)")
         }
+
+        // The whole point of `contents(of:)`. Two calls would be two fetches and two rule passes;
+        // one call is one of each plus a dictionary. Anything approaching `today + fetch` means the
+        // second traversal has crept back in.
+        #expect(
+            contents.rawSeconds < today.rawSeconds + fetch.rawSeconds,
+            "Arriving in Tasks is traversing the library twice again — \(contents.report)"
+        )
 
         // The shape above, asserted rather than left in a comment. Today currently costs about 1.5×
         // its own fetch; 2× is the line at which the rules would have started to dominate, and
