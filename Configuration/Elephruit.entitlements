@@ -51,12 +51,42 @@
 	  no write method, and `ContactsWriteSafetyTests` fails if the adapter ever reaches past it to
 	  `CNSaveRequest` — and a second test fails if the adapter fetches a key nothing displays.
 
-	  Still deliberately ABSENT: network client, network server, iCloud, CloudKit, Reminders, Photos,
+	  Still deliberately ABSENT: network client, network server, iCloud, CloudKit, Photos,
 	  Camera, Microphone, Location, Bluetooth, USB, Apple Events, JIT, and every temporary exception.
 	  Business-card scanning needs no camera entitlement: Continuity Camera is presented by the
 	  system, which hands back a file, and Vision reads it on-device.
 	-->
 	<key>com.apple.security.personal-information.addressbook</key>
+	<true/>
+
+	<!--
+	  The Tasks module: linking to Apple Reminders.
+
+	  This entitlement lets the sandbox reach the reminders store at all. The TCC prompt is separate
+	  and is triggered only when the user turns the integration on in Settings — until then the app
+	  holds an inert `NoRemindersProvider` and never touches `EKEventStore`.
+
+	  **This is the first integration that writes**, and the difference is deliberate rather than an
+	  erosion. The calendar and the address book are read-only by construction: their protocols have
+	  no write method, so writing is a compile error. That is not available here, because a task
+	  manager linked to Reminders that cannot tick a reminder off is not linked to anything.
+
+	  So the guarantee changes shape rather than disappearing. Every write is a `ReminderWrite`
+	  value that can be previewed, logged, and asserted about; `RemindersProviding.apply(_:)` is the
+	  single door it goes through; and `RemindersWriteSafetyTests` fails if any other method in the
+	  EventKit adapter names a mutating call, or if a deletion can be reached without an explicit
+	  `LinkedDeletionChoice`.
+
+	  EventKit offers no read-only or write-only tier for reminders — `requestWriteOnlyAccessToEvents()`
+	  is events-only — so full access is the only request there is, and the user has no way to grant
+	  less. The usage string in Info.plist says what is actually done with it.
+
+	  iCloud synchronisation of the user's reminders is the operating system's business. This app
+	  never asks for an Apple ID, holds no iCloud entitlement, and speaks to no private API: it
+	  writes to the store macOS gives it and the OS carries the change wherever the user has
+	  configured it to go.
+	-->
+	<key>com.apple.security.personal-information.reminders</key>
 	<true/>
 </dict>
 </plist>

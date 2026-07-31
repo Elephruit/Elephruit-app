@@ -9,7 +9,7 @@ import Testing
 private struct PeopleFixture {
     let store: StoreFixture
     let people: PeopleService
-    var clock: FixedDateProvider { store.dateProvider }
+    var clock: any DateProvider { store.dateProvider }
 
     init() throws {
         store = try StoreFixture()
