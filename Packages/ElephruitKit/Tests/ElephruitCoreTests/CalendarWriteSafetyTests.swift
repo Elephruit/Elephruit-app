@@ -55,9 +55,30 @@ struct CalendarWriteSafetyTests {
         "requestWriteOnlyAccessToEvents",
     ]
 
+    /// Calls that would change an **event or a calendar**, as opposed to a reminder.
+    ///
+    /// Split out from ``mutatingCalls`` when the Reminders integration arrived. `EKEventStore` is one
+    /// class serving two entity types, so `store.save(_:commit:)` is both the reminder-writing call
+    /// this app now legitimately makes and the event-writing call it must never make. Whether a given
+    /// `store.save` is safe therefore depends on *what is passed to it*, which a line scan cannot
+    /// see — so the scan is narrowed by file instead, and these are the symbols that are unsafe
+    /// wherever they appear.
+    private static let eventMutatingCalls = [
+        ".saveEvent(",
+        ".removeEvent(",
+        ".saveCalendar(",
+        ".removeCalendar(",
+        "requestWriteOnlyAccessToEvents",
+    ]
+
+    /// The adapter that legitimately writes, and is therefore checked by
+    /// `RemindersWriteSafetyTests` instead.
+    private static let remindersAdapter = "EventKitRemindersProvider.swift"
+
     @Test("The EventKit adapter contains no call that could change a calendar")
     func adapterNeverWrites() throws {
         let files = Self.swiftFiles(under: "ElephruitIntegrations")
+            .filter { $0.lastPathComponent != Self.remindersAdapter }
         #expect(!files.isEmpty, "The integrations source must be findable, or this test proves nothing")
 
         var offenders: [String] = []
@@ -86,6 +107,36 @@ struct CalendarWriteSafetyTests {
             never writes. These would: \(offenders)
             """
         )
+    }
+
+    /// The one file excluded above, checked against the narrower list.
+    ///
+    /// Excluding it entirely would have been the easy move and would have left a hole exactly the
+    /// size of the file that holds the app's only `EKEventStore` write. It writes reminders; it must
+    /// still never write an event or a calendar.
+    @Test("The Reminders adapter writes reminders and never events")
+    func remindersAdapterNeverTouchesEvents() throws {
+        let files = Self.swiftFiles(under: "ElephruitIntegrations")
+            .filter { $0.lastPathComponent == Self.remindersAdapter }
+        #expect(files.count == 1, "The Reminders adapter must be findable, or this test proves nothing")
+
+        var offenders: [String] = []
+
+        for file in files {
+            guard let contents = try? String(contentsOf: file, encoding: .utf8) else { continue }
+
+            for (number, line) in contents.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+                let text = String(line)
+                let trimmed = text.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.hasPrefix("//"), !trimmed.hasPrefix("///") else { continue }
+
+                for call in Self.eventMutatingCalls where text.contains(call) {
+                    offenders.append("\(file.lastPathComponent):\(number + 1) — \(call)")
+                }
+            }
+        }
+
+        #expect(offenders.isEmpty, "The Reminders adapter must not write to a calendar: \(offenders)")
     }
 
     @Test("The read-only guarantee does not depend on the permission granted")
