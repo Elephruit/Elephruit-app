@@ -127,6 +127,7 @@ public enum AccessibilityID {
         public static let timeline = "people.timeline"
         public static let contextSidebar = "people.contextSidebar"
         public static let list = "people.list"
+        public static let sortMenu = "people.sortMenu"
 
         // Facts.
         public static let addFact = "people.addFact"

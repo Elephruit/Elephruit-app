@@ -187,6 +187,12 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         }
     }
 
+    /// Whether the middle column is the contact list, which owns ⌘F while it is.
+    public var isPeopleDestination: Bool {
+        if case .people = self { return true }
+        return false
+    }
+
     /// Whether items shown here are in the Trash, which changes what actions are offered.
     public var showsTrashedItems: Bool {
         self == .trash

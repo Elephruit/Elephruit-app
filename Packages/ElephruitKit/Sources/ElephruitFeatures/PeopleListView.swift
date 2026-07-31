@@ -101,24 +101,51 @@ struct PeopleListView: View {
     let navigation: NavigationModel
     let scope: PeopleScope
 
-    @State private var people: [Item] = []
+    /// Owns the sorting and the sectioning, so neither happens in `body`. See ``PeopleListModel``.
+    @State private var model = PeopleListModel()
+
     @State private var selection: Set<UUID> = []
     @State private var searchText = ""
-    @State private var searchMatches: [PersonMatch] = []
     @State private var isShowingBatchEmail = false
-    @State private var loadFailure: AppError?
+
+    /// Letters typed into the focused list, until the user pauses.
+    @State private var typeAhead = TypeToSelectBuffer()
+    @State private var typedPreview: String?
+
+    /// The heading under the pointer while the jump strip is being dragged.
+    @State private var scrubbedTitle: String?
+
+    /// What to scroll to next. Cleared once it has been done, so a later render does not scroll
+    /// somebody back to where they were three actions ago.
+    @State private var pendingScroll: ScrollTarget?
+
+    @FocusState private var isListFocused: Bool
+    @FocusState private var isSearchFocused: Bool
+
+    /// Where the list was before a search took it over, so cancelling puts it back.
+    @State private var selectionBeforeSearch: Set<UUID> = []
+
+    /// The query in flight, so the next keystroke can abandon it.
+    @State private var searchTask: Task<Void, Never>?
+
+    private enum ScrollTarget: Equatable {
+        case section(String)
+        case person(UUID)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            if let loadFailure {
-                FailureStateView(error: loadFailure) { _ in refresh() }
-            } else if rows.isEmpty {
+            if let failure = model.loadFailure {
+                FailureStateView(error: failure) { _ in refresh() }
+            } else if model.isEmpty {
                 EmptyStateView(
-                    symbolName: isSearching ? "magnifyingglass" : scope.symbolName,
-                    headline: isSearching ? "Nobody matches" : scope.title,
-                    message: isSearching
+                    symbolName: model.isSearching ? "magnifyingglass" : scope.symbolName,
+                    headline: model.isSearching ? "Nobody matches" : scope.title,
+                    message: model.isSearching
                         ? "Try “\(PersonQueryParser.examples.randomElement() ?? "people in Austin")”."
-                        : scope.emptyMessage
+                        : scope.emptyMessage,
+                    actionTitle: model.isSearching ? "Clear Search" : nil,
+                    action: model.isSearching ? { clearSearch() } : nil
                 )
             } else {
                 list
@@ -134,7 +161,16 @@ struct PeopleListView: View {
             }
         }
         .searchable(text: $searchText, placement: .toolbar, prompt: "people in Austin · likes natural wine")
-        .onChange(of: searchText) { _, query in runSearch(query) }
+        .searchFocused($isSearchFocused)
+        .toolbar { sortMenu }
+        .onChange(of: searchText) { _, query in beginSearch(query) }
+        // ⌘F belongs to the list it is looking at. Without this it opened the app-wide search field
+        // while the contact list — the thing on screen, the thing with two thousand rows in it —
+        // stayed exactly as it was.
+        .onChange(of: navigation.isSearchActive) { _, isActive in
+            guard isActive, navigation.selection.isPeopleDestination else { return }
+            isSearchFocused = true
+        }
         .navigationTitle(navigation.windowTitle)
         .accessibilityIdentifier(AccessibilityID.People.list)
         .task(id: scope) { reload() }
@@ -143,52 +179,63 @@ struct PeopleListView: View {
         }
     }
 
-    private var isSearching: Bool {
-        !searchText.trimmingCharacters(in: .whitespaces).isEmpty
-    }
-
-    /// What the list is showing: the scope's people, or — while searching — the matches in rank
-    /// order, each carrying the reason it earned its place.
-    private var rows: [PersonMatch] {
-        isSearching ? searchMatches : people.map { PersonMatch(person: $0, reason: nil) }
-    }
+    // MARK: - The list
 
     private var list: some View {
-        List(selection: $selection) {
-            ForEach(rows) { row in
-                PersonRow(
-                    person: row.person,
-                    dateProvider: services?.dateProvider ?? SystemDateProvider(),
-                    isSelected: selection.contains(row.id),
-                    matchReason: row.reason
-                )
-                    .tag(row.id)
-                    .contextMenu {
-                        Button("Open") { navigation.selectItem(row.id) }
-                        Button(row.person.isFavorite ? "Remove from Favourites" : "Add to Favourites") {
-                            toggleFavorite(row.person)
-                        }
-                        Divider()
-                        Button("Move to Trash", role: .destructive) { trash(contextTargets(for: row)) }
+        ScrollViewReader { proxy in
+            ZStack(alignment: .topTrailing) {
+                sectionedList
+
+                // Beside the scrollbar rather than instead of it: clicking the scrollbar track and
+                // dragging its knob are still how somebody moves *through* the list, and this is how
+                // they move *to* a letter. Two different questions, two controls.
+                if !model.isSearching {
+                    SectionIndexBar(titles: model.sectionTitles) { title in
+                        jump(to: title, using: proxy)
                     }
-                    .rowSwipeActions(
-                        id: row.id,
-                        leading: RowSwipeActions.personLeading(
-                            row.person,
-                            services: services,
-                            onChange: reload
-                        ),
-                        trailing: RowSwipeActions.personTrailing(
-                            row.person,
-                            services: services,
-                            onChange: reload
-                        )
-                    )
+                    .padding(.trailing, Theme.Spacing.medium)
+                    .padding(.vertical, Theme.Spacing.small)
+                }
+            }
+            .overlay {
+                if let scrubbedTitle {
+                    SectionScrubIndicator(title: scrubbedTitle)
+                } else if let typedPreview {
+                    SectionScrubIndicator(title: typedPreview)
+                }
+            }
+            .onChange(of: pendingScroll) { _, target in
+                guard let target else { return }
+                switch target {
+                case .section(let title): proxy.scrollTo(title, anchor: .top)
+                case .person(let id): proxy.scrollTo(id, anchor: .center)
+                }
+                pendingScroll = nil
+            }
+        }
+    }
+
+    private var sectionedList: some View {
+        List(selection: $selection) {
+            ForEach(model.sections) { section in
+                Section {
+                    ForEach(section.entries) { entry in
+                        if let person = model.person(id: entry.id) {
+                            row(for: person, reason: model.matchReasons[entry.id])
+                                .id(entry.id)
+                        }
+                    }
+                } header: {
+                    // The heading carries the section's identity for `scrollTo`, so a jump lands on
+                    // the header rather than on the first name under it — which is what makes the
+                    // letter you asked for the thing at the top of the pane.
+                    SectionHeader(section.title, count: section.entries.count)
+                        .id(section.title)
+                }
             }
         }
         .listStyle(.inset)
-        // The list has always had a Move to Trash in its context menu and no way to reach it from
-        // the keyboard, which reads as "people cannot be deleted" to anybody who tries ⌫ first.
+        .focused($isListFocused)
         .onDeleteCommand { trash(selectedPeople) }
         .focusedSceneValue(
             \.rowActions,
@@ -199,17 +246,167 @@ struct PeopleListView: View {
             // without a second gesture.
             navigation.selectedItemIDs = newValue
         }
+        // Home, End, Page Up and Page Down. `List` gives arrow keys and nothing else, so a list of
+        // two thousand people could be walked only one row at a time.
+        .onKeyPress(.home) { move(to: .first); return .handled }
+        .onKeyPress(.end) { move(to: .last); return .handled }
+        .onKeyPress(.pageUp) { move(to: .page(-1)); return .handled }
+        .onKeyPress(.pageDown) { move(to: .page(1)); return .handled }
+        .onKeyPress(.escape) {
+            guard typeAhead.text.isEmpty else { clearTypeAhead(); return .handled }
+            return .ignored
+        }
+        .onKeyPress(characters: .alphanumerics, phases: .down) { press in
+            // Modifier combinations belong to the menus. Only a bare letter is somebody typing a
+            // name at a list.
+            guard press.modifiers.isEmpty || press.modifiers == .shift else { return .ignored }
+            return type(press.characters)
+        }
+    }
+
+    private func row(for person: Item, reason: String?) -> some View {
+        PersonRow(
+            person: person,
+            dateProvider: services?.dateProvider ?? SystemDateProvider(),
+            isSelected: selection.contains(person.id),
+            matchReason: reason
+        )
+        .tag(person.id)
+        .contextMenu {
+            Button("Open") { navigation.selectItem(person.id) }
+            Button(person.isFavorite ? "Remove from Favourites" : "Add to Favourites") {
+                toggleFavorite(person)
+            }
+            Divider()
+            Button("Move to Trash", role: .destructive) { trash(contextTargets(for: person)) }
+        }
+        .rowSwipeActions(
+            id: person.id,
+            leading: RowSwipeActions.personLeading(person, services: services, onChange: reload),
+            trailing: RowSwipeActions.personTrailing(person, services: services, onChange: reload)
+        )
+    }
+
+    // MARK: - Sorting
+
+    /// One menu rather than four controls on the toolbar.
+    ///
+    /// Progressive disclosure in the sense the brief means it: the order somebody wants is a decision
+    /// they make rarely and then live with, so it costs a click and no permanent width. Recently
+    /// Viewed, Favourites and the groups are already in the sidebar, which is where a *filter*
+    /// belongs; this is only the order.
+    @ToolbarContentBuilder
+    private var sortMenu: some ToolbarContent {
+        ToolbarItem {
+            Menu {
+                Picker("Sort By", selection: sortBinding) {
+                    ForEach(PersonListSort.allCases) { sort in
+                        Text(sort.displayName).tag(sort)
+                    }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Label("Sort", systemImage: "arrow.up.arrow.down")
+            }
+            .help("Sort by \(model.sort.displayName.lowercased())")
+            .accessibilityLabel("Sort")
+            .accessibilityValue(model.sort.displayName)
+            .accessibilityIdentifier(AccessibilityID.People.sortMenu)
+        }
+    }
+
+    private var sortBinding: Binding<PersonListSort> {
+        Binding(
+            get: { model.sort },
+            set: { newSort in
+                model.sort = newSort
+                // Ordering by when you last spoke to somebody needs a date the list does not
+                // otherwise pay for; it is fetched when it is asked for and not before.
+                if newSort == .recentInteraction { reload() }
+                // The selection is the one thing that should survive a reorder — a list that
+                // reorders and then loses your place has done the opposite of helping.
+                if let id = selection.first { pendingScroll = .person(id) }
+            }
+        )
+    }
+
+    // MARK: - Jumping and typing
+
+    private func jump(to title: String, using proxy: ScrollViewProxy) {
+        guard let landing = model.section(nearest: title) else { return }
+        scrubbedTitle = landing
+        proxy.scrollTo(landing, anchor: .top)
+
+        // The label follows the pointer and then goes, rather than being dismissed by the gesture
+        // ending — which would make a single click flash it for one frame.
+        Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            if scrubbedTitle == landing { scrubbedTitle = nil }
+        }
+    }
+
+    private func type(_ characters: String) -> KeyPress.Result {
+        guard let character = characters.first else { return .ignored }
+
+        let typed = typeAhead.append(character, at: services?.dateProvider.now ?? Date())
+        typedPreview = typed
+
+        guard let id = model.entry(matching: typed) else { return .handled }
+        selection = [id]
+        navigation.selectedItemIDs = selection
+        pendingScroll = .person(id)
+
+        Task {
+            try? await Task.sleep(for: .milliseconds(900))
+            guard typeAhead.hasExpired(at: services?.dateProvider.now ?? Date()) else { return }
+            clearTypeAhead()
+        }
+
+        return .handled
+    }
+
+    private func clearTypeAhead() {
+        typeAhead.clear()
+        typedPreview = nil
+    }
+
+    private enum Move: Equatable {
+        case first
+        case last
+        case page(Int)
+    }
+
+    /// Moves the selection without the sections getting in the way.
+    ///
+    /// The keyboard walks a flat list; the headings are a visual grouping and nothing more. A page is
+    /// twelve rows, which is roughly a paneful at the default row height and the same distance
+    /// whatever the window is doing — a page that changed size as the window did would make Page Down
+    /// a different key on every screen.
+    private func move(to move: Move) {
+        let ids = model.flattenedIDs
+        guard !ids.isEmpty else { return }
+
+        let current = selection.first.flatMap { ids.firstIndex(of: $0) } ?? 0
+        let target: Int = switch move {
+        case .first: 0
+        case .last: ids.count - 1
+        case .page(let direction): min(ids.count - 1, max(0, current + direction * 12))
+        }
+
+        selection = [ids[target]]
+        navigation.selectedItemIDs = selection
+        pendingScroll = .person(ids[target])
     }
 
     /// A right-click acts on the whole selection when the clicked row is part of it, and on that row
     /// alone otherwise — the rule every macOS list follows, and the one that stops a context menu
     /// from quietly trashing four people when the user meant the one under the pointer.
-    private func contextTargets(for row: PersonMatch) -> [Item] {
-        selection.contains(row.id) ? selectedPeople : [row.person]
+    private func contextTargets(for person: Item) -> [Item] {
+        selection.contains(person.id) ? selectedPeople : [person]
     }
 
     private var selectedPeople: [Item] {
-        rows.filter { selection.contains($0.id) }.map(\.person)
+        selection.compactMap { model.person(id: $0) }
     }
 
     // MARK: - Loading
@@ -218,85 +415,124 @@ struct PeopleListView: View {
         guard let services else { return }
 
         do {
-            switch scope {
-            case .all:
-                people = try services.persons.allPeople(includingPlaceholders: false)
-
-            case .recentlyViewed:
-                var seen: [Item] = []
-                for id in services.recentlyViewedPeople {
-                    if let person = try services.persons.person(id: id) { seen.append(person) }
-                }
-                people = seen
-
-            case .favorites:
-                people = try services.persons.allPeople(includingPlaceholders: true).filter(\.isFavorite)
-
-            case .celebrations, .duplicates:
-                // These have their own views; the list is not the right shape for either.
-                people = []
-
-            case .fromContacts:
-                let linkedIDs = Set(
-                    try services.contactImports.allLinks().compactMap { $0.person?.id }
-                )
-                people = try services.persons
-                    .allPeople(includingPlaceholders: false)
-                    .filter { linkedIDs.contains($0.id) }
-
-            case .needsFollowUp:
-                // Off by default, and it stays off: the suggestion machinery answers when asked and
-                // never starts telling the user who they have neglected.
-                guard services.showsFollowUpSuggestions else {
-                    people = []
-                    break
-                }
-                let suggestions = try services.people.followUpSuggestions(
-                    thresholdDays: services.followUpThresholdDays
-                )
-                var found: [Item] = []
-                for suggestion in suggestions {
-                    if let person = try services.persons.person(id: suggestion.personID) { found.append(person) }
-                }
-                people = found
-
-            case .group(let id):
-                guard let group = try services.personGroups.group(id: id) else {
-                    people = []
-                    break
-                }
-                people = try services.personGroups.members(of: group)
-            }
-            loadFailure = nil
+            let found = try people(in: scope, services: services)
+            model.setPeople(
+                found,
+                lastInteraction: model.sort == .recentInteraction
+                    ? lastInteractionDates(for: found, services: services)
+                    : [:]
+            )
         } catch {
-            loadFailure = error
-            people = []
+            model.setPeople([], failure: error)
         }
     }
 
-    /// Resolves the ranked results to the person records the rows are built from.
+    private func people(in scope: PeopleScope, services: AppServices) throws(AppError) -> [Item] {
+        switch scope {
+        case .all:
+            return try services.persons.allPeople(includingPlaceholders: false)
+
+        case .recentlyViewed:
+            var seen: [Item] = []
+            for id in services.recentlyViewedPeople {
+                if let person = try services.persons.person(id: id) { seen.append(person) }
+            }
+            return seen
+
+        case .favorites:
+            return try services.persons.allPeople(includingPlaceholders: true).filter(\.isFavorite)
+
+        case .celebrations, .duplicates:
+            // These have their own views; the list is not the right shape for either.
+            return []
+
+        case .fromContacts:
+            let linkedIDs = Set(try services.contactImports.allLinks().compactMap { $0.person?.id })
+            return try services.persons
+                .allPeople(includingPlaceholders: false)
+                .filter { linkedIDs.contains($0.id) }
+
+        case .needsFollowUp:
+            // Off by default, and it stays off: the suggestion machinery answers when asked and
+            // never starts telling the user who they have neglected.
+            guard services.showsFollowUpSuggestions else { return [] }
+            let suggestions = try services.people.followUpSuggestions(
+                thresholdDays: services.followUpThresholdDays
+            )
+            var found: [Item] = []
+            for suggestion in suggestions {
+                if let person = try services.persons.person(id: suggestion.personID) { found.append(person) }
+            }
+            return found
+
+        case .group(let id):
+            guard let group = try services.personGroups.group(id: id) else { return [] }
+            return try services.personGroups.members(of: group)
+        }
+    }
+
+    private func lastInteractionDates(for people: [Item], services: AppServices) -> [UUID: Date] {
+        var dates: [UUID: Date] = [:]
+        for person in people {
+            dates[person.id] = services.people.context(for: person).lastContact?.date
+        }
+        return dates
+    }
+
+    // MARK: - Searching
+
+    /// Runs the search off the main thread and abandons a query the user has typed past.
     ///
-    /// The search index answers with ids and names; a row needs the item itself for its details, its
-    /// star, and its address-book badge. A result whose record has since gone is dropped rather than
-    /// drawn as a name with nothing behind it.
-    private func runSearch(_ query: String) {
-        guard let services, isSearching else {
-            searchMatches = []
+    /// It used to run synchronously inside `onChange`, which meant every keystroke walked the index
+    /// and resolved every result to a record before the field would accept the next letter. On a
+    /// small library that is invisible; on a large one it is the field falling behind the typing,
+    /// which is the one thing a search field may never do.
+    private func beginSearch(_ query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+
+        guard !trimmed.isEmpty else {
+            clearSearch()
             return
         }
 
-        let ranked = (try? services.personSearch.search(query)) ?? []
-        searchMatches = ranked.compactMap { result in
-            guard let person = try? services.persons.person(id: result.id) else { return nil }
-            return PersonMatch(person: person, reason: result.bestReason?.text)
+        if !model.isSearching { selectionBeforeSearch = selection }
+
+        searchTask?.cancel()
+        searchTask = Task {
+            // Long enough to swallow a burst of typing, short enough not to feel like a wait.
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled, let services else { return }
+
+            let ranked = (try? services.personSearch.search(trimmed)) ?? []
+            guard !Task.isCancelled else { return }
+
+            model.setSearchResults(ranked.map { ($0.id, $0.bestReason?.text) })
         }
+    }
+
+    /// Puts the list back where the search found it.
+    ///
+    /// Both halves matter. Clearing a search that leaves you at the top of the list with nothing
+    /// selected has undone the navigation you did before searching, which is usually the reason you
+    /// searched in the first place.
+    private func clearSearch() {
+        searchTask?.cancel()
+        searchText = ""
+        model.setSearchResults(nil)
+
+        if !selectionBeforeSearch.isEmpty {
+            selection = selectionBeforeSearch
+            navigation.selectedItemIDs = selection
+            if let id = selectionBeforeSearch.first { pendingScroll = .person(id) }
+        }
+        selectionBeforeSearch = []
     }
 
     /// Reloads the scope and re-runs any live search, so a change is reflected in whichever of the
     /// two the user is looking at.
     private func refresh() {
         reload()
-        runSearch(searchText)
+        if !searchText.isEmpty { beginSearch(searchText) }
     }
 
     private func toggleFavorite(_ person: Item) {
@@ -308,25 +544,23 @@ struct PeopleListView: View {
     private func trash(_ people: [Item]) {
         guard let services, !people.isEmpty else { return }
 
+        // Where the selection should land once these are gone: the row after the last one removed,
+        // or the row before it at the end of the list. Losing the selection entirely would blank the
+        // detail pane and lose the user's place, which is a large punishment for deleting one row.
+        let ids = model.flattenedIDs
+        let removed = Set(people.map(\.id))
+        let successor = ids.drop { !removed.contains($0) }.first { !removed.contains($0) }
+            ?? ids.last { !removed.contains($0) }
+
         for person in people {
             services.perform { try services.items.moveToTrash(person) }
             services.noteRemoval(of: person.id)
         }
 
-        // The rows are gone, so a selection still naming them would leave the detail pane showing
-        // somebody who is no longer in the list.
-        selection.subtract(people.map(\.id))
+        selection = successor.map { [$0] } ?? []
         navigation.selectedItemIDs = selection
         refresh()
     }
-}
-
-/// A person as the list draws them, and — when the list is a search result — why they are in it.
-struct PersonMatch: Identifiable {
-    let person: Item
-    let reason: String?
-
-    var id: UUID { person.id }
 }
 
 /// One compact row.
