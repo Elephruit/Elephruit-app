@@ -29,6 +29,7 @@ struct PersonWorkspaceView: View {
     @State private var timeline: [PersonTimelineEntry] = []
     @State private var timelineFilter: TimelineGrouping.Filter = .everything
     @State private var isRecordingInteraction = false
+    @State private var isAddingNote = false
     @State private var isAddingFact = false
     @State private var isShowingBrief = false
     @State private var chartKind: RelationshipChartKind?
@@ -50,6 +51,7 @@ struct PersonWorkspaceView: View {
                 // sections — which is worse than the action being off and saying so.
                 hasHistory: !timeline.isEmpty,
                 onAction: { pendingAction = $0 },
+                onAddNote: { isAddingNote = true },
                 onRecordInteraction: { isRecordingInteraction = true },
                 onShowBrief: { isShowingBrief = true },
                 onAddRelationship: { isAddingRelationship = true }
@@ -116,6 +118,16 @@ struct PersonWorkspaceView: View {
                     isRecordingInteraction = false
                 },
                 onCancel: { isRecordingInteraction = false }
+            )
+        }
+        .sheet(isPresented: $isAddingNote) {
+            PersonNoteSheet(
+                personName: person.displayTitle,
+                onSave: { draft in
+                    saveNote(draft)
+                    isAddingNote = false
+                },
+                onCancel: { isAddingNote = false }
             )
         }
         .sheet(isPresented: $isAddingFact) {
@@ -235,6 +247,23 @@ struct PersonWorkspaceView: View {
         reload()
     }
 
+    private func saveNote(_ draft: PersonNoteDraft) {
+        guard let services else { return }
+        services.perform {
+            let note = try services.items.create(
+                ItemDraft(
+                    kind: .note,
+                    title: draft.resolvedTitle(personName: person.displayTitle),
+                    body: draft.cleanedBody,
+                    tagSlugs: draft.tagSlugs
+                )
+            )
+            try services.items.link(note, to: person, kind: .mentions)
+            services.noteChange(to: note)
+        }
+        reload()
+    }
+
     private func addFact(
         _ draft: ObservationDraft,
         confidence: FactConfidence,
@@ -310,6 +339,7 @@ struct PersonHeaderView: View {
     let hasHistory: Bool
 
     let onAction: (ContactActionRequest) -> Void
+    let onAddNote: () -> Void
     let onRecordInteraction: () -> Void
     let onShowBrief: () -> Void
     let onAddRelationship: () -> Void
@@ -371,6 +401,7 @@ struct PersonHeaderView: View {
                 person: person,
                 hasHistory: hasHistory,
                 onAction: onAction,
+                onAddNote: onAddNote,
                 onRecordInteraction: onRecordInteraction,
                 onShowBrief: onShowBrief,
                 onAddRelationship: onAddRelationship
@@ -518,6 +549,7 @@ struct PersonQuickActions: View {
     let hasHistory: Bool
 
     let onAction: (ContactActionRequest) -> Void
+    let onAddNote: () -> Void
     let onRecordInteraction: () -> Void
     let onShowBrief: () -> Void
     let onAddRelationship: () -> Void
@@ -580,7 +612,7 @@ struct PersonQuickActions: View {
             )
 
         case .addNote:
-            createNote()
+            onAddNote()
 
         case .logInteraction:
             onRecordInteraction()
@@ -593,17 +625,6 @@ struct PersonQuickActions: View {
 
         case .addRelationship:
             onAddRelationship()
-        }
-    }
-
-    private func createNote() {
-        guard let services else { return }
-        services.perform {
-            let note = try services.items.create(
-                ItemDraft(kind: .note, title: "Note about \(person.displayTitle)")
-            )
-            try services.items.link(note, to: person, kind: .mentions)
-            services.noteChange(to: note)
         }
     }
 
