@@ -14,7 +14,7 @@ phase plan and its definition of done.
 |---|---|
 | `xcodebuild` Debug and Release | Succeeds, zero warnings |
 | `swift build` (all eight modules) | Succeeds, zero warnings |
-| `swift test` | 1,161 tests, all passing |
+| `swift test` | 1,181 tests, all passing |
 | Sandboxed, five entitlements only | Verified against the signed binary |
 | Store opens on disk, all seventeen entities materialise | Verified against the running app |
 | Light visual review | Done — People workspace, estimates, groups, duplicates. **Not** the calendar |

@@ -94,8 +94,57 @@ Focus Mode. `ShortcutRegistryTests` caught both immediately. They are now ⌃⌘
 
 The layout clipped an event's hours to the visible window *before* testing whether it fell inside it,
 so a 3 a.m. event on a grid starting at eight was given a start of eight and a minimum height, and
-drawn at the top of the morning as though it were happening. The test is
-`outsideVisibleHours`.
+drawn at the top of the morning as though it were happening. The test is `outsideVisibleHours`.
+
+## Seven more, found by re-reading the views against what they claimed to do
+
+None of these was caught by a test, and the reason is the same for all seven: each is in the *wiring*
+between a service that works and a view that calls it, and every unit test of both halves passed.
+
+### The keyboard did nothing at all
+
+`onKeyPress` only fires on a focused view. The workspace had a complete key handler — arrows,
+shift-arrows, T, N, ⌘1–⌘6, Escape, Delete — attached to a view that could never receive a key event.
+Every shortcut compiled, read correctly, and did nothing.
+
+### Delete on a repeating event performed a move
+
+Deleting built its pending request out of a type that had only `move` and `resize` cases, so it
+passed a move to the time the event already had. A no-op behind a sheet saying "Delete", whose
+buttons also read "Changes this occurrence" because `isDeletion` was hardcoded false. There is now
+one path for a drag, a resize, and a deletion, because the question in front of all three is the same
+one.
+
+### A month cell had two tap gestures, which is one
+
+`.onTapGesture` does not stack — a second replaces the first silently. The cell had a line setting
+the keyboard focus that never ran, so clicking a day left the focus ring elsewhere and the arrow keys
+then moved from somewhere other than the day just clicked.
+
+### Revoked access blanked a calendar the app had just read
+
+The service fell back to the cache correctly and the view hid the result behind the permission
+explanation, so the fallback worked and nobody could see it. What the app read five minutes ago is
+still true; the explanation now appears only when there is genuinely nothing to show.
+
+### The menu bar shrank the window a window was showing
+
+Both called `load(range:)`, which records what it read so a change notification can reload it. The
+menu bar wants two days and a window wants a month; whichever called last decided what the *other*
+reloaded. `peek(range:)` reads without claiming.
+
+### A menu bar request was consumed while the window was drawing
+
+`RootView` was handed `consumeCalendarRequest()` in the scene's body — a mutation during a view's
+evaluation, which SwiftUI may run at any time and more than once. Clicking "New Event" in the menu
+bar while a window was already open did nothing.
+
+### And one behaviour that was wrong rather than broken
+
+Ticking a calendar off made its past unsearchable. The cache replaces a window wholesale, which is
+right, but a narrowed fetch says nothing about the calendars it did not cover — and deleting their
+rows on that basis is inferring from silence. A box that hides something is not a box that forgets
+it.
 
 ## What is deliberately not there
 
@@ -137,7 +186,7 @@ the double; neither has been watched happening.
 | Check | Result |
 |---|---|
 | `swift build` | Succeeds, zero warnings |
-| `swift test` | 1,161 tests, all passing |
+| `swift test` | 1,181 tests, all passing |
 | `xcodebuild` Debug | Succeeds, zero warnings |
 | Schema | `0.0.6`, additive, two entities |
 | New entitlements | None — the calendar entitlement was already present |
