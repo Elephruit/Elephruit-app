@@ -546,10 +546,24 @@ public final class NavigationModel {
 
     // MARK: - Layout and focus
 
+    /// Whether a list row is showing its swipe actions.
+    ///
+    /// Mirrored from the window's ``SwipeActionCoordinator`` rather than read from it, because the
+    /// Escape ladder is a pure function of a value type and reaching into a coordinator from inside
+    /// it would make the ladder untestable in exactly the case worth testing.
+    public var hasRevealedRowActions = false
+
+    /// Runs when the ladder decides Escape should put a row's actions away.
+    ///
+    /// A closure because the coordinator lives in the design module, below this one. The window
+    /// wires the two together; neither has to know about the other.
+    @ObservationIgnored public var onCloseRowActions: (() -> Void)?
+
     public var shellState: ShellState {
         ShellState(
             hasOverlay: isQuickCaptureVisible || isCommandPaletteVisible || isTagBrowserVisible
                 || isTaskEntryVisible,
+            hasRevealedRowActions: hasRevealedRowActions,
             isSearchActive: isSearchActive,
             focusedPane: focusedPane,
             layoutMode: layoutMode
@@ -568,6 +582,10 @@ public final class NavigationModel {
             isCommandPaletteVisible = false
             isTagBrowserVisible = false
             isTaskEntryVisible = false
+
+        case .closeRowActions:
+            onCloseRowActions?()
+            hasRevealedRowActions = false
 
         case .leaveSearch:
             endSearch()
