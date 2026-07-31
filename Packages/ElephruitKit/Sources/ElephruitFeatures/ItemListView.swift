@@ -35,7 +35,7 @@ public struct ItemListView: View {
 
     public var body: some View {
         content
-            .navigationTitle(navigation.isSearchActive ? "Search" : navigation.selection.title)
+            .navigationTitle(navigation.isSearchActive ? "Search" : navigation.windowTitle)
             .navigationSubtitle(subtitle)
             .searchable(text: searchBinding, placement: .toolbar, prompt: searchPrompt)
             .searchScopes(scopeBinding) {

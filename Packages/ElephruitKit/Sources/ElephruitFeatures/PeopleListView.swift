@@ -135,7 +135,7 @@ struct PeopleListView: View {
         }
         .searchable(text: $searchText, placement: .toolbar, prompt: "people in Austin · likes natural wine")
         .onChange(of: searchText) { _, query in runSearch(query) }
-        .navigationTitle(scope.title)
+        .navigationTitle(navigation.windowTitle)
         .accessibilityIdentifier(AccessibilityID.People.list)
         .task(id: scope) { reload() }
         .sheet(isPresented: $isShowingBatchEmail) {

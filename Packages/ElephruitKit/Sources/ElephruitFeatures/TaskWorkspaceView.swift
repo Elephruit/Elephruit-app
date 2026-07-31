@@ -27,7 +27,7 @@ struct TaskWorkspaceView: View {
 
     var body: some View {
         content
-            .navigationTitle(navigation.selection.title)
+            .navigationTitle(navigation.windowTitle)
             .navigationSubtitle(subtitle)
             .toolbar { toolbarContent }
             .task(id: reloadToken) { reload() }

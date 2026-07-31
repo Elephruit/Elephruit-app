@@ -200,7 +200,23 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
 @Observable
 @MainActor
 public final class NavigationModel {
-    public var selection: SidebarSelection = .today
+    public private(set) var selection: SidebarSelection = .today
+
+    // MARK: Modules
+
+    /// Which module the sidebar is inside, or `nil` for the primary navigation.
+    ///
+    /// Never set directly from a view. ``select(_:)`` derives it, so a destination reached from a
+    /// menu, a deep link, the command palette, or a restored scene lands in the same place as one
+    /// reached by clicking — which is the whole reason the module is derived rather than stored
+    /// alongside the selection as a second source of truth.
+    public private(set) var activeModule: AppModule?
+
+    /// Where each module was left, so returning to one resumes rather than restarting.
+    ///
+    /// Per window, like everything else here: two windows may be in the same module looking at
+    /// different things.
+    public private(set) var moduleSelections: [AppModule: SidebarSelection] = [:]
 
     /// Everything selected in the list.
     ///
@@ -249,6 +265,27 @@ public final class NavigationModel {
     /// its own surface rather than a scope switch on the general field.
     public var isCalendarSearchVisible = false
 
+    /// The calendar's own state, once the workspace has built it.
+    ///
+    /// Held here rather than inside `CalendarWorkspaceView` because the Calendar module's sidebar
+    /// needs to read and set the view kind, and a `@State` on the middle column is reachable only
+    /// from the middle column. Per window, like the rest of this type: two windows may be looking at
+    /// different weeks.
+    ///
+    /// `nil` until the workspace has been on screen once, which is what the sidebar's own fallback
+    /// is for — the module can be entered before the calendar has ever been drawn.
+    public var calendarWorkspace: CalendarWorkspaceModel?
+
+    /// Which period the Time module is reporting over.
+    ///
+    /// Held here rather than inside `TimeView` so the Time module's sidebar can offer it. A mode
+    /// that only one control in the middle column can reach is a mode the sidebar cannot navigate
+    /// by, which is what left that module with a single row that did nothing.
+    public var timeWindow: TimeWindow = .today
+
+    /// How the Time module's entries are rolled up.
+    public var timeGrouping: TimeGrouping = .item
+
     /// A day something outside the window asked the calendar to show.
     ///
     /// Cleared by the workspace once it has landed there, so a request cannot fire twice — and held
@@ -288,9 +325,166 @@ public final class NavigationModel {
 
     public func select(_ selection: SidebarSelection) {
         guard self.selection != selection else { return }
+
+        // Before anything moves. A debounced editor write is the one piece of state a navigation
+        // can destroy, and flushing here means it cannot matter *which* navigation happened —
+        // module switch, deep link, menu command, or a click in the list.
+        flushPendingEdits()
+
         self.selection = selection
+        applyModule(for: selection)
         selectedItemIDs = []
         sortOverride = nil
+    }
+
+    /// Enters a module, resuming wherever it was last left.
+    ///
+    /// Re-entering the module you are already in is deliberately *not* a no-op at the sidebar level
+    /// — it is how the header's module menu confirms a choice — but it does not disturb the
+    /// selection, so choosing "Tasks" while inside Tasks does not throw away where you were.
+    public func enterModule(_ module: AppModule) {
+        let resumed = moduleSelections[module] ?? module.defaultSelection
+        // Guard against a remembered selection that has since stopped belonging to the module —
+        // which is what a deleted smart list looks like from here.
+        let destination = module.contains(resumed) ? resumed : module.defaultSelection
+
+        if selection != destination {
+            select(destination)
+        }
+
+        // Set explicitly rather than relying on `select`. Stepping back into the module you just
+        // left lands on the selection you left it at, so `select` has nothing to do and would
+        // otherwise leave the sidebar outside the module it was asked to enter.
+        activeModule = module
+        moduleSelections[module] = selection
+    }
+
+    /// Returns to the primary navigation without changing what the window is showing.
+    ///
+    /// Leaving a module is a change of *sidebar*, not of destination: the list and the editor still
+    /// hold what you were reading, and the module is remembered so stepping back in resumes. Making
+    /// this select Home instead would mean the back button silently closed whatever was open.
+    public func leaveModule() {
+        guard let activeModule else { return }
+        moduleSelections[activeModule] = selection
+        self.activeModule = nil
+    }
+
+    /// Keeps ``activeModule`` and ``moduleSelections`` true after a selection change.
+    private func applyModule(for selection: SidebarSelection) {
+        if let module = AppModule.module(for: selection) {
+            activeModule = module
+            moduleSelections[module] = selection
+        } else if GlobalDestination.contains(selection) {
+            if let activeModule { moduleSelections[activeModule] = self.selection }
+            activeModule = nil
+        } else if let activeModule {
+            // A pinned item, a tag, or a saved search opened from inside a module. It belongs to no
+            // module of its own, so the one you are in keeps you.
+            moduleSelections[activeModule] = selection
+        }
+    }
+
+    // MARK: - Unsaved work
+
+    /// Editors with a debounced write outstanding, keyed so a window can hold several.
+    @ObservationIgnored private var editFlushes: [UUID: () -> Void] = [:]
+
+    /// Registers a flush to run before any navigation.
+    ///
+    /// The editor already flushes when the item it is showing changes. This exists for the changes
+    /// it cannot see — leaving a module, following a deep link, a menu command — where the view that
+    /// owns the pending write may be torn down before its own `task(id:)` runs.
+    public func registerEditFlush(_ id: UUID, _ flush: @escaping () -> Void) {
+        editFlushes[id] = flush
+    }
+
+    public func unregisterEditFlush(_ id: UUID) {
+        editFlushes.removeValue(forKey: id)
+    }
+
+    /// Runs every outstanding write now. Idempotent — ``PendingSave`` clears its work before running
+    /// it, so a flush racing the debounce cannot write twice.
+    public func flushPendingEdits() {
+        for flush in editFlushes.values { flush() }
+    }
+
+    // MARK: - Restoration
+
+    /// Everything about *where the user is* that survives a relaunch.
+    ///
+    /// The selection alone is not enough: a tag opened from inside Notes restores as a tag, and
+    /// without the module the sidebar would come back showing the primary navigation with a
+    /// selection that is not in it.
+    public struct RestorationState: Codable, Hashable, Sendable {
+        public var module: AppModule?
+        public var selection: SidebarSelection
+        public var moduleSelections: [AppModule: SidebarSelection]
+
+        public init(
+            module: AppModule?,
+            selection: SidebarSelection,
+            moduleSelections: [AppModule: SidebarSelection] = [:]
+        ) {
+            self.module = module
+            self.selection = selection
+            self.moduleSelections = moduleSelections
+        }
+
+        /// Encoded for `@SceneStorage`, which stores strings.
+        ///
+        /// Returns `nil` rather than throwing: a state that cannot be written is a scene that
+        /// restores to Today, which is a worse outcome than nothing but not an error worth raising
+        /// to somebody in the middle of their work.
+        public var encoded: String? {
+            guard let data = try? JSONEncoder().encode(self) else { return nil }
+            return String(data: data, encoding: .utf8)
+        }
+
+        public init?(encoded: String) {
+            guard let data = encoded.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode(Self.self, from: data)
+            else { return nil }
+            self = decoded
+        }
+    }
+
+    public var restorationState: RestorationState {
+        RestorationState(
+            module: activeModule,
+            selection: selection,
+            moduleSelections: moduleSelections
+        )
+    }
+
+    /// Puts the window back where it was.
+    ///
+    /// A restored selection is checked against the module it claims to be in. A scene written by a
+    /// build where Bookmarks was its own module, restored into one where it is not, must land
+    /// somewhere real rather than in a module whose sidebar would not draw it.
+    public func restore(_ state: RestorationState) {
+        moduleSelections = state.moduleSelections
+        select(state.selection)
+
+        if let module = state.module, activeModule == nil, !GlobalDestination.contains(state.selection) {
+            // A tag or a pinned item, which belongs to no module of its own but was being read
+            // inside one.
+            activeModule = module
+        }
+    }
+
+    // MARK: - Titles
+
+    /// What the window is called.
+    ///
+    /// The selection's own name, except at a module's front door, where the module's name is the
+    /// more useful of the two: "Tasks" says where you are, and "Today" — which is also a global
+    /// destination — does not.
+    public var windowTitle: String {
+        guard let activeModule, selection == activeModule.defaultSelection else {
+            return selection.title
+        }
+        return activeModule.title
     }
 
     /// Selects exactly one item.

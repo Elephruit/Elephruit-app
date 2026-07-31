@@ -267,6 +267,25 @@ public enum TimeGrouping: String, Sendable, Hashable, CaseIterable {
         case .tag: "Tag"
         }
     }
+
+    public var symbolName: String {
+        switch self {
+        case .day: "calendar.day.timeline.left"
+        case .item: "doc.text"
+        case .project: "square.stack.3d.up"
+        case .tag: "number"
+        }
+    }
+
+    /// What the grouping does, for a tooltip. A rule, never a restatement of the name.
+    public var hint: String {
+        switch self {
+        case .day: "One row per day, in the order the days happened."
+        case .item: "One row per thing you tracked against."
+        case .project: "Rolled up to the project each item belongs to."
+        case .tag: "Rolled up by tag, so one entry can count towards several."
+        }
+    }
 }
 
 // MARK: - Recovery

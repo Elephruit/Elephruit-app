@@ -27,13 +27,17 @@ struct SidebarRegistryTests {
         }
     }
 
-    @Test("The derived minimum accounts for every visible destination")
+    @Test("The derived minimum accounts for every visible destination and every module")
     func minimumWidthCoversEveryTitle() {
-        let titles = SidebarRegistry.nonTruncatingTitles
-        let available = SidebarRegistry.available.map(\.title)
+        let titles = Set(SidebarRegistry.nonTruncatingTitles)
+        let available = Set(SidebarRegistry.available.map(\.title))
+        let modules = Set(AppModule.displayOrder.map(\.title))
 
-        #expect(Set(titles) == Set(available), "A destination missing here could be cut off")
-        #expect(SidebarMetrics.minimumWidth(fittingTitles: titles) >= SidebarMetrics.floorWidth)
+        #expect(available.isSubset(of: titles), "A destination missing here could be cut off")
+        // The module list is primary navigation now, so "Bookm…" would be exactly the ambiguity the
+        // rule exists to prevent.
+        #expect(modules.isSubset(of: titles), "A module name missing here could be cut off")
+        #expect(SidebarMetrics.minimumWidth(fittingTitles: Array(titles)) >= SidebarMetrics.floorWidth)
     }
 
     @Test("Unavailable destinations are enumerated nowhere")
@@ -54,17 +58,40 @@ struct SidebarRegistryTests {
         }
     }
 
-    @Test("Calendar became available with the calendar module, in the primary band")
+    @Test("Calendar is the Calendar module's own front door, not a top-level row")
     func calendarIsAvailable() {
         // Declared with `isAvailable: false` from milestone 1 precisely so that the phase which
         // built it would flip one flag rather than edit the sidebar. This is that flag.
         let calendar = SidebarRegistry.allDeclared.first { $0.id == "calendar" }
         #expect(calendar?.isAvailable == true)
 
-        // Primary rather than Library: a calendar is where a day is worked, not somewhere work is
-        // filed — the same argument that puts Today above Notes.
-        #expect(calendar?.band == .primary)
-        #expect(SidebarRegistry.destinations(in: .primary).contains { $0.id == "calendar" })
+        // It was in the primary band while the sidebar showed everything at once. It is inside its
+        // module now, which is the whole point: the top level names the module, and the module's
+        // own sidebar names its destinations.
+        #expect(calendar?.band == .module)
+        #expect(calendar?.module == .calendar)
+        #expect(!SidebarRegistry.destinations(in: .primary).contains { $0.id == "calendar" })
+        #expect(SidebarRegistry.destinations(in: .calendar).contains { $0.id == "calendar" })
+    }
+
+    @Test("The primary band is exactly the four global destinations, in reading order")
+    func primaryBandIsGlobalOnly() {
+        // The whole redesign in one assertion. Anything else at the top level is a feature's
+        // navigation leaking back out of its module, which is what made the old sidebar an index.
+        let ids = SidebarRegistry.destinations(in: .primary).map(\.id)
+        #expect(ids == ["home", "today", "upcoming", "inbox"])
+
+        for destination in SidebarRegistry.destinations(in: .primary) {
+            #expect(destination.module == nil, "\(destination.title) claims a module")
+            #expect(GlobalDestination.contains(destination.selection))
+        }
+    }
+
+    @Test("Every module-band destination names the module it belongs to")
+    func moduleDestinationsCarryTheirModule() {
+        for destination in SidebarRegistry.allDeclared where destination.band == .module {
+            #expect(destination.module != nil, "\(destination.title) is in no module")
+        }
     }
 
     @Test("Home became available in Phase E, first in the primary band")
@@ -78,14 +105,12 @@ struct SidebarRegistryTests {
         #expect(SidebarRegistry.destinations(in: .primary).first?.id == "home")
     }
 
-    @Test("Time became available in Phase C, in the Library band")
+    @Test("Time is inside its own module")
     func timeIsAvailable() {
         let time = SidebarRegistry.allDeclared.first { $0.id == "time" }
         #expect(time?.isAvailable == true)
-
-        // The Library band, not the top one, by decision: the top band is for what you are doing
-        // now, and time is something you look back at.
-        #expect(time?.band == .library)
+        #expect(time?.band == .module)
+        #expect(time?.module == .time)
         #expect(SidebarRegistry.available.contains { $0.id == "time" })
     }
 
@@ -98,9 +123,9 @@ struct SidebarRegistryTests {
 
     @Test("Numeric shortcuts follow the order rows are shown in")
     func shortcutsMatchVisibleOrder() {
-        // ⌘1 must select whatever is first, or the shortcut and the eye disagree.
-        let ordered = SidebarRegistry.destinations(in: .primary)
-            + SidebarRegistry.destinations(in: .library)
+        // ⌘1 must select whatever is first, or the shortcut and the eye disagree. Global
+        // destinations first, then one per module in module order — the sidebar's own order.
+        let ordered = SidebarRegistry.shortcutOrder
 
         for (index, destination) in ordered.enumerated() {
             #expect(SidebarRegistry.destination(forShortcutIndex: index + 1)?.id == destination.id)
