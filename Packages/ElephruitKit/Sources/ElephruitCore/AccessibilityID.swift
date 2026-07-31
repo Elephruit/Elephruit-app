@@ -115,6 +115,42 @@ public enum AccessibilityID {
         public static let relationshipSummary = "people.summary"
         public static let recordInteraction = "people.recordInteraction"
         public static let interactionSheet = "people.interactionSheet"
+
+        // The workspace.
+        public static let workspace = "people.workspace"
+        public static let header = "people.header"
+        public static let quickActions = "people.quickActions"
+        public static let timeline = "people.timeline"
+        public static let contextSidebar = "people.contextSidebar"
+        public static let list = "people.list"
+
+        // Facts.
+        public static let addFact = "people.addFact"
+        public static let addFactSheet = "people.addFactSheet"
+        public static let correctFactSheet = "people.correctFactSheet"
+        public static let staleFacts = "people.staleFacts"
+
+        // Relationships.
+        public static let charts = "people.charts"
+        public static let chartSheet = "people.chartSheet"
+        public static let addRelationshipSheet = "people.addRelationshipSheet"
+
+        // Actions.
+        public static let contactConfirmation = "people.contactConfirmation"
+        public static let meetingBrief = "people.meetingBrief"
+        public static let groupActionPreview = "people.groupActionPreview"
+
+        // The command bar.
+        public static let commandBar = "people.commandBar"
+        public static let commandField = "people.commandField"
+        public static let commandPreview = "people.commandPreview"
+
+        // Other destinations.
+        public static let celebrations = "people.celebrations"
+        public static let myCard = "people.myCard"
+        public static let cardScan = "people.cardScan"
+        public static let contactsSettings = "people.contactsSettings"
+        public static let duplicates = "people.duplicates"
     }
 
     public enum Home {

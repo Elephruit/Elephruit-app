@@ -42,6 +42,7 @@ public struct SidebarView: View {
         List(selection: selectionBinding) {
             primaryBand
             pinnedBand
+            PeopleSidebarSection(navigation: navigation)
             libraryBand
         }
         .listStyle(.sidebar)

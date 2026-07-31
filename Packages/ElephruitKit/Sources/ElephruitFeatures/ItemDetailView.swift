@@ -88,7 +88,18 @@ public struct ItemDetailView: View {
         case .bookmark:
             BookmarkDetailView(item: item, title: titleBinding, bodyText: bodyBinding)
 
-        case .person, .organization:
+        case .person:
+            PersonWorkspaceView(
+                person: item,
+                navigation: navigation,
+                title: titleBinding,
+                bodyText: bodyBinding
+            )
+
+        case .organization:
+            // An organisation keeps the simpler shape. It has no age to estimate, no family, and no
+            // last-contact line, so the portrait's whole apparatus would be scaffolding around a
+            // name and a note.
             PersonDetailView(
                 item: item,
                 navigation: navigation,

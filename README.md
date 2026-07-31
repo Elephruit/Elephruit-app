@@ -23,13 +23,13 @@ The interface has not been reviewed on screen in light and dark mode. Screen-rec
 declined, so this is unverified rather than verified. To check it yourself:
 
 ```bash
-xcodebuild -project Elephruit.xcodeproj -scheme Everything -configuration Debug build
+xcodebuild -project Elephruit.xcodeproj -scheme Elephruit -configuration Debug build
 ```
 
 Then run the app with sample data and a throwaway library, so nothing real is touched:
 
 ```bash
-open -n "$(xcodebuild -project Elephruit.xcodeproj -scheme Everything -showBuildSettings 2>/dev/null | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{print $2}' | head -1)/Elephruit.app" --args -ElephruitDevelopmentMode -ElephruitUseTemporaryStore
+open -n "$(xcodebuild -project Elephruit.xcodeproj -scheme Elephruit -showBuildSettings 2>/dev/null | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{print $2}' | head -1)/Elephruit.app" --args -ElephruitDevelopmentMode -ElephruitUseTemporaryStore
 ```
 
 Sample data then appears under **Settings ▸ Advanced ▸ Load Sample Data**. Switch appearance in
@@ -50,7 +50,7 @@ open Elephruit.xcodeproj
 Or from the command line:
 
 ```bash
-xcodebuild -project Elephruit.xcodeproj -scheme Everything -configuration Debug build
+xcodebuild -project Elephruit.xcodeproj -scheme Elephruit -configuration Debug build
 ```
 
 The module tests run without Xcode, signing, or a simulator:

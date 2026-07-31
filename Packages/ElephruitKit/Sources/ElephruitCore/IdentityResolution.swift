@@ -232,7 +232,10 @@ public enum IdentityMatcher {
 /// Merging is the one operation in this module that destroys structure — two timelines become one
 /// and cannot be pulled apart again by hand. So it is planned, shown, and only then applied, and the
 /// plan names every field that would change and every fact that would be kept.
-public struct MergePlan: Sendable, Hashable {
+public struct MergePlan: Sendable, Hashable, Identifiable {
+    /// The pair, which is what a sheet is presented for.
+    public var id: String { "\(primaryID)-\(secondaryID)" }
+
     /// The record that survives.
     public var primaryID: UUID
 

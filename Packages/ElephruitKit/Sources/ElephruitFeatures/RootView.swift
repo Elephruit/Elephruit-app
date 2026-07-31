@@ -47,6 +47,9 @@ public struct RootView: View {
         .sheet(isPresented: commandPaletteBinding) {
             CommandPaletteView(navigation: navigation, commands: paletteCommands)
         }
+        .sheet(isPresented: peopleCommandBarBinding) {
+            PeopleCommandBarView(navigation: navigation)
+        }
         .sheet(isPresented: $isExportPresented) {
             ExportSheet()
         }
@@ -143,6 +146,17 @@ public struct RootView: View {
                     TimeView(navigation: navigation)
                 } else if navigation.selection == .home {
                     HomeView(navigation: navigation)
+                } else if case .people(let scope) = navigation.selection {
+                    // Celebrations and My Card are not lists of people, so they replace the column
+                    // rather than filtering it — the same arrangement Time already uses.
+                    switch scope {
+                    case .celebrations:
+                        CelebrationsView(navigation: navigation)
+                    case .duplicates:
+                        DuplicatesView(navigation: navigation)
+                    default:
+                        PeopleListView(navigation: navigation, scope: scope)
+                    }
                 } else {
                     ItemListView(navigation: navigation)
                 }
@@ -241,6 +255,15 @@ public struct RootView: View {
             PaletteCommand(id: "go-time", title: "Go to Time", category: .navigate, symbolName: "timer") {
                 navigation.select(.time)
             },
+            PaletteCommand(id: "people-bar", title: "People Command Bar", category: .navigate, symbolName: "person.text.rectangle") {
+                navigation.isPeopleCommandBarVisible = true
+            },
+            PaletteCommand(id: "go-people", title: "Go to People", category: .navigate, symbolName: "person.2") {
+                navigation.select(.people(.all))
+            },
+            PaletteCommand(id: "go-celebrations", title: "Go to Celebrations", category: .navigate, symbolName: "birthday.cake") {
+                navigation.select(.people(.celebrations))
+            },
             PaletteCommand(id: "toggle-inspector", title: "Toggle Inspector", category: .view, symbolName: "sidebar.trailing", command: .toggleInspectorAlternate, in: registry) {
                 navigation.isInspectorVisible.toggle()
             },
@@ -307,6 +330,13 @@ public struct RootView: View {
 
     private var commandPaletteBinding: Binding<Bool> {
         Binding(get: { navigation.isCommandPaletteVisible }, set: { navigation.isCommandPaletteVisible = $0 })
+    }
+
+    private var peopleCommandBarBinding: Binding<Bool> {
+        Binding(
+            get: { navigation.isPeopleCommandBarVisible },
+            set: { navigation.isPeopleCommandBarVisible = $0 }
+        )
     }
 
     private var errorBinding: Binding<Bool> {

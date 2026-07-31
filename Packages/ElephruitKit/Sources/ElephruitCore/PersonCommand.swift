@@ -580,7 +580,9 @@ public struct DeterministicPersonCommandParser: PersonCommandParsing {
         // how `add maya@example.com Maya Chen` still works.
         let details = state.consumeContactDetails()
 
-        if let existing = state.consumePerson() {
+        // Exhaustive, not partial: `add Theo Ramirez` in a library holding Theo Brandt must create
+        // somebody new rather than appending the word "Ramirez" to Brandt.
+        if let existing = state.consumePersonIfExhaustive() {
             var fields = details
             fields.name = existing.fullName
             return state.command(
@@ -718,13 +720,13 @@ public struct DeterministicPersonCommandParser: PersonCommandParsing {
 }
 
 extension PersonDraftFields {
-    var detailCount: Int {
+    public var detailCount: Int {
         emails.count + phones.count
             + (company == nil ? 0 : 1) + (jobTitle == nil ? 0 : 1) + (address == nil ? 0 : 1)
     }
 
     /// "an email and a phone number" — for the preview line.
-    var summaryPhrase: String {
+    public var summaryPhrase: String {
         var parts: [String] = []
         if !emails.isEmpty { parts.append(emails.count == 1 ? "an email" : "\(emails.count) emails") }
         if !phones.isEmpty { parts.append(phones.count == 1 ? "a phone number" : "\(phones.count) phone numbers") }

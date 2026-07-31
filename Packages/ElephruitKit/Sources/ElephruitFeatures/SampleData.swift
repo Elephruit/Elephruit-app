@@ -302,6 +302,10 @@ public enum SampleData {
             throw .writeFailed(path: "store", reason: error.localizedDescription)
         }
 
+        // The People fixture, which is substantial enough to live in its own file and which needs
+        // the store already populated: it links interactions to notes and projects that exist above.
+        try PeopleSampleData.populate(services: services)
+
         Diagnostics.features.info("Loaded sample data")
     }
 

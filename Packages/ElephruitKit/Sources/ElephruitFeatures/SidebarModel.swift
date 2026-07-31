@@ -111,7 +111,13 @@ public enum SidebarRegistry {
         SidebarDestination(id: "notes", selection: .kind(.note), band: .library, title: "Notes", symbolName: "note.text"),
         SidebarDestination(id: "projects", selection: .kind(.project), band: .library, title: "Projects", symbolName: "square.stack.3d.up"),
         SidebarDestination(id: "areas", selection: .kind(.area), band: .library, title: "Areas", symbolName: "square.grid.2x2"),
-        SidebarDestination(id: "people", selection: .kind(.person), band: .library, title: "People", symbolName: "person"),
+        // Superseded by `PeopleSidebarSection`, which is a band of its own.
+        //
+        // Declared rather than deleted, on the same terms as every other unavailable destination: a
+        // scene restored from a build that predates the People module still decodes, and the row is
+        // never enumerated because the accessors filter on availability. A flat `.kind(.person)` list
+        // answers "who do I know" and none of the questions people actually arrive with.
+        SidebarDestination(id: "people", selection: .kind(.person), band: .library, title: "People", symbolName: "person", isAvailable: false),
         SidebarDestination(id: "bookmarks", selection: .kind(.bookmark), band: .library, title: "Bookmarks", symbolName: "bookmark"),
         SidebarDestination(id: "archive", selection: .archive, band: .library, title: "Archive", symbolName: "archivebox"),
         SidebarDestination(id: "trash", selection: .trash, band: .library, title: "Trash", symbolName: "trash"),

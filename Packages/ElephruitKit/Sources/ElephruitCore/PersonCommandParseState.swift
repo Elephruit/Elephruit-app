@@ -98,6 +98,26 @@ struct ParseState {
         return best.person
     }
 
+    /// A known person, but only when their name accounts for *everything* that is left.
+    ///
+    /// ### The bug this exists to prevent
+    /// `add Theo Ramirez` in a library that already contains Theo Brandt matched "Theo" on the first
+    /// name, left "Ramirez" behind, and offered to add the word Ramirez to Brandt's record. A partial
+    /// name match is fine when the rest of the line is a *verb's* object — `call Theo` — but when the
+    /// remaining words are themselves part of a name, a prefix match is the wrong reading.
+    ///
+    /// So creation paths use this, and everything else uses ``consumePerson()``.
+    mutating func consumePersonIfExhaustive() -> KnownPerson? {
+        let savedCursor = cursor
+        let savedEntities = entities
+
+        if let person = consumePerson(), isExhausted { return person }
+
+        cursor = savedCursor
+        entities = savedEntities
+        return nil
+    }
+
     mutating func consumeGroup() -> KnownGroup? {
         guard cursor < tail else { return nil }
 
