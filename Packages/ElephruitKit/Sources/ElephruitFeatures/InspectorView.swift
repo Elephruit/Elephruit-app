@@ -21,9 +21,21 @@ public struct InspectorView: View {
         self.navigation = navigation
     }
 
+    /// The event the calendar has selected, when the calendar is what is on screen.
+    ///
+    /// Read from the focused workspace rather than from `navigation`, because an event is not an
+    /// `Item` and giving `selectedItemID` a second meaning would mean every reader of it had to ask
+    /// which kind of identifier it was holding.
+    @FocusedValue(\.calendarWorkspace) private var calendarWorkspace
+
     public var body: some View {
         Group {
-            if let item = currentItem, item.kind == .person {
+            if let event = selectedEvent {
+                EventInspectorView(event: event) { id in
+                    navigation.select(.kind(.note))
+                    navigation.selectItem(id)
+                }
+            } else if let item = currentItem, item.kind == .person {
                 // A person's inspector is the *context* pane the People module specifies — upcoming
                 // events, open promises, related people, stale facts — rather than the generic field
                 // editor, whose dates, status, and priority a person has none of.
@@ -41,6 +53,15 @@ public struct InspectorView: View {
         .frame(minWidth: InspectorLayout.minimumWidth)
         .measuresInspectorLayout()
         .accessibilityIdentifier(AccessibilityID.Inspector.root)
+    }
+
+    /// The selected event, when the calendar destination is showing one.
+    private var selectedEvent: CalendarEventSummary? {
+        guard navigation.selection == .calendar,
+              let id = calendarWorkspace?.selectedEventID,
+              let services
+        else { return nil }
+        return services.calendar.events.first { $0.id == id }
     }
 
     private func content(for item: Item) -> some View {
