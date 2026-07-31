@@ -598,7 +598,10 @@ public final class AppServices {
             Diagnostics.features.error("Sample data requested outside development mode; refused")
             return
         }
-        perform { try SampleData.populate(services: self) }
+        perform {
+            try SampleData.populate(services: self)
+            try TaskSampleData.populate(services: self)
+        }
     }
 }
 
