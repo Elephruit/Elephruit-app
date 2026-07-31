@@ -436,6 +436,7 @@ struct CalendarVisibilityToggleTests {
         await service.toggleVisibility(of: "personal")
 
         #expect(service.events.map { $0.title } == ["Work thing"])
+        #expect(service.hiddenCalendarIdentifiers.contains("personal"))
         #expect(!service.isVisible(CalendarInfo(id: "personal", title: "Personal")))
     }
 
