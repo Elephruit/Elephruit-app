@@ -107,7 +107,8 @@ struct EditContactDetailsSheet: View {
             }
         }
         .padding(Theme.Spacing.large)
-        .frame(minWidth: 520, minHeight: 480)
+        .frame(width: 680)
+        .frame(minHeight: 560)
         .accessibilityIdentifier(AccessibilityID.People.contactEditor)
     }
 
@@ -163,27 +164,26 @@ private struct ValueListSection: View {
     var body: some View {
         Section(kind.displayName) {
             ForEach($values, id: \.self) { $value in
-                HStack(spacing: Theme.Spacing.small) {
+                HStack(alignment: .center, spacing: Theme.Spacing.medium) {
                     LabelField(label: $value.label, kind: kind)
 
-                    TextField(
-                        "Value",
-                        text: $value.value,
-                        prompt: Text(kind.valuePrompt)
-                    )
+                    TextField("Value", text: $value.value)
                         .labelsHidden()
-                        .accessibilityLabel(kind.displayName)
                         .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityLabel(kind.displayName)
 
                     Button {
                         remove(value)
                     } label: {
-                        Image(systemName: "minus.circle")
+                        Image(systemName: "minus.circle.fill")
+                            .foregroundStyle(Theme.Colors.tertiaryText)
                     }
                     .buttonStyle(.borderless)
                     .help("Remove this \(kind.displayName.lowercased())")
                     .accessibilityLabel("Remove this \(kind.displayName.lowercased())")
                 }
+                .padding(.vertical, Theme.Spacing.hairline)
             }
 
             Button {
@@ -192,6 +192,8 @@ private struct ValueListSection: View {
                 Label("Add \(kind.displayName.lowercased())", systemImage: "plus.circle")
             }
             .buttonStyle(.borderless)
+            .foregroundStyle(Theme.Colors.secondaryText)
+            .padding(.vertical, Theme.Spacing.hairline)
         }
     }
 
@@ -207,10 +209,12 @@ private struct LabelField: View {
     let kind: ContactDetailKind
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: Theme.Spacing.tight) {
             TextField("Label", text: $label)
+                .labelsHidden()
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 90)
+                .frame(width: 112)
+                .accessibilityLabel("Label")
 
             Menu {
                 ForEach(kind.commonLabels, id: \.self) { option in
@@ -221,10 +225,11 @@ private struct LabelField: View {
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
-            .frame(width: 16)
+            .frame(width: 18)
             .help("Common labels")
             .accessibilityLabel("Choose a common label")
         }
+        .frame(width: 138, alignment: .leading)
     }
 }
 
@@ -365,16 +370,6 @@ private extension String {
 }
 
 private extension ContactDetailKind {
-    /// What an empty field asks for. Specific enough to imply the format without stating a rule.
-    var valuePrompt: String {
-        switch self {
-        case .email: "name@example.com"
-        case .phone: "+1 512 555 0192"
-        case .address: "12 Rosewood Lane, Austin"
-        case .website: "example.com"
-        }
-    }
-
     /// The label a newly added row starts with.
     var defaultLabel: String {
         switch self {
