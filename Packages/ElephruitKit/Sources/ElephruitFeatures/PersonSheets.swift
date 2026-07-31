@@ -134,6 +134,8 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
     case askAbout
     case foodAndDrink
     case family
+    case age
+    case school
     case interests
     case likes
     case avoid
@@ -148,6 +150,8 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .askAbout: "Ask about"
         case .foodAndDrink: "Food & drink"
         case .family: "Family"
+        case .age: "Age"
+        case .school: "School"
         case .interests: "Interests"
         case .likes: "Likes"
         case .avoid: "Avoid"
@@ -162,6 +166,8 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .askAbout: "bubble.left.and.questionmark.bubble.right"
         case .foodAndDrink: "fork.knife"
         case .family: "figure.2.and.child.holdinghands"
+        case .age: "birthday.cake"
+        case .school: "graduationcap"
         case .interests: "star.fill"
         case .likes: "hand.thumbsup.fill"
         case .avoid: "hand.thumbsdown.fill"
@@ -176,6 +182,8 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .askAbout: .blue
         case .foodAndDrink: .green
         case .family: .pink
+        case .age: .orange
+        case .school: .indigo
         case .interests: .purple
         case .likes: .cyan
         case .avoid: .orange
@@ -190,6 +198,8 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .askAbout: .conversationTopic
         case .foodAndDrink: .foodAndDrink
         case .family: .family
+        case .age: .observedAge
+        case .school: .schoolGrade
         case .interests: .interest
         case .likes: .like
         case .avoid: .dislike
@@ -204,6 +214,8 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .askAbout: "What would be thoughtful to ask next time?"
         case .foodAndDrink: "Diet, allergies, favorite drinks, restaurants…"
         case .family: "Names, ages, milestones, or family context…"
+        case .age: "Age now, or the age when you learned it…"
+        case .school: "Grade, school, teacher, or what needs confirming…"
         case .interests: "Hobbies, teams, books, music, travel…"
         case .likes: "Something they enjoy or appreciate…"
         case .avoid: "Something they dislike or would rather skip…"
@@ -217,7 +229,9 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         switch self {
         case .askAbout: ["The kids", "Upcoming trip", "Current project", "How they’re doing"]
         case .foodAndDrink: ["Vegetarian", "Gluten-free", "Doesn’t drink alcohol", "Likes wine"]
-        case .family: ["Has children", "Partner", "New baby", "Parents nearby"]
+        case .family: ["Has 2 children", "Names to confirm", "Partner", "New baby"]
+        case .age: ["5 years old", "About 8", "Age to confirm"]
+        case .school: ["2nd grade", "2nd or 3rd grade", "School to confirm"]
         case .interests: ["Wine", "Golf", "Art", "Running"]
         case .likes: ["Coffee", "Live music", "Thoughtful gifts"]
         case .avoid: ["Crowded places", "Early meetings", "Spicy food"]
@@ -370,15 +384,22 @@ struct AddFactSheet: View {
                             .accessibilityLabel(category.title)
                     }
 
+                    VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                        Text("How certain is this?")
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                        Picker("Confidence", selection: $confidence) {
+                            ForEach(FactConfidence.allCases, id: \.rawValue) { option in
+                                Text(option.displayName).tag(option)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                    }
+
                     DisclosureGroup("Details", isExpanded: $showsDetails) {
                         VStack(spacing: Theme.Spacing.medium) {
                             DatePicker("Learned on", selection: $observedOn, displayedComponents: .date)
-
-                            Picker("Confidence", selection: $confidence) {
-                                ForEach(FactConfidence.allCases, id: \.rawValue) { option in
-                                    Text(option.displayName).tag(option)
-                                }
-                            }
 
                             Picker("Privacy", selection: $sensitivity) {
                                 ForEach(FactSensitivity.allCases, id: \.rawValue) { option in
@@ -516,12 +537,18 @@ struct AddRelationshipSheet: View {
     let person: Item
     let onFinish: () -> Void
 
-    @State private var kind: RelationshipKind = .friend
+    @State private var kind: RelationshipKind
     @State private var label = ""
     @State private var name = ""
     @State private var matches: [Item] = []
     @State private var selected: Item?
     @FocusState private var isNameFocused: Bool
+
+    init(person: Item, initialKind: RelationshipKind = .friend, onFinish: @escaping () -> Void) {
+        self.person = person
+        self.onFinish = onFinish
+        _kind = State(initialValue: initialKind)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
