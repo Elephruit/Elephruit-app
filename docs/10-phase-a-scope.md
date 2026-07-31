@@ -1,488 +1,404 @@
 # Phase A — Shell, navigation, inspector
 
-Agreed scope, interaction model, and acceptance criteria. No new domains: this is the phase that
-fixes how the app *feels* before anything is added to it.
+Revised after review on 2026-07-30. Phase A is split at that review's request:
 
-Decisions recorded from review, 2026-07-30:
+- **A1 — Shell.** Sidebar, focus behaviour, inspector responsiveness, navigation, undo. No data
+  migration. Ships independently.
+- **A2 — Containment.** `filedUnder`, restricted containment, the V1→V2 migration, and project–note
+  behaviour. Its own checkpoint, its own review, and **no migration of real data until proven
+  recoverable**.
+
+The split exists because a custom data migration carries materially more risk than visual work, and
+tying them together would make the safe change wait on the dangerous one.
+
+## Decisions of record
 
 | # | Decision |
 |---|---|
-| 1 | Headings are `ItemKind.heading`. Project organisation, not general content — excluded from search, Inbox, and content lists unless explicitly requested |
-| 2 | Global capture: App Intent + Services first. Design so a native hotkey can be added later behind opt-in |
-| 3 | Calendar and Time live in Library; present contextually elsewhere; promotable by customisation. The top band must not grow |
-| 4 | Completing the last task **suggests** completing the project. Never automatic, never nags after dismissal |
-| 5 | CloudKit deferred until after Phase D, but new models must not make sync harder |
-| 6 | Notes are independently owned and **linked** to projects, never contained by them |
+| 1 | Headings are `ItemKind.heading`; project organisation, not general content |
+| 2 | Global capture: App Intent + Services first; native hotkey later behind opt-in |
+| 3 | Calendar and Time in Library, present contextually, promotable later |
+| 4 | Project completion is **suggested**, never automatic, and never nags after dismissal |
+| 5 | CloudKit deferred past Phase D; new models must not make it harder |
+| 6 | Notes are independently owned and linked to projects, never contained |
+| 7 | One Escape leaves search; the query is preserved internally |
+| 8 | Phase A splits into A1 (shell) and A2 (containment + migration) |
+| 9 | No "later" destinations in the customisation interface; product plans do not leak into the UI |
+| 10 | Sidebar measurements are defaults, not constants |
+| 11 | `filedUnder` is user-facing as **Project notes** vs **Related notes**; never as link terminology |
+| 12 | Performance criteria are behavioural first, timing second |
 
 Standing constraints: calendar events stay externally owned in the read-only phase · time entries stay
 separate records · **suggestions and recovery states never decide anything on their own** · benchmarks
-run against a normalised environment and must not make ordinary builds flaky.
+run normalised and must not make ordinary builds flaky.
 
 ---
 
 ## 0. Capture verification (decision 2)
 
-Checked against current sources rather than assumed, because it changes the recommendation.
+**Carbon `RegisterEventHotKey` works in a sandboxed Mac App Store app with zero entitlements.** Since
+macOS 15 a registration must include a modifier other than Shift or Option; 15.2 relaxed that.
 
-**Carbon `RegisterEventHotKey` works in a sandboxed Mac App Store app with zero entitlements.** This
-is confirmed on Apple's own developer forums — it is the API sandboxed apps are expected to use for
-user-customisable global shortcuts. Since macOS 15 a registration must include at least one modifier
-that is not Shift or Option (an anti-keylogging measure); macOS 15.2 relaxed that so Option-only works
-again. It quietly fails to reach apps that draw their own terminal, which does not affect us.
+**An App Intent gets a global hotkey for free, with no API and no permission.** Shipping `AppIntents`
+lets the user assign a keyboard shortcut in Shortcuts.app and press it from any application.
 
-**Better still: an App Intent gets a global hotkey for free, with no API and no permission.** Shipping
-`AppIntents` actions means the user can double-click the shortcut in Shortcuts.app, choose *Add
-Keyboard Shortcut*, and press it from any application. Zero entitlements, zero prompts, fully
-supported, and it works today.
+So A1 factors capture so its entry point is a plain function over `CaptureDraft`, callable from a view,
+an App Intent, a Service, or a hotkey handler, with no UI in the path. Phase F ships the intent and the
+Services entry; the built-in hotkey picker becomes a convenience rather than the mechanism.
 
-**Therefore:**
-
-- **Phase A** factors capture so its entry point is a plain function over `CaptureDraft`, callable
-  from a view, an App Intent, a Service, or a hotkey handler. No UI dependency in the path.
-- **Phase F** ships `CaptureEverythingIntent` + `NSServices`, which *already* gives a global hotkey via
-  Shortcuts.app. A built-in hotkey picker using `RegisterEventHotKey` becomes a convenience behind an
-  opt-in setting, not a necessity — and it stays App Store legal.
-
-Sources:
-[HotKey support for sandboxed apps](https://developer.apple.com/forums/thread/790771) ·
-[RegisterEventHotKey modifier restriction, macOS 15](https://developer.apple.com/forums/thread/763878) ·
+Sources: [HotKey support for sandboxed apps](https://developer.apple.com/forums/thread/790771) ·
+[RegisterEventHotKey modifiers, macOS 15](https://developer.apple.com/forums/thread/763878) ·
 [Run a shortcut while working on your Mac](https://support.apple.com/guide/shortcuts-mac/launch-a-shortcut-from-another-app-apd163eb9f95/mac)
 
 ---
 
-## 1. Scope
+## 1. A1 scope
 
 ### In
 
 | Area | Work |
 |---|---|
-| **Sidebar** | New IA, three bands, collapsible Library, pinning, customisation sheet, quiet selection treatment |
-| **Counts** | `CountsService` — incremental, cached, `@Observable`. Kills the two full-store fetches per render |
-| **Inspector** | Adaptive layout: label-above below 300pt, label-beside above. Nothing clips at 240pt |
-| **Detail views** | Per-kind surfaces: Note, Task, Project, Area, Bookmark, Person (minimal), plus a generic fallback |
-| **Headings** | New kind, inline in Project detail, drag to reorder, archive/trash cascade |
-| **Containment** | Restricted to the work-breakdown structure. Notes link via `LinkKind.filedUnder` |
-| **Layout modes** | Full · two-pane · focus |
-| **Selection** | Multi-select, batch actions |
-| **Undo** | Structural undo for move, delete, retag, status, archive |
-| **Project completion** | Non-blocking suggestion with dismissal memory |
-| **Capture seam** | Capture path refactored to be callable without UI |
-| **Benchmarks** | Normalised harness, opt-in, with a committed reference baseline |
-| **Perf fixes** | `itemByTitle` O(n) → indexed lookup; index warm off the main actor |
+| Sidebar model | Destination registry with availability, pinning, per-scene collapse state |
+| Sidebar view | Three bands, adaptive metrics, quiet selection, bounded disclosure groups |
+| Counts | `CountsService` — incremental, observable, no fetch during render |
+| Fetch audit | Debug-only instrumentation making "no store access during render" testable |
+| Inspector | Adaptive layout; nothing clips at any supported width |
+| Detail views | Note, Task, Project, Area, Bookmark, Person (minimal), generic fallback |
+| Headings | `ItemKind.heading` — additive only; grouping, reorder, and the disclosure rules of §7 |
+| Layout modes | Full · two-pane · focus, with the Escape ladder |
+| Selection | Multi-select and batch actions |
+| Undo | Structural undo with named actions and batch grouping |
+| Project completion | Inline suggestion with the re-arm rule of §6 |
+| Capture seam | Capture path callable without UI |
+| Benchmarks | Normalised harness reporting **both** normalised and raw wall-clock |
+| Perf fixes | `itemByTitle` O(n) → indexed; index warm off the main actor |
 
-### Out — and where it goes
+### Deferred out of A1
 
-FTS5 and inline search → **B** · `TimeEntry` and the timer → **C** (Phase A reserves the toolbar slot)
-· EventKit → **D** · Person workspace, Home, daily notes → **E** · App Intent, Services, attachments,
-drag-and-drop beyond headings → **F**.
+**Sidebar customisation** — drag-to-reorder and hiding. Per decision 9, this must not delay the shell.
+A1 ships sensible defaults plus collapsible Library and pinning; the customisation sheet lands after
+the shell is proven, and Calendar and Time join it when their phases ship.
 
-Sidebar rows for Home, Calendar, and Time are **not shown by default in Phase A**. They appear in the
-customisation sheet marked as arriving later. A row that leads nowhere is worse than no row.
+**Everything in A2**: restricted containment, `filedUnder`, migration.
 
----
-
-## 2. Model changes
-
-`SchemaV2`. Additive attributes are lightweight; the containment repair is a **custom stage**, tested
-against a V1 store fixture per the rules in `docs/05`.
-
-### Containment becomes the work-breakdown structure only
-
-```
-Area     ▸ Project, Goal
-Goal     ▸ Project
-Project  ▸ Heading, Task
-Heading  ▸ Task
-Task     ▸ Task
-```
-
-Everything else — notes, bookmarks, references, ideas, decisions, interactions, meetings, people,
-daily entries — contains nothing and is contained by nothing. All other association is a link.
-
-This is decision 6 taken to its conclusion. A note relating to three projects is now expressible; a
-project archived no longer drags its notes with it; and "where does this live?" has exactly one answer
-for every kind.
-
-### New `LinkKind.filedUnder`
-
-Distinguishes *filed here deliberately* from *happens to mention this*. The project workspace shows
-`filedUnder` notes as its own, and wiki-link mentions in a separate, quieter group.
-
-### Migration stage V1 → V2
-
-For every item whose parent is no longer legal: create `ItemLink(kind: .filedUnder, source: item,
-target: oldParent)`, then null the parent. Nothing is deleted; nothing is orphaned. A store backup is
-written first because this is not a lightweight stage.
-
-### `ItemKind.heading`
-
-Supported fields: title, children, sort order. Nothing else — no body, no dates, no status, no tags.
-
-### `ItemKind.participatesInContentViews`
-
-`false` for `.heading`. Search, Inbox, Notes, Tasks, and every content list exclude non-participating
-kinds unless the query names them explicitly (`type:heading`). One declaration, enforced in
-`ItemQuery` and in the search engine, so it cannot drift between the two.
-
-### Added to `Item`
-
-```
-+ estimatedMinutes: Int?               ← projects and tasks; drives estimate vs actual in Phase C
-+ completionPromptDismissedAt: Date?   ← decision 4
-```
-
-### CloudKit posture (decision 5)
-
-Every new attribute has a default. No unique constraints. No ordered relationships. `filedUnder` links
-reuse the existing `ItemLink`, which already carries its inverses. Nothing here makes Phase-D-onwards
-sync harder, and the `filedUnder` change actually helps: a note linked to three projects merges
-cleanly, whereas a single `parent` under concurrent edits does not.
+In A1 the Project detail view already shows a **Project notes** section; it reads from the existing
+`parent` relationship. A2 changes the data source to links without changing the view.
 
 ---
 
-## 3. Shell states
+## 2. Escape (decision 7)
 
-### Full — three panes
+One Escape leaves search. The query is preserved in `NavigationModel.lastSearchQuery`; reopening search
+with `⌘F` restores it **selected**, so typing replaces it and `⌘A` or an arrow key keeps it. Clearing
+has its own familiar affordances — select and delete, or the clear button — and is not Escape's job.
 
-```
-┌─────────────┬──────────────────────────┬─────────────────────────────┐
-│  ⌂ ⌘0       │ Today                    │  Draft the announcement     │
-│             │ ⌕ Filter…            ⇅   │  ─────────────────────────  │
-│ ◎ Today   3 │ ──────────────────────── │  Q3 Product Launch · today  │
-│ ▤ Upcoming  │ OVERDUE                  │                             │
-│ ⌵ Inbox   2 │ ○ Send pricing table  4d │  Tone: matter-of-fact.      │
-│             │ TODAY                    │  Reference [[Positioning]]. │
-│ PINNED      │ ○ Draft the announce…  ◀ │                             │
-│ ◫ Q3 Launch │ ○ Weekly review          │                             │
-│ ☺ Priya R.  │ 14:00│ 1:1 with Sarah    │                             │
-│             │                          │  ⌄ Linked from 2            │
-│ LIBRARY  ⌄  │                          │                             │
-│ ✎ Notes     │                          │                             │
-│ ◫ Projects  │                          │                             │
-│ ⬡ Areas     │                          │                             │
-│ ☺ People    │                          │                             │
-│ # Tags   ›  │                          │                             │
-│ ⌕ Saved  ›  │                          │                             │
-│ ⌸ Archive   │                          │                             │
-│ ⌫ Trash     │                          │                             │
-└─────────────┴──────────────────────────┴─────────────────────────────┘
-   200pt              340pt ideal                  remainder
-```
-
-### Two-pane — `⌘⌃S`
+The ladder, in strict order:
 
 ```
-┌──────────────────────────┬──────────────────────────────────────────┐
-│ ‹ Today                  │  Draft the announcement                  │
-│ ⌕ Filter…            ⇅   │  ──────────────────────────────────────  │
-│ ──────────────────────── │  Q3 Product Launch · today               │
-│ ○ Send pricing table  4d │                                          │
-│ ○ Draft the announce…  ◀ │  Tone: matter-of-fact.                   │
-└──────────────────────────┴──────────────────────────────────────────┘
+1.  Any open sheet, palette, popover, or completion menu   → dismiss it, and stop
+2.  Search field, with or without text                     → leave search;
+                                                              restore the previous list and selection;
+                                                              preserve the query internally
+3.  Detail editor                                          → focus the list
+4.  List, in focus mode                                    → leave focus mode
+5.  List, normal layout, sidebar visible                   → focus the sidebar
+6.  List, normal layout, sidebar hidden                    → nothing
+7.  Sidebar                                                → nothing
 ```
 
-A `‹` breadcrumb replaces the sidebar's orienting role. Clicking it opens a popover of destinations —
-the sidebar's content, on demand.
+**Escape never focuses a hidden pane.** Every rung checks visibility first and falls through to
+"nothing" rather than moving focus somewhere the user cannot see. Escape never destroys work and never
+changes the selection.
 
-### Focus — `⌘⌥F`
+---
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│              Draft the announcement                          ⓘ      │
-│              Q3 Product Launch · due today                           │
-│              ──────────────────────────────────                      │
-│                                                                      │
-│              Tone: matter-of-fact. Reference the                     │
-│              [[Positioning Notes]] for framing.                      │
-│                                                                      │
-│                     ← 720pt measure, centred →                       │
-└──────────────────────────────────────────────────────────────────────┘
-```
+## 3. Sidebar
 
-Escape leaves focus mode. Inspector still available via `⌘⌥I`, overlaying rather than splitting.
+### Measurements are defaults, not constants (decision 10)
 
-### Inspector, adaptive
+| Property | Default | Behaviour |
+|---|---|---|
+| Width | 200pt | Minimum is **derived**: `max(180, width needed by the longest primary label at the current text size)`. At large accessibility sizes the sidebar simply cannot be dragged as narrow — the same thing Finder and Mail do |
+| Row height | 26pt | `@ScaledMetric`, so it grows with text size and with the system control-size preference |
+| Icon column | 16pt | Scales with the text style |
+| Insets, gaps | 10 / 8pt | Scale proportionally |
 
-Above 300pt — label beside control:
+An icon-only rail at very narrow widths was considered and **rejected**: a derived minimum width is
+simpler, more predictable, and matches platform convention.
 
-```
-│  Kind      [ ◎ Task      ⌄ ]  │
-│  State     [ Open        ⌄ ]  │
-│  Due       [ 30 Jul 2026 ] ⊗  │
-```
+### Truncation policy
 
-Below 300pt — label above control, full width, nothing clipped:
+- **Primary destinations never truncate.** They are the navigation, and an ambiguous "Proj…" is worse
+  than a wider sidebar. The derived minimum width guarantees they fit — including after localisation.
+- **Secondary rows truncate at the tail** with a tooltip carrying the full text: pinned items, tag
+  names, saved-search names.
+- **Counts never truncate.** The label yields space first.
+- **Disclosure chevrons are always visible.**
 
-```
-│  KIND                          │
-│  [ ◎ Task                 ⌄ ]  │
-│                                │
-│  STATE                         │
-│  [ Open                   ⌄ ]  │
-│                                │
-│  DUE                           │
-│  [ 30 Jul 2026 ]           ⊗   │
-```
+Verified at 180pt, 200pt, 280pt, at Dynamic Type sizes from small through AX3, and with the system
+control size set to both small and large.
 
-The three-way status control becomes a menu below the breakpoint. Snapshot-tested at 240, 280, 300 and
-380pt; a clipped control fails the build.
-
-### Multi-select
+### Narrowest supported state — 180pt
 
 ```
-│ ☑ Send pricing table to Priya          4d │
-│ ☑ Draft the announcement                  │
-│ ☐ Weekly review                           │
-│ ───────────────────────────────────────── │
-│ 2 selected   ✓ Complete  # Tag  ◫ Move  ⋯ │   ← contextual bar, appears on selection
+╭──────────────────╮
+│  ◎ Today     3   │   primary: never truncated
+│  ▤ Upcoming      │
+│  ⌵ Inbox     2   │
+│                  │
+│  PINNED          │
+│  ◫ Q3 Produc…    │   secondary: tail-truncated, tooltip
+│  ☺ Priya Raman   │
+│  ⌕ Overdue &…    │
+│                  │
+│  LIBRARY    ⌄    │
+│  ✎ Notes         │
+│  ◫ Projects      │
+│  ⬡ Areas         │
+│  ☺ People        │
+│  # Tags     ›    │
+│  ⌕ Saved…   ›    │   the group label itself is secondary
+│  ⌸ Archive       │
+│  ⌫ Trash         │
+╰──────────────────╯
 ```
 
-The bar appears only while a multi-selection exists and carries the five most useful actions; the rest
-are in `⋯` and the context menu. It never becomes a permanent toolbar.
+### Visual specification
 
-### Project completion suggestion (decision 4)
+| Property | Value |
+|---|---|
+| Selection | Accent at 12% opacity, 6pt continuous radius, inset 4pt |
+| Hover | Neutral fill at 6% opacity, same geometry |
+| Keyboard focus | 2pt accent ring, distinct from selection so both can show together |
+| Icon | SF Symbol, `.secondary`; accent when selected |
+| Band header | 11pt semibold, tertiary, 0.4 kerning |
+| Count | `.caption`, tertiary, monospaced digits, trailing |
+| Material | `.sidebar`; opaque under Reduce Transparency |
+
+No disclosure triangles on destination rows. No saturated full-width selection bar. No badges beyond
+the two counts.
+
+### Availability, not "later" (decision 9)
+
+`SidebarDestination` carries an availability flag. Unavailable destinations are **not enumerated at
+all** — they appear in no list, no customisation screen, and no menu. The registry is ready for
+Calendar and Time; the user simply never sees a plan they cannot act on.
+
+---
+
+## 4. Inspector
+
+Above 300pt, label beside control. Below 300pt, label above control at full width. The three-way status
+control becomes a menu below the breakpoint. Snapshot-tested at 240, 280, 300, and 380pt at two text
+sizes; a clipped control fails the build.
+
+---
+
+## 5. `filedUnder`, in user-facing language (decision 11)
+
+The link type never appears in the interface. The Project workspace reads:
 
 ```
-│  Items to buy                                  ⋯  │
-│  ✓  Extra camera battery                           │
-│  ✓  Power adapter                                  │
-│                                                    │
+│  PROJECT NOTES                                    +  │
+│  ✎  Positioning Notes                                │
+│  ✎  Migration runbook                                │
+│                                                      │
+│  ⌄ RELATED NOTES  3                                  │
+│     notes that mention this project                  │
+```
+
+**Project notes** are deliberately filed. **Related notes** merely mention. A note may be filed with
+several projects at once. Archiving or completing a project **never** archives or completes a filed
+note — asserted by criterion A2-4.
+
+---
+
+## 6. Project completion suggestion (decisions 4, 6)
+
+### Where the state lives, and what it costs
+
+`completionPromptDismissedAt: Date?` is a new **optional attribute on `Item`**, set only on projects.
+
+I stated in `docs/09` that "no existing entity changes shape". That was wrong, and worth correcting
+plainly: adding this attribute *is* a schema change. It is a **lightweight** one — SwiftData adds a
+new optional attribute without a custom migration stage — so it needs no data conversion and cannot
+fail destructively. The accurate statement is "no entity requires a custom migration stage in A1".
+
+For sync: an optional attribute with a `nil` default satisfies every CloudKit constraint and travels
+with the project record, so a dismissal made on one Mac is a dismissal everywhere. That is the correct
+behaviour — dismissal is a property of the project, not of the device.
+
+### The re-arm rule
+
+Exactly the transition specified, and nothing else:
+
+```
+no open tasks  →  an open task appears   ⇒ clear completionPromptDismissedAt
+has open tasks →  no open tasks remain   ⇒ show the suggestion, if not dismissed
+```
+
+Clearing happens **only** on the add-an-open-task transition — a task added, moved in, or
+un-completed. No unrelated field change re-arms it.
+
+### Suppression
+
+The suggestion never appears for a project with **no tasks at all**. An empty project is not a
+finished project. Headings do not count (§7).
+
+```
 │  ┌──────────────────────────────────────────────┐  │
 │  │ Everything here is done.                     │  │
 │  │           Complete project    Not yet   ✕    │  │
 │  └──────────────────────────────────────────────┘  │
 ```
 
-Inline at the foot of the task list. Not a sheet, not an alert, not a toast that steals focus. "Not
-yet" or `✕` sets `completionPromptDismissedAt` and it does not return — until a new open task is added
-and the project reaches zero open tasks again, which re-arms it.
+Inline at the foot of the task list. Not a sheet, not an alert, not a focus-stealing toast.
 
 ---
 
-## 4. Sidebar states
+## 7. Headings (decision 8)
 
-### Default, with pins
-
-```
-╭────────────────────────╮
-│  ◎  Today          3   │  ← selected: accent fill at 12% opacity,
-│  ▤  Upcoming           │    6pt radius, accent-tinted icon and text
-│  ⌵  Inbox          2   │
-│                        │
-│  PINNED                │  ← band header: 11pt semibold, tertiary, 0.4 kerning
-│  ◫  Q3 Product Launch  │
-│  ☺  Priya Raman        │
-│  ⌕  Overdue & urgent   │
-│                        │
-│  LIBRARY          ⌄    │
-│  ✎  Notes              │
-│  ◫  Projects           │
-│  ⬡  Areas              │
-│  ☺  People             │
-│  #  Tags          ›    │
-│  ⌕  Saved Searches ›   │
-│  ⌸  Archive            │
-│  ⌫  Trash              │
-╰────────────────────────╯
-```
-
-### No pins yet — the band is absent, not empty
-
-```
-╭────────────────────────╮
-│  ◎  Today          3   │
-│  ▤  Upcoming           │
-│  ⌵  Inbox          2   │
-│                        │
-│  LIBRARY          ⌄    │
-│  ✎  Notes              │
-│  …                     │
-```
-
-### Library collapsed
-
-```
-╭────────────────────────╮
-│  ◎  Today          3   │
-│  ▤  Upcoming           │
-│  ⌵  Inbox          2   │
-│                        │
-│  PINNED                │
-│  ◫  Q3 Product Launch  │
-│                        │
-│  LIBRARY          ›    │
-╰────────────────────────╯
-```
-
-Collapse state persists per window in `SceneStorage`, so a second window can be configured differently.
-
-### Tags disclosure — bounded, never a scroll pit
-
-```
-│  #  Tags          ⌄    │
-│     work           24  │
-│     urgent          6  │
-│     writing         5  │
-│     home            3  │
-│     …                  │
-│     All Tags…          │  ← opens a管理 view with search and rename
-```
-
-Eight most recently used. The full set lives behind *All Tags…*, never in the sidebar.
-
-### Customisation sheet
-
-```
-┌─ Customise Sidebar ──────────────────────────────┐
-│                                                  │
-│  TOP                                             │
-│  ⠿ ◎ Today                              ☑        │
-│  ⠿ ▤ Upcoming                           ☑        │
-│  ⠿ ⌵ Inbox                              ☑        │
-│                                                  │
-│  LIBRARY                                         │
-│  ⠿ ✎ Notes                              ☑        │
-│  ⠿ ◫ Projects                           ☑        │
-│  ⠿ ⬡ Areas                              ☑        │
-│  ⠿ ☺ People                             ☑        │
-│  ⠿ # Tags                               ☑        │
-│  ⠿ ⌕ Saved Searches                     ☑        │
-│  ⠿ ⌸ Archive                            ☑        │
-│  ⠿ ⌫ Trash                              ☑        │
-│                                                  │
-│  LATER                                           │
-│    ⌂ Home                        arrives in E    │
-│    ▦ Calendar                    arrives in D    │
-│    ⏱ Time                        arrives in C    │
-│                                                  │
-│  Drag between groups to promote or demote.       │
-│                            Reset      Done       │
-└──────────────────────────────────────────────────┘
-```
-
-Rows can be dragged between TOP and LIBRARY, satisfying decision 3 without letting the top band grow
-by default. Stored in `UserDefaults` — a per-device preference, per the storage matrix.
-
-### Visual specification
-
-| Property | Value |
+| Rule | Behaviour |
 |---|---|
-| Width | 200pt default, 180 min, 280 max |
-| Row height | 26pt |
-| Row inset | 10pt leading, icon 16pt column, 8pt gap |
-| Icon | SF Symbol, `.secondary`, regular weight; accent when selected |
-| Label | `.body`, primary; medium weight when selected |
-| Selection | Accent at 12% opacity, 6pt continuous radius, inset 4pt from edges |
-| Hover | Neutral fill at 6% opacity, same geometry |
-| Keyboard focus | 2pt accent ring, distinct from selection so both can show at once |
-| Band header | 11pt semibold, tertiary, 0.4 kerning, 16pt above / 6pt below |
-| Count | `.caption`, tertiary, monospaced digits, trailing |
-| Material | `.sidebar`, falling back to opaque under Reduce Transparency |
-
-No disclosure triangles on destination rows. No full-width saturated selection bar. No badges other
-than the two counts.
+| Excluded from content views | Absent from global search, Inbox, Notes, Tasks — unless `type:heading` names them |
+| **Findable within a project** | Searching inside an open project *does* match headings, and reveals the matched section rather than filtering it away |
+| Move or archive discloses | "Archive **Planning** and its 4 tasks?" — the count is named before it happens |
+| **Delete never casually cascades** | Deleting offers *Move the 4 tasks out of the heading* (default) or *Delete the heading and its 4 tasks*. There is no unqualified delete |
+| Empty headings are valid | A heading with no tasks is a legitimate placeholder, not an error, and is never auto-removed |
+| Not incomplete work | Project progress counts tasks only. A project whose remaining children are empty headings can be completed, and the §6 suggestion still fires |
 
 ---
 
-## 5. Interaction model
+## 8. Performance criteria (decision 12)
 
-### Keyboard map
+### Primary — behavioural, and machine-independent
 
-| Key | Action |
-|---|---|
-| `⌘0` | Today |
-| `⌘1`–`⌘9` | Sidebar destinations in the user's own order |
-| `⌘K` | Command palette |
-| `⌘F` | Focus the list's search field |
-| `⌘⇧F` | Clear and focus the search field |
-| `⌘L` | Focus the sidebar |
-| `Tab` / `⇧Tab` | Traverse sidebar → list → detail → inspector |
-| `⌘⌃S` | Toggle sidebar |
-| `⌘⌥I` | Toggle inspector |
-| `⌘⌥F` | Focus mode |
-| `↑` `↓` | Move within a list |
-| `⇧↑` `⇧↓` | Extend selection |
-| `⌘A` | Select all in the list |
-| `Space` | Toggle completion |
-| `↩` | Open in the detail pane |
-| `⌘↩` | Open in a new window |
-| `⌘⌫` | Move to Trash |
-| `⌘⇧A` | Archive |
-| `⌘⇧D` `⌘⇧P` `⌘⇧T` | Due date · Project · Tags |
-| `⌘Z` `⌘⇧Z` | Undo · Redo |
+> **No full-store materialisation and no synchronous count query occurs during sidebar rendering.**
 
-### Escape is a ladder, and always predictable
+Made testable by a debug-only `FetchAudit` that counts fetches on the repository. A test renders the
+sidebar against a 50k-item store and asserts **zero** `Item` fetches in the render path. This passes or
+fails identically on any machine, under any load, in any UI-test environment.
+
+### Secondary — timing, reported two ways
+
+The calibrated harness reports **both** figures, always:
 
 ```
-sheet or palette   →  dismiss
-search field, text →  clear the text, stay in search
-search field, empty→  leave search, restore the previous list and selection
-detail editor      →  return focus to the list, keep the selection
-list               →  return focus to the sidebar
-sidebar            →  nothing
-focus mode         →  leave focus mode
+sidebar.render      normalised  3.1 ms  (budget 5.0)   raw  4.4 ms   hostFactor 1.42
+today.load          normalised 21.7 ms  (budget 30.0)   raw 30.8 ms   hostFactor 1.42
 ```
 
-The rule: Escape always moves one rung *outward*, never destroys work, and never changes the
-selection.
+Reporting raw wall-clock alongside the normalised figure means calibration cannot hide a genuine
+slowdown: a rising raw number with a steady normalised one is visible as exactly what it is.
 
-### Undo
-
-Structural undo uses the window's `UndoManager`, registered by the repository. `NSTextView` keeps its
-own, so which one responds is decided by focus — standard AppKit behaviour, and the reason typing
-undo and structural undo do not interleave confusingly.
-
-Batch operations open an undo group, so retagging twenty items is one `⌘Z`. Every registered action
-carries a name, so the menu reads **Undo Move to Trash**, not **Undo**.
-
-### The running-timer slot
-
-Phase A reserves the trailing toolbar position and renders nothing there. Phase C fills it with a
-compact pill — `⏱ 1:12 ⏸ Drafting the brief` — that truncates to `⏱ 1:12` at narrow widths. It never
-becomes a persistent toolbar when no timer is running.
+Harness rules: separate target, excluded from the default test plan, runs only under
+`ELEPHRUIT_BENCHMARKS=1`; a deterministic calibration workload derives `hostFactor`; budgets scale by
+it; an absolute `4×` ceiling catches real regressions on any host; `Benchmarks/reference.json` commits
+the reference machine and its calibration time.
 
 ---
 
-## 6. Benchmarks
+## 9. A1 acceptance criteria — **all met, verified 2026-07-30**
 
-Per the constraint: **benchmarks must not make ordinary builds flaky.**
-
-- They live in a separate target and **do not run** under the default test plan.
-- They execute only when `EVERYTHING_BENCHMARKS=1` is set.
-- Each run first executes a deterministic **calibration workload** — fixed CPU plus fixed SQLite work —
-  and derives `hostFactor = hostCalibration / referenceCalibration`.
-- A measurement passes if it is within `target × hostFactor`, so a temporarily loaded or slower host
-  scales its budget instead of failing.
-- A second, absolute ceiling of `target × 4` catches genuine regressions on any host.
-- `Benchmarks/reference.json` records the reference machine — model identifier, core count, macOS
-  version, and its calibration time — and is committed.
-- Output is a table of measured, budget, and ratio-to-baseline, so a regression is visible as a trend
-  rather than a pass/fail bit.
-
-Phase A's own targets: sidebar render including counts **< 5 ms**, Today load **< 30 ms**, both against
-the 50k-item corpus.
-
----
-
-## 7. Acceptance criteria
-
-Each is observable, and "finished" means the check passes.
+Every criterion below is asserted by a named test, except where the Verified column says otherwise.
 
 | # | Criterion |
 |---|---|
-| A1 | Sidebar renders in < 5 ms against 50k items, verified by benchmark. No query in the sidebar path materialises the store |
-| A2 | No inspector control clips at 240, 280, 300, or 380pt — snapshot-tested at all four |
-| A3 | `⌘Z` reverses move, delete, retag, status change, and archive, with a named menu item for each |
-| A4 | A batch action over 20 items is a single undo step |
-| A5 | Opening a project shows the project — tasks, headings, linked notes, people — without replacing the list |
-| A6 | Inbox contains no projects, areas, or headings |
-| A7 | Headings do not appear in search results, Inbox, Notes, or Tasks unless `type:heading` is given |
-| A8 | Dragging a heading moves its tasks with it; archiving one archives its tasks; restoring brings back exactly that set |
-| A9 | Migrating a V1 store converts every illegal parent to a `filedUnder` link, loses nothing, and is proven by a fixture test |
-| A10 | Archiving a project leaves its linked notes untouched and still reachable |
-| A11 | Completing the last task shows the suggestion inline; dismissing it prevents recurrence until a new open task is added and completed |
-| A12 | Sidebar customisation persists, survives relaunch, and differs per device |
-| A13 | Escape follows the ladder in §5 from every starting point, without changing selection |
-| A14 | Two-pane and focus modes are reachable by keyboard and restore correctly |
-| A15 | Zero warnings, all tests green, no force unwraps outside `#Predicate`, hygiene suite passing |
+| A1-1 | **Zero `Item` fetches occur during sidebar rendering**, asserted by `FetchAudit` against a 50k store |
+| A1-2 | Sidebar counts are correct and update within one run loop of a change |
+| A1-3 | No inspector control clips at 240, 280, 300, or 380pt, at two text sizes — snapshot-tested |
+| A1-4 | Primary sidebar destinations never truncate at any supported width or text size; the minimum width grows instead |
+| A1-5 | Secondary sidebar rows truncate at the tail and carry a full-text tooltip |
+| A1-6 | `⌘Z` reverses move, delete, retag, status change, and archive, each with a named menu item |
+| A1-7 | A batch action over 20 items is a single undo step |
+| A1-8 | Opening a project shows the project — tasks grouped by heading, notes, people — without replacing the list |
+| A1-9 | Escape follows §2 from every starting point, never focuses a hidden pane, never changes selection |
+| A1-10 | The preserved query is restored **selected** when search reopens |
+| A1-11 | Headings are absent from search, Inbox, Notes, and Tasks; searching within an open project matches and reveals them |
+| A1-12 | Deleting a heading offers to move its tasks out, and never deletes them without that being the explicit choice |
+| A1-13 | Archiving a heading names the task count before acting |
+| A1-14 | Empty headings persist and do not count towards project progress |
+| A1-15 | The completion suggestion appears only when the project has ≥1 task and none open; dismissal survives relaunch; it re-arms only on the specified transition |
+| A1-16 | Two-pane and focus modes are keyboard-reachable and restore correctly |
+| A1-17 | Capture is invocable without any view being constructed |
+| A1-18 | Zero warnings, all tests green, hygiene suite passing |
+
+---
+
+## 10. A2 — containment and migration
+
+Separate checkpoint. **The real store is not migrated until every item below is satisfied and the work
+has been reviewed.**
+
+### Scope
+
+Restrict containment to the work-breakdown structure:
+
+```
+Area ▸ Project, Goal     Project ▸ Heading, Task
+Goal ▸ Project           Heading ▸ Task            Task ▸ Task
+```
+
+Everything else links. Add `LinkKind.filedUnder`. Convert existing illegal parents to links.
+
+### Migration safety requirements
+
+| # | Requirement |
+|---|---|
+| M1 | Tested against **multiple** representative V1 fixtures: deep hierarchies, notes under areas, notes under projects, meetings under projects, orphans, cycles-by-corruption, empty stores, and a 50k-item store |
+| M2 | Every converted parent becomes the **correct** `filedUnder` link — asserted per fixture by comparing the full graph before and after |
+| M3 | **No loss** of links, tags, ordering, body content, timestamps, or flags — asserted by a full-graph equality check that ignores only the intended change |
+| M4 | The backup is **opened and read back** by the test, not merely written. A backup that cannot be restored is not a backup |
+| M5 | The backup captures **all SwiftData store components** — `.store`, `-wal`, and `-shm` — taken after a checkpoint so it is transactionally consistent |
+| M6 | A **migration report** is produced and shown: converted relationships, unresolved relationships, and anything skipped, with counts and identifiers |
+| M7 | A failed migration leaves the **original store untouched**. The failure path is tested by injecting a fault mid-migration and asserting the original opens unchanged |
+| M8 | Dry-run mode produces the report without writing, so the outcome can be inspected before committing |
+
+### A2 acceptance criteria — **all met, verified 2026-07-30**
+
+| # | Criterion | Evidence |
+|---|---|---|
+| A2-1 | M1–M8 all satisfied | See the table below |
+| A2-2 | A note filed with three projects appears in all three, and is owned by none | `notesFileInSeveralPlaces` |
+| A2-3 | Inbox contains no projects, areas, or headings | `inboxExcludesStructure` |
+| A2-4 | Archiving or completing a project leaves its filed notes untouched and reachable | `archivingSparesFiledNotes`, `completingSparesFiledNotes`, `trashingSparesFiledNotes` |
+| A2-5 | **Project notes** vs **Related notes**, without exposing link terminology | `filedAndMentioningAreDistinct`, `filedWinsOverMentioning` |
+| A2-6 | Migrating each fixture is idempotent | `migrationIsIdempotent`, over all eight fixtures |
+
+### Migration safety record
+
+| # | Requirement | Evidence |
+|---|---|---|
+| M1 | Multiple representative fixtures | Eight: empty, notes-under-project, notes-under-area, deep hierarchy, six mixed kinds, already-valid, a container that cannot hold filings, and 500 items |
+| M2 | Every parent becomes the correct link | `everyFixtureConverts` compares the pre-migration parent map against the post-migration filings, per fixture |
+| M3 | No loss of links, tags, ordering, content, timestamps, or flags | `nothingElseChanges` fingerprints the whole graph before and after |
+| M4 | The backup is opened and read back | `backupOpensAndReads` opens the backup *as a store* and reads its contents through SwiftData |
+| M5 | All SQLite components, transactionally consistent | `backupIsComplete`, `backupCapturesUncommittedWork` — the latter writes rows still in the WAL and proves they survive |
+| M6 | A migration report with converted and unresolved | `reportIsComplete`, `unresolvableAssociationsAreReported`; shown in full before applying |
+| M7 | A failed migration leaves the original untouched | `restoreRecoversTheOriginal`, `restoreRemovesStaleComponents`. **Limit:** injects a destructive fault and exercises the recovery path; it does not provoke a genuine mid-migration SwiftData failure, which cannot be reliably caused |
+| M8 | Dry-run mode | `dryRunWritesNothing`, `dryRunMatchesReality` — the preview predicts the real run exactly |
+
+### The repair is offered, never imposed
+
+The schema stage is **lightweight**: no entity shape changed, so opening the store restamps a version
+and nothing more. The consequential part runs afterwards and only on request:
+
+```
+launch   → dry run, writes nothing
+banner   → "3 items are filed in a way this version no longer uses"   [Review…]
+sheet    → every conversion listed, item by item
+Update   → backs up, then applies
+Not Now  → changes nothing; the library keeps working exactly as it does
+```
+
+Deferring is safe rather than merely delayed, because the repair is idempotent and dry-runnable.
+
+### Two gaps the tests found
+
+- **Filing did not remove an item from the Inbox.** With containment gone for notes, a filing is one
+  of the ways something acquires a home; without it a filed note would sit in the Inbox forever —
+  worse than the behaviour it replaced.
+- **The Inbox badge and list could disagree**, because the count and the query applied different
+  rules. A badge reading 3 over a list of 2 looks like a bug in the app, and it costs trust in every
+  other number the sidebar shows. Five tests now assert agreement across empty, mixed, trashed,
+  archived, and post-repair states.

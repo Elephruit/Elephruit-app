@@ -19,9 +19,9 @@ plus an entitlement, not a model rewrite.
 - Nothing in the v1 user journeys is blocked by its absence.
 
 **Assumption, reversible:** the container identifier will be
-`iCloud.com.everything.Everything`, and the bundle identifier
-`com.everything.Everything`. Both are placeholders until a real team identifier is
-chosen; they are defined in one place (`Configuration/Everything.xcconfig`) so
+`iCloud.com.elephruit.Elephruit`, and the bundle identifier
+`com.elephruit.Elephruit`. Both are placeholders until a real team identifier is
+chosen; they are defined in one place (`Configuration/Elephruit.xcconfig`) so
 changing them is a one-line edit.
 
 ## Constraints honoured from v1
@@ -57,7 +57,7 @@ This means the first real migration is an *addition to an existing mechanism*, n
 the introduction of one.
 
 ```swift
-enum EverythingMigrationPlan: SchemaMigrationPlan {
+enum ElephruitMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] { [SchemaV1.self] }
     static var stages: [MigrationStage] { [] }
 }
@@ -72,10 +72,10 @@ Rules:
    builds a store at version *N*, migrates it, and asserts on the version *N+1*
    contents. No exceptions.
 3. **Every released schema version is kept in source forever** under
-   `Sources/EverythingModel/Schema/` so that migration paths remain compilable and
+   `Sources/ElephruitModel/Schema/` so that migration paths remain compilable and
    testable.
 4. **A pre-migration backup** of the store file is written to
-   `Application Support/Everything/Backups/pre-v<N>-<timestamp>/` before any
+   `Application Support/Elephruit/Backups/pre-v<N>-<timestamp>/` before any
    non-lightweight stage runs, and surfaced in the UI if migration fails.
 5. **Migration failure is recoverable, never fatal.** The app opens in a degraded
    "store unavailable" state that offers: retry, reveal the backup in Finder, or
@@ -84,7 +84,7 @@ Rules:
 ## Store bootstrap sequence
 
 ```
-1. Resolve store URL (App Support/Everything/Everything.store)
+1. Resolve store URL (App Support/Everything/Elephruit.store)
 2. Build ModelConfiguration(schema: SchemaV1, url:, cloudKitDatabase: .none)   ← Phase 4 flips this
 3. try ModelContainer(for: schema, migrationPlan:, configurations:)
    ├─ success → integrity pass (orphaned links, dangling attachments, stale bookmarks)

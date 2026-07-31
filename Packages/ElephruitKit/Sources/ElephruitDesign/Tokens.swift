@@ -1,0 +1,268 @@
+import SwiftUI
+
+/// The design system's vocabulary.
+///
+/// Every spacing value, corner radius, and colour in the app comes from here. Not because
+/// tokens are fashionable, but because "high information density without feeling crowded"
+/// is achievable only if the *same* rhythm is used everywhere, and that is impossible when
+/// each view invents its own numbers.
+public enum Theme {}
+
+// MARK: - Spacing
+
+extension Theme {
+    /// A four-point scale.
+    ///
+    /// Four, not eight, because this app is dense: an eight-point grid forces either wasted
+    /// space in list rows or off-grid exceptions, and exceptions defeat the purpose.
+    public enum Spacing {
+        /// 2 pt — between a glyph and its label.
+        public static let hairline: CGFloat = 2
+        /// 4 pt — within a tightly-coupled pair.
+        public static let tight: CGFloat = 4
+        /// 8 pt — the default gap between related elements.
+        public static let small: CGFloat = 8
+        /// 12 pt — between elements in a row.
+        public static let medium: CGFloat = 12
+        /// 16 pt — standard content inset.
+        public static let large: CGFloat = 16
+        /// 24 pt — between sections.
+        public static let section: CGFloat = 24
+        /// 40 pt — around empty states, which need room to feel calm rather than broken.
+        public static let generous: CGFloat = 40
+    }
+
+    public enum Radius {
+        /// 4 pt — chips and small controls.
+        public static let small: CGFloat = 4
+        /// 6 pt — rows and fields.
+        public static let medium: CGFloat = 6
+        /// 10 pt — cards and popovers.
+        public static let large: CGFloat = 10
+    }
+
+    public enum Size {
+        /// The leading glyph column in a list row. Fixed, so titles align down the list even
+        /// when their symbols differ in width.
+        public static let rowGlyph: CGFloat = 16
+
+        /// Minimum height of a list row. Comfortable to click without being airy.
+        public static let rowHeight: CGFloat = 28
+
+        /// Minimum height of a two-line list row.
+        public static let rowHeightExpanded: CGFloat = 44
+
+        public static let sidebarMinWidth: CGFloat = 190
+        public static let sidebarIdealWidth: CGFloat = 224
+        public static let sidebarMaxWidth: CGFloat = 320
+
+        public static let listMinWidth: CGFloat = 260
+        public static let listIdealWidth: CGFloat = 340
+
+        public static let detailMinWidth: CGFloat = 420
+        public static let inspectorWidth: CGFloat = 280
+
+        /// The editor's measure. Long lines are hard to read; this caps them at roughly 80
+        /// characters at the default size while leaving the window free to be any width.
+        public static let editorMaxWidth: CGFloat = 720
+    }
+}
+
+// MARK: - Typography
+
+extension Theme {
+    /// Text styles, all relative to the user's chosen size.
+    ///
+    /// Every style is built from a `Font.TextStyle`, never from a point size, so Dynamic Type
+    /// and the system text-size setting are respected without special cases.
+    public enum Text {
+        /// A note or item title in the detail view.
+        public static let title: Font = .system(.title2, design: .default, weight: .semibold)
+
+        /// A section header in a sidebar or inspector.
+        public static let sectionHeader: Font = .system(.caption, design: .default, weight: .semibold)
+
+        /// A list row's primary line.
+        public static let rowTitle: Font = .system(.body)
+
+        /// A list row's primary line, when the item is unread or pinned.
+        public static let rowTitleEmphasised: Font = .system(.body, design: .default, weight: .medium)
+
+        /// A list row's secondary line.
+        public static let rowSubtitle: Font = .system(.callout)
+
+        /// Metadata: dates, counts, provenance.
+        public static let metadata: Font = .system(.caption)
+
+        /// A tag chip.
+        public static let chip: Font = .system(.caption, design: .default, weight: .medium)
+
+        /// A keyboard shortcut hint.
+        public static let keyHint: Font = .system(.caption2, design: .rounded, weight: .medium)
+
+        /// The note body editor.
+        ///
+        /// Proportional by default, because most notes are prose. The editor offers a
+        /// monospaced alternative for those who prefer it; the choice is a preference, not a
+        /// hard-coded assumption about what the user writes.
+        public static let editorBody: Font = .system(.body)
+        public static let editorBodyMonospaced: Font = .system(.body, design: .monospaced)
+    }
+}
+
+// MARK: - Colour
+
+extension Theme {
+    /// Semantic colours.
+    ///
+    /// Built from the system's own semantic colours wherever one exists, so light mode, dark
+    /// mode, Increase Contrast, and the user's accent colour are all handled by AppKit rather
+    /// than approximated here. A hard-coded hex value would be wrong in at least one of those
+    /// four conditions.
+    public enum Colors {
+        /// Primary reading text.
+        public static let primaryText = Color.primary
+        /// Supporting text: subtitles, metadata.
+        public static let secondaryText = Color.secondary
+        /// Text that is present but not currently relevant.
+        public static let tertiaryText = Color(nsColor: .tertiaryLabelColor)
+        /// Placeholder text in an empty field or an untitled item.
+        public static let placeholderText = Color(nsColor: .placeholderTextColor)
+
+        /// The window's own background. Sidebars use a material instead.
+        public static let windowBackground = Color(nsColor: .windowBackgroundColor)
+        /// The background of a content list or editor.
+        public static let contentBackground = Color(nsColor: .textBackgroundColor)
+        /// A subtle fill for chips and grouped rows.
+        public static let subtleFill = Color(nsColor: .quaternarySystemFill)
+        /// A separator hairline.
+        public static let separator = Color(nsColor: .separatorColor)
+
+        /// Selection. Follows the user's accent colour.
+        public static let selection = Color.accentColor
+
+        /// Something needs attention now — an overdue date.
+        public static let overdue = Color(nsColor: .systemRed)
+        /// Something needs attention today.
+        public static let dueToday = Color(nsColor: .systemOrange)
+        /// Completed.
+        public static let completed = Color(nsColor: .systemGreen)
+        /// A link that points at something.
+        public static let link = Color.accentColor
+        /// A link whose target does not exist yet.
+        public static let unresolvedLink = Color(nsColor: .systemOrange)
+        /// A destructive action.
+        public static let destructive = Color(nsColor: .systemRed)
+
+        /// Something the app could not interpret and has told the user about.
+        ///
+        /// Amber rather than red: an unreadable fragment of a search query is not a failure, it is
+        /// a part of the request that was skipped. Red would overstate it.
+        public static let warning = Color(nsColor: .systemOrange)
+    }
+
+    /// The palette a user may pick from for projects, areas, tags, and collections.
+    ///
+    /// Named rather than stored as raw values, so a stored `colorName` renders correctly in
+    /// every appearance and can be re-tuned later without a data migration. An unknown name
+    /// resolves to the accent colour rather than failing.
+    public enum Palette: String, CaseIterable, Sendable {
+        case red, orange, yellow, green, mint, teal, cyan, blue, indigo, purple, pink, brown, graphite
+
+        public var color: Color {
+            switch self {
+            case .red: Color(nsColor: .systemRed)
+            case .orange: Color(nsColor: .systemOrange)
+            case .yellow: Color(nsColor: .systemYellow)
+            case .green: Color(nsColor: .systemGreen)
+            case .mint: Color(nsColor: .systemMint)
+            case .teal: Color(nsColor: .systemTeal)
+            case .cyan: Color(nsColor: .systemCyan)
+            case .blue: Color(nsColor: .systemBlue)
+            case .indigo: Color(nsColor: .systemIndigo)
+            case .purple: Color(nsColor: .systemPurple)
+            case .pink: Color(nsColor: .systemPink)
+            case .brown: Color(nsColor: .systemBrown)
+            case .graphite: Color(nsColor: .systemGray)
+            }
+        }
+
+        public var displayName: String {
+            rawValue.capitalized
+        }
+
+        /// Resolves a stored name, falling back to the accent colour.
+        public static func color(named name: String?) -> Color {
+            guard let name, let entry = Palette(rawValue: name) else { return Color.accentColor }
+            return entry.color
+        }
+    }
+}
+
+// MARK: - Motion
+
+extension Theme {
+    /// Animation, with Reduce Motion honoured in one place.
+    ///
+    /// Every animation in the app goes through these helpers. That is the only way to keep the
+    /// accessibility promise: a single view animating directly would break it, and nothing
+    /// would catch that in review.
+    public enum Motion {
+        /// A state change the user initiated and is watching — a disclosure, a selection.
+        public static let standard: Animation = .easeOut(duration: 0.18)
+
+        /// Something appearing or disappearing.
+        public static let appearance: Animation = .easeOut(duration: 0.14)
+
+        /// A list reordering or an item moving between sections.
+        public static let reorder: Animation = .spring(response: 0.3, dampingFraction: 0.85)
+
+        /// The animation to use, or `nil` when Reduce Motion is on.
+        ///
+        /// Returning `nil` rather than a zero duration matters: SwiftUI treats a `nil`
+        /// animation as "apply the change immediately", which is exactly what the setting asks
+        /// for, whereas a zero-duration animation still runs a transaction.
+        public static func respectingReduceMotion(
+            _ animation: Animation,
+            reduceMotion: Bool
+        ) -> Animation? {
+            reduceMotion ? nil : animation
+        }
+    }
+}
+
+// MARK: - Environment
+
+extension EnvironmentValues {
+    /// Whether the user prefers a monospaced editor.
+    ///
+    /// In the environment rather than read from `UserDefaults` inside the editor, so previews
+    /// can show both and tests need no defaults suite.
+    @Entry public var prefersMonospacedEditor: Bool = false
+}
+
+extension View {
+    /// Applies an animation unless Reduce Motion is on.
+    ///
+    /// Reads the accessibility setting itself, so no call site has to remember to.
+    public func calmAnimation<Value: Equatable>(
+        _ animation: Animation = Theme.Motion.standard,
+        value: Value
+    ) -> some View {
+        modifier(CalmAnimationModifier(animation: animation, value: value))
+    }
+}
+
+private struct CalmAnimationModifier<Value: Equatable>: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let animation: Animation
+    let value: Value
+
+    func body(content: Content) -> some View {
+        content.animation(
+            Theme.Motion.respectingReduceMotion(animation, reduceMotion: reduceMotion),
+            value: value
+        )
+    }
+}

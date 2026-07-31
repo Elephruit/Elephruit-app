@@ -29,7 +29,7 @@ product's core premise is *anything links to anything*, and this shape fights it
 A protocol gives uniform *reading* but not uniform *storage*: the relationship
 problem above is unchanged, because a SwiftData relationship must name a concrete
 `PersistentModel`. A protocol here would be decoration over the same pain. So:
-`ContentItem` exists in `EverythingCore` as a **read-only view protocol** used by
+`ContentItem` exists in `ElephruitCore` as a **read-only view protocol** used by
 the design system and export codecs, and `Item` is the single persisted node.
 
 ### The cost, stated honestly
@@ -95,7 +95,7 @@ Relationships (all optional or defaulted, all with inverses, no `.deny` rules):
 `note`, `task`, `project`, `area`, `person`, `organization`, `interaction`,
 `meeting`, `bookmark`, `dailyEntry`, `idea`, `goal`, `decision`, `reference`.
 
-Declared in `EverythingCore` as a `String`-backed enum with an
+Declared in `ElephruitCore` as a `String`-backed enum with an
 `unknown(String)`-style tolerant decoder, so an archive written by a newer version
 imports without data loss.
 
