@@ -72,6 +72,10 @@ struct PersonWorkspaceView: View {
                         onOpenPerson: { navigation.selectItem($0) }
                     )
 
+                    // Collapsed by default. Where a detail came from is worth being able to find and
+                    // not worth scrolling past to reach what somebody wrote about a friend.
+                    LinkedContactSection(person: person)
+
                     PersonTimelineSection(
                         entries: timeline,
                         filter: $timelineFilter,

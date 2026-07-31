@@ -295,12 +295,36 @@ struct SettingsView: View {
                 .tabItem { Label("Editor", systemImage: "textformat") }
                 .accessibilityIdentifier(AccessibilityID.Settings.editorTab)
 
+            people
+                .tabItem { Label("People", systemImage: "person.2") }
+                .accessibilityIdentifier(AccessibilityID.People.contactsSettings)
+
             advanced
                 .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
                 .accessibilityIdentifier(AccessibilityID.Settings.advancedTab)
         }
-        .frame(width: 460, height: 300)
+        .frame(width: 500, height: 380)
         .accessibilityIdentifier(AccessibilityID.Settings.root)
+    }
+
+    /// Managing the address book connection.
+    ///
+    /// Its own tab rather than a section under General, because it is the one integration with an
+    /// ongoing state — linked counts, a last-refresh time, conflicts awaiting a decision — and burying
+    /// that under a Trash preference would make it undiscoverable at exactly the moment somebody goes
+    /// looking for why a phone number is out of date.
+    private var people: some View {
+        Form {
+            if case .ready(let services) = environment.state {
+                ContactsSettingsSection()
+                    .appServices(services)
+            } else {
+                Text("Available once your library is open.")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+        }
+        .formStyle(.grouped)
     }
 
     private var general: some View {
@@ -329,7 +353,7 @@ struct SettingsView: View {
 
             Section("Privacy") {
                 Label("This app makes no network requests.", systemImage: "lock.shield")
-                Text("Your library is stored only on this Mac. There is no analytics, no telemetry, and no crash reporting. iCloud sync is not enabled in this version. If you turn on Calendar, Elephruit reads your events and never writes to them.")
+                Text("Your library is stored only on this Mac. There is no analytics, no telemetry, and no crash reporting. iCloud sync is not enabled in this version. If you turn on Calendar, Elephruit reads your events and never writes to them. If you turn on Contacts, it reads your address book and never writes to it — and your notes, reflections, and relationship history are never put into a contact.")
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)

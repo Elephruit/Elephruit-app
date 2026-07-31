@@ -18,6 +18,12 @@ public enum PeopleScope: Hashable, Sendable, Codable {
     case group(id: UUID)
     case duplicates
 
+    /// People whose standard details come from the address book.
+    ///
+    /// A scope rather than a separate list, because the point of the module is that there is **one**
+    /// person record — not an iCloud version and a CRM version. This filters the same list.
+    case fromContacts
+
     public var title: String {
         switch self {
         case .all: "All People"
@@ -27,6 +33,7 @@ public enum PeopleScope: Hashable, Sendable, Codable {
         case .needsFollowUp: "Needs Follow-up"
         case .group: "Group"
         case .duplicates: "Possible Duplicates"
+        case .fromContacts: "From Contacts"
         }
     }
 
@@ -39,6 +46,7 @@ public enum PeopleScope: Hashable, Sendable, Codable {
         case .needsFollowUp: "hand.wave"
         case .group: "person.2.circle"
         case .duplicates: "person.crop.circle.badge.questionmark"
+        case .fromContacts: "person.crop.rectangle.stack"
         }
     }
 
@@ -53,6 +61,7 @@ public enum PeopleScope: Hashable, Sendable, Codable {
         case .needsFollowUp: "Nobody is overdue. Follow-up suggestions are off until you turn them on."
         case .group: "Nobody in this group yet."
         case .duplicates: "No likely duplicates. Contacts from several accounts are matched automatically."
+        case .fromContacts: "Nobody is linked to your address book yet. Import contacts from People settings."
         }
     }
 }
@@ -192,6 +201,14 @@ struct PeopleListView: View {
                 // These have their own views; the list is not the right shape for either.
                 people = []
 
+            case .fromContacts:
+                let linkedIDs = Set(
+                    try services.contactImports.allLinks().compactMap { $0.person?.id }
+                )
+                people = try services.persons
+                    .allPeople(includingPlaceholders: false)
+                    .filter { linkedIDs.contains($0.id) }
+
             case .needsFollowUp:
                 // Off by default, and it stays off: the suggestion machinery answers when asked and
                 // never starts telling the user who they have neglected.
@@ -266,6 +283,10 @@ struct PersonRow: View {
                             .font(.system(size: 8))
                             .foregroundStyle(Theme.Colors.dueToday)
                     }
+
+                    if let state = linkState {
+                        ContactSourceBadge(state: state)
+                    }
                 }
 
                 if let subtitle {
@@ -281,6 +302,12 @@ struct PersonRow: View {
         .frame(minHeight: Theme.Size.rowHeightExpanded)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(subtitle.map { "\(person.displayTitle), \($0)" } ?? person.displayTitle)
+    }
+
+    /// Whether this person's details come from the address book, and whether that still works.
+    private var linkState: ContactSyncState? {
+        guard let services else { return nil }
+        return (try? services.contactImports.link(for: person))?.state
     }
 
     /// Role and organisation if known, otherwise where the relationship stands.

@@ -151,6 +151,15 @@ public enum AccessibilityID {
         public static let cardScan = "people.cardScan"
         public static let contactsSettings = "people.contactsSettings"
         public static let duplicates = "people.duplicates"
+
+        // Bringing the address book in.
+        public static let contactOnboarding = "people.contactOnboarding"
+        public static let contactExplanation = "people.contactExplanation"
+        public static let contactAccessRefused = "people.contactAccessRefused"
+        public static let contactReview = "people.contactReview"
+        public static let contactDuplicate = "people.contactDuplicate"
+        public static let contactImportFinished = "people.contactImportFinished"
+        public static let linkedContactSection = "people.linkedContact"
     }
 
     public enum Home {

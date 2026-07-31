@@ -22,6 +22,9 @@ public struct RootView: View {
     @State private var transferSummary: String?
     @State private var isRepairSheetPresented = false
 
+    /// Held for the window's lifetime so the observation is not cancelled the moment `task` returns.
+    @State private var contactRefresh: ContactRefreshCoordinator?
+
     public init() {}
 
     public var body: some View {
@@ -80,6 +83,15 @@ public struct RootView: View {
             Text(transferSummary ?? "")
         }
         .task {
+            // Watching for address-book changes, so a number edited in Contacts reaches the CRM
+            // without anybody pressing anything. Coalesced inside the coordinator, and a no-op until
+            // the integration is turned on.
+            if let services {
+                let coordinator = ContactRefreshCoordinator(services: services)
+                contactRefresh = coordinator
+                coordinator.start()
+            }
+
             services?.checkForContainmentRepair()
             // Housekeeping, in the same place and on the same terms: looked at once the store is
             // open, reported if there is anything to say, and never acted on unasked.

@@ -292,6 +292,37 @@ struct ContactRefreshTests {
         #expect(link.state == .linked)
     }
 
+    /// The bug the onboarding flow test caught, pinned.
+    ///
+    /// Maya and her housemate share a landline. When Maya's record was deleted, the recovery path
+    /// searched by phone number and re-linked her CRM record to *him* — a silent identity swap in the
+    /// one code path that exists to be careful. The lookup still narrows by contact detail; what it
+    /// now also does is verify the candidate before accepting it.
+    @Test("A housemate sharing a phone number is not mistaken for the person who left")
+    func recoveryDoesNotRelinkToAHousemate() async throws {
+        let housemate = SystemContact(
+            id: "housemate",
+            givenName: "Sam",
+            familyName: "Okonkwo",
+            emailAddresses: [ContactLabelledValue(label: "home", value: "sam@example.com")],
+            // The same household number.
+            phoneNumbers: [ContactLabelledValue(label: "home", value: "512-555-0192")]
+        )
+
+        let fixture = try Fixture(contacts: [Self.maya(), housemate])
+        await fixture.enableContacts()
+
+        let (person, link) = try importOne(Self.maya(), into: fixture)
+        await fixture.provider.remove(identifier: "maya")
+
+        let coordinator = ContactRefreshCoordinator(services: fixture.services)
+        let outcome = await coordinator.refresh(link)
+
+        #expect(outcome == .wentUnavailable, "the right answer is 'I cannot find her', not 'here she is'")
+        #expect(link.contactIdentifier == "maya", "the link must not have been pointed at somebody else")
+        #expect(person.displayTitle == "Maya Chen")
+    }
+
     // MARK: - Permission
 
     @Test("Revoked access marks links unreadable and keeps every person")

@@ -1,4 +1,5 @@
 import ElephruitCore
+import ElephruitIntegrations
 import ElephruitFeatures
 import ElephruitPersistence
 import Foundation
@@ -60,17 +61,43 @@ final class AppEnvironment {
         // A UI test needs a clean, isolated library that leaves the real one untouched.
         let useTemporaryStore = ProcessInfo.processInfo.arguments.contains("-ElephruitUseTemporaryStore")
 
+        // A synthetic address book, for reviewing the Contacts import without handing the app
+        // anybody's real contacts.
+        //
+        // The whole flow — onboarding, permission, review counts, the ambiguous match, refresh, a
+        // deleted contact — is demonstrable against invented people with `example.com` addresses.
+        // Gated on development mode as well as the argument, so a release build cannot be talked
+        // into showing fiction where the user expects their own address book.
+        let useFixtureContacts = isDevelopmentMode
+            && ProcessInfo.processInfo.arguments.contains("-ElephruitUseFixtureContacts")
+
         do {
             let location = useTemporaryStore
                 ? StoreLocation.temporary(name: "UITests")
                 : try StoreLocation.application()
 
             let stack = try PersistenceStack.open(mode: .onDisk(location))
+            // Hoisted and explicitly typed: a ternary between a closure and `nil` in an argument
+            // position defeats the type checker here.
+            let makeFixtureContacts: @Sendable () -> any ContactsProviding = {
+                FixtureContactsProvider(
+                    contacts: ContactFixtures.library,
+                    containers: ContactFixtures.containers,
+                    authorization: .notRequested
+                )
+            }
+            let contactsProvider = useFixtureContacts ? makeFixtureContacts : nil
+
             let services = AppServices(
                 stack: stack,
                 dateProvider: SystemDateProvider(),
-                isDevelopmentMode: isDevelopmentMode
+                isDevelopmentMode: isDevelopmentMode,
+                contactsProvider: contactsProvider
             )
+
+            if useFixtureContacts {
+                Diagnostics.features.info("Using a synthetic address book; no real contacts are read")
+            }
 
             // An intent firing in this process now uses the container that is already open, rather
             // than opening a second writable one on the same SQLite file. `CaptureBridge` was

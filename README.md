@@ -14,9 +14,9 @@ phase plan and its definition of done.
 |---|---|
 | `xcodebuild` Debug and Release | Succeeds, zero warnings |
 | `swift build` (all eight modules) | Succeeds, zero warnings |
-| `swift test` | 829 tests, all passing |
+| `swift test` | 902 tests, all passing |
 | Sandboxed, five entitlements only | Verified against the signed binary |
-| Store opens on disk, all twelve entities materialise | Verified against the running app |
+| Store opens on disk, all fifteen entities materialise | Verified against the running app |
 | Light visual review | Done — People workspace, estimates, groups, duplicates |
 | Dark visual review | **Not done** — see below |
 
@@ -40,6 +40,22 @@ open -n "$(xcodebuild -project Elephruit.xcodeproj -scheme Elephruit -showBuildS
 Sample data then appears under **Settings ▸ Advanced ▸ Load Sample Data**. Switch appearance in
 System Settings ▸ Appearance, and turn on Reduce Motion and Increase Contrast in
 Accessibility ▸ Display to exercise those paths.
+
+### Reviewing the Contacts import without using your own contacts
+
+Add `-ElephruitUseFixtureContacts` to the launch arguments above. The app then reads a **synthetic**
+address book of ten invented people — `example.com` addresses, 555 numbers — that deliberately
+contains the awkward cases: a record matching somebody already in the CRM, two different people
+sharing a surname, a housemate sharing a phone number, a row with no name at all, a birthday with no
+year, and a custom phone label. `CNContactStore` is never constructed.
+
+The whole flow is then reachable from **People ▸ + ▸ Import from Contacts…**, and again from
+**Settings ▸ People**. The flag is ignored outside development mode, so a release build can never be
+talked into showing fiction where somebody expects their own address book.
+
+**To use your real contacts instead**, launch without that flag and turn the integration on in
+Settings ▸ People. Elephruit reads them and never writes: `ContactsProviding` has no write method,
+and `ContactsWriteSafetyTests` fails if the adapter ever reaches past it.
 
 ## Requirements
 
@@ -86,6 +102,8 @@ Read these before changing anything structural.
 | [20 — Expansion slices](docs/20-expansion-slices.md) | The ordered slice list |
 | [21 — People module scope](docs/21-people-module-scope.md) | The five decisions behind the People module |
 | [22 — People module record](docs/22-people-module-record.md) | What was built, the bugs found, what was deliberately left |
+| [23 — Contacts import scope](docs/23-contacts-import-scope.md) | The six decisions behind reading the address book |
+| [24 — Contacts import record](docs/24-contacts-import-record.md) | Permission, provenance, refresh, and two SDK facts worth knowing |
 
 Phase records: [10 — A scope](docs/10-phase-a-scope.md) ·
 [11 — B](docs/11-phase-b-record.md) · [12 — C](docs/12-phase-c-record.md) ·
