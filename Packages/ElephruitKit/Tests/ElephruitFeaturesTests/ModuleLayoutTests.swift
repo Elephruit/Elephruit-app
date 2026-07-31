@@ -332,18 +332,6 @@ struct ModuleLayoutTests {
         #expect(!first)
     }
 
-    /// The shell resets the detector when it applies a module's policy, so the snap that follows is
-    /// not recorded as a preference — which would make the policy permanent and unchangeable.
-    @Test("A reset detector treats the next sample as a starting point")
-    func resetSuppressesTheNextSample() {
-        var detector = PaneDragDetector()
-        _ = detector.isUserDrag(columnWidth: 500, windowWidth: 1600)
-        detector.reset()
-
-        let afterReset = detector.isUserDrag(columnWidth: 900, windowWidth: 1600)
-        #expect(!afterReset)
-    }
-
     @Test("A sub-point difference between layout passes is not a drag")
     func roundingIsNotADrag() {
         var detector = PaneDragDetector()
@@ -351,6 +339,520 @@ struct ModuleLayoutTests {
 
         let jitter = detector.isUserDrag(columnWidth: 500.4, windowWidth: 1600)
         #expect(!jitter)
+    }
+}
+
+/// Every module, at every window size, with and without a selection and an inspector.
+///
+/// ### Why this is a test and not a set of screenshots
+/// Because the fault was never visible in one screenshot. Each pane cleared its own threshold; what
+/// was wrong was the sum, and the sum is only wrong in some combinations of module, window width,
+/// selection and inspector. Enumerating them is the only way to know none of them is the broken one,
+/// and a person cannot enumerate forty-eight layouts by eye.
+///
+/// The three widths are the ones worth naming: the app's own minimum window, a typical laptop, and
+/// a large display like the one the fault was reported from.
+@Suite("Every layout at every size")
+@MainActor
+struct LayoutAuditTests {
+    private var sidebar: CGFloat {
+        SidebarMetrics.minimumWidth(fittingTitles: SidebarRegistry.nonTruncatingTitles)
+    }
+
+    private let windows: [(name: String, width: CGFloat)] = [
+        ("minimum window", 900),
+        ("laptop", 1440),
+        ("large display", 1920),
+    ]
+
+    /// Every layout the shell can be in, named so a failure says which one.
+    private func everyLayout() -> [(name: String, layout: ModuleShellLayout)] {
+        var all: [(String, ModuleShellLayout)] = [("Today and Upcoming", PrimaryNavigationLayout.shell)]
+        all.append(contentsOf: AppModule.displayOrder.map { ($0.title, $0.shellLayout) })
+        return all.map { (name: $0.0, layout: $0.1) }
+    }
+
+    /// The floor below which a content pane is a strip rather than a pane.
+    ///
+    /// No content column in the app declares a minimum under 240. A column narrower than this is the
+    /// symptom that was reported — an editor at 118 points, an empty state wrapping "Nothing
+    /// selected" one syllable to a line.
+    ///
+    /// The sidebar is exempt and is meant to be: it is primary navigation, it is deliberately
+    /// compact, and its own minimum is derived from the titles it must not truncate rather than from
+    /// a number here. It is held to that minimum by the second assertion below.
+    private let readableFloor: CGFloat = 240
+
+    @Test("No pane is ever narrower than a pane can usefully be")
+    func nothingIsAStrip() {
+        for (moduleName, layout) in everyLayout() {
+            for window in windows {
+                for wantsInspector in [true, false] {
+                    for hasSelection in [true, false] {
+                        let widths = layout.widths(
+                            windowWidth: window.width,
+                            sidebarWidth: sidebar,
+                            userWantsInspector: wantsInspector,
+                            hasSelection: hasSelection
+                        )
+
+                        let situation = """
+                            \(moduleName), \(window.name) (\(Int(window.width))pt), \
+                            inspector \(wantsInspector ? "on" : "off"), \
+                            \(hasSelection ? "with" : "without") a selection
+                            """
+
+                        for pane in widths.present {
+                            if pane.column != .sidebar {
+                                #expect(
+                                    pane.width >= readableFloor,
+                                    "\(situation): the \(pane.column) column is \(pane.width)pt — \(widths)"
+                                )
+                            }
+                            #expect(
+                                pane.width >= layout.minimumWidth(of: pane.column, sidebarWidth: sidebar),
+                                "\(situation): the \(pane.column) column is below its own declared minimum"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test("The columns never add up to more window than there is")
+    func nothingOverflows() {
+        for (moduleName, layout) in everyLayout() {
+            for window in windows {
+                for wantsInspector in [true, false] {
+                    let widths = layout.widths(
+                        windowWidth: window.width,
+                        sidebarWidth: sidebar,
+                        userWantsInspector: wantsInspector,
+                        hasSelection: true
+                    )
+
+                    #expect(
+                        widths.total <= window.width,
+                        "\(moduleName) at \(Int(window.width))pt asks for \(widths.total)pt — \(widths)"
+                    )
+                }
+            }
+        }
+    }
+
+    /// Requirement, stated as a test: an inspector that will not fit is not shown at all.
+    @Test("A window too narrow for a usable inspector has none")
+    func theInspectorGoesRatherThanShrinks() {
+        for (moduleName, layout) in everyLayout() where layout.inspector.isAvailable {
+            let widths = layout.widths(
+                windowWidth: 900,
+                sidebarWidth: sidebar,
+                userWantsInspector: true,
+                hasSelection: true
+            )
+
+            #expect(
+                widths.inspector == nil,
+                "\(moduleName) squeezes an inspector into the minimum window instead of hiding it"
+            )
+        }
+    }
+
+    /// The complaint about proportions: moving between modules should not reshape the window.
+    ///
+    /// Not identical — People really does want a wider profile than Notes wants an editor, and that
+    /// is the point of a per-module policy — but within sight of each other, which "1,170 here and
+    /// 340 there" was not.
+    ///
+    /// Only the modules that are the same *shape* are compared. A canvas — Calendar, Time — is one
+    /// pane that is the module, so its middle column is the window and is supposed to be; holding it
+    /// to the width of a contact list would be asserting the opposite of what the policy says.
+    @Test("Switching between list modules does not reshape the window")
+    func proportionsAreComparableAcrossModules() {
+        let lists = everyLayout()
+            .filter { $0.layout.detail.isAvailable }
+            .map { entry in
+                (
+                    entry.name,
+                    entry.layout.widths(
+                        windowWidth: 1440,
+                        sidebarWidth: sidebar,
+                        userWantsInspector: false,
+                        hasSelection: true
+                    ).primary
+                )
+            }
+
+        guard let narrowest = lists.min(by: { $0.1 < $1.1 }),
+              let widest = lists.max(by: { $0.1 < $1.1 })
+        else {
+            Issue.record("No layouts to compare")
+            return
+        }
+
+        #expect(
+            widest.1 <= narrowest.1 * 2,
+            "\(widest.0)'s list is \(widest.1)pt and \(narrowest.0)'s is \(narrowest.1)pt — that is a different window, not a different module"
+        )
+    }
+
+    /// A canvas module has no editor by design, and that must stay a deliberate absence rather than
+    /// becoming a strip when the arithmetic changes.
+    @Test("A canvas module gets its canvas and no empty third column")
+    func canvasModulesKeepTheirCanvas() {
+        for module in [AppModule.calendar, .time] {
+            let widths = module.shellLayout.widths(
+                windowWidth: 1920,
+                sidebarWidth: sidebar,
+                userWantsInspector: false,
+                hasSelection: false
+            )
+
+            #expect(widths.detail == nil, "\(module.title) has grown a detail column")
+            #expect(
+                widths.primary > 900,
+                "\(module.title) is a canvas and should have the window — it has \(widths.primary)pt"
+            )
+        }
+    }
+}
+
+/// What a relaunch does with widths that were never choices.
+///
+/// These are not invented numbers. They are what was actually in the user's preferences when this
+/// was reported, written by a drag detector that read the frames of the shell's own animations as
+/// deliberate resizes — a Notes list at 1,171.5 points against a declared maximum of 480, and an
+/// editor at 118.5 against a minimum of 420. That detector is fixed, but what it wrote survives a
+/// relaunch, so the store has to recognise a value that could never have come from a drag.
+@Suite("Widths that could not have been chosen")
+@MainActor
+struct PersistedWidthHealingTests {
+    private func defaults() -> UserDefaults {
+        UserDefaults(suiteName: "PersistedWidthHealing-\(UUID().uuidString)") ?? .standard
+    }
+
+    private let key = "layout.moduleColumnWidths"
+
+    @Test("A width beyond the module's own maximum is not restored")
+    func impossibleWidthsAreDiscarded() {
+        let store = defaults()
+        store.set(
+            [
+                "notes": ["primary": 1171.5, "detail": 1101.5],
+                "_primary": ["primary": 1382.5, "detail": 118.5],
+            ],
+            forKey: key
+        )
+
+        let layout = ModuleLayoutStore(defaults: store)
+
+        // Each falls back to the module's own ideal rather than to the impossible stored number.
+        #expect(layout.width(of: .primary, in: .notes, available: 2000) == AppModule.notes.shellLayout.primary.ideal)
+        #expect(layout.width(of: .detail, in: .notes, available: 2000) == AppModule.notes.shellLayout.detail.width.ideal)
+        #expect(layout.width(of: .primary, in: nil, available: 2000) == PrimaryNavigationLayout.shell.primary.ideal)
+        #expect(layout.width(of: .detail, in: nil, available: 2000) == PrimaryNavigationLayout.shell.detail.width.ideal)
+    }
+
+    /// Healing happens on disk too, or every launch would rediscover the same rubbish.
+    @Test("The discarded widths do not survive the launch that rejected them")
+    func healingIsWrittenBack() {
+        let store = defaults()
+        store.set(["notes": ["primary": 1171.5]], forKey: key)
+
+        _ = ModuleLayoutStore(defaults: store)
+
+        let remaining = store.dictionary(forKey: key) as? [String: [String: Double]]
+        #expect(remaining?["notes"]?["primary"] == nil)
+    }
+
+    /// The point is to reject what cannot have been a drag, not to forget what was one.
+    @Test("A width the user really could have dragged to is kept")
+    func legitimateWidthsSurvive() {
+        let store = defaults()
+        let chosen = AppModule.notes.shellLayout.primary.maximum ?? 480
+        store.set(["notes": ["primary": Double(chosen) - 20]], forKey: key)
+
+        let layout = ModuleLayoutStore(defaults: store)
+
+        #expect(layout.width(of: .primary, in: .notes, available: 2000) == chosen - 20)
+    }
+
+    /// A width dragged on a larger display is still a preference, and still comes back whole when
+    /// there is room for it — that rule is about the *window*, and is deliberately not touched here.
+    @Test("A width from a bigger display is kept and clamped to today's room")
+    func widthsFromLargerDisplaysAreStillHonoured() {
+        let store = defaults()
+        store.set(["people": ["detail": 800.0]], forKey: key)
+
+        let layout = ModuleLayoutStore(defaults: store)
+
+        #expect(layout.width(of: .detail, in: .people, available: 2000) == 800)
+        #expect(layout.width(of: .detail, in: .people, available: 500) == 500)
+    }
+}
+
+/// Whether the columns fit *together*, which is the question nobody was asking.
+///
+/// Every pane had a threshold of its own — "am I allowed at this window width?" — and every pane
+/// could answer yes while the four of them added up to more window than there was. The result was
+/// four columns each above its own bar, squeezed: a list at 1,170 points against a declared maximum
+/// of 480, an editor at 118 against a minimum of 420, and an empty state wrapping one character to
+/// a line.
+@Suite("Columns that fit together")
+@MainActor
+struct ShellFitTests {
+    /// What the sidebar takes from the others at the current text size.
+    private var sidebar: CGFloat {
+        SidebarMetrics.minimumWidth(fittingTitles: SidebarRegistry.nonTruncatingTitles)
+    }
+
+    /// The app's own minimum window — see `ElephruitApp`'s `.frame(minWidth: 900)`.
+    private let minimumWindow: CGFloat = 900
+
+    /// The one that decides whether the numbers in `ModuleLayoutPolicy` are coherent at all.
+    ///
+    /// If this fails, some module has asked for more than the smallest window the app will open at,
+    /// and somebody using that window gets no editor — which is a decision to make deliberately
+    /// rather than to discover.
+    @Test("Every module holds a sidebar, a list and an editor at the minimum window size")
+    func everyModuleFitsTheSmallestWindow() {
+        for module in AppModule.displayOrder {
+            let layout = module.shellLayout
+            guard layout.detail.isAvailable else { continue }
+
+            let needed = sidebar + layout.primary.minimum + layout.detail.width.minimum
+            #expect(
+                needed <= minimumWindow,
+                "\(module.title) needs \(needed) points before it has an editor, and the window can be \(minimumWindow)"
+            )
+
+            let fitted = layout.columns(fittingWindowOfWidth: minimumWindow, sidebarWidth: sidebar)
+            #expect(fitted.contains(.detail), "\(module.title) loses its editor at the minimum window")
+        }
+    }
+
+    @Test("Primary navigation holds all three at the minimum window size too")
+    func primaryNavigationFitsTheSmallestWindow() {
+        let layout = PrimaryNavigationLayout.shell
+        let fitted = layout.columns(fittingWindowOfWidth: minimumWindow, sidebarWidth: sidebar)
+
+        #expect(fitted.contains(.primary))
+        #expect(fitted.contains(.detail), "Today and Upcoming lose their editor at the minimum window")
+    }
+
+    /// The inspector goes first and the editor second, rather than everything narrowing at once.
+    @Test("A narrowing window gives up the inspector before the editor")
+    func dropOrder() {
+        let layout = AppModule.notes.shellLayout
+
+        let roomy = layout.columns(fittingWindowOfWidth: 1600, sidebarWidth: sidebar)
+        #expect(roomy.contains(.detail))
+        #expect(roomy.contains(.inspector))
+
+        // Below the inspector's threshold, above the editor's.
+        let middling = layout.columns(fittingWindowOfWidth: 1000, sidebarWidth: sidebar)
+        #expect(middling.contains(.detail))
+        #expect(!middling.contains(.inspector), "The inspector is what a narrow window gives up first")
+
+        let tight = layout.columns(fittingWindowOfWidth: 700, sidebarWidth: sidebar)
+        #expect(!tight.contains(.detail))
+        #expect(!tight.contains(.inspector))
+        #expect(tight.contains(.primary), "The list is never what goes")
+    }
+
+    /// The arithmetic the whole fault came down to: a column was being offered the window rather
+    /// than what the window had left.
+    @Test("A column is offered the window less what the others cannot give up")
+    func roomAccountsForEveryVisibleColumn() {
+        let layout = AppModule.notes.shellLayout
+        let visible: Set<ModuleShellLayout.Column> = [.sidebar, .primary, .detail, .inspector]
+
+        let forList = layout.room(
+            for: .primary, inWindowOfWidth: 1400, sidebarWidth: sidebar, showing: visible
+        )
+
+        let others = sidebar + layout.detail.width.minimum + layout.inspector.width.minimum
+        #expect(forList == 1400 - others)
+        #expect(forList < 1400, "The list was being offered the whole window")
+    }
+
+    @Test("A column hidden from the shell takes no room from the rest")
+    func hiddenColumnsCostNothing() {
+        let layout = AppModule.notes.shellLayout
+
+        let withInspector = layout.room(
+            for: .primary,
+            inWindowOfWidth: 1400,
+            sidebarWidth: sidebar,
+            showing: [.sidebar, .primary, .detail, .inspector]
+        )
+        let without = layout.room(
+            for: .primary,
+            inWindowOfWidth: 1400,
+            sidebarWidth: sidebar,
+            showing: [.sidebar, .primary, .detail]
+        )
+
+        #expect(without == withInspector + layout.inspector.width.minimum)
+    }
+
+    /// A column is never offered less than it needs, even in a window that cannot hold everything —
+    /// dropping a column is the shell's answer to that, not squeezing one below its minimum.
+    @Test("Room never falls below the column's own minimum")
+    func roomNeverGoesBelowTheMinimum() {
+        let layout = AppModule.people.shellLayout
+
+        let room = layout.room(
+            for: .detail,
+            inWindowOfWidth: 400,
+            sidebarWidth: sidebar,
+            showing: [.sidebar, .primary, .detail, .inspector]
+        )
+
+        #expect(room == layout.detail.width.minimum)
+    }
+
+    /// Resolving against the room rather than the window is what actually changes the answer.
+    @Test("A stored width is bounded by the room, not by the window")
+    func storedWidthsRespectTheRoom() {
+        let layout = AppModule.notes.shellLayout
+        let visible: Set<ModuleShellLayout.Column> = [.sidebar, .primary, .detail]
+        let room = layout.room(
+            for: .detail, inWindowOfWidth: 1100, sidebarWidth: sidebar, showing: visible
+        )
+
+        // The user dragged the editor wide on a much larger display.
+        let resolved = layout.detail.width.resolved(stored: 900, available: room)
+
+        #expect(resolved <= room)
+        #expect(resolved >= layout.detail.width.minimum)
+        #expect(
+            layout.detail.width.resolved(stored: 900, available: 1100) > resolved,
+            "Resolving against the window is what let one column take the others' space"
+        )
+    }
+}
+
+/// What reaches the store, and — the point of the type — what does not.
+///
+/// `PaneDragDetector` can only compare two samples. Everything about *which* two it is shown lives
+/// in the recorder, and that is where both faults were: a stream of widths acted on one frame at a
+/// time, and a sidebar collapse recorded as if somebody had dragged the divider.
+@MainActor
+@Suite("Pane width recorder")
+struct PaneWidthRecorderTests {
+    /// The one that was making the window sluggish. Every frame of an animation used to reach the
+    /// store, and every write invalidated the shell that produced the next frame.
+    @Test("A stream of widths produces at most one answer")
+    func samplesAreCoalesced() {
+        let recorder = PaneWidthRecorder()
+        var recorded: [(ModuleShellLayout.Column, CGFloat)] = []
+        recorder.onDrag = { column, width, _ in recorded.append((column, width)) }
+
+        // A baseline, then a drag through eight intermediate widths.
+        recorder.sample(500, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+
+        for width in stride(from: CGFloat(510), through: 580, by: 10) {
+            recorder.sample(width, of: .primary, windowWidth: 1600)
+        }
+        recorder.settleNow()
+
+        #expect(recorded.count == 1, "A drag is one preference, not one per frame")
+        #expect(recorded.first?.1 == 580, "The width that matters is the one it came to rest at")
+    }
+
+    /// Hiding the sidebar widens the pane beside it without the window changing size, which is
+    /// exactly what the drag test cannot tell apart on its own. Left unsaid, collapsing the sidebar
+    /// silently rewrote the module's stored width to whatever the animation happened to pass through.
+    @Test("A width the shell caused is not stored")
+    func shellMovesAreNotDrags() {
+        let recorder = PaneWidthRecorder()
+        var recorded: [CGFloat] = []
+        recorder.onDrag = { _, width, _ in recorded.append(width) }
+
+        recorder.sample(500, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+
+        recorder.expectShellMove(of: [.primary])
+        recorder.sample(720, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+
+        #expect(recorded.isEmpty)
+    }
+
+    /// One warning covers one settle. Collapsing the sidebar must not stop the recorder listening
+    /// for the rest of the session.
+    @Test("A drag after the shell has settled is still a drag")
+    func expectationDoesNotOutliveTheSettle() {
+        let recorder = PaneWidthRecorder()
+        var recorded: [CGFloat] = []
+        recorder.onDrag = { _, width, _ in recorded.append(width) }
+
+        recorder.sample(500, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+        recorder.expectShellMove(of: [.primary])
+        recorder.sample(720, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+
+        recorder.sample(760, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+
+        #expect(recorded == [760])
+    }
+
+    /// The case that decides why an expectation expires at the settle rather than at the next
+    /// sample: two modules whose policies agree move nothing, so no sample ever arrives, and an
+    /// expectation left lying about would swallow the user's next drag instead.
+    @Test("A shell move that moves nothing does not consume the next drag")
+    func unmovedShellMoveIsForgotten() {
+        let recorder = PaneWidthRecorder()
+        var recorded: [CGFloat] = []
+        recorder.onDrag = { _, width, _ in recorded.append(width) }
+
+        recorder.sample(500, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+
+        recorder.expectShellMove(of: [.primary])
+        recorder.settleNow() // Nothing moved, so nothing was sampled.
+
+        recorder.sample(560, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+
+        #expect(recorded == [560])
+    }
+
+    @Test("A column the window resized is not a drag")
+    func windowResizeIsNotADrag() {
+        let recorder = PaneWidthRecorder()
+        var recorded: [CGFloat] = []
+        recorder.onDrag = { _, width, _ in recorded.append(width) }
+
+        recorder.sample(500, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+        recorder.sample(560, of: .primary, windowWidth: 1720)
+        recorder.settleNow()
+
+        #expect(recorded.isEmpty)
+    }
+
+    @Test("Each column is judged on its own")
+    func columnsAreIndependent() {
+        let recorder = PaneWidthRecorder()
+        var recorded: [ModuleShellLayout.Column] = []
+        recorder.onDrag = { column, _, _ in recorded.append(column) }
+
+        recorder.sample(500, of: .primary, windowWidth: 1600)
+        recorder.sample(700, of: .detail, windowWidth: 1600)
+        recorder.settleNow()
+
+        recorder.expectShellMove(of: [.detail])
+        recorder.sample(560, of: .primary, windowWidth: 1600)
+        recorder.sample(760, of: .detail, windowWidth: 1600)
+        recorder.settleNow()
+
+        #expect(recorded == [.primary], "An expectation about one column must not cover the other")
     }
 }
 

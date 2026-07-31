@@ -56,6 +56,12 @@ extension Theme {
         public static let sidebarIdealWidth: CGFloat = 224
         public static let sidebarMaxWidth: CGFloat = 320
 
+        /// What to assume a window is before it has been measured.
+        ///
+        /// The size the app opens at — see `ElephruitApp`'s `.defaultSize`. A window of no width
+        /// holds no columns, so assuming zero for one frame drops the editor and then puts it back.
+        public static let assumedWindowWidth: CGFloat = 1180
+
         public static let listMinWidth: CGFloat = 260
         public static let listIdealWidth: CGFloat = 340
 

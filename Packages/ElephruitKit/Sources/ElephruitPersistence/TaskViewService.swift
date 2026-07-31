@@ -143,6 +143,88 @@ public final class TaskViewService {
         }
     }
 
+    // MARK: - Everything a workspace needs, once
+
+    /// A system view's grouping and its tasks, from one pass over the library.
+    ///
+    /// A workspace needs both: the grouping to draw the sections, and the flat list to act on a
+    /// selection and to say how many there are.
+    ///
+    /// Not `Sendable`, and cannot be: it holds `Item`, which belongs to the main actor's context.
+    /// That is the same boundary every other answer from this service respects.
+    public struct Contents {
+        /// The sections, for the views that have them.
+        public var sections: [TaskSectionGroup] = []
+
+        /// The agenda bands. Upcoming only, which groups by date rather than by heading.
+        public var agenda: [AgendaGroup] = []
+
+        /// Every task the view names.
+        public var tasks: [Item] = []
+    }
+
+    /// Everything the Tasks workspace draws for one destination.
+    ///
+    /// ### Why this exists rather than two calls
+    /// Because it was two calls. The workspace asked `today()` for the sections and then
+    /// `tasks(in: .today)` for the flat list, and each of those fetches every open task and runs the
+    /// scheduling rules over all of it — so arriving in the module traversed the library twice to
+    /// answer one question. At five thousand open tasks that is about seven hundred milliseconds of
+    /// blocked main thread; at a few hundred, which is a heavy real library, it is the difference
+    /// between two dropped frames and four.
+    ///
+    /// One fetch, and the flat list comes out of the grouping that was just built rather than being
+    /// derived a second time from scratch. Where a view's flat list is genuinely a different
+    /// question from its grouping — Upcoming asks over a longer window than the agenda shows, the
+    /// log lists tasks it has no day to file under — the second question is still asked, but of the
+    /// rows already in hand.
+    public func contents(of view: TaskSystemView) throws(AppError) -> Contents {
+        switch view {
+        case .today:
+            let open = try openTasks()
+            let sections = todaySections(from: open)
+            return Contents(sections: sections, tasks: tasks(named: sections, from: open))
+
+        case .anytime:
+            let open = try openTasks()
+            let sections = anytimeSections(from: open)
+            return Contents(sections: sections, tasks: tasks(named: sections, from: open))
+
+        case .someday:
+            let open = try openTasks()
+            let sections = somedaySections(from: open)
+            return Contents(sections: sections, tasks: tasks(named: sections, from: open))
+
+        case .upcoming:
+            let open = try openTasks()
+            return Contents(
+                agenda: upcomingGroups(from: open, days: 120, horizon: .standard),
+                // Not the agenda's own window: an agenda shows four months and the list is every
+                // dated obligation there is. Two questions, one fetch.
+                tasks: open.filter { belongs($0, to: .upcoming) }
+            )
+
+        case .completed:
+            // The flat list is every resolved task; the sections skip any that carry no date to be
+            // filed under, so it cannot be derived from them.
+            let resolved = try resolvedTasks(limit: 500)
+            return Contents(sections: logbookSections(from: resolved), tasks: resolved)
+
+        case .inbox, .flagged, .waiting, .all:
+            let tasks = try self.tasks(in: view)
+            return Contents(
+                sections: [TaskSectionGroup(heading: .none, taskIDs: tasks.map(\.id))],
+                tasks: tasks
+            )
+        }
+    }
+
+    /// The tasks a set of sections names, in the order the sections name them.
+    private func tasks(named sections: [TaskSectionGroup], from pool: [Item]) -> [Item] {
+        let byID = Dictionary(pool.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return sections.flatMap(\.taskIDs).compactMap { byID[$0] }
+    }
+
     /// The two counts the sidebar shows.
     ///
     /// Only two, deliberately. A number beside every destination turns a sidebar into a scoreboard.
@@ -159,7 +241,10 @@ public final class TaskViewService {
     /// the thing you have been avoiding longest. The plan is in the user's own order, which is
     /// ``Item/todayOrder`` and not the order of any project.
     public func today() throws(AppError) -> [TaskSectionGroup] {
-        let open = try openTasks()
+        todaySections(from: try openTasks())
+    }
+
+    private func todaySections(from open: [Item]) -> [TaskSectionGroup] {
         var buckets: [TodaySection: [Item]] = [:]
 
         for task in open {
@@ -242,7 +327,10 @@ public final class TaskViewService {
     /// Manual order is preserved inside every group, because the order of a project's steps is
     /// information and re-sorting it by date would throw that away.
     public func anytime() throws(AppError) -> [TaskSectionGroup] {
-        let open = try openTasks()
+        anytimeSections(from: try openTasks())
+    }
+
+    private func anytimeSections(from open: [Item]) -> [TaskSectionGroup] {
         let available = open.filter {
             TaskViewRules.isInAnytime($0.taskFacts(), now: now, calendar: calendar)
         }
@@ -251,8 +339,11 @@ public final class TaskViewService {
 
     /// Parked work.
     public func someday() throws(AppError) -> [TaskSectionGroup] {
-        let open = try openTasks()
-        return groupByContainer(open.filter { $0.isSomeday })
+        somedaySections(from: try openTasks())
+    }
+
+    private func somedaySections(from open: [Item]) -> [TaskSectionGroup] {
+        groupByContainer(open.filter { $0.isSomeday })
     }
 
     // MARK: - Upcoming
@@ -261,7 +352,14 @@ public final class TaskViewService {
     ///
     /// - Parameter days: How far ahead to look. Beyond this the agenda would be mostly empty bands.
     public func upcoming(days: Int = 120, horizon: AgendaHorizon = .standard) throws(AppError) -> [AgendaGroup] {
-        let open = try openTasks()
+        upcomingGroups(from: try openTasks(), days: days, horizon: horizon)
+    }
+
+    private func upcomingGroups(
+        from open: [Item],
+        days: Int,
+        horizon: AgendaHorizon
+    ) -> [AgendaGroup] {
         let window = dateProvider.startOfToday..<dateProvider.startOfDay(daysFromToday: days)
 
         let entries = open.flatMap {
@@ -275,8 +373,10 @@ public final class TaskViewService {
 
     /// Finished and abandoned work, grouped by the day it was resolved.
     public func logbook(limit: Int = 500) throws(AppError) -> [TaskSectionGroup] {
-        let resolved = try resolvedTasks(limit: limit)
+        logbookSections(from: try resolvedTasks(limit: limit))
+    }
 
+    private func logbookSections(from resolved: [Item]) -> [TaskSectionGroup] {
         var byDay: [Date: [Item]] = [:]
         for task in resolved {
             guard let stamp = task.completedAt ?? task.cancelledAt else { continue }
