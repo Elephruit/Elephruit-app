@@ -27,6 +27,9 @@ public struct ItemDetailView: View {
     @State private var pendingInsertion: WikiLinkInsertion?
     @State private var pendingSave = PendingSave()
 
+    /// Identifies this editor to the navigation model, so a window with two of them can hold two.
+    @State private var editorID = UUID()
+
     public init(navigation: NavigationModel) {
         self.navigation = navigation
     }
@@ -52,7 +55,17 @@ public struct ItemDetailView: View {
             }
         }
         .task(id: navigation.selectedItemID) { load() }
-        .onDisappear { flushPendingSave() }
+        // Registered so that *any* navigation flushes first, not only a change of item.
+        //
+        // `task(id:)` already covers changing which item is shown. It does not cover leaving a
+        // module, following a deep link, or a menu command that moves the window somewhere the
+        // editor is torn down rather than reloaded — and those are exactly the cases where a
+        // debounced half-second of typing had nowhere to go.
+        .task { navigation.registerEditFlush(editorID) { flushPendingSave() } }
+        .onDisappear {
+            navigation.unregisterEditFlush(editorID)
+            flushPendingSave()
+        }
         // `scenePhase` does not report a macOS quit, so the notification is the only hook that
         // fires before the process goes. `NSSupportsSuddenTermination` is already `false` for
         // exactly this reason — the plist half of the promise was kept and this half was not.
