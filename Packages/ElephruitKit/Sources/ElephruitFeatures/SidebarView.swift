@@ -161,7 +161,7 @@ public struct SidebarView: View {
         HStack(spacing: SidebarMetrics.iconGap) {
             Image(systemName: row.symbolName)
                 .frame(width: SidebarMetrics.iconColumn)
-                .foregroundStyle(row.colorName == nil ? Color.secondary : Theme.Palette.color(named: row.colorName))
+                .rowTint(row.colorName == nil ? Theme.Colors.secondaryText : Theme.Palette.color(named: row.colorName))
                 .accessibilityHidden(true)
 
             Text(row.title)
@@ -186,7 +186,7 @@ public struct SidebarView: View {
         Text("\(count)")
             .font(Theme.Text.metadata)
             .monospacedDigit()
-            .foregroundStyle(Theme.Colors.tertiaryText)
+            .rowForeground(.tertiary)
             .accessibilityHidden(true)
     }
 
