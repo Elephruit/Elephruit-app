@@ -69,7 +69,7 @@ they were removed from the staleness rule.
 
 | Check | Result |
 |---|---|
-| `swift test` | **829 tests pass** (from 631) |
+| `swift test` | **828 tests pass** (from 631), three consecutive clean full runs |
 | `xcodebuild` Debug and Release | Succeed, zero warnings |
 | Schema 0.0.4 migration from a real pre-`TimeEntry` store | Passes — `RealStoreMigrationTests` |
 | App launches, migrates, loads the fixture, renders | Verified on screen |
@@ -118,5 +118,8 @@ of this that stays true next month; it is not a substitute for looking.
    exist; what is missing is the extraction, and it should be deterministic first.
 3. **Per-attribute shelf lives in a preference.** They are constants today; a user who checks in with
    people twice a year wants different numbers from one who does it weekly.
-4. **`PendingSaveTests` flakes under parallel load** and passes in isolation. Pre-existing, unrelated
-   to this slice, and worth an injected clock rather than a real delay.
+4. **Injected clocks for the remaining timing tests.** `PendingSaveTests` was fixed here — it slept
+   a fixed 120 ms after a 10 ms debounce, which asserts how busy the machine is rather than how
+   `PendingSave` behaves, and adding 23 store-building tests to the same target was enough to break
+   it. It now polls for the condition. Anything else asserting on a real delay has the same latent
+   fault.
