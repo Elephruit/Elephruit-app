@@ -434,6 +434,13 @@ public struct CalendarWorkspaceView: View {
         case "n", "N":
             quickEntryStart = defaultStart(workspace: workspace, services: services)
             return .handled
+        case "s", "S":
+            // Cycling rather than opening a menu: switching context is something done often and
+            // quickly, and "everything" is part of the cycle rather than somewhere you have to
+            // reach for the mouse to get back to.
+            let next = services.calendar.setAfterActive()
+            Task { await services.calendar.activate(setID: next?.id) }
+            return .handled
         case "1"..."6":
             guard let index = Int(press.characters),
                   index - 1 < CalendarViewKind.allCases.count
@@ -544,8 +551,15 @@ struct CalendarToolbar: View {
                 .lineLimit(1)
                 .accessibilityAddTraits(.isHeader)
 
+            if calendar.isLoading {
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel("Reading your calendar")
+            }
+
             Spacer(minLength: Theme.Spacing.small)
 
+            calendarVisibility
             setSwitcher
             viewSwitcher
 
@@ -600,6 +614,57 @@ struct CalendarToolbar: View {
         .fixedSize()
         .accessibilityLabel("Calendar view")
         .accessibilityIdentifier(AccessibilityID.Calendar.viewSwitcher)
+    }
+
+    /// Switching individual calendars off for now.
+    ///
+    /// Separate from the set switcher because they answer different questions: a set is a
+    /// configuration somebody composed, and this is the thing everybody does without thinking about
+    /// it. Ticking a calendar off here does not edit a saved set.
+    private var calendarVisibility: some View {
+        Menu {
+            ForEach(calendar.calendarsByAccount, id: \.account) { group in
+                Section(group.account) {
+                    ForEach(group.calendars) { entry in
+                        Button {
+                            Task { await calendar.toggleVisibility(of: entry.id) }
+                        } label: {
+                            Label(
+                                entry.title,
+                                systemImage: calendar.isVisible(entry) ? "checkmark.circle.fill" : "circle"
+                            )
+                        }
+                        .disabled(!inActiveSet(entry))
+                        .help(inActiveSet(entry)
+                            ? entry.title
+                            : "Not in the “\(calendar.activeSet?.name ?? "")” set")
+                    }
+                }
+            }
+
+            if !calendar.hiddenCalendarIdentifiers.isEmpty {
+                Divider()
+                Button("Show All Calendars") {
+                    Task { await calendar.showAllCalendars() }
+                }
+            }
+        } label: {
+            Image(systemName: calendar.hiddenCalendarIdentifiers.isEmpty
+                ? "line.3.horizontal.decrease.circle"
+                : "line.3.horizontal.decrease.circle.fill")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Which calendars are showing")
+        .accessibilityLabel("Calendar visibility")
+    }
+
+    /// Whether a calendar is in the active set's scope at all.
+    private func inActiveSet(_ entry: CalendarInfo) -> Bool {
+        guard let scope = calendar.activeSet?.calendarIdentifiers(among: calendar.calendars) else {
+            return true
+        }
+        return scope.contains(entry.id)
     }
 
     private var setSwitcher: some View {
