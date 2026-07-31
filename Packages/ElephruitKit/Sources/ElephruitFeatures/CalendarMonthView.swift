@@ -124,7 +124,15 @@ struct CalendarMonthView: View {
             onOpen: onOpen
         )
         .contentShape(.rect)
-        .onTapGesture { focusedDay = day }
+        // One single-tap gesture, not two. A second `.onTapGesture` on the same view does not add
+        // behaviour — it replaces the first, silently — so the version with both had a line setting
+        // the keyboard focus that never ran.
+        .onTapGesture {
+            focusedDay = day
+            // A cell that is hiding events opens its popover on a click, rather than asking somebody
+            // to hit the "+2 more" text exactly.
+            if dayEvents.count > density.monthCellEventLimit { popoverDay = day }
+        }
         .simultaneousGesture(TapGesture(count: 2).onEnded { onOpenDay(day) })
         .popover(isPresented: popoverBinding(for: day), arrowEdge: .trailing) {
             DayDetailPopover(
@@ -143,12 +151,6 @@ struct CalendarMonthView: View {
             if dayEvents.count > density.monthCellEventLimit {
                 Button("Show All \(dayEvents.count)") { popoverDay = day }
             }
-        }
-        .onTapGesture(count: 1) {
-            focusedDay = day
-            // The overflow disclosure: a cell that is hiding events opens its popover on a click
-            // rather than requiring the user to find the "+2 more" text exactly.
-            if dayEvents.count > density.monthCellEventLimit { popoverDay = day }
         }
     }
 
