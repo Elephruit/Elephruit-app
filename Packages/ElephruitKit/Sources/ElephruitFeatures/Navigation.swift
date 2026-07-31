@@ -327,6 +327,13 @@ public final class NavigationModel {
     /// Whether the list is currently showing search results rather than its usual contents.
     public private(set) var isSearchActive = false
 
+    /// A new value for every explicit request to focus search, including while search is active.
+    ///
+    /// A Boolean describes mode but cannot describe the event “focus it again.” Without this, ⌘F
+    /// after Escape cleared or dismissed a field assigned `true` to an already-true value, so no
+    /// observer ran and focus stayed wherever it was.
+    public private(set) var searchFocusRequest = 0
+
     /// The live query while search is active.
     public var searchQuery = ""
 
@@ -539,13 +546,15 @@ public final class NavigationModel {
 
     /// Enters search, offering the previous query back.
     public func beginSearch(clearingQuery: Bool = false) {
+        searchFocusRequest &+= 1
+
         if !isSearchActive {
             selectionBeforeSearch = selectedItemID
             isSearchActive = true
+            searchQuery = clearingQuery ? "" : lastSearchQuery
+            shouldSelectSearchQuery = !searchQuery.isEmpty
         }
 
-        searchQuery = clearingQuery ? "" : lastSearchQuery
-        shouldSelectSearchQuery = !searchQuery.isEmpty
         focusedPane = .list
     }
 
