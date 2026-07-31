@@ -209,8 +209,25 @@ final class AppEnvironment {
 
         hotKeyResults[.quickCapture] = result
 
-        if let explanation = result.explanation {
-            Diagnostics.shell.info("Global shortcut not taken: \(explanation, privacy: .public)")
+        // The calendar's quick entry, from anywhere.
+        //
+        // A second global shortcut rather than a mode on the first, because the two produce
+        // different things and somebody reaching for one is not thinking about the other. A person
+        // mid-conversation who needs to put a meeting in the calendar should not have to open a
+        // capture field and then decide what kind of thing they are capturing.
+        let eventResult = hotKeys.register(
+            .newEvent,
+            binding: services.shortcuts.binding(for: .newEvent)
+        ) { [weak self] in
+            self?.openCalendarQuickEntry()
+        }
+
+        hotKeyResults[.newEvent] = eventResult
+
+        for outcome in [result, eventResult] {
+            if let explanation = outcome.explanation {
+                Diagnostics.shell.info("Global shortcut not taken: \(explanation, privacy: .public)")
+            }
         }
     }
 }
