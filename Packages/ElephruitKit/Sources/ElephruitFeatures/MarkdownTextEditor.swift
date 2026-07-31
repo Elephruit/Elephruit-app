@@ -21,6 +21,14 @@ public struct MarkdownTextEditor: NSViewRepresentable {
     /// Called when the caret moves, with the partial `[[…]]` link under it, if any.
     private let onCompletionContextChange: (WikiLinkCompletionContext?) -> Void
 
+    /// Called when the editor gains or loses first responder.
+    ///
+    /// SwiftUI's `@FocusState` cannot see inside an `NSViewRepresentable`, and the surface around
+    /// this editor needs to know: the focus ring, the placeholder and the height it grows to on
+    /// being clicked into are all answers to *is the caret in here*. Without this the ring would be
+    /// drawn from whether the field had been clicked recently, which is not the same question.
+    private let onFocusChange: (Bool) -> Void
+
     /// A completion the caller wants inserted. Cleared by the coordinator once applied.
     @Binding private var pendingInsertion: WikiLinkInsertion?
 
@@ -32,13 +40,15 @@ public struct MarkdownTextEditor: NSViewRepresentable {
         pendingInsertion: Binding<WikiLinkInsertion?> = .constant(nil),
         isMonospaced: Bool = false,
         isEditable: Bool = true,
-        onCompletionContextChange: @escaping (WikiLinkCompletionContext?) -> Void = { _ in }
+        onCompletionContextChange: @escaping (WikiLinkCompletionContext?) -> Void = { _ in },
+        onFocusChange: @escaping (Bool) -> Void = { _ in }
     ) {
         self._text = text
         self._pendingInsertion = pendingInsertion
         self.isMonospaced = isMonospaced
         self.isEditable = isEditable
         self.onCompletionContextChange = onCompletionContextChange
+        self.onFocusChange = onFocusChange
     }
 
     public func makeNSView(context: Context) -> NSScrollView {
@@ -158,6 +168,14 @@ public struct MarkdownTextEditor: NSViewRepresentable {
         public func textViewDidChangeSelection(_ notification: Notification) {
             guard !isApplyingUpdate, let textView = notification.object as? NSTextView else { return }
             reportCompletionContext(in: textView)
+        }
+
+        public func textDidBeginEditing(_ notification: Notification) {
+            parent.onFocusChange(true)
+        }
+
+        public func textDidEndEditing(_ notification: Notification) {
+            parent.onFocusChange(false)
         }
 
         /// Works out whether the caret sits inside an unterminated `[[`, and tells the caller.
