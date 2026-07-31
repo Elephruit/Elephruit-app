@@ -57,7 +57,7 @@ extension AppModule {
             // The contact list keeps its own width, which is why it is stated separately here rather
             // than taken from whatever the profile left over.
             ModuleShellLayout(
-                primary: PaneWidth(minimum: 260, ideal: 320, maximum: 460),
+                primary: PaneWidth(minimum: 250, ideal: 300, maximum: 380),
                 detail: DetailPanePolicy(
                     hidesWhenNothingSelected: false,
                     width: PaneWidth(minimum: 400, ideal: 560, maximum: 820),
