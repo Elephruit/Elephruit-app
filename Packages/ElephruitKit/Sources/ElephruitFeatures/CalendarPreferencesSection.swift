@@ -26,6 +26,13 @@ public struct CalendarPreferencesSection: View {
             if services.calendar.isEnabled, services.calendar.authorization.canRead {
                 Toggle("Show week numbers", isOn: $showsWeekNumbers)
 
+                Picker("Weeks start on", selection: firstWeekdayBinding) {
+                    Text("Follow my region").tag(0)
+                    ForEach(1...7, id: \.self) { weekday in
+                        Text(weekdayName(weekday)).tag(weekday)
+                    }
+                }
+
                 timeZones
                 travelMode
                 cache
@@ -166,6 +173,19 @@ public struct CalendarPreferencesSection: View {
     }
 
     // MARK: Bindings
+
+    private func weekdayName(_ weekday: Int) -> String {
+        let symbols = services.calendar.displayCalendar.weekdaySymbols
+        guard weekday - 1 < symbols.count else { return "" }
+        return symbols[weekday - 1]
+    }
+
+    private var firstWeekdayBinding: Binding<Int> {
+        Binding(
+            get: { services.calendar.firstWeekdayOverride ?? 0 },
+            set: { services.calendar.firstWeekdayOverride = $0 == 0 ? nil : $0 }
+        )
+    }
 
     private var zoneChoices: [String] {
         var choices = services.calendar.timeZoneDisplay.favouriteZoneIdentifiers

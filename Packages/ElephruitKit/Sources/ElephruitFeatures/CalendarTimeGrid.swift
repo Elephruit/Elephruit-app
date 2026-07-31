@@ -284,12 +284,15 @@ struct CalendarTimeGridView: View {
             width: max(8, size.width * position.width - 2),
             height: max(Theme.CalendarMetrics.minimumBlockHeight, height)
         )
-        .offset(x: size.width * position.leading + 1, y: offsetY)
+        .offset(
+            x: size.width * position.leading + 1 + draggedOffsetX(for: position, columnWidth: size.width),
+            y: offsetY
+        )
         .zIndex(isDragging ? 100 : Double(position.depth))
         .opacity(isDragging ? 0.85 : 1)
         .onTapGesture { select(position.event) }
         .simultaneousGesture(TapGesture(count: 2).onEnded { onOpen(position.event) })
-        .gesture(moveGesture(position.event, day: day))
+        .gesture(moveGesture(position.event, day: day, columnWidth: size.width))
         .overlay(alignment: .bottom) {
             if position.event.isEditable {
                 resizeHandle(position.event, day: day)
@@ -303,6 +306,16 @@ struct CalendarTimeGridView: View {
         let base = position.top * gridHeight
         guard case .moving(let id, _, let hourOffset) = drag, id == position.event.id else { return base }
         return base + hourOffset * hourHeight
+    }
+
+    /// How far a block has been dragged sideways, in points.
+    ///
+    /// Only ever non-zero in a week view: a day view has one column, and letting a block drift out
+    /// of it would be a drag with nowhere to land.
+    private func draggedOffsetX(for position: PositionedEvent, columnWidth: CGFloat) -> CGFloat {
+        guard days.count > 1 else { return 0 }
+        guard case .moving(let id, let dayOffset, _) = drag, id == position.event.id else { return 0 }
+        return CGFloat(dayOffset) * columnWidth
     }
 
     private func draggedHeight(for position: PositionedEvent) -> CGFloat {
@@ -357,13 +370,17 @@ struct CalendarTimeGridView: View {
     }
 
     /// Dragging a block to another time, and in a week view to another day.
-    private func moveGesture(_ event: CalendarEventSummary, day: Date) -> some Gesture {
+    ///
+    /// Both axes at once, because that is how somebody moves "Tuesday at ten" to "Thursday at two" —
+    /// one gesture, not two. The day is worked out from the column width rather than from a drop
+    /// target, so the block follows the pointer continuously instead of jumping between columns.
+    private func moveGesture(_ event: CalendarEventSummary, day: Date, columnWidth: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 5)
             .onChanged { value in
                 guard event.isEditable else { return }
                 drag = .moving(
                     id: event.id,
-                    dayOffset: 0,
+                    dayOffset: dayDelta(value.translation.width, columnWidth: columnWidth),
                     hourOffset: snappedDelta(value.translation.height)
                 )
             }
@@ -372,12 +389,26 @@ struct CalendarTimeGridView: View {
                 guard event.isEditable else { return }
 
                 let hourDelta = snappedDelta(value.translation.height)
-                let dayDelta = 0
+                let dayDelta = dayDelta(value.translation.width, columnWidth: columnWidth)
                 guard hourDelta != 0 || dayDelta != 0 else { return }
 
-                let moved = event.startAt.addingTimeInterval(hourDelta * 3_600)
-                onMove(event, moved)
+                // Days first, through `Calendar`, so a drag across a clock change keeps the event at
+                // the same time of day rather than sliding it by an hour. Adding 86,400 seconds
+                // would be wrong twice a year, on exactly the days somebody is most confused.
+                let shifted = calendar.date(byAdding: .day, value: dayDelta, to: event.startAt)
+                    ?? event.startAt
+                onMove(event, shifted.addingTimeInterval(hourDelta * 3_600))
             }
+    }
+
+    /// How many columns a sideways drag has crossed.
+    ///
+    /// Clamped to the visible week, so dragging off the edge lands on the last day rather than
+    /// producing an event three weeks away that nobody can see to correct.
+    private func dayDelta(_ width: CGFloat, columnWidth: CGFloat) -> Int {
+        guard days.count > 1, columnWidth > 0 else { return 0 }
+        let raw = Int((width / columnWidth).rounded())
+        return min(max(raw, -(days.count - 1)), days.count - 1)
     }
 
     private func resizeGesture(_ event: CalendarEventSummary, day: Date) -> some Gesture {
