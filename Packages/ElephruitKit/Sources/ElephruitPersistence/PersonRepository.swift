@@ -149,6 +149,9 @@ public protocol PersonRepository: AnyObject {
     /// Says the fact still holds, without changing it.
     func confirm(_ observation: PersonObservationRecord) throws(AppError)
 
+    /// Removes one observation. Superseded history remains unless it is explicitly removed too.
+    func remove(_ observation: PersonObservationRecord) throws(AppError)
+
     /// Replaces a fact, keeping the original as history.
     @discardableResult
     func correct(
@@ -441,6 +444,15 @@ public final class SwiftDataPersonRepository: PersonRepository {
 
     public func confirm(_ observation: PersonObservationRecord) throws(AppError) {
         observation.lastConfirmedOn = dateProvider.now
+        try save()
+    }
+
+    public func remove(_ observation: PersonObservationRecord) throws(AppError) {
+        let person = observation.subject
+        context.delete(observation)
+        if let person {
+            try items.update(person) { $0.refreshSearchText() }
+        }
         try save()
     }
 

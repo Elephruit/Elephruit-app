@@ -21,6 +21,7 @@ struct PersonPortraitSection: View {
     let onAddFact: (QuickFactSeed?) -> Void
     let onConfirm: (PortraitValue) -> Void
     let onCorrect: (PortraitValue) -> Void
+    let onDelete: (PortraitValue) -> Void
     let onOpenSource: (UUID) -> Void
 
     var body: some View {
@@ -54,6 +55,7 @@ struct PersonPortraitSection: View {
                             card: card,
                             onConfirm: onConfirm,
                             onCorrect: onCorrect,
+                            onDelete: onDelete,
                             onOpenSource: onOpenSource
                         )
                         if index != cards.indices.last { Divider().padding(.leading, 54) }
@@ -152,6 +154,7 @@ struct PortraitCardView: View {
     let card: PortraitCard
     let onConfirm: (PortraitValue) -> Void
     let onCorrect: (PortraitValue) -> Void
+    let onDelete: (PortraitValue) -> Void
     let onOpenSource: (UUID) -> Void
 
     @State private var isShowingHistory = false
@@ -176,6 +179,7 @@ struct PortraitCardView: View {
                         value: value,
                         onConfirm: { onConfirm(value) },
                         onCorrect: { onCorrect(value) },
+                        onDelete: { onDelete(value) },
                         onOpenSource: onOpenSource
                     )
                 }
@@ -210,6 +214,7 @@ struct PortraitValueRow: View {
     let value: PortraitValue
     let onConfirm: () -> Void
     let onCorrect: () -> Void
+    let onDelete: () -> Void
     let onOpenSource: (UUID) -> Void
 
     @State private var isHovering = false
@@ -265,12 +270,15 @@ struct PortraitValueRow: View {
         .contextMenu {
             Button("Still true", action: onConfirm)
             Button("Correct this…", action: onCorrect)
+            Divider()
+            Button("Delete Quick Fact", role: .destructive, action: onDelete)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
         .accessibilityActions {
             Button("Confirm still true", action: onConfirm)
             Button("Correct", action: onCorrect)
+            Button("Delete quick fact", action: onDelete)
         }
     }
 
@@ -289,6 +297,13 @@ struct PortraitValueRow: View {
             .buttonStyle(.borderless)
             .help("Correct this — the previous value is kept")
             .accessibilityLabel("Correct")
+
+            Button(role: .destructive, action: onDelete) {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .help("Delete this quick fact")
+            .accessibilityLabel("Delete quick fact")
         }
         .font(Theme.Text.metadata)
     }

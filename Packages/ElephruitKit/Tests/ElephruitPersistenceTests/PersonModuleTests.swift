@@ -354,6 +354,22 @@ struct PersonModuleTests {
         #expect(ledger.history(.location).map(\.value) == ["Portland"])
     }
 
+    @Test("A quick fact can be removed without deleting the person")
+    func factsCanBeRemoved() throws {
+        let fixture = try Fixture()
+        let maya = try fixture.people.createPerson(PersonDraft(fullName: "Maya Chen"))
+        let observation = try fixture.people.record(
+            ObservationDraft(attribute: .foodAndDrink, value: "Vegetarian"),
+            about: maya, observedOn: Self.date(2026, 7, 18),
+            confidence: .stated, sensitivity: .normal, source: nil
+        )
+
+        try fixture.people.remove(observation)
+
+        #expect(try fixture.people.observations(for: maya).isEmpty)
+        #expect(try fixture.people.person(id: maya.id)?.displayTitle == "Maya Chen")
+    }
+
     @Test("Likes accumulate rather than replacing each other")
     func multiValuedFactsAccumulate() throws {
         let fixture = try Fixture()

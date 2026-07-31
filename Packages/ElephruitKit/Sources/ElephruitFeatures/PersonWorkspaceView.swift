@@ -36,6 +36,7 @@ struct PersonWorkspaceView: View {
     @State private var chartKind: RelationshipChartKind?
     @State private var pendingAction: ContactActionRequest?
     @State private var correctionTarget: PortraitValue?
+    @State private var deletionTarget: PortraitValue?
     @State private var isEditingContactDetails = false
     @State private var pendingWriteBack: ContactDetailsEdit?
     @State private var loadFailure: AppError?
@@ -78,6 +79,7 @@ struct PersonWorkspaceView: View {
                         },
                         onConfirm: confirm(_:),
                         onCorrect: { correctionTarget = $0 },
+                        onDelete: { deletionTarget = $0 },
                         onOpenSource: { navigation.selectItem($0) }
                     )
 
@@ -213,6 +215,22 @@ struct PersonWorkspaceView: View {
                 }
             }
         }
+        .confirmationDialog(
+            "Delete this quick fact?",
+            isPresented: Binding(
+                get: { deletionTarget != nil },
+                set: { if !$0 { deletionTarget = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Quick Fact", role: .destructive) {
+                if let deletionTarget { deleteFact(deletionTarget) }
+                deletionTarget = nil
+            }
+            Button("Cancel", role: .cancel) { deletionTarget = nil }
+        } message: {
+            Text("This removes the selected value from (person.displayTitle).")
+        }
     }
 
     // MARK: - Loading
@@ -331,6 +349,18 @@ struct PersonWorkspaceView: View {
                 .first(where: { $0.id == value.observationID })
             else { return }
             try services.persons.correct(record, to: newValue, note: note)
+        }
+        reload()
+    }
+
+    private func deleteFact(_ value: PortraitValue) {
+        guard let services else { return }
+        services.perform {
+            guard let record = try services.persons.observations(for: person)
+                .first(where: { $0.id == value.observationID })
+            else { return }
+            try services.persons.remove(record)
+            services.noteChange(to: person)
         }
         reload()
     }
