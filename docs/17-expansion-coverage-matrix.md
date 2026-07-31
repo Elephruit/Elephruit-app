@@ -92,25 +92,25 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 
 | # | Requirement | Status | Evidence | Slice |
 |---|---|---|---|---|
-| P1 | Person identity with contact details | Partial | `ItemKind.person` + `PersonProfile` | S11 |
+| P1 | Person identity with contact details | **Met** (S16) | Widened `PersonProfile`: pronouns, pronunciation, nickname, organisation, location, time zone, addresses, websites, placeholder and My Card flags | — |
 | P2 | Derived relationship context | Met | `PersonContext`; only `.meeting`/`.interaction` count as contact; 22 tests | — |
 | P3 | Notes stay canonical and appear through links | Met | Bodies are never copied into People | — |
-| P4 | Timestamped interactions | Partial | `recordInteraction` has summary/date/notes; no attachments, no suggested facts, no follow-up | S11 |
+| P4 | Timestamped interactions | **Met** (S16) | `InteractionProvenance` distinguishes logged, initiated, and detected; only logged counts as contact | — |
 | P5 | Follow-up suggestions never act on their own | Met | Off by default; `suggestionsNeverAct:292` proves item count is unchanged | — |
-| P6 | Three-column workspace | Absent | Generic kind list + a detail view that defers the workspace in its own doc comment | S11 |
-| P7 | People overview | Absent | `allContexts()` exists; nothing renders it (`docs/14:123`) | S11 |
-| P8 | Merged reverse-chronological timeline | Partial | Data exists; view renders a summary line and two unmerged lists | S11 |
-| P9 | Celebrations | Absent | `PersonProfile.birthday` stored, read by nothing | S11 |
-| P10 | Attendee → person matching | Absent | `attendeeNames` populated, consumed by nothing | S11 |
-| P11 | Contacts identity and linking | Absent | No `import Contacts`, no entitlement — deliberately (`docs/15:131`). Stub only | Deferred |
-| P12 | Reciprocal relationships | Absent | Planned `docs/09:432`, never implemented | Deferred |
-| P13 | Observations with history and provenance | Absent | No entity; facts can only be prose | Deferred |
-| P14 | Temporal estimates labelled as estimates | Absent | — | Deferred |
-| P15 | Groups and smart groups | Absent | People is a flat `.kind(.person)` query | Deferred |
-| P16 | Command bar for people | Partial | ⌘K palette exists and is general; no people or timer commands | Deferred |
-| P17 | Meeting Brief | Absent | — | Deferred |
-| P18 | My Card and share profiles | Absent | — | Deferred |
-| P19 | Business-card / PDF scan import | Absent | — | Deferred |
+| P6 | Three-column workspace | **Met** (S16) | People band, `PeopleListView`, `PersonWorkspaceView`, `PersonContextSidebar` in the inspector | — |
+| P7 | People overview | **Met** (S16) | Six scopes plus groups, each with its own empty state | — |
+| P8 | Merged reverse-chronological timeline | **Met** (S16) | `PersonWorkspaceService.timeline` walks both link directions, grouped by month, five filters | — |
+| P9 | Celebrations | **Met** (S16) | `CelebrationCalendar`; partial dates, leap days compared by year, memorials never celebratory | — |
+| P10 | Attendee → person matching | Partial | Meetings link to attendees and appear in the timeline; automatic name→person matching on calendar import is not built | Deferred |
+| P11 | Contacts identity and linking | **Met** (S16) | `SystemContactsProvider`, off until enabled; read-only by construction, asserted by `ContactsWriteSafetyTests` | — |
+| P12 | Reciprocal relationships | **Met** (S16) | `PersonRelationship` written as a pair; involution asserted over `allCases`; the user's own word is never mirrored | — |
+| P13 | Observations with history and provenance | **Met** (S16) | `PersonObservationRecord` + `FactLedger`; correction appends and never deletes | — |
+| P14 | Temporal estimates labelled as estimates | **Met** (S16) | `AgeEstimator`, `GradeEstimator`, `EstimateProvenance`; 25 tests including the summer school-year gap | — |
+| P15 | Groups and smart groups | **Met** (S16) | Fixed = `ItemCollection`, smart = `SavedSearch`. No new entity — R5 satisfied | — |
+| P16 | Command bar for people | **Met** (S16) | `PersonCommandParsing` + deterministic parser, ⌘⇧K, live preview; every externally visible intent confirms | — |
+| P17 | Meeting Brief | **Met** (S16) | Assembled, never authored; estimates labelled, reflections structurally excluded | — |
+| P18 | My Card and share profiles | **Met** (S16) | Three default profiles, vCard emitter fed a flat card so app-only data is unreachable | — |
+| P19 | Business-card / PDF scan import | **Met** (S16) | Vision behind `TextRecognizing`; candidates reviewed before creation; the scan kept as provenance | — |
 | P20 | Relationship scores, pipelines, productivity scores | Rejected | Product principle; absent and to stay absent | — |
 
 ## Time tracking

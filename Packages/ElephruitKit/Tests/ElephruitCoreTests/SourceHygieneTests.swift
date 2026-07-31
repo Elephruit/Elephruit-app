@@ -244,6 +244,57 @@ struct SourceHygieneTests {
         #expect(offenders.isEmpty, "Unfinished work belongs in the roadmap, not in a comment: \(offenders)")
     }
 
+    /// Appearance correctness, enforced rather than eyeballed.
+    ///
+    /// ### Why this is a source check and not a screenshot
+    /// A hard-coded colour is wrong in at least one of four conditions — light, dark, Increase
+    /// Contrast, and a non-default accent — and it is wrong *silently*: the screen that was reviewed
+    /// looked fine. `Theme.Colors` is built entirely from AppKit's semantic colours precisely so that
+    /// all four are handled by the system, and this is what keeps a later edit from reaching around
+    /// it.
+    ///
+    /// It is not a substitute for looking at the app. It is the part of "works in dark mode" that can
+    /// be guaranteed to still be true next month.
+    @Test("No view names a colour the system cannot adapt")
+    func coloursComeFromTheDesignSystem() {
+        var offenders: [String] = []
+
+        // Literal constructors. `Color(nsColor:)` is absent from this list on purpose — that is how
+        // `Theme.Colors` itself is built, and it resolves per appearance.
+        let literals = [
+            "Color(red:",
+            "Color(.sRGB",
+            "Color(.displayP3",
+            "Color(hue:",
+            "NSColor(red:",
+            "NSColor(calibratedRed:",
+            "NSColor(deviceRed:",
+        ]
+
+        for file in Self.swiftFiles() {
+            // The tokens file is where the palette is *defined*; everywhere else consumes it.
+            guard file.lastPathComponent != "Tokens.swift" else { continue }
+            guard let contents = try? String(contentsOf: file, encoding: .utf8) else { continue }
+
+            for (index, line) in contents.components(separatedBy: .newlines).enumerated() {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.hasPrefix("//"), !trimmed.hasPrefix("///") else { continue }
+
+                for literal in literals where line.contains(literal) {
+                    offenders.append("\(file.lastPathComponent):\(index + 1) — \(literal)")
+                }
+            }
+        }
+
+        #expect(
+            offenders.isEmpty,
+            """
+            A literal colour is wrong in light mode, dark mode, Increase Contrast, or under a \
+            non-default accent — and wrong invisibly. Use a `Theme.Colors` token: \(offenders)
+            """
+        )
+    }
+
     @Test("Log statements do not interpolate values without a privacy annotation")
     func logsAnnotatePrivacy() {
         var offenders: [String] = []

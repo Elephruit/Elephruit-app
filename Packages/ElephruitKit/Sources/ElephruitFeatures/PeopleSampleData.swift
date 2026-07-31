@@ -88,13 +88,16 @@ enum PeopleSampleData {
                     thunderstorms, and Maya wants a recommendation for a dog trainer. She has moved \
                     to Austin and is enjoying it more than she expected.
                     """,
-                startAt: clock.calendar.date(byAdding: .day, value: -540, to: today)
+                startAt: clock.calendar.date(byAdding: .day, value: -900, to: today)
             )
         )
         try items.update(coffee) { $0.sourceIdentifier = InteractionProvenance.logged.rawValue }
         try items.link(coffee, to: maya, kind: .mentions)
 
-        let observedOn = clock.calendar.date(byAdding: .day, value: -540, to: today) ?? today
+        // Far enough back that a school-year boundary has been crossed, so the fixture shows a
+        // *labelled* grade estimate rather than only the unhedged case. Two and a half years also
+        // widens the age to a two-year range, which is what an honest estimate looks like.
+        let observedOn = clock.calendar.date(byAdding: .day, value: -900, to: today) ?? today
 
         // The worked example: an age and a grade, both anchored to the date they were said. Eighteen
         // months on, the page reads "approximately 7–8 years old · likely in 3rd grade" and says
