@@ -19,6 +19,7 @@ struct PersonTimelineDetailSheet: View {
     @State private var item: Item?
     @State private var status: ItemStatus = .none
     @State private var failure: AppError?
+    @State private var isConfirmingDeletion = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -75,6 +76,16 @@ struct PersonTimelineDetailSheet: View {
         .frame(width: 620, height: 540)
         .background(Theme.Colors.windowBackground)
         .task(id: entry.id) { load() }
+        .confirmationDialog(
+            "Move this (entry.kind.displayName.lowercased()) to Trash?",
+            isPresented: $isConfirmingDeletion,
+            titleVisibility: .visible
+        ) {
+            Button("Move to Trash", role: .destructive) { moveToTrash() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You can restore it later from Trash.")
+        }
     }
 
     private var header: some View {
@@ -219,6 +230,11 @@ struct PersonTimelineDetailSheet: View {
 
             Spacer()
 
+            Button("Move to Trash", systemImage: "trash", role: .destructive) {
+                isConfirmingDeletion = true
+            }
+            .buttonStyle(.borderless)
+
             Button("Done", action: onClose)
                 .keyboardShortcut(.defaultAction)
         }
@@ -276,6 +292,17 @@ struct PersonTimelineDetailSheet: View {
             _ = try services.tasks.complete(item)
             status = .completed
             services.noteChange(to: item)
+        } catch {
+            failure = error
+        }
+    }
+
+    private func moveToTrash() {
+        guard let services, let item else { return }
+        do {
+            try services.undo.moveToTrash([item])
+            services.noteChange(to: item)
+            onClose()
         } catch {
             failure = error
         }
