@@ -210,6 +210,32 @@ struct InteractionTests {
         #expect(fixture.people.context(for: ana).daysSinceLastContact(using: fixture.clock) == 3)
     }
 
+    @Test("Logging an interaction tracks its actions separately")
+    func interactionBundleCreatesTasksAndPromises() throws {
+        let fixture = try PeopleFixture()
+        let ana = try fixture.makePerson("Ana")
+
+        let created = try fixture.people.recordInteractionBundle(
+            with: ana,
+            summary: "Project catch-up",
+            kind: .phone,
+            discussion: "Talked about the launch",
+            followUps: ["Book Tuesday"],
+            commitments: ["Send Ana the deck"]
+        )
+
+        #expect(created.count == 3)
+        let interaction = try #require(created.first { $0.kind == .interaction })
+        #expect(interaction.body == "Talked about the launch")
+        #expect(interaction.tagSlugs.contains("interaction/phone"))
+
+        let tasks = created.filter { $0.kind == .task }
+        #expect(tasks.count == 2)
+        #expect(tasks.allSatisfy { $0.status == .open })
+        #expect(tasks.first { $0.title == "Send Ana the deck" }?.tagSlugs.contains("promise") == true)
+        #expect(fixture.people.context(for: ana).openItemIDs.count == 2)
+    }
+
     @Test("There is at most one daily entry per day")
     func oneEntryPerDay() throws {
         let fixture = try PeopleFixture()
