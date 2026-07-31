@@ -30,6 +30,8 @@ public struct EventInspectorView: View {
     @State private var isShowingFollowUp = false
     @State private var debriefText = ""
     @State private var preparationText = ""
+    @State private var brief: [BriefEntry] = []
+    @State private var meetingItem: Item?
 
     var onOpenItem: (UUID) -> Void
 
@@ -51,8 +53,10 @@ public struct EventInspectorView: View {
 
                 if showsPersonContext {
                     people
+                    if !brief.isEmpty { meetingBrief }
                     if !priorMeetings.isEmpty { history }
                     notes
+                    attachments
                     debrief
                 } else {
                     hiddenContextNotice
@@ -285,6 +289,110 @@ public struct EventInspectorView: View {
         }
     }
 
+    // MARK: The brief
+
+    /// What is worth knowing before walking in.
+    ///
+    /// ### Why this is assembled rather than written
+    /// Because a brief somebody has to maintain is a brief that is wrong in six months. Every line
+    /// here is derived — from observations, from open tasks, from celebrations, from the timeline —
+    /// so there is no second document to update and no way for it to disagree with the pages it
+    /// summarises.
+    ///
+    /// Every entry says whether it is a stated fact or an estimate, because a brief is read in the
+    /// ninety seconds before a meeting, which is exactly when somebody will act on a sentence
+    /// without checking it.
+    private var meetingBrief: some View {
+        InspectorSection("Worth knowing") {
+            VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                ForEach(groupedBrief, id: \.section) { group in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label(group.section.displayName, systemImage: group.section.symbolName)
+                            .font(Theme.Text.keyHint)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
+
+                        ForEach(group.entries) { entry in
+                            Button {
+                                if let id = entry.sourceItemID { onOpenItem(id) }
+                            } label: {
+                                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.tight) {
+                                    Text(entry.text)
+                                        .font(Theme.Text.rowSubtitle)
+                                        .multilineTextAlignment(.leading)
+                                        .fixedSize(horizontal: false, vertical: true)
+
+                                    if entry.needsEstimateLabel {
+                                        Text("estimate")
+                                            .font(Theme.Text.keyHint)
+                                            .foregroundStyle(Theme.Colors.warning)
+                                    }
+
+                                    Spacer(minLength: 0)
+                                }
+                                .contentShape(.rect)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(entry.sourceItemID == nil)
+                            .help(entry.detail ?? entry.text)
+                            .accessibilityElement(children: .combine)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var groupedBrief: [(section: BriefEntry.Section, entries: [BriefEntry])] {
+        BriefEntry.Section.allCases.compactMap { section in
+            let matching = brief.filter { $0.section == section }
+            return matching.isEmpty ? nil : (section: section, entries: matching)
+        }
+    }
+
+    // MARK: Attachments
+
+    /// Files kept with the meeting.
+    ///
+    /// ### What syncs and what does not, said out loud
+    /// These are **Elephruit's** attachments, held on the meeting item beside every other attachment
+    /// in the library: copied in, or referenced by a security-scoped bookmark where the user keeps
+    /// them. They do not travel with the calendar event.
+    ///
+    /// That is not a shortcoming being papered over — EventKit exposes no public API for reading or
+    /// writing an event's attachments at all. `EKCalendarItem` has no attachments property, and
+    /// there is no supported way to add one. So an attachment here cannot be claimed to sync, and
+    /// this says so rather than implying otherwise. See `docs/26-calendar-module-record.md`.
+    @ViewBuilder
+    private var attachments: some View {
+        if let meetingItem {
+            VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                AttachmentSection(item: meetingItem)
+
+                Text("Kept in Elephruit on this Mac. Calendar attachments are not part of EventKit.")
+                    .font(Theme.Text.keyHint)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            Button {
+                createMeetingItem()
+            } label: {
+                Label("Attach a file…", systemImage: "paperclip")
+                    .font(Theme.Text.metadata)
+            }
+            .buttonStyle(.borderless)
+            .help("Files are kept in Elephruit and are not added to the calendar event")
+        }
+    }
+
+    /// Creates the meeting item so something can be attached to it.
+    private func createMeetingItem() {
+        guard let services else { return }
+        services.perform {
+            meetingItem = try services.eventLinks.meetingItem(for: event)
+        }
+    }
+
     // MARK: History
 
     private var history: some View {
@@ -460,6 +568,17 @@ public struct EventInspectorView: View {
         priorMeetings = (try? services.eventLinks.priorMeetings(
             withPeople: found.personIDs, before: event.startAt
         )) ?? []
+
+        meetingItem = found.meetingItemID.flatMap { try? services.items.item(id: $0) }
+
+        // One person's brief, and only when exactly one is linked. A brief about three people is
+        // three briefs, and reading them stacked in an inspector column before a meeting is worse
+        // than reading none — the point of a brief is that it can be taken in at a glance.
+        if linkedPeople.count == 1, let person = linkedPeople.first {
+            brief = (try? services.personWorkspace.brief(for: person))?.entries ?? []
+        } else {
+            brief = []
+        }
     }
 
     private func unlink(_ person: Item) {

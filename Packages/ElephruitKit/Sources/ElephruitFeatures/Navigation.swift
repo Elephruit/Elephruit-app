@@ -199,6 +199,13 @@ public final class NavigationModel {
     /// its own surface rather than a scope switch on the general field.
     public var isCalendarSearchVisible = false
 
+    /// A day something outside the window asked the calendar to show.
+    ///
+    /// Cleared by the workspace once it has landed there, so a request cannot fire twice — and held
+    /// here rather than on the workspace because the workspace may not exist yet when the request
+    /// arrives, which is exactly the case when the app was launched by the link.
+    public var requestedCalendarDay: Date?
+
     // MARK: Search as a mode
 
     /// Whether the list is currently showing search results rather than its usual contents.

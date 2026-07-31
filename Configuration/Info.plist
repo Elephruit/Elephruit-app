@@ -48,6 +48,29 @@
 	  milliseconds at quit and closes that window entirely.
 	-->
 
+	<!--
+	  The `elephruit:` scheme, for deep links into the calendar.
+
+	  Registered now rather than in Phase 2's placeholder form because the calendar has links worth
+	  making: a note, a Shortcut, or a bookmark can point at a particular day. The scheme reads only —
+	  every URL it accepts navigates, and none creates, changes, or deletes anything. That is the
+	  same rule the intents follow and for the same reason: a link can be clicked from anywhere, by
+	  anything, and a URL that could write would be a write nobody confirmed.
+	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.elephruit.Elephruit</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>elephruit</string>
+			</array>
+		</dict>
+	</array>
+
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
