@@ -345,9 +345,11 @@ struct PersonHeaderView: View {
 
     private var relationshipLine: String? {
         guard let services, let relationships = try? services.persons.relationships(of: person) else { return nil }
+        // "son Jack Chen", not "son of Jack Chen". The label describes what the *other* person is to
+        // this one, so "of" inverts it and reads as though Maya were Jack's son.
         let closest = relationships.prefix(3).compactMap { relationship -> String? in
             guard let other = relationship.other else { return nil }
-            return "\(relationship.displayLabel) of \(other.displayTitle)"
+            return "\(relationship.displayLabel) \(other.displayTitle)"
         }
         return closest.isEmpty ? nil : closest.joined(separator: " · ")
     }

@@ -327,9 +327,13 @@ public struct PersonObservation: Sendable, Hashable, Identifiable {
         .lifeEvent: 180,
         .health: 180,
         .lookingFor: 120,
-        .observedAge: 365,
-        .schoolGrade: 365,
     ]
+
+    // `observedAge` and `schoolGrade` are deliberately absent. They are the *inputs* to
+    // `AgeEstimator` and `GradeEstimator`, which already label everything derived from them and say
+    // which date it came from. Asking "is Jack still six? Still true?" two years on is the wrong
+    // question — of course he is not, and the app knows it — so nagging about them would be the
+    // interface admitting it has not read its own estimate.
 
     /// The confidence to *display*, which decays even though the record does not.
     ///

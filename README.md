@@ -14,13 +14,18 @@ phase plan and its definition of done.
 |---|---|
 | `xcodebuild` Debug and Release | Succeeds, zero warnings |
 | `swift build` (all eight modules) | Succeeds, zero warnings |
-| `swift test` | 183 tests, all passing |
-| Sandboxed, three entitlements only | Verified against the signed binary |
-| Store opens on disk, all nine entities materialise | Verified against the running app |
-| Light / dark visual review | **Not done** — see below |
+| `swift test` | 829 tests, all passing |
+| Sandboxed, five entitlements only | Verified against the signed binary |
+| Store opens on disk, all twelve entities materialise | Verified against the running app |
+| Light visual review | Done — People workspace, estimates, groups, duplicates |
+| Dark visual review | **Not done** — see below |
 
-The interface has not been reviewed on screen in light and dark mode. Screen-recording access was
-declined, so this is unverified rather than verified. To check it yourself:
+The interface has been reviewed on screen in light mode. **Dark mode has not been checked
+visually** — switching it means changing a system setting, which the session that built the People
+module could not do. What is enforced instead is that no view names a literal colour
+(`SourceHygieneTests.coloursComeFromTheDesignSystem`), so every colour resolves through AppKit's
+semantic palette in light, dark, Increase Contrast, and under a non-default accent. That is the part
+that stays true; it is not a substitute for looking. To check it yourself:
 
 ```bash
 xcodebuild -project Elephruit.xcodeproj -scheme Elephruit -configuration Debug build
@@ -79,6 +84,8 @@ Read these before changing anything structural.
 | [18 — Architecture checkpoint](docs/18-architecture-checkpoint.md) | Standing rules, the four seams, deferred decisions |
 | [19 — Permissions matrix](docs/19-permissions-matrix.md) | Entitlements and usage strings, per capability |
 | [20 — Expansion slices](docs/20-expansion-slices.md) | The ordered slice list |
+| [21 — People module scope](docs/21-people-module-scope.md) | The five decisions behind the People module |
+| [22 — People module record](docs/22-people-module-record.md) | What was built, the bugs found, what was deliberately left |
 
 Phase records: [10 — A scope](docs/10-phase-a-scope.md) ·
 [11 — B](docs/11-phase-b-record.md) · [12 — C](docs/12-phase-c-record.md) ·
