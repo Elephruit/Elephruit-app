@@ -48,6 +48,29 @@
 	  milliseconds at quit and closes that window entirely.
 	-->
 
+	<!--
+	  The `elephruit:` scheme, for deep links into the calendar.
+
+	  Registered now rather than in Phase 2's placeholder form because the calendar has links worth
+	  making: a note, a Shortcut, or a bookmark can point at a particular day. The scheme reads only —
+	  every URL it accepts navigates, and none creates, changes, or deletes anything. That is the
+	  same rule the intents follow and for the same reason: a link can be clicked from anywhere, by
+	  anything, and a URL that could write would be a write nobody confirmed.
+	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.elephruit.Elephruit</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>elephruit</string>
+			</array>
+		</dict>
+	</array>
+
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
@@ -69,16 +92,20 @@
 		</dict>
 	</array>
 	<!--
-	  Shown in the macOS permission prompt. Says what is read and, as importantly, that nothing is
-	  written — because EventKit forces the request to be for full access even though this app only
-	  ever reads.
+	  Shown in the macOS permission prompt.
+
+	  It used to say the app never writes. That was true of Phase D and is no longer: the calendar
+	  module creates and edits events, which is the point of it. What replaces that promise is the
+	  one a person deciding on this prompt actually needs — that what they write *about* a meeting
+	  stays in Elephruit and is never put into an event other people can read. `EventDraft` is why
+	  that is structural rather than a claim; see `CalendarWriteSafetyTests`.
 
 	  `NSCalendarsFullAccessUsageDescription` is the key that pairs with
 	  `requestFullAccessToEvents()` on macOS 14 and later; the older `NSCalendarsUsageDescription`
 	  pairs with the deprecated request and is deliberately not used.
 	-->
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Elephruit shows your events alongside your tasks and notes. It only reads your calendar and never changes it.</string>
+	<string>Elephruit shows your calendar and lets you create and change events. Your own notes about a meeting stay in Elephruit and are never added to a calendar event.</string>
 
 	<!--
 	  Shown in the macOS permission prompt for the People module.

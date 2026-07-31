@@ -12,6 +12,13 @@ public struct ShortcutSettingsSection: View {
     private let registry: ShortcutRegistry
     private let globalResults: [ShortcutCommand: HotKeyRegistration]
 
+    /// The commands offered to the whole system, in the order they appear.
+    ///
+    /// Two, and both create something. A global shortcut is worth the collision risk only when the
+    /// thing it does is wanted *while you are in another application*, which is true of capturing a
+    /// thought and of putting a meeting in the calendar and true of almost nothing else.
+    private static let globalCommands: [ShortcutCommand] = [.quickCapture, .newEvent]
+
     public init(
         registry: ShortcutRegistry,
         globalResults: [ShortcutCommand: HotKeyRegistration] = [:]
@@ -22,15 +29,24 @@ public struct ShortcutSettingsSection: View {
 
     public var body: some View {
         Section {
-            LabeledContent("Quick Jot") {
-                HStack(spacing: Theme.Spacing.small) {
-                    if let binding = registry.binding(for: .quickCapture) {
-                        Text(binding.display)
-                            .font(.system(.body, design: .monospaced))
-                    } else {
-                        Text("Not set").foregroundStyle(Theme.Colors.tertiaryText)
+            ForEach(Self.globalCommands, id: \.self) { command in
+                LabeledContent(command.title) {
+                    HStack(spacing: Theme.Spacing.small) {
+                        if let binding = registry.binding(for: command) {
+                            Text(binding.display)
+                                .font(.system(.body, design: .monospaced))
+                        } else {
+                            Text("Not set").foregroundStyle(Theme.Colors.tertiaryText)
+                        }
+                        statusBadge(for: command)
                     }
-                    globalStatusBadge
+                }
+
+                if let explanation = globalResults[command]?.explanation {
+                    Label(explanation, systemImage: "keyboard.badge.exclamationmark")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.unresolvedLink)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
@@ -39,19 +55,12 @@ public struct ShortcutSettingsSection: View {
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.unresolvedLink)
             }
-
-            if let explanation = globalResults[.quickCapture]?.explanation {
-                Label(explanation, systemImage: "keyboard.badge.exclamationmark")
-                    .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.unresolvedLink)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         } header: {
             Text("Shortcuts")
         } footer: {
             Text(
-                "Quick Jot works from any app. Elephruit asks the system for these keys and does "
-                    + "not require the Accessibility permission."
+                "Quick Jot and New Event work from any app. Elephruit asks the system for these "
+                    + "keys and does not require the Accessibility permission."
             )
             .font(Theme.Text.metadata)
             .foregroundStyle(Theme.Colors.tertiaryText)
@@ -59,8 +68,8 @@ public struct ShortcutSettingsSection: View {
     }
 
     @ViewBuilder
-    private var globalStatusBadge: some View {
-        switch globalResults[.quickCapture] {
+    private func statusBadge(for command: ShortcutCommand) -> some View {
+        switch globalResults[command] {
         case .registered:
             Label("Working everywhere", systemImage: "checkmark.circle")
                 .labelStyle(.iconOnly)
@@ -70,6 +79,7 @@ public struct ShortcutSettingsSection: View {
             Label("Not available", systemImage: "exclamationmark.circle")
                 .labelStyle(.iconOnly)
                 .foregroundStyle(Theme.Colors.unresolvedLink)
+                .help("Another application claimed these keys first.")
         case .unbound, .none:
             EmptyView()
         }

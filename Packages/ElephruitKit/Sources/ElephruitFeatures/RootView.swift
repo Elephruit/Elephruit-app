@@ -25,7 +25,24 @@ public struct RootView: View {
     /// Held for the window's lifetime so the observation is not cancelled the moment `task` returns.
     @State private var contactRefresh: ContactRefreshCoordinator?
 
-    public init() {}
+    /// What the menu bar or an intent has asked for, if anything.
+    ///
+    /// Read rather than consumed here: taking it would be a mutation during a view's body, which
+    /// SwiftUI is entitled to run at any time and more than once. The window clears it through
+    /// ``onCalendarRequestHandled`` once it has actually acted, which is also what stops two open
+    /// windows both reacting to one click.
+    private let pendingCalendarRequest: PendingCalendarRequest?
+
+    /// Called once the request above has been acted on.
+    private let onCalendarRequestHandled: () -> Void
+
+    public init(
+        pendingCalendarRequest: PendingCalendarRequest? = nil,
+        onCalendarRequestHandled: @escaping () -> Void = {}
+    ) {
+        self.pendingCalendarRequest = pendingCalendarRequest
+        self.onCalendarRequestHandled = onCalendarRequestHandled
+    }
 
     public var body: some View {
         Group {
@@ -88,7 +105,14 @@ public struct RootView: View {
         } message: {
             Text(transferSummary ?? "")
         }
+        .onChange(of: pendingCalendarRequest) { _, request in
+            handleCalendarRequest(request)
+        }
         .task {
+            // On launch, when the request arrived before this window existed — which is the case
+            // when a Shortcut or a link started the app rather than merely bringing it forward.
+            handleCalendarRequest(pendingCalendarRequest)
+
             // Watching for address-book changes, so a number edited in Contacts reaches the CRM
             // without anybody pressing anything. Coalesced inside the coordinator, and a no-op until
             // the integration is turned on.
@@ -168,6 +192,11 @@ public struct RootView: View {
                     TaskWorkspaceView(navigation: navigation)
                 } else if navigation.selection == .time {
                     TimeView(navigation: navigation)
+                } else if navigation.selection == .calendar {
+                    // The calendar replaces the middle column rather than opening beside it, on the
+                    // same terms as Time and the People workspace: it *is* that column's contents
+                    // for this destination.
+                    CalendarWorkspaceView(navigation: navigation)
                 } else if navigation.selection == .home {
                     HomeView(navigation: navigation)
                 } else if case .people(let scope) = navigation.selection {
@@ -213,6 +242,23 @@ public struct RootView: View {
             export: { isExportPresented = true },
             importFiles: { isImportPresented = true }
         ))
+    }
+
+    /// Acts on a request from the menu bar, an intent, or a link.
+    private func handleCalendarRequest(_ request: PendingCalendarRequest?) {
+        guard let request else { return }
+
+        navigation.select(.calendar)
+        switch request {
+        case .open:
+            break
+        case .quickEntry:
+            navigation.isCalendarQuickEntryVisible = true
+        case .day(let day):
+            navigation.requestedCalendarDay = day
+        }
+
+        onCalendarRequestHandled()
     }
 
     // MARK: - Palette commands
@@ -278,6 +324,17 @@ public struct RootView: View {
             },
             PaletteCommand(id: "go-time", title: "Go to Time", category: .navigate, symbolName: "timer") {
                 navigation.select(.time)
+            },
+            PaletteCommand(id: "go-calendar", title: "Go to Calendar", category: .navigate, symbolName: "calendar.day.timeline.left") {
+                navigation.select(.calendar)
+            },
+            PaletteCommand(id: "new-event", title: "New Event…", category: .create, symbolName: "calendar.badge.plus") {
+                navigation.select(.calendar)
+                navigation.isCalendarQuickEntryVisible = true
+            },
+            PaletteCommand(id: "search-calendar", title: "Search Calendar", category: .navigate, symbolName: "magnifyingglass") {
+                navigation.select(.calendar)
+                navigation.isCalendarSearchVisible = true
             },
             PaletteCommand(id: "people-bar", title: "People Command Bar", category: .navigate, symbolName: "person.text.rectangle") {
                 navigation.isPeopleCommandBarVisible = true
@@ -517,6 +574,16 @@ extension AppServices {
         await search.invalidateIndex()
         await warmSearchIndex()
     }
+}
+
+/// What the menu bar or an intent asked the calendar to do.
+///
+/// Declared here rather than in the app target so a window can be handed one without the shell
+/// depending on the app's own types — and so the same request can be produced by a test.
+public enum PendingCalendarRequest: Sendable, Hashable {
+    case open
+    case quickEntry
+    case day(Date)
 }
 
 /// Export and import, exposed to the menu bar through the focused scene.

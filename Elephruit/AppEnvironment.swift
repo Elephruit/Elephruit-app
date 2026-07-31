@@ -2,6 +2,7 @@ import ElephruitCore
 import ElephruitIntegrations
 import ElephruitFeatures
 import ElephruitPersistence
+import AppKit
 import Foundation
 import Observation
 
@@ -71,6 +72,16 @@ final class AppEnvironment {
         let useFixtureContacts = isDevelopmentMode
             && ProcessInfo.processInfo.arguments.contains("-ElephruitUseFixtureContacts")
 
+        // A synthetic calendar, for the same reason and on the same terms.
+        //
+        // The whole module — the week grid with a clashing morning, a four-day trip in the all-day
+        // band, a recurring standup, a declined invitation, a read-only subscribed calendar
+        // refusing an edit — is demonstrable against invented events. Gated on development mode as
+        // well as the argument, so a release build can never be talked into showing fiction where
+        // somebody expects their own calendar. `EKEventStore` is never constructed.
+        let useFixtureCalendar = isDevelopmentMode
+            && ProcessInfo.processInfo.arguments.contains("-ElephruitUseFixtureCalendar")
+
         do {
             let location = useTemporaryStore
                 ? StoreLocation.temporary(name: "UITests")
@@ -88,15 +99,24 @@ final class AppEnvironment {
             }
             let contactsProvider = useFixtureContacts ? makeFixtureContacts : nil
 
+            let makeFixtureCalendar: @Sendable () -> any CalendarProviding = {
+                FixtureCalendarProvider()
+            }
+            let calendarProvider = useFixtureCalendar ? makeFixtureCalendar : nil
+
             let services = AppServices(
                 stack: stack,
                 dateProvider: SystemDateProvider(),
                 isDevelopmentMode: isDevelopmentMode,
-                contactsProvider: contactsProvider
+                contactsProvider: contactsProvider,
+                calendarProvider: calendarProvider
             )
 
             if useFixtureContacts {
                 Diagnostics.features.info("Using a synthetic address book; no real contacts are read")
+            }
+            if useFixtureCalendar {
+                Diagnostics.features.info("Using a synthetic calendar; no real events are read or written")
             }
 
             // An intent firing in this process now uses the container that is already open, rather
@@ -125,6 +145,54 @@ final class AppEnvironment {
         return nil
     }
 
+    // MARK: - Reaching the calendar from outside a window
+
+    /// What the menu bar and the intents have asked the calendar to do.
+    ///
+    /// A published request rather than a direct call, because neither the menu bar nor an intent has
+    /// a window to act on: the window may not exist yet, and there may be several. The workspace
+    /// picks the request up when it next renders, which is also what makes it work when the app was
+    /// launched *by* the intent.
+    private(set) var pendingCalendarRequest: CalendarRequest?
+
+    typealias CalendarRequest = PendingCalendarRequest
+
+    func openCalendar() {
+        pendingCalendarRequest = .open
+        NSApplication.shared.activate()
+    }
+
+    func openCalendarQuickEntry() {
+        pendingCalendarRequest = .quickEntry
+        NSApplication.shared.activate()
+    }
+
+    /// Opens the calendar on a particular day — the shape a deep link arrives in.
+    func openCalendar(on day: Date) {
+        pendingCalendarRequest = .day(day)
+        NSApplication.shared.activate()
+    }
+
+    /// Cleared by the window that acted on it, so a request cannot fire twice.
+    ///
+    /// Called *after* the window has acted rather than while it is rendering: consuming during a
+    /// view's body is a mutation SwiftUI is entitled to run at any time and more than once.
+    func clearCalendarRequest() {
+        pendingCalendarRequest = nil
+    }
+
+    /// Picks up anything an intent left behind while the app was not frontmost.
+    func adoptIntentRouting() {
+        if CalendarIntentRouting.shouldOpenCalendar {
+            CalendarIntentRouting.shouldOpenCalendar = false
+            pendingCalendarRequest = .open
+        }
+        if let day = CalendarIntentRouting.requestedDay {
+            CalendarIntentRouting.requestedDay = nil
+            pendingCalendarRequest = .day(day)
+        }
+    }
+
     /// Offers the global shortcuts to the system and records what it said.
     ///
     /// Idempotent, so a preference change calls it again: the centre unregisters before it
@@ -143,8 +211,25 @@ final class AppEnvironment {
 
         hotKeyResults[.quickCapture] = result
 
-        if let explanation = result.explanation {
-            Diagnostics.shell.info("Global shortcut not taken: \(explanation, privacy: .public)")
+        // The calendar's quick entry, from anywhere.
+        //
+        // A second global shortcut rather than a mode on the first, because the two produce
+        // different things and somebody reaching for one is not thinking about the other. A person
+        // mid-conversation who needs to put a meeting in the calendar should not have to open a
+        // capture field and then decide what kind of thing they are capturing.
+        let eventResult = hotKeys.register(
+            .newEvent,
+            binding: services.shortcuts.binding(for: .newEvent)
+        ) { [weak self] in
+            self?.openCalendarQuickEntry()
+        }
+
+        hotKeyResults[.newEvent] = eventResult
+
+        for outcome in [result, eventResult] {
+            if let explanation = outcome.explanation {
+                Diagnostics.shell.info("Global shortcut not taken: \(explanation, privacy: .public)")
+            }
         }
     }
 }
