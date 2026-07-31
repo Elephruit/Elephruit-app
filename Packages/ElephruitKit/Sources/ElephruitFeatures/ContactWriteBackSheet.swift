@@ -103,7 +103,7 @@ struct ContactWriteBackSheet: View {
 
             row("Role", edit.roleTitle)
             row("Department", edit.departmentName)
-            row("Organisation", edit.organizationName)
+            row("Organization", edit.organizationName)
             row("Birthday", birthdayDescription)
 
             ForEach(writableGroups, id: \.title) { group in

@@ -92,7 +92,7 @@ struct CalendarEventRow: View {
         }
         if let location = event.locationName, !location.isEmpty { parts.append(location) }
         if let calendar = event.calendarName, !calendar.isEmpty { parts.append(calendar) }
-        if event.isCancelled { parts.append("cancelled") }
+        if event.isCancelled { parts.append("canceled") }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
@@ -102,7 +102,7 @@ struct CalendarEventRow: View {
             ? "all day"
             : "\(event.startAt.formatted(date: .omitted, time: .shortened)) to \(event.endAt.formatted(date: .omitted, time: .shortened))")
         if event.isRecurring { parts.append("repeating") }
-        if event.isCancelled { parts.append("cancelled") }
+        if event.isCancelled { parts.append("canceled") }
         if let location = event.locationName, !location.isEmpty { parts.append("at \(location)") }
         return parts.joined(separator: ", ")
     }
@@ -245,7 +245,7 @@ public struct CalendarSettingsSection: View {
         }
         return """
             Your events appear in Elephruit, and you can create and change them here. Anything you \
-            write *about* a meeting — linked people, your own notes, what you promised — stays in \
+            write *about* a meeting — linked people, your own notes, and related tasks — stays in \
             Elephruit and is never added to the calendar event.
             """
     }

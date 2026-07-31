@@ -81,7 +81,7 @@ public final class PersonIdentityService {
             conflicts.append(MergeConflict(field: field, primaryValue: left, secondaryValue: right))
         }
         compare("Role", primaryProfile?.roleTitle, secondaryProfile?.roleTitle)
-        compare("Organisation", primaryProfile?.organizationName, secondaryProfile?.organizationName)
+        compare("Organization", primaryProfile?.organizationName, secondaryProfile?.organizationName)
         compare("Location", primaryProfile?.locationText, secondaryProfile?.locationText)
         compare("Pronouns", primaryProfile?.pronouns, secondaryProfile?.pronouns)
 

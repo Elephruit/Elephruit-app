@@ -273,26 +273,15 @@ struct LogInteractionSheet: View {
                     summaryAndDate
                     discussionField
 
-                    HStack(alignment: .top, spacing: Theme.Spacing.medium) {
-                        actionList(
-                            title: "Follow-ups",
-                            detail: "Open tasks",
-                            symbol: "checkmark.circle.fill",
-                            tint: .blue,
-                            text: $draft.followUps,
-                            field: .followUps,
-                            prompt: "One task per line"
-                        )
-                        actionList(
-                            title: "Commitments",
-                            detail: "Promises you made",
-                            symbol: "hand.raised.fill",
-                            tint: .orange,
-                            text: $draft.commitments,
-                            field: .commitments,
-                            prompt: "One promise per line"
-                        )
-                    }
+                    actionList(
+                        title: "Tasks",
+                        detail: "Next steps from this interaction",
+                        symbol: "checkmark.circle.fill",
+                        tint: .blue,
+                        text: $draft.followUps,
+                        field: .followUps,
+                        prompt: "One task per line"
+                    )
                 }
                 .padding(Theme.Spacing.section)
             }
@@ -596,7 +585,7 @@ struct LogInteractionSheet: View {
 
     private var footer: some View {
         HStack {
-            Text("Saved to every attendee; follow-ups become tasks.")
+            Text("The interaction and its tasks are linked to every attendee.")
                 .font(Theme.Text.metadata)
                 .foregroundStyle(Theme.Colors.tertiaryText)
 

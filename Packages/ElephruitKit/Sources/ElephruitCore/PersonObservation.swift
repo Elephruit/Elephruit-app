@@ -88,7 +88,7 @@ public struct FactAttribute: RawRepresentable, Codable, Sendable, Hashable {
         case .lookingFor: "Looking for"
         case .significance: "Why they matter"
         case .reflection: "Private notes"
-        case .promise: "Promised"
+        case .promise: "Tasks"
         default: rawValue.capitalized
         }
     }
@@ -113,7 +113,7 @@ public struct FactAttribute: RawRepresentable, Codable, Sendable, Hashable {
         case .lookingFor: "magnifyingglass"
         case .significance: "heart"
         case .reflection: "lock"
-        case .promise: "hand.raised"
+        case .promise: "checkmark.circle"
         default: "text.alignleft"
         }
     }

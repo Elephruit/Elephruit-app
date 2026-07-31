@@ -407,8 +407,8 @@ struct PersonHeaderView: View {
                                 .foregroundStyle(person.isFavorite ? Theme.Colors.dueToday : Theme.Colors.secondaryText)
                         }
                         .buttonStyle(.borderless)
-                        .help(person.isFavorite ? "Remove from Favourites" : "Add to Favourites")
-                        .accessibilityLabel(person.isFavorite ? "Remove from favourites" : "Add to favourites")
+                        .help(person.isFavorite ? "Remove from Favorites" : "Add to Favorites")
+                        .accessibilityLabel(person.isFavorite ? "Remove from favorites" : "Add to favorites")
                     }
 
                     if let pronunciation = profile?.pronunciation, !pronunciation.isEmpty {
@@ -588,23 +588,100 @@ struct PersonQuickActions: View {
     let onAddRelationship: () -> Void
 
     var body: some View {
-        AdaptiveActionBar(actions)
+        ViewThatFits(in: .horizontal) {
+            actionDock(showsContactTitles: true)
+            actionDock(showsContactTitles: false)
+        }
             .accessibilityIdentifier(AccessibilityID.People.quickActions)
     }
 
-    private var actions: [ActionItem] {
-        availability.map { entry in
-            ActionItem(
-                id: entry.id,
-                title: entry.title,
-                symbolName: entry.symbolName,
-                priority: priority(for: entry),
-                isEnabled: entry.isAvailable,
-                unavailabilityReason: entry.unavailabilityReason,
-                detail: entry.detail,
-                perform: { perform(entry) }
-            )
+    private func actionDock(showsContactTitles: Bool) -> some View {
+        HStack(spacing: Theme.Spacing.small) {
+            ForEach(primaryContactActions) { entry in
+                PersonDockButton(
+                    entry: entry,
+                    tint: tint(for: entry),
+                    showsTitle: showsContactTitles,
+                    isProminent: false
+                ) { perform(entry) }
+            }
+
+            if !primaryContactActions.isEmpty {
+                Divider()
+                    .frame(height: 24)
+                    .padding(.horizontal, 2)
+            }
+
+            if let interactionAction {
+                PersonDockButton(
+                    entry: interactionAction,
+                    tint: .purple,
+                    showsTitle: true,
+                    isProminent: true
+                ) { perform(interactionAction) }
+            }
+
+            if let noteAction {
+                PersonDockButton(
+                    entry: noteAction,
+                    tint: .orange,
+                    showsTitle: showsContactTitles,
+                    isProminent: false
+                ) { perform(noteAction) }
+            }
+
+            if !secondaryActions.isEmpty {
+                Menu {
+                    ForEach(secondaryActions) { entry in
+                        Button {
+                            perform(entry)
+                        } label: {
+                            Label(entry.title, systemImage: entry.symbolName)
+                        }
+                        .disabled(!entry.isAvailable)
+                        .help(entry.unavailabilityReason ?? entry.detail ?? entry.title)
+                    }
+                } label: {
+                    Label("More", systemImage: "ellipsis")
+                        .labelStyle(.iconOnly)
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 36, height: 36)
+                        .background(Theme.Colors.subtleFill, in: Circle())
+                }
+                .menuIndicator(.hidden)
+                .buttonStyle(.plain)
+                .help("More actions")
+                .accessibilityLabel("More actions")
+            }
         }
+        .padding(7)
+        .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: 15))
+        .overlay {
+            RoundedRectangle(cornerRadius: 15)
+                .strokeBorder(Theme.Colors.separator.opacity(0.55))
+        }
+        .shadow(color: .black.opacity(0.055), radius: 12, y: 4)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var primaryContactActions: [PersonActionAvailability] {
+        availability.filter { entry in
+            guard entry.isAvailable, case .contact(let channel) = entry.kind else { return false }
+            return channel == .call || channel == .message || channel == .email
+        }
+    }
+
+    private var interactionAction: PersonActionAvailability? {
+        availability.first { if case .logInteraction = $0.kind { true } else { false } }
+    }
+
+    private var noteAction: PersonActionAvailability? {
+        availability.first { if case .addNote = $0.kind { true } else { false } }
+    }
+
+    private var secondaryActions: [PersonActionAvailability] {
+        let visible = Set(primaryContactActions.map(\.id) + [interactionAction?.id, noteAction?.id].compactMap { $0 })
+        return availability.filter { !visible.contains($0.id) }
     }
 
     private var availability: [PersonActionAvailability] {
@@ -620,13 +697,15 @@ struct PersonQuickActions: View {
         return (try? services.persons.relationships(of: person)) ?? []
     }
 
-    /// The availability rule already ranked these; this is only the coarse banding the action bar
-    /// sheds labels by, so the two cannot disagree about which action matters most.
-    private func priority(for entry: PersonActionAvailability) -> ActionItem.Priority {
-        switch entry.rank {
-        case 80...: .essential
-        case 50..<80: .common
-        default: .occasional
+    private func tint(for entry: PersonActionAvailability) -> Color {
+        guard case .contact(let channel) = entry.kind else { return Theme.Colors.selection }
+        switch channel {
+        case .call: return Color.green
+        case .message: return Color.blue
+        case .email: return Color.indigo
+        case .facetimeVideo, .facetimeAudio: return Color.cyan
+        case .maps: return Color.orange
+        case .web: return Color.purple
         }
     }
 
@@ -670,5 +749,46 @@ struct PersonQuickActions: View {
             try services.items.link(task, to: person, kind: .mentions)
             services.noteChange(to: task)
         }
+    }
+}
+
+private struct PersonDockButton: View {
+    let entry: PersonActionAvailability
+    let tint: Color
+    let showsTitle: Bool
+    let isProminent: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Group {
+                if showsTitle {
+                    Label(entry.title, systemImage: entry.symbolName)
+                } else {
+                    Label(entry.title, systemImage: entry.symbolName)
+                        .labelStyle(.iconOnly)
+                }
+            }
+            .font(.system(.callout, weight: .semibold))
+            .foregroundStyle(isProminent ? Color.white : tint)
+            .padding(.horizontal, showsTitle ? Theme.Spacing.medium : 0)
+            .frame(width: showsTitle ? nil : 36, height: 36)
+            .background(
+                isProminent ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(tint.opacity(0.11)),
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(isProminent ? Color.white.opacity(0.16) : tint.opacity(0.16))
+            }
+            .shadow(color: isProminent ? tint.opacity(0.25) : .clear, radius: 7, y: 3)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!entry.isAvailable)
+        .help(entry.unavailabilityReason ?? entry.detail ?? entry.title)
+        .accessibilityLabel(entry.title)
+        .accessibilityHint(entry.unavailabilityReason ?? entry.detail ?? "")
+        .accessibilityIdentifier("action.\(entry.id)")
     }
 }

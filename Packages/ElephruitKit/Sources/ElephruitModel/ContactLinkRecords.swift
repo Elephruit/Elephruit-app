@@ -241,7 +241,7 @@ extension ImportedContactValue {
         case ContactField.nameSuffix: "Suffix"
         case ContactField.nickname: "Nickname"
         case ContactField.pronunciation: "Pronunciation"
-        case ContactField.organization: "Organisation"
+        case ContactField.organization: "Organization"
         case ContactField.role: "Role"
         case ContactField.email: "Email"
         case ContactField.phone: "Phone"

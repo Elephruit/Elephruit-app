@@ -240,17 +240,17 @@ struct PersonTimelineDetailSheet: View {
     }
 
     private var eyebrow: String {
-        if entry.isPromise { return "Promise" }
+        if entry.isPromise { return "Task" }
         if entry.kind == .interaction { return "Interaction" }
         return entry.kind.displayName
     }
 
     private var heroSymbol: String {
-        entry.isPromise ? "hand.raised.fill" : entry.kind.symbolName
+        entry.isPromise ? "checkmark.circle.fill" : entry.kind.symbolName
     }
 
     private var accent: Color {
-        if entry.isPromise { return .orange }
+        if entry.isPromise { return .green }
         switch entry.kind {
         case .note: return .blue
         case .interaction, .meeting: return .purple

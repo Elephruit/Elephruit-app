@@ -321,7 +321,7 @@ struct AgendaEventRow: View {
             parts.append(event.attendeeNames.prefix(3).joined(separator: ", "))
         }
         if let name = event.calendarName, !name.isEmpty { parts.append(name) }
-        if event.isCancelled { parts.append("cancelled") }
+        if event.isCancelled { parts.append("canceled") }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
@@ -336,7 +336,7 @@ struct AgendaEventRow: View {
         var parts = [event.displayTitle]
         parts.append(event.isAllDay ? "all day" : event.timeSummary(in: timeZone, calendar: calendar))
         if event.isRecurring { parts.append("repeating") }
-        if event.isCancelled { parts.append("cancelled") }
+        if event.isCancelled { parts.append("canceled") }
         if let location = event.locationName, !location.isEmpty { parts.append("at \(location)") }
         if !event.attendeeNames.isEmpty {
             parts.append("with \(event.attendeeNames.prefix(3).joined(separator: ", "))")

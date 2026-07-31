@@ -543,7 +543,7 @@ public struct EventInspectorView: View {
                 Text("Last changed \(modified.formatted(date: .abbreviated, time: .shortened))")
             }
             if let organizer = event.organizerName {
-                Text("Organised by \(organizer)")
+                Text("Organized by \(organizer)")
             }
         }
         .font(Theme.Text.keyHint)
