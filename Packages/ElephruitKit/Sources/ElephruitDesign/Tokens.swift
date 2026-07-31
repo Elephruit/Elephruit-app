@@ -141,6 +141,17 @@ extension Theme {
         /// Selection. Follows the user's accent colour.
         public static let selection = Color.accentColor
 
+        /// The fill under whatever the pointer is over.
+        ///
+        /// Deliberately *not* ``selection``. Hover answers "what would I hit if I clicked here";
+        /// selection answers "what am I looking at". Drawing hover in the accent colour conflates
+        /// the two, so a pointer crossing a list leaves a wake of things that look chosen.
+        ///
+        /// `quaternarySystemFill` is AppKit's own token for exactly this — a small area tinted
+        /// enough to be noticed and not enough to be read as state — and it resolves correctly in
+        /// dark mode and under Increase Contrast, where a fixed grey would not.
+        public static let hoverFill = Color(nsColor: .quaternarySystemFill)
+
         /// Something needs attention now — an overdue date.
         public static let overdue = Color(nsColor: .systemRed)
         /// Something needs attention today.

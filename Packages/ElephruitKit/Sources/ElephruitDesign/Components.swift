@@ -276,6 +276,72 @@ public struct TagChipRow: View {
     }
 }
 
+// MARK: - Hover
+
+extension View {
+    /// Draws a quiet fill under this view while the pointer is over it.
+    ///
+    /// ### Why the app draws this rather than the system
+    /// macOS hover-highlights toolbar buttons and menu items for free, but not the rows of a
+    /// `List` — a sidebar row and a person in the middle column give no feedback at all until
+    /// they are clicked. On a dense list that is the difference between "which of these am I
+    /// about to open" and a guess.
+    ///
+    /// ### On pairing it with `.help`
+    /// A highlight says *this is the thing under the pointer*; it does not say what the thing is.
+    /// Every surface that takes this modifier also carries a `.help` string, so hovering first
+    /// shows which row is live and then, after the system's own tooltip delay, what it holds.
+    /// The delay is the system's on purpose: it is a setting the user may have changed, and a
+    /// bespoke timer would ignore that and would not reach VoiceOver either.
+    ///
+    /// - Parameters:
+    ///   - isEnabled: Pass `false` for a row that is already selected. The selection fill and the
+    ///     hover fill on the same row read as neither.
+    ///   - cornerRadius: Matches the surrounding selection treatment.
+    ///   - extending: How far past the content the fill reaches horizontally. List rows lay their
+    ///     content out inside the list's own inset, so a fill drawn flush to the text hugs it.
+    public func hoverHighlight(
+        isEnabled: Bool = true,
+        cornerRadius: CGFloat = Theme.Radius.medium,
+        extending: CGFloat = 0
+    ) -> some View {
+        modifier(
+            HoverHighlightModifier(
+                isEnabled: isEnabled,
+                cornerRadius: cornerRadius,
+                extending: extending
+            )
+        )
+    }
+}
+
+private struct HoverHighlightModifier: ViewModifier {
+    let isEnabled: Bool
+    let cornerRadius: CGFloat
+    let extending: CGFloat
+
+    @State private var isHovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Theme.Colors.hoverFill)
+                    .padding(.horizontal, -extending)
+                    .opacity(isVisible ? 1 : 0)
+            }
+            // So the gaps between a glyph, a label, and a trailing count are part of the same
+            // target. Without it the highlight flickers as the pointer crosses the spacing.
+            .contentShape(.rect)
+            .onHover { isHovering = $0 }
+            .calmAnimation(Theme.Motion.appearance, value: isVisible)
+    }
+
+    /// Selection wins. A row cannot usefully be both the thing you are looking at and the thing
+    /// you might click next.
+    private var isVisible: Bool { isEnabled && isHovering }
+}
+
 // MARK: - Empty state
 
 /// What a view shows when it has nothing to show.
