@@ -22,6 +22,7 @@ public struct CalendarMenuBarContent: View {
 
     @State private var today: [CalendarEventSummary] = []
     @State private var next: CalendarEventSummary?
+    @State private var window: [CalendarEventSummary] = []
 
     public init(
         services: AppServices,
@@ -149,14 +150,22 @@ public struct CalendarMenuBarContent: View {
     /// tomorrow morning's meeting, and a menu that says "nothing left today" while somebody has a
     /// 7 a.m. flight is the wrong answer to the question they asked.
     private func refresh() async {
+        // Starting the service here as well as in a window, because the menu bar can be the first
+        // thing on screen — the app may be launched into the background by a Shortcut, and a menu
+        // that says "nothing scheduled" because nobody opened a window is worse than an empty one.
+        await services.calendar.start()
+
         let calendar = services.calendar.displayCalendar
         let start = calendar.startOfDay(for: services.dateProvider.now)
         guard let end = calendar.date(byAdding: .day, value: 2, to: start) else { return }
 
-        await services.calendar.load(range: start..<end)
+        // `peek` rather than `load`: a window is showing a month and this wants two days, and
+        // whichever called `load` last would decide what the other reloaded on the next change.
+        window = await services.calendar.peek(range: start..<end)
 
-        today = services.calendar.events(on: services.dateProvider.now)
-        next = services.calendar.events
+        let today = calendar.startOfDay(for: services.dateProvider.now)
+        self.today = window.filter { $0.occurs(on: today, calendar: calendar) && $0.appearsInPlan }
+        next = window
             .filter { $0.startAt > services.dateProvider.now && $0.appearsInPlan && !$0.isAllDay }
             .min { $0.startAt < $1.startAt }
     }
@@ -213,14 +222,14 @@ public struct CalendarMenuBarLabel: View {
     }
 
     private func refresh() async {
+        await services.calendar.start()
         guard services.calendar.isEnabled, services.calendar.authorization.canRead else { return }
 
         let calendar = services.calendar.displayCalendar
         let start = calendar.startOfDay(for: services.dateProvider.now)
         guard let end = calendar.date(byAdding: .day, value: 2, to: start) else { return }
 
-        await services.calendar.load(range: start..<end)
-        next = services.calendar.events
+        next = await services.calendar.peek(range: start..<end)
             .filter { $0.startAt > services.dateProvider.now && $0.appearsInPlan && !$0.isAllDay }
             .min { $0.startAt < $1.startAt }
     }

@@ -393,6 +393,29 @@ public final class CalendarService {
         return events.filter(\.appearsInPlan)
     }
 
+    /// Reads a window **without** making it the window the interface is showing.
+    ///
+    /// ### Why this exists rather than another `load(range:)`
+    /// The menu bar wants two days and a window wants a month, and they are on screen at the same
+    /// time. `load(range:)` records what it read, so the two calling it in turn means each one
+    /// shrinks or widens what the other is showing — and the next change notification reloads
+    /// whichever window happened to be recorded last. The symptom is a week view that quietly
+    /// becomes two days when the menu bar refreshes.
+    ///
+    /// So anything that wants a window of its own asks for one and keeps it.
+    public func peek(range: Range<Date>) async -> [CalendarEventSummary] {
+        guard isEnabled, authorization.canRead else {
+            guard let index else { return [] }
+            let cached = await index.cachedEvents(
+                in: range, calendarIdentifiers: visibleCalendarIdentifiers
+            )
+            return applyingSetRules(to: cached.map(Self.summary(from:)))
+        }
+
+        let fetched = await provider.events(in: range, calendarIdentifiers: visibleCalendarIdentifiers)
+        return applyingSetRules(to: fetched)
+    }
+
     /// Events happening on a given day, in plan order.
     public func events(on date: Date) -> [CalendarEventSummary] {
         events.filter { $0.occurs(on: date, calendar: displayCalendar) && $0.appearsInPlan }
