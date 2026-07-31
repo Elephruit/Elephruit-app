@@ -52,6 +52,22 @@ public enum ItemKind: String, Codable, Sendable, Hashable, CaseIterable {
     /// Material kept because it may be needed, not because it is being worked on.
     case reference
 
+    /// A flexible collection of tasks with no outcome and no end — "Groceries", "Books to read".
+    ///
+    /// ### Why a list is not a project, and not an area
+    /// A **project** finishes. It has an outcome, a progress figure that means something, and a
+    /// point at which the app can reasonably ask whether it is done. A **list** does not: nobody
+    /// completes Groceries. An **area** is a standing responsibility that *contains* work rather
+    /// than being work itself, so putting loose errands directly in one makes the responsibility and
+    /// the errands the same shape.
+    ///
+    /// Collapsing the three into one container was the alternative, and it fails in both directions:
+    /// a project whose progress is meaningless, or a shopping list the app keeps offering to finish.
+    ///
+    /// A list is also the only container that maps cleanly onto an Apple Reminders list, which is
+    /// what makes the integration honest — see `ReminderFieldMapping`.
+    case list
+
     /// A named section inside a project — "Planning", "Things to buy".
     ///
     /// Project *organisation*, not content. A heading has a title, an order, and tasks beneath it,
@@ -109,6 +125,23 @@ public struct ItemFields: OptionSet, Sendable, Hashable {
     /// May carry tags. Everything except a heading, which is structure rather than content.
     public static let tags = ItemFields(rawValue: 1 << 13)
 
+    /// `reminderAt` and its ownership — a notification, which is not a date.
+    ///
+    /// Its own flag rather than folded into ``dueDate`` precisely because the two must never be set
+    /// together by accident: a kind that can hold a deadline is not thereby allowed to interrupt
+    /// somebody.
+    public static let reminder = ItemFields(rawValue: 1 << 14)
+
+    /// The marks that describe how work is being *managed* rather than what it is: a commitment to
+    /// today, a parked state, a waiting state, a flag.
+    public static let planning = ItemFields(rawValue: 1 << 15)
+
+    /// `checklistData` — lightweight steps inside a single action.
+    public static let checklist = ItemFields(rawValue: 1 << 16)
+
+    /// A link to a record in a system store, with its sync state.
+    public static let externalLink = ItemFields(rawValue: 1 << 17)
+
     /// Fields every kind supports, and which therefore need no declaration:
     /// title, timestamps, tags, links, attachments, flags, sort order, metadata.
     public static let none: ItemFields = []
@@ -123,13 +156,24 @@ extension ItemKind {
             [.body, .tags]
 
         case .task:
-            [.body, .tags, .status, .dueDate, .startDate, .deferDate, .recurrence, .priority, .children]
+            [
+                .body, .tags, .status, .dueDate, .startDate, .deferDate, .recurrence, .priority,
+                .children, .reminder, .planning, .checklist, .externalLink,
+            ]
 
         case .project:
-            [.body, .tags, .status, .dueDate, .startDate, .deferDate, .priority, .children, .appearance]
+            // Planning but no reminder: a project can be parked, flagged, or waited on, and none of
+            // those is a reason to interrupt somebody. The reminder belongs on the action.
+            [
+                .body, .tags, .status, .dueDate, .startDate, .deferDate, .priority, .children,
+                .appearance, .planning,
+            ]
 
         case .area:
             [.body, .tags, .children, .appearance]
+
+        case .list:
+            [.body, .tags, .children, .appearance, .externalLink]
 
         case .person:
             [.body, .tags, .appearance, .personProfile]
@@ -188,10 +232,10 @@ extension ItemKind {
 
         switch self {
         case .area:
-            return childKind == .project || childKind == .goal
+            return childKind == .project || childKind == .goal || childKind == .list
         case .goal:
             return childKind == .project
-        case .project:
+        case .project, .list:
             return childKind == .heading || childKind == .task
         case .heading:
             return childKind == .task
@@ -208,7 +252,7 @@ extension ItemKind {
     /// contained".
     public var isWorkBreakdownContainer: Bool {
         switch self {
-        case .area, .goal, .project, .heading, .task: true
+        case .area, .goal, .project, .list, .heading, .task: true
         default: false
         }
     }
@@ -227,7 +271,7 @@ extension ItemKind {
     /// never themselves the thing awaiting triage.
     public var appearsInInbox: Bool {
         switch self {
-        case .project, .area, .goal:
+        case .project, .area, .goal, .list:
             // Containers.
             false
         case .person, .organization:
@@ -272,6 +316,7 @@ extension ItemKind {
     public var symbolName: String {
         switch self {
         case .note: "note.text"
+        case .list: "list.bullet"
         case .task: "checkmark.circle"
         case .project: "square.stack.3d.up"
         case .area: "square.grid.2x2"
@@ -294,6 +339,7 @@ extension ItemKind {
     public var displayName: String {
         switch self {
         case .note: "Note"
+        case .list: "List"
         case .task: "Task"
         case .project: "Project"
         case .area: "Area"

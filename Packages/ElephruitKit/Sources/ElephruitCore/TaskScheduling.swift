@@ -193,6 +193,34 @@ public enum TaskSyncState: String, Sendable, Hashable, Codable, CaseIterable {
     }
 }
 
+/// Why a migrated date was left alone and flagged instead.
+///
+/// The migration's whole posture is that it does not know what an old value meant. Where the meaning
+/// is unambiguous it converts; where it is not, it converts nothing and records one of these, so the
+/// user can decide with the task in front of them.
+public enum DateReviewReason: String, Sendable, Hashable, Codable, CaseIterable {
+    /// A deadline carrying a time of day, from before reminders existed as a separate field.
+    ///
+    /// It could have been "finish by 5pm" or "remind me at 5pm", and those are different requests.
+    /// The value stays exactly where it was, as a deadline, and the task says it is worth a look.
+    case deadlineMayHaveBeenAReminder
+
+    /// Both a legacy defer date and a start date were present and disagreed.
+    ///
+    /// The fold is only lossless when there is one value; two means somebody's intent is in there
+    /// and picking one would throw the other away.
+    case startAndDeferDisagreed
+
+    public var summary: String {
+        switch self {
+        case .deadlineMayHaveBeenAReminder:
+            "This deadline has a time on it. Did you mean a deadline, or a reminder?"
+        case .startAndDeferDisagreed:
+            "This task had two different start dates. The earlier one was kept."
+        }
+    }
+}
+
 // MARK: - Facts
 
 /// Everything the scheduling rules need to know about one task, as a value.

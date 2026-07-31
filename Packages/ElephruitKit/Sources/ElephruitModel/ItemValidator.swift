@@ -70,6 +70,27 @@ public enum ItemValidator {
         if !item.tags.isEmpty, !fields.contains(.tags) {
             throw fieldFailure("tags", kind)
         }
+        if item.reminderAt != nil, !fields.contains(.reminder) {
+            throw fieldFailure("reminderAt", kind)
+        }
+        if item.checklistData != nil, !fields.contains(.checklist) {
+            throw fieldFailure("checklist", kind)
+        }
+        if item.externalIdentifier != nil, !fields.contains(.externalLink) {
+            throw fieldFailure("externalIdentifier", kind)
+        }
+        if !fields.contains(.planning) {
+            // Checked together because they are one capability. A note that somehow acquired a
+            // Someday mark and a note that acquired a flag are the same bug, and naming the first
+            // field found is enough to locate it.
+            let hasPlanningValue = item.todayCommittedOn != nil
+                || item.isLaterToday
+                || item.isSomeday
+                || item.isFlagged
+                || item.waitingSince != nil
+                || item.followUpAt != nil
+            if hasPlanningValue { throw fieldFailure("planning", kind) }
+        }
     }
 
     private static func fieldFailure(_ field: String, _ kind: ItemKind) -> AppError {
@@ -97,6 +118,12 @@ public enum ItemValidator {
 
         guard isCompleted == hasCompletionDate else {
             throw .validation(ValidationFailure(reason: .statusDateMismatch, field: "completedAt"))
+        }
+
+        // Cancellation carries the same rule as completion: the state and its date are one fact, and
+        // a task that reads as abandoned with no date for it cannot be placed in the log.
+        guard (item.status == .cancelled) == (item.cancelledAt != nil) else {
+            throw .validation(ValidationFailure(reason: .statusDateMismatch, field: "cancelledAt"))
         }
     }
 
@@ -193,10 +220,42 @@ public enum ItemValidator {
             cleared.append("tags")
         }
 
+        if item.reminderAt != nil, !fields.contains(.reminder) {
+            item.reminderAt = nil
+            item.reminderIsTimed = false
+            item.reminderOwner = .none
+            cleared.append("reminder")
+        }
+        if item.checklistData != nil, !fields.contains(.checklist) {
+            item.checklistData = nil
+            cleared.append("checklist")
+        }
+        if item.externalIdentifier != nil, !fields.contains(.externalLink) {
+            // The *link* is dropped, never the reminder. Turning a task into a note is not consent
+            // to delete something out of somebody's iCloud account.
+            item.setReminderLink(nil)
+            cleared.append("Reminders link")
+        }
+        if !fields.contains(.planning) {
+            var clearedPlanning = false
+            if item.todayCommittedOn != nil || item.isLaterToday { clearedPlanning = true }
+            if item.isSomeday || item.isFlagged { clearedPlanning = true }
+            if item.waitingSince != nil || item.followUpAt != nil { clearedPlanning = true }
+
+            item.todayCommittedOn = nil
+            item.isLaterToday = false
+            item.isSomeday = false
+            item.isFlagged = false
+            item.waitingSince = nil
+            item.followUpAt = nil
+            if clearedPlanning { cleared.append("planning marks") }
+        }
+
         if !newKind.supportsStatus {
-            if item.status != .none || item.completedAt != nil {
+            if item.status != .none || item.completedAt != nil || item.cancelledAt != nil {
                 item.status = .none
                 item.completedAt = nil
+                item.cancelledAt = nil
                 cleared.append("completion")
             }
         } else if item.status == .none {
