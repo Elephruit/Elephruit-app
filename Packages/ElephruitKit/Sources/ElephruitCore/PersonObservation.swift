@@ -31,6 +31,11 @@ public struct FactAttribute: RawRepresentable, Codable, Sendable, Hashable {
     public static let dislike = FactAttribute("dislike")
     public static let giftIdea = FactAttribute("giftIdea")
     public static let communicationPreference = FactAttribute("communicationPreference")
+    public static let foodAndDrink = FactAttribute("foodAndDrink")
+    public static let family = FactAttribute("family")
+    public static let interest = FactAttribute("interest")
+    public static let conversationTopic = FactAttribute("conversationTopic")
+    public static let quickFact = FactAttribute("quickFact")
 
     // MARK: Derived-from-dated-observation
 
@@ -55,8 +60,9 @@ public struct FactAttribute: RawRepresentable, Codable, Sendable, Hashable {
 
     /// Every attribute the interface offers a dedicated card for, in the order they are shown.
     public static let curated: [FactAttribute] = [
-        .significance, .lifeEvent, .location, .employer, .role,
-        .like, .dislike, .giftIdea, .communicationPreference, .lookingFor,
+        .significance, .conversationTopic, .family, .foodAndDrink, .interest,
+        .like, .dislike, .lifeEvent, .location, .employer, .role,
+        .giftIdea, .communicationPreference, .lookingFor, .quickFact,
         .promise, .reflection,
     ]
 
@@ -72,6 +78,11 @@ public struct FactAttribute: RawRepresentable, Codable, Sendable, Hashable {
         case .dislike: "Avoid"
         case .giftIdea: "Gift ideas"
         case .communicationPreference: "How to reach them"
+        case .foodAndDrink: "Food & drink"
+        case .family: "Family"
+        case .interest: "Interests"
+        case .conversationTopic: "Ask about"
+        case .quickFact: "Good to know"
         case .observedAge: "Age"
         case .schoolGrade: "School"
         case .lookingFor: "Looking for"
@@ -92,6 +103,11 @@ public struct FactAttribute: RawRepresentable, Codable, Sendable, Hashable {
         case .dislike: "hand.thumbsdown"
         case .giftIdea: "gift"
         case .communicationPreference: "bubble.left.and.text.bubble.right"
+        case .foodAndDrink: "fork.knife"
+        case .family: "figure.2.and.child.holdinghands"
+        case .interest: "star"
+        case .conversationTopic: "bubble.left.and.questionmark.bubble.right"
+        case .quickFact: "sparkles"
         case .observedAge: "birthday.cake"
         case .schoolGrade: "graduationcap"
         case .lookingFor: "magnifyingglass"

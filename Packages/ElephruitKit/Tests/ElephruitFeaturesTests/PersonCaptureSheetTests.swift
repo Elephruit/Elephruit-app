@@ -51,4 +51,14 @@ struct PersonCaptureSheetTests {
         #expect(stored == .video)
         #expect(entry.provenanceLine == "video — logged")
     }
+
+    @Test("Quick facts use searchable, practical categories")
+    func quickFactCategories() {
+        #expect(QuickFactCategory.foodAndDrink.attribute == .foodAndDrink)
+        #expect(QuickFactCategory.family.attribute == .family)
+        #expect(QuickFactCategory.askAbout.attribute == .conversationTopic)
+        #expect(QuickFactCategory.foodAndDrink.suggestions.contains("Vegetarian"))
+        #expect(QuickFactCategory.foodAndDrink.suggestions.contains("Doesn’t drink alcohol"))
+        #expect(QuickFactCategory.foodAndDrink.suggestions.contains("Likes wine"))
+    }
 }
