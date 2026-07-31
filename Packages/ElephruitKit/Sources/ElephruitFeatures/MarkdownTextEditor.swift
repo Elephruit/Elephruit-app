@@ -85,6 +85,13 @@ public struct MarkdownTextEditor: NSViewRepresentable {
 
         context.coordinator.parent = self
 
+        // Everything below writes into the text view, and `NSTextView` answers those writes with
+        // delegate callbacks on the same turn of the run loop. Reporting them back to SwiftUI from
+        // inside `updateNSView` is a state mutation during a view update, so the coordinator stays
+        // quiet for the duration and speaks again once the update is over.
+        context.coordinator.isApplyingUpdate = true
+        defer { context.coordinator.isApplyingUpdate = false }
+
         // Only write when the value genuinely differs, or every keystroke would reset the caret to
         // the end of the document.
         if textView.string != text {
@@ -130,18 +137,26 @@ public struct MarkdownTextEditor: NSViewRepresentable {
         var parent: MarkdownTextEditor
         weak var textView: NSTextView?
 
+        /// Set while SwiftUI is pushing values into the text view.
+        ///
+        /// Assigning `string` makes `NSTextView` collapse the selection and post a selection-change
+        /// notification, and restoring the selection posts another. Both arrive synchronously,
+        /// inside `updateNSView`, and both describe a caret the user never moved — so the honest
+        /// answer to them is silence rather than a completion context nobody asked for.
+        var isApplyingUpdate = false
+
         init(parent: MarkdownTextEditor) {
             self.parent = parent
         }
 
         public func textDidChange(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
+            guard !isApplyingUpdate, let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
             reportCompletionContext(in: textView)
         }
 
         public func textViewDidChangeSelection(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
+            guard !isApplyingUpdate, let textView = notification.object as? NSTextView else { return }
             reportCompletionContext(in: textView)
         }
 
@@ -205,8 +220,13 @@ public struct MarkdownTextEditor: NSViewRepresentable {
             let caret = range.location + (replacement as NSString).length
             textView.setSelectedRange(NSRange(location: caret, length: 0))
 
-            parent.text = textView.string
-            parent.onCompletionContextChange(nil)
+            // This runs from `updateNSView`, so the two writes wait for the next tick for the same
+            // reason the caller's `pendingInsertion = nil` does.
+            let inserted = textView.string
+            Task { @MainActor [self] in
+                parent.text = inserted
+                parent.onCompletionContextChange(nil)
+            }
         }
     }
 }

@@ -75,6 +75,11 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
     case clearSelection
     case toggleTimer
     case peopleCommandBar
+    case quickTaskEntry
+    case goTasks
+    case completeTask
+    case flagTask
+    case moveToToday
 
     // MARK: The calendar
     case goCalendar
@@ -110,6 +115,11 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .newEvent: "New Event"
         case .searchCalendar: "Search Calendar"
         case .switchCalendarSet: "Switch Calendar Set"
+        case .quickTaskEntry: "Quick Task Entry"
+        case .goTasks: "Go to Today's Tasks"
+        case .completeTask: "Complete Task"
+        case .flagTask: "Flag Task"
+        case .moveToToday: "Move to Today"
         }
     }
 
@@ -152,6 +162,16 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .newEvent: KeyBinding("e", [.command, .control])
         case .searchCalendar: KeyBinding("f", [.command, .control])
         case .switchCalendarSet: KeyBinding("s", [.command, .option])
+
+        // ⌃⌘Space for capture from anywhere, which is the one shortcut a task manager has to have
+        // and the one place a global binding is worth the cost. See ADR 0008.
+        case .quickTaskEntry: KeyBinding(" ", [.command, .control])
+        case .goTasks: KeyBinding("7")
+        // Return-adjacent, because completing is what you do most and ⌘Return is free here: the
+        // lists are not text fields, and the text fields that exist handle their own Return.
+        case .completeTask: KeyBinding("\r", .command)
+        case .flagTask: KeyBinding("f", [.command, .shift])
+        case .moveToToday: KeyBinding("t", [.command, .shift])
         }
     }
 }

@@ -64,6 +64,12 @@ public struct RootView: View {
                 navigation.selectItem(id)
             }
         }
+        .sheet(isPresented: taskEntryBinding) {
+            TaskQuickEntryView { created in
+                navigation.select(.taskView(.inbox))
+                navigation.selectItem(created.id)
+            }
+        }
         .sheet(isPresented: commandPaletteBinding) {
             CommandPaletteView(navigation: navigation, commands: paletteCommands)
         }
@@ -178,7 +184,13 @@ public struct RootView: View {
             // Time replaces the list rather than opening beside it: it *is* the middle column's
             // contents for that destination, in the same way a project's task list is.
             Group {
-                if navigation.selection == .time {
+                if navigation.selection.isTaskDestination {
+                    // Tasks replace the middle column rather than filtering it. The sections, the
+                    // headings, and the inline row are all specific to the scheduling model, and
+                    // routing them through the generic item list would mean either a second copy of
+                    // those rules or a list that cannot show them.
+                    TaskWorkspaceView(navigation: navigation)
+                } else if navigation.selection == .time {
                     TimeView(navigation: navigation)
                 } else if navigation.selection == .calendar {
                     // The calendar replaces the middle column rather than opening beside it, on the
@@ -399,6 +411,10 @@ public struct RootView: View {
 
     private var commandPaletteBinding: Binding<Bool> {
         Binding(get: { navigation.isCommandPaletteVisible }, set: { navigation.isCommandPaletteVisible = $0 })
+    }
+
+    private var taskEntryBinding: Binding<Bool> {
+        Binding(get: { navigation.isTaskEntryVisible }, set: { navigation.isTaskEntryVisible = $0 })
     }
 
     private var peopleCommandBarBinding: Binding<Bool> {

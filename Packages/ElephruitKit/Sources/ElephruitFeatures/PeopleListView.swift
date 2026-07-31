@@ -89,6 +89,12 @@ public enum PeopleScope: Hashable, Sendable, Codable {
 /// Compact rows: name, the one line that answers "where are we with this person", and a hint of what
 /// is open. Multi-selection and a batch bar, the same shape `ItemListView` already uses, so nothing
 /// about selecting people is a special case the user has to learn separately.
+///
+/// ### Searching narrows the list; it does not replace it
+/// Results used to be their own list of plain buttons, which meant that typing into the search field
+/// silently took away selection, the highlight, the context menu, the batch bar, and the delete key —
+/// every way of *doing* something to a person, at exactly the moment they had just been found. The
+/// search now changes which people the list holds and why each one is there, and nothing else.
 struct PeopleListView: View {
     @Environment(\.services) private var services
 
@@ -98,21 +104,21 @@ struct PeopleListView: View {
     @State private var people: [Item] = []
     @State private var selection: Set<UUID> = []
     @State private var searchText = ""
-    @State private var searchResults: [RankedPerson] = []
+    @State private var searchMatches: [PersonMatch] = []
     @State private var isShowingBatchEmail = false
     @State private var loadFailure: AppError?
 
     var body: some View {
         VStack(spacing: 0) {
             if let loadFailure {
-                FailureStateView(error: loadFailure) { _ in reload() }
-            } else if isSearching {
-                searchList
-            } else if people.isEmpty {
+                FailureStateView(error: loadFailure) { _ in refresh() }
+            } else if rows.isEmpty {
                 EmptyStateView(
-                    symbolName: scope.symbolName,
-                    headline: scope.title,
-                    message: scope.emptyMessage
+                    symbolName: isSearching ? "magnifyingglass" : scope.symbolName,
+                    headline: isSearching ? "Nobody matches" : scope.title,
+                    message: isSearching
+                        ? "Try “\(PersonQueryParser.examples.randomElement() ?? "people in Austin")”."
+                        : scope.emptyMessage
                 )
             } else {
                 list
@@ -141,26 +147,36 @@ struct PeopleListView: View {
         !searchText.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    /// What the list is showing: the scope's people, or — while searching — the matches in rank
+    /// order, each carrying the reason it earned its place.
+    private var rows: [PersonMatch] {
+        isSearching ? searchMatches : people.map { PersonMatch(person: $0, reason: nil) }
+    }
+
     private var list: some View {
         List(selection: $selection) {
-            ForEach(people, id: \.id) { person in
+            ForEach(rows) { row in
                 PersonRow(
-                    person: person,
+                    person: row.person,
                     dateProvider: services?.dateProvider ?? SystemDateProvider(),
-                    isSelected: selection.contains(person.id)
+                    isSelected: selection.contains(row.id),
+                    matchReason: row.reason
                 )
-                    .tag(person.id)
+                    .tag(row.id)
                     .contextMenu {
-                        Button("Open") { navigation.selectItem(person.id) }
-                        Button(person.isFavorite ? "Remove from Favourites" : "Add to Favourites") {
-                            toggleFavorite(person)
+                        Button("Open") { navigation.selectItem(row.id) }
+                        Button(row.person.isFavorite ? "Remove from Favourites" : "Add to Favourites") {
+                            toggleFavorite(row.person)
                         }
                         Divider()
-                        Button("Move to Trash", role: .destructive) { trash(person) }
+                        Button("Move to Trash", role: .destructive) { trash(contextTargets(for: row)) }
                     }
             }
         }
         .listStyle(.inset)
+        // The list has always had a Move to Trash in its context menu and no way to reach it from
+        // the keyboard, which reads as "people cannot be deleted" to anybody who tries ⌫ first.
+        .onDeleteCommand { trash(selectedPeople) }
         .onChange(of: selection) { _, newValue in
             // The list's own selection drives the detail pane, so clicking a row opens somebody
             // without a second gesture.
@@ -168,35 +184,15 @@ struct PeopleListView: View {
         }
     }
 
-    private var searchList: some View {
-        List {
-            if searchResults.isEmpty {
-                EmptyStateView(
-                    symbolName: "magnifyingglass",
-                    headline: "Nobody matches",
-                    message: "Try “\(PersonQueryParser.examples.randomElement() ?? "people in Austin")”."
-                )
-            } else {
-                ForEach(searchResults) { result in
-                    Button {
-                        navigation.selectItem(result.id)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(result.name)
-                                .font(Theme.Text.rowTitle)
-                            if let reason = result.bestReason {
-                                Text(reason.text)
-                                    .font(Theme.Text.metadata)
-                                    .foregroundStyle(Theme.Colors.secondaryText)
-                            }
-                        }
-                        .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .listStyle(.inset)
+    /// A right-click acts on the whole selection when the clicked row is part of it, and on that row
+    /// alone otherwise — the rule every macOS list follows, and the one that stops a context menu
+    /// from quietly trashing four people when the user meant the one under the pointer.
+    private func contextTargets(for row: PersonMatch) -> [Item] {
+        selection.contains(row.id) ? selectedPeople : [row.person]
+    }
+
+    private var selectedPeople: [Item] {
+        rows.filter { selection.contains($0.id) }.map(\.person)
     }
 
     // MARK: - Loading
@@ -261,26 +257,59 @@ struct PeopleListView: View {
         }
     }
 
+    /// Resolves the ranked results to the person records the rows are built from.
+    ///
+    /// The search index answers with ids and names; a row needs the item itself for its details, its
+    /// star, and its address-book badge. A result whose record has since gone is dropped rather than
+    /// drawn as a name with nothing behind it.
     private func runSearch(_ query: String) {
         guard let services, isSearching else {
-            searchResults = []
+            searchMatches = []
             return
         }
-        searchResults = (try? services.personSearch.search(query)) ?? []
+
+        let ranked = (try? services.personSearch.search(query)) ?? []
+        searchMatches = ranked.compactMap { result in
+            guard let person = try? services.persons.person(id: result.id) else { return nil }
+            return PersonMatch(person: person, reason: result.bestReason?.text)
+        }
+    }
+
+    /// Reloads the scope and re-runs any live search, so a change is reflected in whichever of the
+    /// two the user is looking at.
+    private func refresh() {
+        reload()
+        runSearch(searchText)
     }
 
     private func toggleFavorite(_ person: Item) {
         guard let services else { return }
         services.perform { try services.items.update(person) { $0.isFavorite.toggle() } }
-        reload()
+        refresh()
     }
 
-    private func trash(_ person: Item) {
-        guard let services else { return }
-        services.perform { try services.items.moveToTrash(person) }
-        services.noteRemoval(of: person.id)
-        reload()
+    private func trash(_ people: [Item]) {
+        guard let services, !people.isEmpty else { return }
+
+        for person in people {
+            services.perform { try services.items.moveToTrash(person) }
+            services.noteRemoval(of: person.id)
+        }
+
+        // The rows are gone, so a selection still naming them would leave the detail pane showing
+        // somebody who is no longer in the list.
+        selection.subtract(people.map(\.id))
+        navigation.selectedItemIDs = selection
+        refresh()
     }
+}
+
+/// A person as the list draws them, and — when the list is a search result — why they are in it.
+struct PersonMatch: Identifiable {
+    let person: Item
+    let reason: String?
+
+    var id: UUID { person.id }
 }
 
 /// One compact row.
@@ -303,6 +332,9 @@ struct PersonRow: View {
 
     /// Suppresses the hover fill on a row that already carries the selection fill.
     var isSelected: Bool = false
+
+    /// Why this person matched the search, when the list is answering one.
+    var matchReason: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.small) {
@@ -346,6 +378,16 @@ struct PersonRow: View {
                         .rowForeground(.tertiary)
                         .lineLimit(1)
                 }
+
+                // Below the details rather than instead of them: "likes natural wine" explains the
+                // row's presence, and the row still has to answer the question the list is for.
+                if let matchReason {
+                    Label(matchReason, systemImage: "sparkle.magnifyingglass")
+                        .font(Theme.Text.metadata)
+                        .rowForeground(.tertiary)
+                        .labelStyle(.titleAndIcon)
+                        .lineLimit(1)
+                }
             }
 
             Spacer(minLength: 0)
@@ -353,9 +395,8 @@ struct PersonRow: View {
         .padding(.vertical, Theme.Spacing.tight)
         .frame(minHeight: Theme.Size.rowHeightExpanded)
         .hoverHighlight(isEnabled: !isSelected, extending: Theme.Spacing.small)
-        // Name, then whichever supporting lines the row actually drew. Each is truncated to one line
-        // in the row and each is worth reading in full — who somebody is, and where the relationship
-        // stands — without having to open them.
+        // Everything the row shows, at full length — a work address and a mobile number are exactly
+        // the things a narrow list column truncates, and exactly the things somebody hovers for.
         .help(tooltip)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
@@ -368,17 +409,19 @@ struct PersonRow: View {
         }
     }
 
-    /// The row's own lines, rejoined.
+    /// The whole row, untruncated, one line each.
     ///
-    /// Assembled from the same two properties the row draws from rather than from a third source, so
-    /// a tooltip cannot describe a row that is no longer there. It said `subtitle` until this file
-    /// grew ``identityLine`` and ``relationshipLine`` in its place, and the stale name was a build
-    /// failure rather than a wrong tooltip only because nothing else in the file happened to define
-    /// one.
+    /// The row truncates the identity line and fits the contact details to the column width; the
+    /// tooltip is where a long address or a role that ran out of room can be read in full.
     private var tooltip: String {
-        let lines = [identityLine, relationshipLine].compactMap { $0 }.filter { !$0.isEmpty }
-        guard !lines.isEmpty else { return person.displayTitle }
-        return ([person.displayTitle] + lines).joined(separator: "\n")
+        var lines = [person.displayTitle]
+        if let identityLine { lines.append(identityLine) }
+        if rowDetails.isEmpty {
+            if let relationshipLine { lines.append(relationshipLine) }
+        } else {
+            lines.append(contentsOf: rowDetails.map { "\($0.displayLabel): \($0.value)" })
+        }
+        return lines.joined(separator: "\n")
     }
 
     /// Whether this person's details come from the address book, and whether that still works.
@@ -412,6 +455,7 @@ struct PersonRow: View {
 
     private var accessibilityDescription: String {
         var parts = [person.displayTitle]
+        if let matchReason { parts.append(matchReason) }
         if let identityLine { parts.append(identityLine) }
         if rowDetails.isEmpty {
             if let relationshipLine { parts.append(relationshipLine) }

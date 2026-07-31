@@ -2,7 +2,37 @@ import ElephruitCore
 import ElephruitModel
 import ElephruitPersistence
 import Foundation
+import Synchronization
 import SwiftData
+
+/// A clock that stands still until it is told to move.
+///
+/// ### Why a frozen clock is not enough for every test
+/// `FixedDateProvider` is the right default: it makes "today", overdue arithmetic, and recurrence
+/// assertable without depending on the machine. But `ItemRepository.update` stamps `updatedAt` from
+/// the injected clock, so under a frozen one **no edit ever changes an item's modification date** —
+/// and anything that detects a local edit by comparing that stamp cannot be tested at all. The
+/// reminder sync is exactly that: it decides whether to push by asking whether the task has moved
+/// since the last reconciliation.
+///
+/// So this ticks on demand. `advance()` between edits is what a real keyboard does for free.
+final class TickingDateProvider: DateProvider, Sendable {
+    private let instant: Mutex<Date>
+    let calendar: Calendar
+
+    init(start: FixedDateProvider = .reference) {
+        self.instant = Mutex(start.now)
+        self.calendar = start.calendar
+    }
+
+    var now: Date { instant.withLock { $0 } }
+
+    /// Moves the clock forward. A minute by default — long enough to be unambiguous, short enough
+    /// not to cross a day boundary in a test that did not ask to.
+    func advance(by interval: TimeInterval = 60) {
+        instant.withLock { $0 += interval }
+    }
+}
 
 /// An isolated in-memory store for one test.
 ///
@@ -15,9 +45,13 @@ struct StoreFixture {
     let context: ModelContext
     let items: SwiftDataItemRepository
     let tags: SwiftDataTagRepository
-    let dateProvider: FixedDateProvider
 
-    init(dateProvider: FixedDateProvider = .reference, audit: FetchAudit? = nil) throws {
+    /// `any DateProvider` rather than the concrete frozen one, so a test that needs the clock to
+    /// move can hand in a ``TickingDateProvider``. Everything the fixtures use — `now`, `calendar`,
+    /// `startOfToday`, `startOfDay(daysFromToday:)` — comes from the protocol.
+    let dateProvider: any DateProvider
+
+    init(dateProvider: any DateProvider = FixedDateProvider.reference, audit: FetchAudit? = nil) throws {
         self.stack = try PersistenceStack.inMemory()
         self.context = ModelContext(stack.container)
         self.dateProvider = dateProvider

@@ -199,6 +199,9 @@ struct ElephruitCommands: Commands {
             .shortcut(.newEvent, in: shortcuts)
             .disabled(navigation == nil)
 
+            Button("Quick Task…") { navigation?.isTaskEntryVisible = true }
+                .shortcut(.quickTaskEntry, in: shortcuts)
+
             Divider()
 
             // A new window is genuinely useful in this app — two projects side by side — so it is a
@@ -260,18 +263,25 @@ struct ElephruitCommands: Commands {
         CommandGroup(after: .sidebar) {
             Divider()
 
-            Button("Today") { navigation?.select(.today) }
+            // Each command carries the shortcut named after it. Four of these were previously
+            // crossed — Notes held `goUpcoming`, Tasks held `goNotes`, Areas held `goPeople` — so
+            // the menu showed a key that selected something else. A binding whose name and effect
+            // disagree is worse than no binding: `ShortcutRegistry` exists precisely so a shortcut
+            // has one owner, and the menu is where that ownership is visible.
+            Button("Today") { navigation?.select(.taskView(.today)) }
                 .shortcut(.goToday, in: shortcuts)
-            Button("Inbox") { navigation?.select(.inbox) }
+            Button("Inbox") { navigation?.select(.taskView(.inbox)) }
                 .shortcut(.goInbox, in: shortcuts)
-            Button("Notes") { navigation?.select(.kind(.note)) }
+            Button("Upcoming") { navigation?.select(.taskView(.upcoming)) }
                 .shortcut(.goUpcoming, in: shortcuts)
-            Button("Tasks") { navigation?.select(.kind(.task)) }
+            Button("Notes") { navigation?.select(.kind(.note)) }
                 .shortcut(.goNotes, in: shortcuts)
             Button("Projects") { navigation?.select(.kind(.project)) }
                 .shortcut(.goProjects, in: shortcuts)
-            Button("Areas") { navigation?.select(.kind(.area)) }
+            Button("People") { navigation?.select(.people(.all)) }
                 .shortcut(.goPeople, in: shortcuts)
+            Button("Anytime") { navigation?.select(.taskView(.anytime)) }
+                .shortcut(.goTasks, in: shortcuts)
 
             Button("Calendar") { navigation?.select(.calendar) }
                 .shortcut(.goCalendar, in: shortcuts)
@@ -286,7 +296,9 @@ struct ElephruitCommands: Commands {
 
             Divider()
 
-            Button("Upcoming") { navigation?.select(.upcoming) }
+            Button("Someday") { navigation?.select(.taskView(.someday)) }
+            Button("Waiting") { navigation?.select(.taskView(.waiting)) }
+            Button("Logbook") { navigation?.select(.taskView(.completed)) }
             Button("Trash") { navigation?.select(.trash) }
 
             Divider()
@@ -360,6 +372,10 @@ struct SettingsView: View {
                 .tabItem { Label("People", systemImage: "person.2") }
                 .accessibilityIdentifier(AccessibilityID.People.contactsSettings)
 
+            tasks
+                .tabItem { Label("Tasks", systemImage: "checkmark.circle") }
+                .accessibilityIdentifier("settings.tasks")
+
             advanced
                 .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
                 .accessibilityIdentifier(AccessibilityID.Settings.advancedTab)
@@ -378,6 +394,23 @@ struct SettingsView: View {
         Form {
             if case .ready(let services) = environment.state {
                 ContactsSettingsSection()
+                    .appServices(services)
+            } else {
+                Text("Available once your library is open.")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    /// The Reminders connection, on its own tab for the reason the People one is: it has an ongoing
+    /// state — which lists take part, when it last reconciled, what is waiting for a decision — and
+    /// that state is what somebody goes looking for when a reminder has stopped arriving.
+    private var tasks: some View {
+        Form {
+            if case .ready(let services) = environment.state {
+                RemindersSettingsSection()
                     .appServices(services)
             } else {
                 Text("Available once your library is open.")

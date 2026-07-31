@@ -277,7 +277,6 @@ public final class SwiftDataItemRepository: ItemRepository {
         }
 
         item.updatedAt = dateProvider.now
-        item.refreshSearchText()
 
         do {
             try ItemValidator.validate(item)
@@ -285,8 +284,47 @@ public final class SwiftDataItemRepository: ItemRepository {
             throw abort(with: error)
         }
 
+        // Only once the edit is known to be good. `ItemRestorePoint` restores the item and nothing
+        // else, so a profile written before a rejected edit would keep the change the rollback was
+        // supposed to undo. The search text follows, because it reads the parts this may correct.
+        Self.syncNameParts(of: item)
+        item.refreshSearchText()
+
         try reconcileWikiLinks(for: item)
         try save()
+    }
+
+    /// Keeps a person's given and family names in step with the name they are shown under.
+    ///
+    /// ### Why this is here rather than at the rename
+    /// The parts were split once, when the profile was created, and never again — so renaming
+    /// somebody in the header changed `title` and left `givenName` and `familyName` spelling the old
+    /// name for good. Nothing displayed that drift, which is why it survived: it surfaced only
+    /// indirectly, as a search that still found the person by a name they no longer had, and as an
+    /// address-book write that would now offer to set the wrong name entirely.
+    ///
+    /// Placed at the single update funnel so it cannot be forgotten by a rename path added later.
+    ///
+    /// ### It only acts when the parts have actually fallen behind
+    /// A profile whose parts already spell the title is left alone. That matters for every name the
+    /// splitter cannot get right on its own — "van der Berg", a family name written first, a title
+    /// somebody typed as "Dr Chen" — because those are corrected once, deliberately, and re-splitting
+    /// them on an unrelated edit would undo the correction every time.
+    private static func syncNameParts(of item: Item) {
+        guard item.kind == .person, let profile = item.personProfile else { return }
+
+        // `title`, never `displayTitle`. The latter falls back to the body's first line and then to
+        // "Untitled Person", and splitting a placeholder into somebody's name is how a person ends
+        // up with a given name of "Untitled".
+        //
+        // Compared against every part rather than given + family, so a name carrying a prefix, a
+        // middle name, or a suffix reads as in step rather than as drift to be re-split.
+        let shown = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !shown.isEmpty, profile.assembledName != shown else { return }
+
+        let parts = PersonDraft.nameParts(from: shown)
+        profile.givenName = parts.given
+        profile.familyName = parts.family
     }
 
     /// Archives or unarchives an item and everything it contains.
