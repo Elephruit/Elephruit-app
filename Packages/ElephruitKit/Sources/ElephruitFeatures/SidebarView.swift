@@ -106,11 +106,21 @@ public struct SidebarView: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(Theme.Colors.secondaryText)
                         .frame(minHeight: rowHeight)
+                        .hoverHighlight(
+                            cornerRadius: SidebarMetrics.selectionRadius,
+                            extending: SidebarMetrics.selectionInset
+                        )
+                        .help("Every tag, with room to search and rename")
                         .accessibilityIdentifier("sidebar.allTags")
                 }
             } label: {
                 Label("Tags", systemImage: "number")
                     .frame(minHeight: rowHeight)
+                    .hoverHighlight(
+                        cornerRadius: SidebarMetrics.selectionRadius,
+                        extending: SidebarMetrics.selectionInset
+                    )
+                    .help("The eight tags you use most. The rest are behind All Tags.")
             }
         }
     }
@@ -125,6 +135,11 @@ public struct SidebarView: View {
             } label: {
                 Label("Saved Searches", systemImage: "line.3.horizontal.decrease.circle")
                     .frame(minHeight: rowHeight)
+                    .hoverHighlight(
+                        cornerRadius: SidebarMetrics.selectionRadius,
+                        extending: SidebarMetrics.selectionInset
+                    )
+                    .help("Searches you kept, re-run each time you open one")
             }
         }
     }
@@ -148,9 +163,18 @@ public struct SidebarView: View {
             }
         }
         .frame(minHeight: rowHeight)
+        .hoverHighlight(
+            isEnabled: navigation.selection != destination.selection,
+            cornerRadius: SidebarMetrics.selectionRadius,
+            extending: SidebarMetrics.selectionInset
+        )
         .tag(destination.selection)
+        // What the destination holds, rather than what it is called — the label is already on the
+        // row, and a tooltip that repeats it is a pause that teaches nothing.
+        .help(destination.hint)
         .accessibilityIdentifier(destination.selection.accessibilityIdentifier)
         .accessibilityLabel(accessibilityLabel(for: destination))
+        .accessibilityHint(destination.hint)
     }
 
     /// A row derived from the store — a pinned item, a tag, a saved search.
@@ -176,7 +200,14 @@ public struct SidebarView: View {
         }
         .frame(minHeight: rowHeight)
         .padding(.leading, CGFloat(row.depth) * Theme.Spacing.medium)
+        .hoverHighlight(
+            isEnabled: navigation.selection != row.selection,
+            cornerRadius: SidebarMetrics.selectionRadius,
+            extending: SidebarMetrics.selectionInset
+        )
         .tag(row.selection)
+        // The full name, because unlike a destination this one *may* have been truncated, and
+        // recovering the rest of it is what the tooltip is for here.
         .help(row.title)
         .accessibilityIdentifier(row.selection.accessibilityIdentifier)
         .accessibilityLabel(row.count.map { "\(row.title), \($0) items" } ?? row.title)

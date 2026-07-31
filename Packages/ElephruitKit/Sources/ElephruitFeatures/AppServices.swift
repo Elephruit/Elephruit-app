@@ -169,6 +169,27 @@ public final class AppServices {
     /// Pinned items, tags, and saved searches, computed away from the view.
     public let sidebar: SidebarModel
 
+    /// Bumped once for every item written or removed through ``noteChange(to:)`` and
+    /// ``noteRemoval(of:)``.
+    ///
+    /// ### Why a counter rather than watching the thing on screen
+    /// A page assembled from *links* cannot notice a change by watching its own subject. Adding a
+    /// task about somebody writes the task and an `ItemLink`; it does not touch the person's row,
+    /// so their `updatedAt` never moves and a view watching it concludes nothing happened. The
+    /// task was in the Inbox and in the search index immediately, and absent from the person's page
+    /// until the view was rebuilt by navigating away and back — which reads as the app having
+    /// dropped it.
+    ///
+    /// Deliberately opaque and deliberately coarse. It says *something in the library changed*,
+    /// which is all a page needs in order to re-ask its own question; a change *description* would
+    /// invite views to guess whether a given write could possibly affect them, and that guess is
+    /// exactly what was wrong here. Reassembling a person's page is one traversal of links already
+    /// in memory.
+    ///
+    /// ``refreshDerivedState()`` does **not** bump it: it is called to recompute badges after a
+    /// change already announced, and bumping there would turn one write into two rounds of reloads.
+    public private(set) var changeToken = 0
+
     /// Reported to the sidebar's status line. ``SyncStatus/disabled`` until Phase 4.
     public var syncStatus: SyncStatus = .disabled
 
@@ -386,6 +407,7 @@ public final class AppServices {
     public func noteChange(to item: Item) {
         let engine = search
         Task { await engine.indexDidChange(for: item) }
+        changeToken &+= 1
         refreshDerivedState()
     }
 
@@ -412,6 +434,7 @@ public final class AppServices {
     public func noteRemoval(of id: UUID) {
         let engine = search
         Task { await engine.removeFromIndex(id: id) }
+        changeToken &+= 1
         refreshDerivedState()
     }
 

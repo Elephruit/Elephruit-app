@@ -387,4 +387,58 @@ struct PeopleWorkspaceTests {
         )
         #expect(!entry.isContact, "pressing Call is not having spoken")
     }
+
+    // MARK: - Staying current
+
+    /// The bug: a task added about somebody went to the Inbox and did not appear on their page
+    /// until the view was rebuilt by navigating away and back.
+    ///
+    /// This asserts the *cause* rather than the symptom, because the symptom is a view lifecycle
+    /// and cannot be driven from here. The page watched the person's `updatedAt`; the write that
+    /// changes what the page shows does not touch the person at all.
+    @Test("Adding a task about somebody leaves their own row untouched")
+    func aLinkedWriteDoesNotMoveThePersonsTimestamp() throws {
+        let services = makeServices()
+        let maya = try person(named: "Maya Chen", in: services)
+        let before = maya.updatedAt
+
+        let task = try services.items.create(
+            ItemDraft(kind: .task, title: "Follow up with \(maya.displayTitle)")
+        )
+        try services.items.link(task, to: maya, kind: .mentions)
+
+        #expect(
+            maya.updatedAt == before,
+            """
+            If this ever becomes false the workspace could watch `updatedAt` alone — but while it \
+            holds, that is exactly why it could not see the new task.
+            """
+        )
+
+        #expect(
+            try services.personWorkspace.timeline(for: maya).contains { $0.id == task.id },
+            "the traversal finds it immediately; only the view was late"
+        )
+    }
+
+    @Test("Announcing a write bumps the token every linked page watches")
+    func changeTokenAdvancesOnEveryWrite() throws {
+        let services = makeServices()
+        let maya = try person(named: "Maya Chen", in: services)
+        let start = services.changeToken
+
+        let task = try services.items.create(ItemDraft(kind: .task, title: "Send Maya the deck"))
+        try services.items.link(task, to: maya, kind: .mentions)
+        services.noteChange(to: task)
+
+        #expect(services.changeToken == start + 1)
+
+        services.noteRemoval(of: task.id)
+        #expect(services.changeToken == start + 2, "a removal is a change too")
+
+        // Recomputing badges after a change already announced must not announce a second one, or
+        // one write becomes two rounds of reloads on every open page.
+        services.refreshDerivedState()
+        #expect(services.changeToken == start + 2)
+    }
 }

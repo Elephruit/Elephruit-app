@@ -106,6 +106,45 @@ struct SidebarRegistryTests {
         #expect(SidebarRegistry.destination(forShortcutIndex: ordered.count + 1) == nil)
     }
 
+    /// The tooltip content, which is the half of "hover, then explain" that can be checked.
+    ///
+    /// The hover fill and the delay before the tooltip appears are a view modifier and a system
+    /// setting respectively, and neither is assertable here. What *is* assertable is that every row
+    /// has something worth waiting for — a hint that says what the destination holds rather than
+    /// spelling its own name back.
+    @Test("Every destination explains what it holds, in words its label does not already use")
+    func everyDestinationHasAHint() {
+        for destination in SidebarRegistry.allDeclared {
+            #expect(!destination.hint.isEmpty, "\(destination.title) has no tooltip")
+
+            #expect(
+                destination.hint.caseInsensitiveCompare(destination.title) != .orderedSame,
+                "\(destination.title)'s tooltip repeats the label, which is a delay followed by nothing"
+            )
+
+            #expect(
+                destination.hint.count > destination.title.count,
+                "\(destination.title)'s tooltip should describe the rule, not restate the row"
+            )
+        }
+    }
+
+    @Test("Every People scope explains the rule that decides who appears in it")
+    func everyPeopleScopeHasAHint() {
+        let scopes: [PeopleScope] = [
+            .all, .recentlyViewed, .favorites, .celebrations, .needsFollowUp,
+            .group(id: UUID()), .duplicates, .fromContacts,
+        ]
+
+        for scope in scopes {
+            #expect(!scope.hint.isEmpty, "\(scope.title) has no tooltip")
+            #expect(
+                scope.hint.caseInsensitiveCompare(scope.title) != .orderedSame,
+                "\(scope.title)'s tooltip repeats the label"
+            )
+        }
+    }
+
     @Test("A derived row keeps its full title, so a truncated one still has a tooltip")
     func derivedRowsCarryTheirFullTitle() {
         // The row may be cut in the view; the value it was built from is not, which is what the
