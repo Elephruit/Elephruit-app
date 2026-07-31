@@ -26,6 +26,7 @@ struct UpcomingAgendaView: View {
     let onChange: () -> Void
 
     @State private var dropTarget: Date?
+    @State private var pendingLinkedDeletion: Item?
 
     var body: some View {
         if groups.allSatisfy(\.entries.isEmpty) {
@@ -60,6 +61,43 @@ struct UpcomingAgendaView: View {
             }
             .listStyle(.inset)
             .alternatingRowBackgrounds(.disabled)
+            .background { linkedDeletionDialog }
+        }
+    }
+
+    /// The deletion a swipe may reveal but never finish. See `TaskWorkspaceView` for why.
+    @ViewBuilder
+    private var linkedDeletionDialog: some View {
+        EmptyView()
+            .confirmationDialog(
+                "Delete \u{201C}\(pendingLinkedDeletion?.displayTitle ?? "")\u{201D}?",
+                isPresented: Binding(
+                    get: { pendingLinkedDeletion != nil },
+                    set: { if !$0 { pendingLinkedDeletion = nil } }
+                ),
+                presenting: pendingLinkedDeletion
+            ) { task in
+                Button("Remove from Elephruit Only") { deleteLinked(task, choice: .removeLocally) }
+                Button("Delete Here and in Reminders", role: .destructive) {
+                    deleteLinked(task, choice: .deleteBoth)
+                }
+                Button("Cancel", role: .cancel) { pendingLinkedDeletion = nil }
+            } message: { _ in
+                Text("""
+                    This task is linked to a reminder. Removing it here leaves the reminder exactly \
+                    where it is; deleting both removes it from Reminders on every device it syncs \
+                    to, and from anybody the list is shared with.
+                    """)
+            }
+    }
+
+    private func deleteLinked(_ task: Item, choice: LinkedDeletionChoice) {
+        guard let services else { return }
+        pendingLinkedDeletion = nil
+        Task {
+            _ = await services.reminderSync.delete(task, choice: choice)
+            services.noteRemoval(of: task.id)
+            onChange()
         }
     }
 
@@ -84,6 +122,19 @@ struct UpcomingAgendaView: View {
             .tag(task.id)
             .draggable(TaskDragPayload(taskID: task.id, reason: TaskDragPayload.Reason(entry.reason)))
             .contextMenu { TaskContextMenu(task: task, navigation: navigation, onChange: onChange) }
+            // The same actions Today and Anytime offer. A gesture that worked in one task view and
+            // not another would be a gesture nobody trusts.
+            .rowSwipeActions(
+                id: task.id,
+                leading: RowSwipeActions.taskLeading(task, services: services, onChange: onChange),
+                trailing: RowSwipeActions.taskTrailing(
+                    task,
+                    services: services,
+                    onLinkedDeletion: { pendingLinkedDeletion = $0 },
+                    onChange: onChange
+                ),
+                allowsFullSwipe: RowSwipeActions.taskAllowsFullSwipe(task)
+            )
         }
     }
 
@@ -365,7 +416,13 @@ struct TaskContextMenu: View {
         // there being two commands, each of which says what it does.
         if task.syncState == .local {
             Button("Move to Trash", systemImage: "trash", role: .destructive) {
-                act { try $0.items.moveToTrash(task) }
+                // Through the undo coordinator, so ⌘Z brings it back. The swipe, the batch bar and
+                // this are the same user action and must share one undo story.
+                guard let services else { return }
+                services.perform { try services.undo.moveToTrash([task]) }
+                services.refreshDerivedState()
+                services.noteRemoval(of: task.id)
+                onChange()
             }
         } else {
             Button("Remove from Elephruit Only", systemImage: "trash", role: .destructive) {

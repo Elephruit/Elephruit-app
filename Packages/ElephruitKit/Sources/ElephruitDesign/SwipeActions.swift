@@ -215,8 +215,7 @@ public final class SwipeActionCoordinator {
     /// clearer division — the coordinator decides, the monitor obeys.
     private func install() {
         monitors.add(NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            nonisolated(unsafe) let captured = event
-            let consume = MainActor.assumeIsolated { self?.shouldConsume(scroll: captured) ?? false }
+            let consume = MainActor.assumeIsolated { self?.shouldConsume(scroll: event) ?? false }
             return consume ? nil : event
         })
 
@@ -362,11 +361,13 @@ public final class SwipeActionCoordinator {
 
 /// Holds event-monitor tokens and removes them when it goes.
 ///
-/// `nonisolated(unsafe)` is accurate rather than a shrug: the tokens are only ever written during
-/// `install()` on the main actor, and only ever read again by this type's own `deinit`, which by
-/// definition has the last reference.
+/// Deliberately *not* actor-isolated. A `@MainActor` type's `deinit` is not isolated and so cannot
+/// read its own stored properties, which is why the tokens cannot live on the coordinator itself.
+/// An ordinary class has an ordinary `deinit`, and the monitors go when the window does without the
+/// owner having to remember — which is exactly the promise `GlobalHotKeyCenter` documents not
+/// being able to make.
 private final class EventMonitorBox {
-    nonisolated(unsafe) private var tokens: [Any] = []
+    private var tokens: [Any] = []
 
     func add(_ token: Any?) {
         guard let token else { return }

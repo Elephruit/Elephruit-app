@@ -629,6 +629,24 @@ public enum PendingCalendarRequest: Sendable, Hashable {
     case day(Date)
 }
 
+/// Deleting whatever the list has selected, exposed to the menu bar.
+///
+/// The menu item existed from milestone one and was disabled, which meant `⌘⌫` did nothing in a
+/// list where ⌫ already worked — a shortcut printed in a menu that does not fire is worse than an
+/// absent one. Each middle column publishes its own, because what "delete" means differs between
+/// them and the menu should not have to know.
+public struct RowActions: Sendable {
+    public var moveToTrash: @MainActor () -> Void
+
+    /// Whether there is anything selected to act on.
+    public var isEnabled: Bool
+
+    public init(isEnabled: Bool, moveToTrash: @escaping @MainActor () -> Void) {
+        self.isEnabled = isEnabled
+        self.moveToTrash = moveToTrash
+    }
+}
+
 /// Export and import, exposed to the menu bar through the focused scene.
 public struct TransferActions: Sendable {
     public var export: @MainActor () -> Void
@@ -645,6 +663,9 @@ extension FocusedValues {
     @Entry public var navigationModel: NavigationModel?
 
     @Entry public var transferActions: TransferActions?
+
+    /// What the focused list can do to its selection.
+    @Entry public var rowActions: RowActions?
 }
 
 #Preview("Root", traits: .fixedLayout(width: 1180, height: 720)) {

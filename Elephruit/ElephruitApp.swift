@@ -159,6 +159,7 @@ private struct RootWindow: View {
 struct ElephruitCommands: Commands {
     @FocusedValue(\.navigationModel) private var navigation
     @FocusedValue(\.transferActions) private var transfer
+    @FocusedValue(\.rowActions) private var rowActions
 
     /// The services, for the few commands that act on the app rather than on a window.
     ///
@@ -232,9 +233,12 @@ struct ElephruitCommands: Commands {
         CommandGroup(after: .pasteboard) {
             Divider()
 
-            Button("Move to Trash") { /* Handled per-list in Phase 2's multi-select work. */ }
+            // Disabled from milestone one, which meant ⌘⌫ was printed in a menu and did nothing
+            // in lists where ⌫ already worked. Each middle column publishes what deleting means
+            // there, and this calls it.
+            Button("Move to Trash") { rowActions?.moveToTrash() }
                 .shortcut(.moveToTrash, in: shortcuts)
-                .disabled(true)
+                .disabled(rowActions?.isEnabled != true)
         }
 
         // MARK: Find
