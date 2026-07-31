@@ -79,6 +79,11 @@ public struct CalendarWorkspaceView: View {
         .onChange(of: services.calendar.events.count) { _, _ in
             refreshAnnotations(services: services)
         }
+        .onChange(of: navigation.isCalendarQuickEntryVisible) { _, wanted in
+            guard wanted else { return }
+            navigation.isCalendarQuickEntryVisible = false
+            quickEntryStart = defaultStart(workspace: workspace, services: services)
+        }
         .sheet(item: $editorRequest) { request in
             EventEditorView(existing: request.existing, draft: request.draft) { event in
                 workspace.selectedEventID = event.id
@@ -112,6 +117,16 @@ public struct CalendarWorkspaceView: View {
         }
         .sheet(isPresented: $isShowingSetEditor) {
             CalendarSetListView()
+        }
+        .sheet(isPresented: searchBinding) {
+            CalendarSearchView { result in
+                // Landing on the day rather than opening the event: a search result is a *place* in
+                // the calendar, and arriving there with its neighbours visible is what makes the
+                // result readable.
+                workspace.go(to: result.startAt)
+                workspace.setViewKind(.day)
+                workspace.selectedEventID = result.id
+            }
         }
         .focusedSceneValue(\.calendarWorkspace, workspace)
         .onKeyPress(action: { press in handle(press, services: services, workspace: workspace) })
@@ -364,6 +379,13 @@ public struct CalendarWorkspaceView: View {
     }
 
     // MARK: Bindings
+
+    private var searchBinding: Binding<Bool> {
+        Binding(
+            get: { navigation.isCalendarSearchVisible },
+            set: { navigation.isCalendarSearchVisible = $0 }
+        )
+    }
 
     private var showsWeekNumbers: Bool {
         UserDefaults.standard.bool(forKey: "calendar.showsWeekNumbers")
