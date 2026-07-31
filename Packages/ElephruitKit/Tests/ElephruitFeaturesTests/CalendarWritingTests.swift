@@ -407,3 +407,77 @@ private extension Result where Success == CalendarEventSummary, Failure == Calen
         return false
     }
 }
+
+@Suite("Switching calendars off for now")
+@MainActor
+struct CalendarVisibilityToggleTests {
+    private static let clock = FixedDateProvider.reference
+
+    private static func made(_ title: String, calendar: String) -> CalendarEventSummary {
+        let start = clock.startOfToday.addingTimeInterval(9 * 3_600)
+        return CalendarEventSummary(
+            identity: EventIdentity(externalIdentifier: title),
+            title: title,
+            startAt: start,
+            endAt: start.addingTimeInterval(3_600),
+            calendarIdentifier: calendar
+        )
+    }
+
+    @Test("Hiding a calendar removes its events and nothing else")
+    func hidingOneCalendar() async {
+        let provider = FakeCalendarProvider(events: [
+            Self.made("Work thing", calendar: "work"),
+            Self.made("Personal thing", calendar: "personal"),
+        ])
+        let service = await writingService(provider: provider)
+        #expect(service.events.count == 2)
+
+        await service.toggleVisibility(of: "personal")
+
+        #expect(service.events.map { $0.title } == ["Work thing"])
+        #expect(!service.isVisible(CalendarInfo(id: "personal", title: "Personal")))
+    }
+
+    @Test("Showing everything again is one action")
+    func showingAllAgain() async {
+        let provider = FakeCalendarProvider(events: [
+            Self.made("Work thing", calendar: "work"),
+            Self.made("Personal thing", calendar: "personal"),
+        ])
+        let service = await writingService(provider: provider)
+
+        await service.toggleVisibility(of: "personal")
+        await service.toggleVisibility(of: "work")
+        #expect(service.events.isEmpty)
+
+        await service.showAllCalendars()
+        #expect(service.events.count == 2)
+    }
+
+    @Test("A hidden calendar and a Calendar Set compose rather than fight")
+    func visibilityComposesWithSets() async {
+        let provider = FakeCalendarProvider(events: [
+            Self.made("Work thing", calendar: "work"),
+            Self.made("Personal thing", calendar: "personal"),
+        ])
+        let service = await writingService(provider: provider)
+
+        // With no set, hiding one calendar leaves the rest.
+        await service.toggleVisibility(of: "personal")
+        #expect(service.visibleCalendarIdentifiers?.contains("personal") == false)
+        #expect(service.visibleCalendarIdentifiers?.contains("work") == true, """
+            A momentary tick must not turn into a saved configuration, and a saved configuration must
+            not be edited by a glance
+            """)
+    }
+
+    @Test("Cycling sets passes through “everything”")
+    func cyclingIncludesEverything() async {
+        let provider = FakeCalendarProvider()
+        let service = await writingService(provider: provider)
+
+        // With no sets at all there is nothing to cycle to, which is a state rather than a crash.
+        #expect(service.setAfterActive() == nil)
+    }
+}

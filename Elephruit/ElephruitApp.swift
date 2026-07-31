@@ -24,7 +24,7 @@ struct ElephruitApp: App {
         // itself is never restored from here.
         .windowToolbarStyle(.unified)
         .commands {
-            ElephruitCommands()
+            ElephruitCommands(services: environment.services)
         }
 
         // The menu bar timer.
@@ -157,6 +157,13 @@ struct ElephruitCommands: Commands {
     @FocusedValue(\.navigationModel) private var navigation
     @FocusedValue(\.transferActions) private var transfer
 
+    /// The services, for the few commands that act on the app rather than on a window.
+    ///
+    /// Switching Calendar Set is one: which calendars are showing is a property of the app's
+    /// calendar rather than of a particular window, and two windows showing two different sets would
+    /// be two answers to a question with one.
+    let services: AppServices?
+
     /// The bindings, from the one place that decides them.
     ///
     /// Read from preferences rather than held, because `Commands` is a value rebuilt on change and
@@ -265,6 +272,14 @@ struct ElephruitCommands: Commands {
 
             Button("Calendar") { navigation?.select(.calendar) }
                 .shortcut(.goCalendar, in: shortcuts)
+
+            Button("Next Calendar Set") {
+                guard let calendar = services?.calendar else { return }
+                let next = calendar.setAfterActive()
+                Task { await calendar.activate(setID: next?.id) }
+            }
+            .shortcut(.switchCalendarSet, in: shortcuts)
+            .disabled(services == nil)
 
             Divider()
 

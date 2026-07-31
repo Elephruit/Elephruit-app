@@ -80,6 +80,7 @@ public final class CalendarService {
     static let favouriteZonesKey = "calendar.favouriteTimeZones"
     static let travellingKey = "calendar.isTravelling"
     static let firstWeekdayKey = "calendar.firstWeekday"
+    static let hiddenCalendarsKey = "calendar.hiddenCalendars"
 
     public init(
         dateProvider: any DateProvider,
@@ -237,9 +238,50 @@ public final class CalendarService {
         Dictionary(uniqueKeysWithValues: calendars.map { ($0.id, $0.title) })
     }
 
-    /// The identifiers the active set restricts to, or `nil` for everything.
+    /// Calendars switched off by hand, on top of whatever the active set says.
+    ///
+    /// ### Why this is separate from a Calendar Set
+    /// A set is a *configuration* somebody composed — it has a name, working hours, a default
+    /// calendar. Ticking a calendar off for the next ten minutes is not that; it is the thing
+    /// everybody does in Calendar.app's sidebar without thinking about it, and making it edit a
+    /// saved set would mean a momentary glance permanently changing something they set up once.
+    ///
+    /// So the two compose: the set decides which calendars are *in scope*, and this hides some of
+    /// them for now. Per-device, because it is a statement about this screen.
+    public var hiddenCalendarIdentifiers: Set<String> {
+        get { Set(defaults.stringArray(forKey: Self.hiddenCalendarsKey) ?? []) }
+        set { defaults.set(Array(newValue).sorted(), forKey: Self.hiddenCalendarsKey) }
+    }
+
+    /// Switches one calendar on or off for now, and re-reads.
+    public func toggleVisibility(of identifier: String) async {
+        var hidden = hiddenCalendarIdentifiers
+        if hidden.contains(identifier) { hidden.remove(identifier) } else { hidden.insert(identifier) }
+        hiddenCalendarIdentifiers = hidden
+        await reload()
+    }
+
+    /// Turns every calendar back on.
+    public func showAllCalendars() async {
+        hiddenCalendarIdentifiers = []
+        await reload()
+    }
+
+    public func isVisible(_ calendar: CalendarInfo) -> Bool {
+        guard !hiddenCalendarIdentifiers.contains(calendar.id) else { return false }
+        guard let scope = activeSet?.calendarIdentifiers(among: calendars) else { return true }
+        return scope.contains(calendar.id)
+    }
+
+    /// The identifiers actually read: the active set's scope, less anything switched off by hand.
     public var visibleCalendarIdentifiers: [String]? {
-        activeSet?.calendarIdentifiers(among: calendars)
+        let hidden = hiddenCalendarIdentifiers
+
+        guard let scope = activeSet?.calendarIdentifiers(among: calendars) else {
+            guard !hidden.isEmpty else { return nil }
+            return calendars.map(\.id).filter { !hidden.contains($0) }
+        }
+        return scope.filter { !hidden.contains($0) }
     }
 
     // MARK: - Sets
