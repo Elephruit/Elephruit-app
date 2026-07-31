@@ -70,15 +70,28 @@ struct PendingSaveTests {
         #expect(written == ["The p"])
     }
 
+    /// Waits for the timer rather than for the clock.
+    ///
+    /// This used to sleep a fixed 120 ms after a 10 ms debounce and assert the write had happened.
+    /// That asserts something about how busy the machine is, not about `PendingSave`: when the
+    /// People suite arrived in this target — 23 tests that each build an in-memory store and load a
+    /// full sample library — the main actor stopped being free enough for the margin to hold, and
+    /// the test failed under the full run while passing in isolation.
+    ///
+    /// Polling for the condition tests the behaviour that matters — the work runs *without* a flush —
+    /// and the ceiling only has to be longer than a plausible stall rather than exactly right.
     @Test("Work still runs on its own once the delay elapses")
     func timerFiresWithoutAFlush() async {
         let pending = PendingSave(delay: .milliseconds(10))
         var writes = 0
 
         pending.schedule { writes += 1 }
-        try? await Task.sleep(for: .milliseconds(120))
 
-        #expect(writes == 1)
+        for _ in 0..<200 where writes == 0 {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        #expect(writes == 1, "the scheduled work never ran on its own")
         #expect(pending.isPending == false)
     }
 
