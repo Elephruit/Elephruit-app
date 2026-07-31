@@ -121,7 +121,9 @@ struct EditContactDetailsSheet: View {
                             }
                         }
                         .padding(.horizontal, Theme.Spacing.small)
+                        .frame(maxWidth: .infinity)
                         .frame(height: 38)
+                        .contentShape(Rectangle())
                         .background(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
                                 .fill(selectedPage == page ? Theme.Colors.contentBackground : .clear)
@@ -186,13 +188,13 @@ struct EditContactDetailsSheet: View {
                     EditorPanel {
                         VStack(spacing: Theme.Spacing.large) {
                             HStack(alignment: .top, spacing: Theme.Spacing.medium) {
-                                EditorField("Prefix", text: $edit.namePrefix, width: 92)
+                                EditorField("Prefix", text: $edit.namePrefix)
                                 EditorField("First name", text: $edit.givenName)
                                 EditorField("Middle name", text: $edit.middleName)
                             }
                             HStack(alignment: .top, spacing: Theme.Spacing.medium) {
                                 EditorField("Last name", text: $edit.familyName)
-                                EditorField("Suffix", text: $edit.nameSuffix, width: 92)
+                                EditorField("Suffix", text: $edit.nameSuffix)
                                 EditorField("Nickname", text: $edit.nickname)
                             }
                         }
