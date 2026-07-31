@@ -16,6 +16,7 @@ public struct CalendarWorkspaceView: View {
     @State private var pendingDrag: DragRequest?
     @State private var annotatedKeys: Set<String> = []
     @State private var isShowingSetEditor = false
+    @State private var isShowingTemplates = false
 
     let navigation: NavigationModel
 
@@ -127,6 +128,21 @@ public struct CalendarWorkspaceView: View {
                 workspace.setViewKind(.day)
                 workspace.selectedEventID = result.id
             }
+        }
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                EventTemplateMenu(
+                    start: defaultStart(workspace: workspace, services: services),
+                    onCreated: { event in
+                        workspace.selectedEventID = event.id
+                        Task { await reload(services: services, workspace: workspace) }
+                    },
+                    onManage: { isShowingTemplates = true }
+                )
+            }
+        }
+        .sheet(isPresented: $isShowingTemplates) {
+            EventTemplateListView()
         }
         .focusedSceneValue(\.calendarWorkspace, workspace)
         .onKeyPress(action: { press in handle(press, services: services, workspace: workspace) })

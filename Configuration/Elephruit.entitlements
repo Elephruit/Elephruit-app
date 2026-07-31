@@ -26,15 +26,19 @@
 	<true/>
 
 	<!--
-	  Phase D: reading the calendar.
+	  Reading and writing the calendar.
 
 	  This entitlement lets the sandbox reach CalendarAgent at all. The TCC prompt is separate and is
 	  triggered only when the user turns the feature on in Settings — until then the app holds an
 	  inert provider and never touches EventKit.
 
-	  EventKit has no read-only tier: its only requests are full access and write-only, so a
-	  read-only feature must ask for full access. Elephruit never writes. `CalendarProviding` has no
-	  write method, and `CalendarWriteSafetyTests` fails if the EventKit adapter ever calls one.
+	  EventKit has no read-only tier: its only requests are full access and write-only, so any app
+	  that reads must ask for full access. Phase D used only the read half and proved it with a test
+	  asserting that no mutating call existed anywhere. The calendar module uses both halves, so that
+	  test was replaced rather than deleted, by three narrower properties `CalendarWriteSafetyTests`
+	  still enforces: writes take an `EventDraft` and nothing else, so the CRM has nowhere to leak
+	  through; mutating EventKit calls exist in exactly three named methods; and nothing is saved or
+	  deleted across a series without an explicit scope.
 	-->
 	<key>com.apple.security.personal-information.calendars</key>
 	<true/>

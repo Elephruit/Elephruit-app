@@ -76,6 +76,12 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
     case toggleTimer
     case peopleCommandBar
 
+    // MARK: The calendar
+    case goCalendar
+    case newEvent
+    case searchCalendar
+    case switchCalendarSet
+
     public var title: String {
         switch self {
         case .newItem: "New Item"
@@ -100,6 +106,10 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .clearSelection: "Clear Selection"
         case .toggleTimer: "Start or Stop Timer"
         case .peopleCommandBar: "People Command Bar"
+        case .goCalendar: "Go to Calendar"
+        case .newEvent: "New Event"
+        case .searchCalendar: "Search Calendar"
+        case .switchCalendarSet: "Switch Calendar Set"
         }
     }
 
@@ -132,6 +142,16 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         // it over `allCases`, so a collision introduced here fails a test rather than silently
         // shadowing the palette.
         case .peopleCommandBar: KeyBinding("k", [.command, .shift])
+
+        // ⌘6, continuing the numeric run that already reaches People at ⌘5.
+        case .goCalendar: KeyBinding("6")
+        // ⌃⌘E for an event, ⌃⌘F for finding one. Both keep the calendar on the control layer, and
+        // both were checked against every other default rather than assumed free — ⌃⌘N and ⌥⌘F,
+        // the obvious choices, are already New Window and Focus Mode, and `ShortcutRegistryTests`
+        // caught both the moment they were written.
+        case .newEvent: KeyBinding("e", [.command, .control])
+        case .searchCalendar: KeyBinding("f", [.command, .control])
+        case .switchCalendarSet: KeyBinding("s", [.command, .option])
         }
     }
 }

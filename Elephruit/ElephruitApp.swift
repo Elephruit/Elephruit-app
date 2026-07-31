@@ -49,6 +49,30 @@ struct ElephruitApp: App {
             }
         }
 
+        // The calendar's menu bar item.
+        //
+        // A second extra rather than a section inside the timer's, because the two answer different
+        // questions and are wanted at different moments: the timer is about what you are doing now,
+        // and this is about what is next. Merging them would mean a label that has to choose which
+        // to show, and it would be wrong half the time.
+        MenuBarExtra {
+            if case .ready(let services) = environment.state {
+                CalendarMenuBarContent(
+                    services: services,
+                    onOpenCalendar: { environment.openCalendar() },
+                    onQuickEntry: { environment.openCalendarQuickEntry() }
+                )
+            } else {
+                Text("Opening your library…")
+            }
+        } label: {
+            if case .ready(let services) = environment.state {
+                CalendarMenuBarLabel(services: services)
+            } else {
+                Label("Calendar", systemImage: "calendar")
+            }
+        }
+
         Settings {
             SettingsView(environment: environment)
         }
@@ -156,6 +180,13 @@ struct ElephruitCommands: Commands {
             Button("Quick Jot…") { navigation?.isQuickCaptureVisible = true }
                 .shortcut(.quickCapture, in: shortcuts)
 
+            Button("New Event…") {
+                navigation?.select(.calendar)
+                navigation?.isCalendarQuickEntryVisible = true
+            }
+            .shortcut(.newEvent, in: shortcuts)
+            .disabled(navigation == nil)
+
             Divider()
 
             // A new window is genuinely useful in this app — two projects side by side — so it is a
@@ -203,6 +234,13 @@ struct ElephruitCommands: Commands {
             Button("Command Palette…") { navigation?.isCommandPaletteVisible = true }
                 .shortcut(.commandPalette, in: shortcuts)
                 .disabled(navigation == nil)
+
+            Button("Search Calendar") {
+                navigation?.select(.calendar)
+                navigation?.isCalendarSearchVisible = true
+            }
+            .shortcut(.searchCalendar, in: shortcuts)
+            .disabled(navigation == nil)
         }
 
         // MARK: View
@@ -222,6 +260,9 @@ struct ElephruitCommands: Commands {
                 .shortcut(.goProjects, in: shortcuts)
             Button("Areas") { navigation?.select(.kind(.area)) }
                 .shortcut(.goPeople, in: shortcuts)
+
+            Button("Calendar") { navigation?.select(.calendar) }
+                .shortcut(.goCalendar, in: shortcuts)
 
             Divider()
 
@@ -339,7 +380,7 @@ struct SettingsView: View {
 
             Section("Calendar") {
                 if case .ready(let services) = environment.state {
-                    CalendarSettingsSection(calendar: services.calendar)
+                    CalendarPreferencesSection(services: services)
                     ShortcutSettingsSection(
                         registry: services.shortcuts,
                         globalResults: environment.hotKeyResults
