@@ -324,23 +324,42 @@ public actor SystemContactsProvider: ContactsProviding {
 
     /// Re-finds a contact whose identifier stopped resolving.
     ///
-    /// Searches by email and by phone, never by name: a name-only fallback would silently re-link
-    /// somebody to a different person with the same name, which is the one failure this whole layer
-    /// exists to avoid.
+    /// ### Why a shared email or phone is not enough on its own
+    /// The search narrows by contact detail — never by name, which would re-link somebody to a
+    /// stranger who happens to share theirs. But the narrowing is only a *lookup*: households share
+    /// a landline and couples share an address, so the first record holding a number is not
+    /// necessarily the person the link belonged to.
+    ///
+    /// So every candidate is then checked with ``ContactIdentitySignature/stronglyMatches(_:)``,
+    /// which requires the shared detail **and** a name that agrees or is absent. Without that check a
+    /// deleted contact silently re-links to whoever else has the house phone — which a test caught
+    /// doing exactly that.
     public func systemContact(matching signature: ContactIdentitySignature) async -> SystemContact? {
         guard authorization == .authorized else { return nil }
 
+        func verified(_ contacts: [CNContact]) -> SystemContact? {
+            for contact in contacts {
+                let candidate = snapshot(from: contact)
+                if ContactIdentitySignature(contact: candidate).stronglyMatches(signature) {
+                    return candidate
+                }
+            }
+            return nil
+        }
+
         for email in signature.emailKeys {
             let predicate = CNContact.predicateForContacts(matchingEmailAddress: email)
-            if let found = try? store.unifiedContacts(matching: predicate, keysToFetch: importKeys).first {
-                return snapshot(from: found)
+            if let found = try? store.unifiedContacts(matching: predicate, keysToFetch: importKeys),
+               let match = verified(found) {
+                return match
             }
         }
 
         for phone in signature.phoneKeys {
             let predicate = CNContact.predicateForContacts(matching: CNPhoneNumber(stringValue: phone))
-            if let found = try? store.unifiedContacts(matching: predicate, keysToFetch: importKeys).first {
-                return snapshot(from: found)
+            if let found = try? store.unifiedContacts(matching: predicate, keysToFetch: importKeys),
+               let match = verified(found) {
+                return match
             }
         }
 

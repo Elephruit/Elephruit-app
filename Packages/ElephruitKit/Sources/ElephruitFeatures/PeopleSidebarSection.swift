@@ -21,12 +21,18 @@ struct PeopleSidebarSection: View {
 
     @State private var groups: [PersonGroup] = []
     @State private var duplicateCount = 0
+    @State private var linkedCount = 0
     @State private var isExpanded = true
+    @State private var isShowingContactImport = false
 
     var body: some View {
         Section(isExpanded: $isExpanded) {
             ForEach(Self.scopes, id: \.self) { scope in
                 row(for: scope, count: count(for: scope))
+            }
+
+            ForEach(contactScopes, id: \.self) { scope in
+                row(for: scope, count: linkedCount)
             }
 
             if !groups.isEmpty {
@@ -49,23 +55,36 @@ struct PeopleSidebarSection: View {
             HStack {
                 Text("People")
                 Spacer()
-                Button {
-                    navigation.isPeopleCommandBarVisible = true
+
+                Menu {
+                    Button("Add a Person…") { navigation.isPeopleCommandBarVisible = true }
+                    Divider()
+                    Button("Import from Contacts…") { isShowingContactImport = true }
                 } label: {
                     Image(systemName: "plus")
                 }
-                .buttonStyle(.borderless)
-                .help("Add a person (⌘⇧K)")
-                .accessibilityLabel("Add a person")
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Add a person, or bring in your contacts")
+                .accessibilityLabel("Add people")
             }
         }
         .task { reload() }
+        .sheet(isPresented: $isShowingContactImport) {
+            ContactOnboardingView(navigation: navigation)
+        }
     }
 
     /// The fixed scopes, in the order they are shown.
     static let scopes: [PeopleScope] = [
         .all, .recentlyViewed, .favorites, .celebrations, .needsFollowUp,
     ]
+
+    /// Shown only once something is actually linked, so an unused integration adds no row.
+    var contactScopes: [PeopleScope] {
+        linkedCount > 0 ? [.fromContacts] : []
+    }
 
     @ViewBuilder
     private func row(
@@ -131,6 +150,9 @@ struct PeopleSidebarSection: View {
             guard services.showsFollowUpSuggestions else { return nil }
             return (try? services.people.followUpSuggestions(thresholdDays: services.followUpThresholdDays).count)
 
+        case .fromContacts:
+            return (try? services.contactImports.linkedCount())
+
         case .recentlyViewed, .group, .duplicates:
             return nil
         }
@@ -140,6 +162,7 @@ struct PeopleSidebarSection: View {
         guard let services else { return }
         groups = (try? services.personGroups.allGroups()) ?? []
         duplicateCount = ((try? services.personIdentity.duplicates()) ?? []).count
+        linkedCount = (try? services.contactImports.linkedCount()) ?? 0
     }
 
     private func deleteGroup(_ id: UUID) {

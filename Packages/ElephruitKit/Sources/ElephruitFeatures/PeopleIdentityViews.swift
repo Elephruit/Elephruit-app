@@ -189,27 +189,32 @@ struct MergeConfirmationSheet: View {
 
 // MARK: - Contacts settings
 
-/// Turning the address book on, and linking records to it.
+/// Managing the address-book connection.
 ///
-/// The permission is explained in plain language *before* it is requested, and the explanation says
-/// what the app cannot do as well as what it will — because Contacts grants read and write together
-/// and the user has no way to give less.
-struct ContactsSettingsSection: View {
+/// ### What this screen is for
+/// Turning the integration on, seeing whether it is working, refreshing on demand, resolving any
+/// disagreement between a value the user changed and a newer one from Contacts, and starting the
+/// import again. The explanation of *what the app will and will not do* lives in the onboarding flow,
+/// which this can reopen — one place to write it, one place to keep it honest.
+public struct ContactsSettingsSection: View {
     @Environment(\.services) private var services
 
-    @State private var searchText = ""
-    @State private var isSearching = false
+    @State private var coordinator: ContactRefreshCoordinator?
+    @State private var isShowingOnboarding = false
+    @State private var refreshSummary: String?
 
-    var body: some View {
+    public init() {}
+
+    public var body: some View {
         Section("Contacts") {
             if let contacts = services?.contacts {
                 Toggle("Use my address book", isOn: enabledBinding)
                     .accessibilityHint("Links people in Elephruit to your existing contacts")
 
                 Text("""
-                    Elephruit can link the people you keep notes about to your existing contacts, so \
-                    you do not type their details twice. It only ever reads them. Your notes, \
-                    reflections, and relationship history stay here and are never written back.
+                    Elephruit can use the contacts already on this Mac as the starting point for \
+                    People. It only ever reads them. Your notes, reflections, relationship history, \
+                    promises, and tags stay here and are never written into Contacts.
                     """)
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.secondaryText)
@@ -221,52 +226,159 @@ struct ContactsSettingsSection: View {
             }
         }
         .accessibilityIdentifier(AccessibilityID.People.contactsSettings)
+        .task {
+            guard coordinator == nil, let services else { return }
+            let created = ContactRefreshCoordinator(services: services)
+            created.refreshCounts()
+            coordinator = created
+        }
+        .sheet(isPresented: $isShowingOnboarding) {
+            ContactOnboardingView(navigation: NavigationModel())
+        }
     }
 
     @ViewBuilder
     private func authorizationState(_ contacts: ContactsService) -> some View {
         switch contacts.authorization {
         case .authorized:
-            if contacts.accounts.isEmpty {
-                Text("No accounts found.")
-                    .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.tertiaryText)
-            } else {
-                ForEach(contacts.accounts) { account in
-                    HStack {
-                        Label(account.name, systemImage: "person.crop.rectangle.stack")
-                        Spacer()
-                        Text("\(account.contactCount)")
-                            .foregroundStyle(Theme.Colors.tertiaryText)
-                            .monospacedDigit()
-                        if account.isReadOnly {
-                            Image(systemName: "lock")
-                                .foregroundStyle(Theme.Colors.tertiaryText)
-                                .help("Read-only account")
-                        }
-                    }
-                    .font(Theme.Text.rowSubtitle)
-                }
-            }
-
-            ContactImportRow(searchText: $searchText)
+            statusRows(contacts)
+            accountRows(contacts)
+            conflictRows()
+            actionRow(contacts)
 
         case .denied, .restricted:
             // macOS records the answer permanently, so a "try again" button here would show no
             // prompt and read as broken. Saying where the switch actually is respects the user's
             // time more than a button that cannot work.
             Label(
-                contacts.authorization.explanation
-                    ?? "Access was refused. Turn it on in System Settings ▸ Privacy & Security ▸ Contacts.",
+                contacts.authorization == .restricted
+                    ? "Contacts access is managed on this Mac and cannot be turned on here."
+                    : "Access was refused. You can change it in System Settings ▸ Privacy & Security ▸ Contacts.",
                 systemImage: "exclamationmark.triangle"
             )
             .font(Theme.Text.metadata)
             .foregroundStyle(Theme.Colors.warning)
             .fixedSize(horizontal: false, vertical: true)
 
+            if let coordinator, coordinator.linkedCount > 0 {
+                Text("""
+                    \(coordinator.linkedCount) linked \(coordinator.linkedCount == 1 ? "person is" : "people are") \
+                    kept, with everything you recorded about them. Their contact details can no \
+                    longer refresh.
+                    """)
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if contacts.authorization == .denied {
+                Button("Open System Settings") { ContactPrivacySettings.open() }
+            }
+
         case .notRequested, .unavailable:
-            ProgressView()
-                .controlSize(.small)
+            Button("Set up Contacts…") { isShowingOnboarding = true }
+        }
+    }
+
+    @ViewBuilder
+    private func statusRows(_ contacts: ContactsService) -> some View {
+        if let coordinator {
+            LabeledContent("Status") {
+                Text(coordinator.statusSummary)
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+        }
+
+        LabeledContent("Last refresh") {
+            Text(
+                contacts.lastRefreshedAt
+                    .map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Never"
+            )
+            .font(Theme.Text.metadata)
+            .foregroundStyle(Theme.Colors.secondaryText)
+        }
+
+        if let refreshSummary {
+            Text(refreshSummary)
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.completed)
+        }
+    }
+
+    @ViewBuilder
+    private func accountRows(_ contacts: ContactsService) -> some View {
+        if contacts.accounts.isEmpty {
+            Text("No accounts found.")
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.tertiaryText)
+        } else {
+            ForEach(contacts.accounts) { account in
+                HStack {
+                    Label(account.name, systemImage: "person.crop.rectangle.stack")
+                    Spacer()
+                    Text("\(account.contactCount)")
+                        .foregroundStyle(Theme.Colors.tertiaryText)
+                        .monospacedDigit()
+                    if account.isReadOnly {
+                        Image(systemName: "lock")
+                            .foregroundStyle(Theme.Colors.tertiaryText)
+                            .help("Read-only. Elephruit never writes to any account, so this changes nothing.")
+                    }
+                }
+                .font(Theme.Text.rowSubtitle)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(account.name), \(account.contactCount) contacts")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func conflictRows() -> some View {
+        if let coordinator, !coordinator.conflicts.isEmpty {
+            Text("Values you changed here that Contacts now disagrees with")
+                .font(Theme.Text.sectionHeader)
+                .foregroundStyle(Theme.Colors.secondaryText)
+
+            ForEach(coordinator.conflicts) { conflict in
+                VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                    Text("\(conflict.personName) — \(conflict.summary)")
+                        .font(Theme.Text.metadata)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: Theme.Spacing.small) {
+                        Button("Keep mine") { coordinator.keepLocalValue(for: conflict.id) }
+                            .controlSize(.small)
+                        Button("Use the one from Contacts") { coordinator.takeSystemValue(for: conflict.id) }
+                            .controlSize(.small)
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Disagreement for \(conflict.personName). \(conflict.summary)")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func actionRow(_ contacts: ContactsService) -> some View {
+        HStack(spacing: Theme.Spacing.small) {
+            Button("Refresh Contacts") { refresh() }
+                .disabled(coordinator?.isRunning == true)
+
+            Button("Import Contacts…") { isShowingOnboarding = true }
+                .help("Nothing already added will be added twice")
+
+            if coordinator?.isRunning == true {
+                ProgressView().controlSize(.small)
+            }
+        }
+    }
+
+    private func refresh() {
+        guard let coordinator else { return }
+        Task {
+            let report = await coordinator.refresh()
+            refreshSummary = report.summary
         }
     }
 
@@ -276,98 +388,15 @@ struct ContactsSettingsSection: View {
             set: { isOn in
                 guard let contacts = services?.contacts else { return }
                 if isOn {
-                    Task { await contacts.enable() }
+                    // The explanation first, then the prompt — never the other way round.
+                    isShowingOnboarding = true
                 } else {
                     contacts.disable()
+                    // Links stay; they simply stop refreshing, and every one says so.
+                    try? services?.contactSync.markAllUnreadable()
+                    coordinator?.refreshCounts()
                 }
             }
         )
-    }
-}
-
-/// Finding a system contact and linking or importing it.
-struct ContactImportRow: View {
-    @Environment(\.services) private var services
-
-    @Binding var searchText: String
-
-    @State private var results: [ContactSummary] = []
-    @State private var feedback: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            TextField("Find a contact by name", text: $searchText)
-                .onSubmit { search() }
-
-            ForEach(results) { contact in
-                HStack(spacing: Theme.Spacing.small) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(contact.fullName)
-                            .font(Theme.Text.rowSubtitle)
-                        if let organization = contact.organizationName {
-                            Text(organization)
-                                .font(Theme.Text.metadata)
-                                .foregroundStyle(Theme.Colors.tertiaryText)
-                        }
-                    }
-
-                    Spacer()
-
-                    if let existing = existingMatch(for: contact) {
-                        Button("Link") { link(contact, to: existing) }
-                            .controlSize(.small)
-                            .help("Attaches this contact to a person you already have")
-                    } else {
-                        Button("Import") { importContact(contact) }
-                            .controlSize(.small)
-                    }
-                }
-            }
-
-            if let feedback {
-                Label(feedback, systemImage: "checkmark.circle")
-                    .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.completed)
-            }
-        }
-    }
-
-    private func search() {
-        guard let services else { return }
-        Task {
-            await services.contacts.search(searchText)
-            results = services.contacts.searchResults
-        }
-    }
-
-    /// Whether the library already holds somebody this contact plausibly is.
-    ///
-    /// Offering *Link* rather than *Import* here is the whole point of the identity layer: importing
-    /// blindly is how one person becomes three profiles.
-    private func existingMatch(for contact: ContactSummary) -> UUID? {
-        guard let services else { return nil }
-        let candidate = ContactsService.candidate(from: contact)
-        return try? services.personIdentity.existingMatch(for: candidate)?.rightID
-    }
-
-    private func importContact(_ contact: ContactSummary) {
-        guard let services else { return }
-        services.perform {
-            let person = try services.persons.createPerson(ContactsService.draft(from: contact))
-            services.noteChange(to: person)
-        }
-        feedback = "Imported \(contact.fullName)."
-    }
-
-    private func link(_ contact: ContactSummary, to personID: UUID) {
-        guard let services, let person = try? services.persons.person(id: personID) else { return }
-        services.perform {
-            try services.personIdentity.link(
-                person, toContactsIdentifier: contact.id, accountName: contact.accountName
-            )
-            try services.persons.addDetails(to: person, from: ContactsService.draft(from: contact))
-            services.noteChange(to: person)
-        }
-        feedback = "Linked to \(person.displayTitle)."
     }
 }

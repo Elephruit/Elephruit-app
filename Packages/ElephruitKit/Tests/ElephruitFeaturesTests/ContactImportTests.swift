@@ -64,6 +64,21 @@ struct ContactImportTests {
             await services.contacts.enable()
         }
 
+        /// A fixture with the integration already on, as it is for somebody who set it up before.
+        ///
+        /// The distinction matters: until the user has turned Contacts on, the service deliberately
+        /// holds an inert provider and reports `.notRequested` — so a flow that has not been enabled
+        /// shows the explanation, which is the behaviour, not a gap.
+        @MainActor
+        static func ready(
+            contacts: [SystemContact] = ContactFixtures.library,
+            authorization: IntegrationAuthorization = .authorized
+        ) async throws -> Fixture {
+            let fixture = try Fixture(contacts: contacts, authorization: authorization)
+            await fixture.enableContacts()
+            return fixture
+        }
+
         /// Plans every contact, the way the model does but without the interface.
         @MainActor
         func plan(_ contacts: [SystemContact]) throws -> [ContactImportProposal] {

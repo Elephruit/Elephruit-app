@@ -113,13 +113,14 @@ public actor FixtureContactsProvider: ContactsProviding {
         return contacts.first { $0.id == identifier }
     }
 
+    /// The same rule the live provider applies: a shared detail *and* an agreeing name.
+    ///
+    /// A shared number alone would re-link somebody to whoever else is on the household line.
     public func systemContact(matching signature: ContactIdentitySignature) async -> SystemContact? {
         guard currentAuthorization == .authorized else { return nil }
 
         return contacts.first { candidate in
-            let theirs = ContactIdentitySignature(contact: candidate)
-            return !theirs.emailKeys.isDisjoint(with: signature.emailKeys)
-                || !theirs.phoneKeys.isDisjoint(with: signature.phoneKeys)
+            ContactIdentitySignature(contact: candidate).stronglyMatches(signature)
         }
     }
 
