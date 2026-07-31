@@ -349,3 +349,97 @@ struct CalendarJourneyTests {
         #expect(Set(cached.map(\.title)).isSubset(of: titles.union(Set(cached.map(\.title)))))
     }
 }
+
+@Suite("Losing access while running")
+@MainActor
+struct CalendarRevocationTests {
+    private static var clock: FixedDateProvider { .reference }
+
+    private static var week: Range<Date> {
+        clock.startOfDay(daysFromToday: -7)..<clock.startOfDay(daysFromToday: 14)
+    }
+
+    /// A provider whose permission can be taken away, as System Settings does.
+    private static func services() throws -> (AppServices, FakeCalendarProvider) {
+        let stack = try PersistenceStack.inMemory()
+        let defaults = UserDefaults(suiteName: "calendar-revoke-\(UUID().uuidString)") ?? .standard
+
+        let start = clock.startOfToday.addingTimeInterval(9 * 3_600)
+        let provider = FakeCalendarProvider(events: [
+            CalendarEventSummary(
+                identity: EventIdentity(externalIdentifier: "a"),
+                title: "Board meeting",
+                startAt: start,
+                endAt: start.addingTimeInterval(3_600),
+                calendarIdentifier: "work",
+                calendarName: "Work"
+            ),
+        ])
+
+        let services = AppServices(
+            stack: stack,
+            dateProvider: clock,
+            isDevelopmentMode: true,
+            calendarProvider: { provider },
+            defaults: defaults
+        )
+        return (services, provider)
+    }
+
+    @Test("Revoked access falls back to what was last read rather than to an empty day")
+    func revocationFallsBackToTheCache() async throws {
+        let (services, provider) = try Self.services()
+
+        await services.calendar.enable()
+        await services.calendar.load(range: Self.week)
+        #expect(services.calendar.events.count == 1)
+        #expect(!services.calendar.isShowingCachedEvents)
+
+        // What System Settings does while the app is open.
+        await provider.revokeAccess()
+        await services.calendar.refreshAuthorization()
+
+        #expect(services.calendar.authorization == .denied)
+        #expect(services.calendar.events.map(\.title) == ["Board meeting"], """
+            What the app read five minutes ago is still true. Blanking it to explain why there is \
+            nothing on screen throws away the only useful thing on screen.
+            """)
+        #expect(services.calendar.isShowingCachedEvents, "…and it says where that came from")
+    }
+
+    @Test("A cached event is never offered for editing")
+    func cachedEventsAreNotEditable() async throws {
+        let (services, provider) = try Self.services()
+
+        await services.calendar.enable()
+        await services.calendar.load(range: Self.week)
+
+        await provider.revokeAccess()
+        await services.calendar.refreshAuthorization()
+
+        #expect(services.calendar.events.allSatisfy { !$0.isEditable }, """
+            Saying an event is editable when the app cannot reach the calendar is a lie the user \
+            only discovers after typing
+            """)
+    }
+
+    @Test("Turning the calendar off empties the cache as well as the screen")
+    func disablingEmptiesTheCache() async throws {
+        let (services, _) = try Self.services()
+
+        await services.calendar.enable()
+        await services.calendar.load(range: Self.week)
+
+        services.calendar.disable()
+
+        // Long enough for the invalidation task the service starts on disabling.
+        try? await Task.sleep(for: .milliseconds(120))
+        await services.calendarSearch.prepare()
+
+        let cached = await services.calendarSearch.cachedEvents(in: Self.week, calendarIdentifiers: nil)
+        #expect(cached.isEmpty, """
+            The cache holds titles and locations from somebody's calendar. "I turned that off" has to \
+            mean the app is no longer holding them.
+            """)
+    }
+}

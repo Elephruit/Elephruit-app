@@ -9,6 +9,7 @@ import SwiftUI
 /// inspector on the trailing edge is what shows one event.
 public struct CalendarWorkspaceView: View {
     @Environment(\.services) private var services
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var workspace: CalendarWorkspaceModel?
     @State private var editorRequest: EditorRequest?
@@ -76,7 +77,15 @@ public struct CalendarWorkspaceView: View {
                 CalendarOfflineBanner(authorization: services.calendar.authorization)
             }
 
-            if !services.calendar.isEnabled || !services.calendar.authorization.canRead {
+            // The cache wins over the permission state when it has something.
+            //
+            // Access revoked in System Settings should not blank a calendar the app read five
+            // minutes ago: what it read is still true, and the banner above says where it came from.
+            // Replacing it with an explanation would throw away the only useful thing on screen in
+            // order to explain why there is nothing on screen.
+            if services.calendar.isShowingCachedEvents {
+                views(services: services, workspace: workspace)
+            } else if !services.calendar.isEnabled || !services.calendar.authorization.canRead {
                 CalendarPermissionState(calendar: services.calendar)
             } else {
                 views(services: services, workspace: workspace)
@@ -163,6 +172,16 @@ public struct CalendarWorkspaceView: View {
             EventTemplateListView()
         }
         .focusedSceneValue(\.calendarWorkspace, workspace)
+        .onChange(of: scenePhase) { _, phase in
+            // Permission can be revoked in System Settings while the app is running, and the first
+            // sign of it should not be a silently empty day. Re-read on becoming active, which is
+            // the moment somebody comes back from having changed it.
+            guard phase == .active else { return }
+            Task {
+                await services.calendar.refreshAuthorization()
+                await reload(services: services, workspace: workspace)
+            }
+        }
         .onOpenURL { url in
             guard let link = CalendarDeepLink.parse(url) else { return }
             Task { await follow(link, services: services, workspace: workspace) }
