@@ -229,6 +229,45 @@ public enum SchemaV7: VersionedSchema {
     }
 }
 
+/// The eighth schema: the calendar module.
+///
+/// Two new entities — ``CalendarSetRecord`` and ``EventTemplateRecord`` — and nothing else.
+/// **Additive**, so a store opened under this version gains two empty tables and keeps everything it
+/// had.
+///
+/// ### What is deliberately *not* here
+/// **No entity for an event.** EventKit is authoritative for events and always will be; a table of
+/// them in this store would be a second copy that can disagree with the first, which is precisely
+/// the failure `docs/03-storage-matrix.md` exists to prevent. The local cache that makes the
+/// calendar work offline and makes search fast is a *derived* SQLite sidecar beside the search
+/// index, deletable without loss and rebuilt from EventKit — the same shape, and for the same
+/// reasons, as `SearchIndex.sqlite`.
+///
+/// **No entity for an event's links.** A meeting somebody has attached people, notes, and a project
+/// to is an ``Item`` of kind `.meeting` carrying an ``EventReference``, which is the shape this
+/// store has had since milestone 1. Linking a person to it is an ``ItemLink``; attaching a file is
+/// an ``Attachment``; the debrief is its body. Standing rule R5 asks for proof that the existing
+/// shape cannot do the job before a new one is added, and here there is no such proof to offer:
+/// every one of those already works, and a parallel table would need its own search indexing, its
+/// own export, its own trash, and its own answer to what happens when a person is merged.
+///
+/// ### Why lightweight inference is still right
+/// The same argument as `SchemaV4` and `SchemaV5`, with more evidence behind it each time.
+/// `TimeEntry` added an entity and a relationship under a single declared version and migrates real
+/// bytes correctly; `SchemaV4` did it three times over and `SchemaV5` three more. ADR 0005 reserves
+/// the model-type freeze for the first change that cannot be inferred — a rename, a type change, a
+/// computed value — and there is none.
+public enum SchemaV8: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 8) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV7.models + [
+            CalendarSetRecord.self,
+            EventTemplateRecord.self,
+        ]
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -241,7 +280,7 @@ public enum SchemaV7: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV7.self]
+        [SchemaV8.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -261,13 +300,13 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV7.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV8.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV7.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV8.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {
-        let version = SchemaV7.versionIdentifier
+        let version = SchemaV8.versionIdentifier
         return "\(version.major).\(version.minor).\(version.patch)"
     }
 }

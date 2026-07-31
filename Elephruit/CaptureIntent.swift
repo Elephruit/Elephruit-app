@@ -119,5 +119,41 @@ struct ElephruitShortcuts: AppShortcutsProvider {
             shortTitle: "Celebrations",
             systemImageName: "birthday.cake"
         )
+        AppShortcut(
+            intent: TodaysAgendaIntent(),
+            phrases: [
+                "What is on today in \(.applicationName)",
+                "\(.applicationName) agenda",
+            ],
+            shortTitle: "Today's Agenda",
+            systemImageName: "calendar.day.timeline.left"
+        )
+        AppShortcut(
+            intent: NextEventIntent(),
+            phrases: ["What is next in \(.applicationName)"],
+            shortTitle: "Next Event",
+            systemImageName: "clock"
+        )
+        AppShortcut(
+            intent: CreateEventIntent(),
+            phrases: [
+                "Add an event to \(.applicationName)",
+                "New \(.applicationName) event",
+            ],
+            shortTitle: "Create an Event",
+            systemImageName: "calendar.badge.plus"
+        )
+        AppShortcut(
+            intent: SwitchCalendarSetIntent(),
+            phrases: ["Switch \(.applicationName) calendar set"],
+            shortTitle: "Switch Calendar Set",
+            systemImageName: "square.stack.3d.up"
+        )
+        AppShortcut(
+            intent: SearchCalendarIntent(),
+            phrases: ["Search \(.applicationName) calendar"],
+            shortTitle: "Search Calendar",
+            systemImageName: "magnifyingglass"
+        )
     }
 }

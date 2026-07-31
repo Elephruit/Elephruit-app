@@ -41,6 +41,15 @@ public final class AppServices {
     /// The running timer, its heartbeat, and any recovery awaiting an answer.
     public let timer: TimerService
 
+    /// The user's calendar: what it holds, which sets are saved, and every write.
+    ///
+    /// Off until the user turns it on, on the same terms as Contacts.
+    public let calendar: CalendarService
+    public let calendarSearch: any CalendarSearching
+    public let calendarSets: CalendarSetService
+    public let eventTemplates: EventTemplateService
+    public let eventLinks: EventAnnotationService
+
     // MARK: The Tasks module
 
     /// Every way a task can change, and the one place its invariants are applied.
@@ -60,9 +69,6 @@ public final class AppServices {
 
     /// Turning a line of typed text into a task, once the library has had its say.
     public let taskEntry: TaskEntryComposer
-
-    /// The user's calendar, read-only and off until they turn it on.
-    public let calendar: CalendarService
 
     /// People, computed from the links that already exist.
     public let people: PeopleService
@@ -230,6 +236,11 @@ public final class AppServices {
     ///     lazily and only once the user turns the integration on. A test passes a
     ///     ``ElephruitIntegrations/FixtureContactsProvider`` here, which is what lets the whole
     ///     import flow be exercised without `CNContactStore` ever being constructed.
+    ///   - calendarProvider: How to build the calendar adapter, on the same terms. A test — or a
+    ///     reviewer in development mode — passes a
+    ///     ``ElephruitIntegrations/FixtureCalendarProvider`` here, which is what lets the whole
+    ///     module be exercised without `EKEventStore` ever being constructed or anybody's real
+    ///     calendar being written to.
     ///   - remindersProvider: How to build the Reminders adapter, on the same terms. A test passes
     ///     a ``ElephruitIntegrations/FixtureRemindersProvider``, which is what lets the whole sync
     ///     flow be exercised without `EKEventStore` ever being constructed.
@@ -240,6 +251,7 @@ public final class AppServices {
         dateProvider: any DateProvider = SystemDateProvider(),
         isDevelopmentMode: Bool = false,
         contactsProvider: (@Sendable () -> any ContactsProviding)? = nil,
+        calendarProvider: (@Sendable () -> any CalendarProviding)? = nil,
         remindersProvider: (@Sendable () -> any RemindersProviding)? = nil,
         defaults: UserDefaults = .standard
     ) {
@@ -295,6 +307,22 @@ public final class AppServices {
         self.timeEntries = timeEntries
         self.timer = TimerService(entries: timeEntries, dateProvider: dateProvider)
 
+        // Derived, and beside the search index for the same reasons. A stack with no location —
+        // previews and tests — gets a throwaway file.
+        let calendarIndexURL = stack.location?.calendarIndexURL
+            ?? URL.temporaryDirectory.appending(path: "ElephruitCalendarIndex-\(UUID().uuidString).sqlite")
+        let calendarSearch = FTSCalendarSearchEngine(indexURL: calendarIndexURL)
+        self.calendarSearch = calendarSearch
+
+        let calendarSets = CalendarSetService(
+            context: context, dateProvider: dateProvider, defaults: defaults
+        )
+        self.calendarSets = calendarSets
+        self.eventTemplates = EventTemplateService(context: context, dateProvider: dateProvider)
+
+        let eventLinks = EventAnnotationService(context: context, items: items, dateProvider: dateProvider)
+        self.eventLinks = eventLinks
+
         let tasks = TaskService(items: items, context: context, dateProvider: dateProvider)
         let taskViews = TaskViewService(items: items, context: context, dateProvider: dateProvider)
         self.tasks = tasks
@@ -321,7 +349,14 @@ public final class AppServices {
 
         // The provider is built lazily, and only when the feature is enabled — so an app that never
         // turns the calendar on never constructs an `EKEventStore` and never prompts.
-        self.calendar = CalendarService(dateProvider: dateProvider) { EventKitCalendarProvider() }
+        self.calendar = CalendarService(
+            dateProvider: dateProvider,
+            defaults: defaults,
+            index: calendarSearch,
+            sets: calendarSets,
+            annotations: eventLinks,
+            makeProvider: calendarProvider ?? { EventKitCalendarProvider() }
+        )
         self.people = PeopleService(items: items, dateProvider: dateProvider)
 
         let persons = SwiftDataPersonRepository(context: context, items: items, dateProvider: dateProvider)
@@ -370,6 +405,14 @@ public final class AppServices {
         undoManager.groupsByEvent = false
         self.undoManager = undoManager
         self.undo = StructuralUndoCoordinator(items: items, undoManager: undoManager)
+        // Resolving a linked person's or project's name for the calendar index. Set after
+        // construction because the calendar needs the repository and the repository needs the
+        // context, and a closure is the smallest thing that can cross that.
+        self.calendar.titleResolver = { [weak items] id in
+            guard let items else { return nil }
+            return (try? items.item(id: id))?.displayTitle
+        }
+
         self.sidebar = SidebarModel(
             items: items,
             tags: tags,

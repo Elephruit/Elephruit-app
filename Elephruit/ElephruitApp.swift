@@ -24,7 +24,7 @@ struct ElephruitApp: App {
         // itself is never restored from here.
         .windowToolbarStyle(.unified)
         .commands {
-            ElephruitCommands()
+            ElephruitCommands(services: environment.services)
         }
 
         // The menu bar timer.
@@ -46,6 +46,30 @@ struct ElephruitApp: App {
                 TimerMenuBarLabel(services: services)
             } else {
                 Label("Elephruit", systemImage: "timer")
+            }
+        }
+
+        // The calendar's menu bar item.
+        //
+        // A second extra rather than a section inside the timer's, because the two answer different
+        // questions and are wanted at different moments: the timer is about what you are doing now,
+        // and this is about what is next. Merging them would mean a label that has to choose which
+        // to show, and it would be wrong half the time.
+        MenuBarExtra {
+            if case .ready(let services) = environment.state {
+                CalendarMenuBarContent(
+                    services: services,
+                    onOpenCalendar: { environment.openCalendar() },
+                    onQuickEntry: { environment.openCalendarQuickEntry() }
+                )
+            } else {
+                Text("Opening your library…")
+            }
+        } label: {
+            if case .ready(let services) = environment.state {
+                CalendarMenuBarLabel(services: services)
+            } else {
+                Label("Calendar", systemImage: "calendar")
             }
         }
 
@@ -72,9 +96,12 @@ private struct RootWindow: View {
                     .accessibilityLabel("Opening your library")
 
             case .ready(let services):
-                RootView()
-                    .appServices(services)
-                    .environment(\.prefersMonospacedEditor, prefersMonospacedEditor)
+                RootView(
+                    pendingCalendarRequest: environment.pendingCalendarRequest,
+                    onCalendarRequestHandled: { environment.clearCalendarRequest() }
+                )
+                .appServices(services)
+                .environment(\.prefersMonospacedEditor, prefersMonospacedEditor)
 
             case .failed(let error):
                 FailureStateView(error: error) { option in
@@ -87,6 +114,8 @@ private struct RootWindow: View {
             if case .opening = environment.state {
                 environment.start()
             }
+            // Anything an intent left behind while the app was not running, or not frontmost.
+            environment.adoptIntentRouting()
         }
     }
 
@@ -131,6 +160,13 @@ struct ElephruitCommands: Commands {
     @FocusedValue(\.navigationModel) private var navigation
     @FocusedValue(\.transferActions) private var transfer
 
+    /// The services, for the few commands that act on the app rather than on a window.
+    ///
+    /// Switching Calendar Set is one: which calendars are showing is a property of the app's
+    /// calendar rather than of a particular window, and two windows showing two different sets would
+    /// be two answers to a question with one.
+    let services: AppServices?
+
     /// The bindings, from the one place that decides them.
     ///
     /// Read from preferences rather than held, because `Commands` is a value rebuilt on change and
@@ -155,6 +191,13 @@ struct ElephruitCommands: Commands {
 
             Button("Quick Jot…") { navigation?.isQuickCaptureVisible = true }
                 .shortcut(.quickCapture, in: shortcuts)
+
+            Button("New Event…") {
+                navigation?.select(.calendar)
+                navigation?.isCalendarQuickEntryVisible = true
+            }
+            .shortcut(.newEvent, in: shortcuts)
+            .disabled(navigation == nil)
 
             Button("Quick Task…") { navigation?.isTaskEntryVisible = true }
                 .shortcut(.quickTaskEntry, in: shortcuts)
@@ -206,6 +249,13 @@ struct ElephruitCommands: Commands {
             Button("Command Palette…") { navigation?.isCommandPaletteVisible = true }
                 .shortcut(.commandPalette, in: shortcuts)
                 .disabled(navigation == nil)
+
+            Button("Search Calendar") {
+                navigation?.select(.calendar)
+                navigation?.isCalendarSearchVisible = true
+            }
+            .shortcut(.searchCalendar, in: shortcuts)
+            .disabled(navigation == nil)
         }
 
         // MARK: View
@@ -232,6 +282,17 @@ struct ElephruitCommands: Commands {
                 .shortcut(.goPeople, in: shortcuts)
             Button("Anytime") { navigation?.select(.taskView(.anytime)) }
                 .shortcut(.goTasks, in: shortcuts)
+
+            Button("Calendar") { navigation?.select(.calendar) }
+                .shortcut(.goCalendar, in: shortcuts)
+
+            Button("Next Calendar Set") {
+                guard let calendar = services?.calendar else { return }
+                let next = calendar.setAfterActive()
+                Task { await calendar.activate(setID: next?.id) }
+            }
+            .shortcut(.switchCalendarSet, in: shortcuts)
+            .disabled(services == nil)
 
             Divider()
 
@@ -372,7 +433,7 @@ struct SettingsView: View {
 
             Section("Calendar") {
                 if case .ready(let services) = environment.state {
-                    CalendarSettingsSection(calendar: services.calendar)
+                    CalendarPreferencesSection(services: services)
                     ShortcutSettingsSection(
                         registry: services.shortcuts,
                         globalResults: environment.hotKeyResults

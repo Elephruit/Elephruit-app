@@ -81,6 +81,12 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
     case flagTask
     case moveToToday
 
+    // MARK: The calendar
+    case goCalendar
+    case newEvent
+    case searchCalendar
+    case switchCalendarSet
+
     public var title: String {
         switch self {
         case .newItem: "New Item"
@@ -105,6 +111,10 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .clearSelection: "Clear Selection"
         case .toggleTimer: "Start or Stop Timer"
         case .peopleCommandBar: "People Command Bar"
+        case .goCalendar: "Go to Calendar"
+        case .newEvent: "New Event"
+        case .searchCalendar: "Search Calendar"
+        case .switchCalendarSet: "Switch Calendar Set"
         case .quickTaskEntry: "Quick Task Entry"
         case .goTasks: "Go to Today's Tasks"
         case .completeTask: "Complete Task"
@@ -142,10 +152,21 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         // it over `allCases`, so a collision introduced here fails a test rather than silently
         // shadowing the palette.
         case .peopleCommandBar: KeyBinding("k", [.command, .shift])
+
+        // ⌘6, continuing the numeric run that already reaches People at ⌘5.
+        case .goCalendar: KeyBinding("6")
+        // ⌃⌘E for an event, ⌃⌘F for finding one. Both keep the calendar on the control layer, and
+        // both were checked against every other default rather than assumed free — ⌃⌘N and ⌥⌘F,
+        // the obvious choices, are already New Window and Focus Mode, and `ShortcutRegistryTests`
+        // caught both the moment they were written.
+        case .newEvent: KeyBinding("e", [.command, .control])
+        case .searchCalendar: KeyBinding("f", [.command, .control])
+        case .switchCalendarSet: KeyBinding("s", [.command, .option])
+
         // ⌃⌘Space for capture from anywhere, which is the one shortcut a task manager has to have
         // and the one place a global binding is worth the cost. See ADR 0008.
         case .quickTaskEntry: KeyBinding(" ", [.command, .control])
-        case .goTasks: KeyBinding("6")
+        case .goTasks: KeyBinding("7")
         // Return-adjacent, because completing is what you do most and ⌘Return is free here: the
         // lists are not text fields, and the text fields that exist handle their own Return.
         case .completeTask: KeyBinding("\r", .command)

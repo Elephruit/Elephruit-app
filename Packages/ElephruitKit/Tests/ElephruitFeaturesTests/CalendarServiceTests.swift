@@ -6,26 +6,43 @@ import Testing
 
 /// A calendar the test controls, standing in for EventKit.
 ///
-/// Conforms to `CalendarProviding`, which **has no write method** — so this double cannot offer one
-/// either, and "no write is attempted" is enforced by the type system rather than by counting calls.
-/// What it does record is every read, so a test can assert that turning the feature *off* means the
-/// calendar is not consulted at all.
+/// ### What it is for
+/// Every call is recorded, so a test can assert that turning the feature *off* means the calendar is
+/// not consulted at all — and, now that the module writes, that a write reaches the store exactly
+/// once, with the scope the user chose and not a default one.
+///
+/// It behaves like EventKit in the ways that matter and not in the ways that do not: read-only
+/// calendars refuse, an unknown identifier fails rather than silently creating a calendar, and
+/// deleting a series with `.entireSeries` removes every occurrence rather than one. It does *not*
+/// expand recurrence rules — a test that needs several occurrences hands them in.
 actor FakeCalendarProvider: CalendarProviding {
     private var storedEvents: [CalendarEventSummary]
+    private var storedCalendars: [CalendarInfo]
     private var status: IntegrationAuthorization
     private var grantOnRequest: IntegrationAuthorization
 
-    /// Every call that read something, in order.
+    /// Every call, in order. Reads and writes alike.
     private(set) var readLog: [String] = []
 
+    /// Every write, with the scope it was given.
+    private(set) var writeLog: [(operation: String, scope: EventEditScope?)] = []
+
     private var continuation: AsyncStream<Void>.Continuation?
+    private var nextIdentifier = 1
 
     init(
         events: [CalendarEventSummary] = [],
+        calendars: [CalendarInfo] = [
+            CalendarInfo(id: "work", title: "Work", accountName: "iCloud", accountKind: .iCloud,
+                         isDefaultForNewEvents: true),
+            CalendarInfo(id: "personal", title: "Personal", accountName: "iCloud", accountKind: .iCloud),
+            CalendarInfo(id: "holidays", title: "Holidays", accountName: "iCloud", accountKind: .subscribed),
+        ],
         status: IntegrationAuthorization = .notRequested,
         grantOnRequest: IntegrationAuthorization = .authorized
     ) {
         self.storedEvents = events
+        self.storedCalendars = calendars
         self.status = status
         self.grantOnRequest = grantOnRequest
     }
@@ -38,10 +55,27 @@ actor FakeCalendarProvider: CalendarProviding {
         return status
     }
 
-    func events(in range: Range<Date>) -> [CalendarEventSummary] {
+    func calendars() -> [CalendarInfo] {
+        readLog.append("calendars")
+        guard status.canRead else { return [] }
+        return storedCalendars
+    }
+
+    func defaultCalendarIdentifier() -> String? {
+        guard status.canRead else { return nil }
+        return storedCalendars.first { $0.isDefaultForNewEvents }?.id
+    }
+
+    func events(in range: Range<Date>, calendarIdentifiers: [String]?) -> [CalendarEventSummary] {
         readLog.append("events")
         guard status.canRead else { return [] }
-        return storedEvents.filter { $0.startAt < range.upperBound && $0.endAt > range.lowerBound }
+
+        return storedEvents.filter { event in
+            guard event.startAt < range.upperBound, event.endAt > range.lowerBound else { return false }
+            guard let calendarIdentifiers else { return true }
+            guard let identifier = event.calendarIdentifier else { return false }
+            return calendarIdentifiers.contains(identifier)
+        }
     }
 
     func event(matching identity: EventIdentity) -> CalendarEventSummary? {
@@ -50,6 +84,114 @@ actor FakeCalendarProvider: CalendarProviding {
 
         if let exact = storedEvents.first(where: { $0.identity == identity }) { return exact }
         return storedEvents.first { $0.identity.externalIdentifier == identity.externalIdentifier }
+    }
+
+    // MARK: Writing
+
+    func createEvent(_ draft: EventDraft) -> Result<CalendarEventSummary, CalendarWriteFailure> {
+        writeLog.append(("create", nil))
+        guard status.canRead else { return .failure(.notAuthorized) }
+
+        guard let calendar = storedCalendars.first(where: { $0.id == draft.calendarIdentifier }) else {
+            return .failure(.calendarNotFound(identifier: draft.calendarIdentifier))
+        }
+        guard calendar.allowsModification else {
+            return .failure(.calendarReadOnly(title: calendar.title))
+        }
+
+        let identifier = "created-\(nextIdentifier)"
+        nextIdentifier += 1
+
+        let created = Self.summary(from: draft, identifier: identifier, calendar: calendar)
+        storedEvents.append(created)
+        return .success(created)
+    }
+
+    func updateEvent(
+        matching identity: EventIdentity,
+        with draft: EventDraft,
+        scope: EventEditScope
+    ) -> Result<CalendarEventSummary, CalendarWriteFailure> {
+        writeLog.append(("update", scope))
+        guard status.canRead else { return .failure(.notAuthorized) }
+
+        guard let index = storedEvents.firstIndex(where: { $0.identity == identity }) else {
+            return .failure(.eventNotFound)
+        }
+        guard let calendar = storedCalendars.first(where: { $0.id == draft.calendarIdentifier }) else {
+            return .failure(.calendarNotFound(identifier: draft.calendarIdentifier))
+        }
+        guard calendar.allowsModification else {
+            return .failure(.calendarReadOnly(title: calendar.title))
+        }
+
+        let updated = Self.summary(
+            from: draft,
+            identifier: identity.externalIdentifier,
+            occurrence: identity.occurrenceDate,
+            calendar: calendar,
+            isRecurring: storedEvents[index].isRecurring,
+            isDetached: scope == .thisEvent && storedEvents[index].isRecurring
+        )
+        storedEvents[index] = updated
+        return .success(updated)
+    }
+
+    func deleteEvent(
+        matching identity: EventIdentity,
+        scope: EventEditScope
+    ) -> Result<Void, CalendarWriteFailure> {
+        writeLog.append(("delete", scope))
+        guard status.canRead else { return .failure(.notAuthorized) }
+
+        guard storedEvents.contains(where: { $0.identity == identity }) else {
+            return .failure(.eventNotFound)
+        }
+
+        switch scope {
+        case .thisEvent:
+            storedEvents.removeAll { $0.identity == identity }
+        case .entireSeries:
+            storedEvents.removeAll { $0.identity.externalIdentifier == identity.externalIdentifier }
+        case .thisAndFuture:
+            let boundary = identity.occurrenceDate ?? .distantPast
+            storedEvents.removeAll {
+                $0.identity.externalIdentifier == identity.externalIdentifier
+                    && ($0.identity.occurrenceDate ?? .distantPast) >= boundary
+            }
+        }
+
+        return .success(())
+    }
+
+    private static func summary(
+        from draft: EventDraft,
+        identifier: String,
+        occurrence: Date? = nil,
+        calendar: CalendarInfo,
+        isRecurring: Bool = false,
+        isDetached: Bool = false
+    ) -> CalendarEventSummary {
+        CalendarEventSummary(
+            identity: EventIdentity(externalIdentifier: identifier, occurrenceDate: occurrence),
+            title: draft.title,
+            startAt: draft.startAt,
+            endAt: draft.endAt,
+            isAllDay: draft.isAllDay,
+            calendarIdentifier: calendar.id,
+            calendarName: calendar.title,
+            calendarColorName: calendar.colorName,
+            accountName: calendar.accountName,
+            locationName: draft.location.isEmpty ? nil : draft.location,
+            notes: draft.notes.isEmpty ? nil : draft.notes,
+            url: draft.url,
+            availability: draft.availability,
+            timeZoneIdentifier: draft.timeZoneIdentifier,
+            alarms: draft.alarms,
+            isRecurring: isRecurring || draft.recurrence != nil,
+            recurrence: draft.recurrence,
+            isDetached: isDetached
+        )
     }
 
     nonisolated var changes: AsyncStream<Void> {
@@ -62,6 +204,10 @@ actor FakeCalendarProvider: CalendarProviding {
         storedEvents = events
     }
 
+    func replaceCalendars(with calendars: [CalendarInfo]) {
+        storedCalendars = calendars
+    }
+
     func revokeAccess() {
         status = .denied
     }
@@ -69,6 +215,14 @@ actor FakeCalendarProvider: CalendarProviding {
     func callCount(of name: String) -> Int {
         readLog.filter { $0 == name }.count
     }
+
+    var storedEventCount: Int { storedEvents.count }
+
+    func storedEvent(titled title: String) -> CalendarEventSummary? {
+        storedEvents.first { $0.title == title }
+    }
+
+    var writes: [(operation: String, scope: EventEditScope?)] { writeLog }
 }
 
 @MainActor

@@ -70,8 +70,8 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .trash:
             .trash()
         case .home, .calendar, .time:
-            // Unreachable while these destinations are unavailable; an empty query is the honest
-            // answer rather than a crash if one is ever restored from a newer scene.
+            // These destinations replace the list rather than filtering it, so there is no query to
+            // answer with. An empty one is the honest result rather than a crash.
             ItemQuery()
         case .people:
             // People are fetched through `PersonRepository`, which knows about placeholders and
@@ -102,7 +102,10 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .inbox: .note
         case .kind(let kind): kind
         case .tag, .savedSearch, .item, .archive, .trash: .note
-        case .home, .calendar, .time: .note
+        // A meeting, in the calendar. `⌘N` there means an event rather than a note, and the
+        // workspace intercepts it before this is consulted — this is the honest fallback.
+        case .calendar: .meeting
+        case .home, .time: .note
         case .people: .person
         case .taskView, .smartList, .builtInSmartList: .task
         }
@@ -238,6 +241,20 @@ public final class NavigationModel {
 
     /// The full tag list, reached from the sidebar's bounded disclosure group.
     public var isTagBrowserVisible = false
+
+    /// The calendar's natural-language entry field, which can be opened from anywhere.
+    public var isCalendarQuickEntryVisible = false
+
+    /// Searching the calendar, which is a different question from searching the library and so has
+    /// its own surface rather than a scope switch on the general field.
+    public var isCalendarSearchVisible = false
+
+    /// A day something outside the window asked the calendar to show.
+    ///
+    /// Cleared by the workspace once it has landed there, so a request cannot fire twice — and held
+    /// here rather than on the workspace because the workspace may not exist yet when the request
+    /// arrives, which is exactly the case when the app was launched by the link.
+    public var requestedCalendarDay: Date?
 
     // MARK: Search as a mode
 
