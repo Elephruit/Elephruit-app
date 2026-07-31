@@ -17,6 +17,10 @@ public struct InspectorView: View {
 
     @State private var tagInput = ""
 
+    /// Where the selected item could be moved to. Loaded on change, never during a render — see
+    /// ``loadPossibleParents(for:)``.
+    @State private var possibleParents: [Item] = []
+
     public init(navigation: NavigationModel) {
         self.navigation = navigation
     }
@@ -53,6 +57,21 @@ public struct InspectorView: View {
         .frame(minWidth: InspectorLayout.minimumWidth)
         .measuresInspectorLayout()
         .accessibilityIdentifier(AccessibilityID.Inspector.root)
+        // The two things that can change where this item may be moved to: which item it is, and a
+        // write to the library that added or removed a container.
+        .task(id: parentCandidatesToken) { loadPossibleParents(for: currentItem) }
+    }
+
+    private struct ParentCandidatesToken: Equatable {
+        var itemID: UUID?
+        var changeToken: Int
+    }
+
+    private var parentCandidatesToken: ParentCandidatesToken {
+        ParentCandidatesToken(
+            itemID: navigation.selectedItemID,
+            changeToken: services?.changeToken ?? 0
+        )
     }
 
     /// The selected event, when the calendar destination is showing one.
@@ -237,7 +256,7 @@ public struct InspectorView: View {
             InspectorRow("Inside") {
                 Picker("Inside", selection: parentBinding(for: item)) {
                     Text("Nothing").tag(UUID?.none)
-                    ForEach(possibleParents(for: item), id: \.id) { candidate in
+                    ForEach(possibleParents, id: \.id) { candidate in
                         Text(candidate.displayTitle).tag(UUID?.some(candidate.id))
                     }
                 }
@@ -359,8 +378,21 @@ public struct InspectorView: View {
 
     /// Containers this item may legally move into. Filtered by ``ItemKind/canContain(_:)``, so the
     /// picker cannot offer a move that validation would then reject.
-    private func possibleParents(for item: Item) -> [Item] {
-        guard let services else { return [] }
+    ///
+    /// ### Why this is loaded rather than computed where it is used
+    /// It was computed inside the picker, and a `Picker`'s contents are built eagerly with the rest
+    /// of the body rather than when the menu is opened. So every evaluation of this view fetched
+    /// every area, project, task, goal, meeting and daily entry in the library, sorted them by
+    /// title, and walked the selected item's descendants — to fill a menu nobody had clicked. The
+    /// inspector is on screen while the shell animates, so that ran on frames of a sidebar collapse
+    /// and on every module switch, and on a library of any size it is tens of milliseconds each
+    /// time. The answer changes when the selection changes or when something is written; those are
+    /// the two things this is keyed on.
+    private func loadPossibleParents(for item: Item?) {
+        guard let services, let item else {
+            possibleParents = []
+            return
+        }
 
         var query = ItemQuery()
         query.kinds = [.area, .project, .task, .goal, .meeting, .dailyEntry]
@@ -369,7 +401,7 @@ public struct InspectorView: View {
         let candidates = (try? services.items.items(matching: query)) ?? []
         let descendantIDs = descendants(of: item)
 
-        return candidates.filter { candidate in
+        possibleParents = candidates.filter { candidate in
             candidate.id != item.id
                 && !descendantIDs.contains(candidate.id)
                 && candidate.kind.canContain(item.kind)
