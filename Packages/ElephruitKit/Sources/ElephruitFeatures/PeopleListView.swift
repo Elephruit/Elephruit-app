@@ -171,12 +171,29 @@ struct PeopleListView: View {
                         Divider()
                         Button("Move to Trash", role: .destructive) { trash(contextTargets(for: row)) }
                     }
+                    .rowSwipeActions(
+                        id: row.id,
+                        leading: RowSwipeActions.personLeading(
+                            row.person,
+                            services: services,
+                            onChange: reload
+                        ),
+                        trailing: RowSwipeActions.personTrailing(
+                            row.person,
+                            services: services,
+                            onChange: reload
+                        )
+                    )
             }
         }
         .listStyle(.inset)
         // The list has always had a Move to Trash in its context menu and no way to reach it from
         // the keyboard, which reads as "people cannot be deleted" to anybody who tries ⌫ first.
         .onDeleteCommand { trash(selectedPeople) }
+        .focusedSceneValue(
+            \.rowActions,
+            RowActions(isEnabled: !selection.isEmpty) { trash(selectedPeople) }
+        )
         .onChange(of: selection) { _, newValue in
             // The list's own selection drives the detail pane, so clicking a row opens somebody
             // without a second gesture.

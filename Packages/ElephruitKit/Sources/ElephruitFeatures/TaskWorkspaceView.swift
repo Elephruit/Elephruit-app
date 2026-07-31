@@ -23,6 +23,7 @@ struct TaskWorkspaceView: View {
     @State private var isPlanning = false
     @State private var draftTitle = ""
     @State private var draftSectionID: String?
+    @State private var pendingLinkedDeletion: Item?
     @FocusState private var isDraftFocused: Bool
 
     var body: some View {
@@ -31,6 +32,13 @@ struct TaskWorkspaceView: View {
             .navigationSubtitle(subtitle)
             .toolbar { toolbarContent }
             .task(id: reloadToken) { reload() }
+            .background { linkedDeletionDialog }
+            // ⌫ on the selection, which is what somebody tries before they find any menu.
+            .onDeleteCommand { trashSelection() }
+            .focusedSceneValue(
+                \.rowActions,
+                RowActions(isEnabled: !navigation.selectedItemIDs.isEmpty) { trashSelection() }
+            )
             .accessibilityIdentifier("tasks.workspace")
     }
 
@@ -82,6 +90,72 @@ struct TaskWorkspaceView: View {
         )
         .tag(task.id)
         .contextMenu { TaskContextMenu(task: task, navigation: navigation, onChange: reload) }
+        // Every one of these is on the context menu too, and reachable from the keyboard. A gesture
+        // is a shortcut for something that must already be possible without it.
+        .rowSwipeActions(
+            id: task.id,
+            leading: RowSwipeActions.taskLeading(task, services: services, onChange: reload),
+            trailing: RowSwipeActions.taskTrailing(
+                task,
+                services: services,
+                onLinkedDeletion: { pendingLinkedDeletion = $0 },
+                onChange: reload
+            ),
+            allowsFullSwipe: RowSwipeActions.taskAllowsFullSwipe(task)
+        )
+    }
+
+    /// The one deletion a swipe is not allowed to finish.
+    ///
+    /// A task linked to Apple Reminders may live in an iCloud account shared with other people, and
+    /// removing it from there because somebody tidied up in a different app is not recoverable. So
+    /// the gesture reveals the button, the button asks, and the question is the same pair of
+    /// commands the context menu already offers rather than a dialogue that Return dismisses.
+    @ViewBuilder
+    private var linkedDeletionDialog: some View {
+        EmptyView()
+            .confirmationDialog(
+                "Delete “\(pendingLinkedDeletion?.displayTitle ?? "")”?",
+                isPresented: linkedDeletionBinding,
+                presenting: pendingLinkedDeletion
+            ) { task in
+                Button("Remove from Elephruit Only") { removeLocally(task) }
+                Button("Delete Here and in Reminders", role: .destructive) { deleteBoth(task) }
+                Button("Cancel", role: .cancel) { pendingLinkedDeletion = nil }
+            } message: { _ in
+                Text("""
+                    This task is linked to a reminder. Removing it here leaves the reminder exactly \
+                    where it is; deleting both removes it from Reminders on every device it syncs \
+                    to, and from anybody the list is shared with.
+                    """)
+            }
+    }
+
+    private var linkedDeletionBinding: Binding<Bool> {
+        Binding(
+            get: { pendingLinkedDeletion != nil },
+            set: { if !$0 { pendingLinkedDeletion = nil } }
+        )
+    }
+
+    private func removeLocally(_ task: Item) {
+        guard let services else { return }
+        pendingLinkedDeletion = nil
+        Task {
+            _ = await services.reminderSync.delete(task, choice: .removeLocally)
+            services.noteRemoval(of: task.id)
+            reload()
+        }
+    }
+
+    private func deleteBoth(_ task: Item) {
+        guard let services else { return }
+        pendingLinkedDeletion = nil
+        Task {
+            _ = await services.reminderSync.delete(task, choice: .deleteBoth)
+            services.noteRemoval(of: task.id)
+            reload()
+        }
     }
 
     /// Repeating the container inside a smart list is the point of it; repeating it inside a
@@ -400,6 +474,29 @@ struct TaskWorkspaceView: View {
     }
 
     // MARK: - Actions
+
+    /// ⌫ on whatever is selected, as one undo step.
+    ///
+    /// The keyboard equivalent of the swipe, and the reason the gesture is a shortcut rather than
+    /// the only way through. Linked tasks are held back and asked about one at a time, on the same
+    /// terms the swipe uses: a batch that silently wrote to somebody's iCloud account is exactly
+    /// what this integration promises not to do.
+    private func trashSelection() {
+        guard let services else { return }
+        let targets = flatTasks.filter { navigation.selectedItemIDs.contains($0.id) }
+        guard !targets.isEmpty else { return }
+
+        let owned = targets.filter { $0.syncState == .local }
+        if !owned.isEmpty {
+            services.perform { try services.undo.moveToTrash(owned) }
+            services.refreshDerivedState()
+            for task in owned { services.noteRemoval(of: task.id) }
+        }
+
+        navigation.selectedItemIDs = []
+        pendingLinkedDeletion = targets.first { $0.syncState != .local }
+        reload()
+    }
 
     private func toggle(_ task: Item) {
         guard let services else { return }
