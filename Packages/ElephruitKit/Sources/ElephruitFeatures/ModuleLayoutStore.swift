@@ -41,6 +41,15 @@ public final class ModuleLayoutStore {
             case .primaryNavigation: "_primary"
             }
         }
+
+        /// The module this key names, or `nil` for primary navigation — which is what
+        /// ``AppModule/shellLayout`` already takes.
+        var module: AppModule? {
+            switch self {
+            case .module(let module): module
+            case .primaryNavigation: nil
+            }
+        }
     }
 
     public init(defaults: UserDefaults = .standard) {
@@ -58,6 +67,16 @@ public final class ModuleLayoutStore {
     ) -> CGFloat {
         paneWidth(of: column, in: module)
             .resolved(stored: widths[Key(module)]?[column], available: available)
+    }
+
+    /// What the user has dragged this module's columns to, unresolved.
+    ///
+    /// Raw, because the resolving is now done for every column at once rather than one at a time —
+    /// see ``ElephruitDesign/ModuleShellLayout/widths(windowWidth:sidebarWidth:showsList:userWantsInspector:hasSelection:stored:)``.
+    /// A column asked on its own could only be told about the window, which is how two columns were
+    /// each offered the same slack and both took it.
+    public func storedWidths(in module: AppModule?) -> [ModuleShellLayout.Column: CGFloat] {
+        widths[Key(module)] ?? [:]
     }
 
     /// Records a width the user dragged to.
@@ -125,6 +144,36 @@ public final class ModuleLayoutStore {
             return
         }
         widths = decode(raw) { CGFloat($0) }
+        discardImpossibleWidths()
+    }
+
+    /// Throws away any stored width the user could not have produced.
+    ///
+    /// ### Why this is not the clamping the type already refuses to do
+    /// The note above says a stored width is never clamped on the way in, and that stands: it is
+    /// clamped to *today's window* on the way out, so a 900-point pane dragged on a 6K display comes
+    /// back at 900 there and at whatever fits on a laptop. That is about the window.
+    ///
+    /// This is about the policy. A column cannot be dragged past its own maximum, so a value outside
+    /// the module's declared range is not a preference — it is a record of something that was never
+    /// a drag. The store was full of them: a Notes list at 1,171 points against a declared maximum
+    /// of 480, an editor at 118 against a minimum of 420. They were written by a drag detector that
+    /// read the frames of the shell's own animations as choices, and while that no longer happens,
+    /// what it wrote is still on disk and would otherwise be restored forever.
+    private func discardImpossibleWidths() {
+        for (key, columns) in widths {
+            for (column, width) in columns {
+                let policy = paneWidth(of: column, in: key.module)
+                let ceiling = policy.maximum ?? .greatestFiniteMagnitude
+
+                if width < policy.minimum || width > ceiling {
+                    widths[key]?.removeValue(forKey: column)
+                }
+            }
+            if widths[key]?.isEmpty == true { widths.removeValue(forKey: key) }
+        }
+
+        save()
     }
 
     private func decode<Stored, Value>(

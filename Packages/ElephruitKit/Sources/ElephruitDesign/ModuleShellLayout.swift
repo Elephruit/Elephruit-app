@@ -190,4 +190,172 @@ extension ModuleShellLayout {
 
         return kept
     }
+
+    /// The narrowest this column is ever allowed to be.
+    ///
+    /// The sidebar's is passed in rather than declared here: it is primary navigation, it is the
+    /// same in every module, and it is derived from the titles it has to fit — see ``SidebarMetrics``.
+    public func minimumWidth(of column: Column, sidebarWidth: CGFloat) -> CGFloat {
+        switch column {
+        case .sidebar: sidebarWidth
+        case .primary: primary.minimum
+        case .detail: detail.width.minimum
+        case .inspector: inspector.width.minimum
+        }
+    }
+
+    /// Every column's width for one window, decided together.
+    ///
+    /// `nil` means the column is not on screen, which is a different statement from zero and the
+    /// distinction the shell kept losing: a column squeezed to nothing still takes a divider, still
+    /// takes its insets, and still draws its empty state one character to a line.
+    public struct Widths: Sendable, Hashable {
+        public var sidebar: CGFloat?
+        public var primary: CGFloat
+        public var detail: CGFloat?
+        public var inspector: CGFloat?
+
+        /// The columns that are actually on screen, narrowest first — for assertions and for
+        /// anything that needs to reason about the set rather than the members.
+        public var present: [(column: Column, width: CGFloat)] {
+            var found: [(Column, CGFloat)] = [(.primary, primary)]
+            if let sidebar { found.append((.sidebar, sidebar)) }
+            if let detail { found.append((.detail, detail)) }
+            if let inspector { found.append((.inspector, inspector)) }
+            return found.sorted { $0.1 < $1.1 }.map { (column: $0.0, width: $0.1) }
+        }
+
+        public var total: CGFloat {
+            present.reduce(into: CGFloat.zero) { $0 += $1.width }
+        }
+    }
+
+    /// What every column should be, for one window, in one module.
+    ///
+    /// ### Why the whole set is decided at once
+    /// Because a column's width is not a property of that column. It is what is left after the
+    /// others have had what they need, and every part of this that was decided pane-by-pane got it
+    /// wrong: each pane checked the *window* against its own threshold, each pane resolved its
+    /// stored width against the *window*, and four panes that each cleared their own bar added up to
+    /// more window than there was. One function, one set of numbers, and the arithmetic is the same
+    /// arithmetic for every module.
+    ///
+    /// Pure, so "what does Notes look like in a 900-point window with the inspector open" is a value
+    /// a test can assert rather than a screenshot somebody has to take.
+    public func widths(
+        windowWidth: CGFloat,
+        sidebarWidth: CGFloat?,
+        showsList: Bool = true,
+        userWantsInspector: Bool,
+        hasSelection: Bool,
+        stored: [Column: CGFloat] = [:]
+    ) -> Widths {
+        let sidebarFootprint = sidebarWidth ?? 0
+
+        var visible = columns(fittingWindowOfWidth: windowWidth, sidebarWidth: sidebarFootprint)
+        if sidebarWidth == nil { visible.remove(.sidebar) }
+        if !showsList { visible.remove(.primary) }
+
+        // The inspector answers to its module's policy as well as to the arithmetic. Both must say
+        // yes: a window wide enough for one does not mean this module wants one here.
+        let inspectorFits = visible.contains(.inspector)
+            && inspector.isVisible(
+                userWants: userWantsInspector,
+                hasSelection: hasSelection,
+                windowWidth: windowWidth
+            )
+        if !inspectorFits { visible.remove(.inspector) }
+
+        // What each column would like, already inside its own declared range. An unbounded column —
+        // a canvas — asks for whatever is left rather than for a number, so it is settled after the
+        // others have said what they want.
+        var wanted: [Column: CGFloat] = [:]
+        for column in visible.subtracting([.sidebar]) {
+            let paneBounds = bounds(of: column)
+            guard paneBounds.maximum != nil else { continue }
+            wanted[column] = paneBounds.resolved(stored: stored[column], available: windowWidth)
+        }
+
+        var spoken = sidebarFootprint + wanted.values.reduce(0, +)
+
+        for column in visible.subtracting([.sidebar]) where bounds(of: column).maximum == nil {
+            let floorWidth = minimumWidth(of: column, sidebarWidth: sidebarFootprint)
+            wanted[column] = Swift.max(floorWidth, windowWidth - spoken)
+            spoken += wanted[column] ?? floorWidth
+        }
+
+        // Everybody gives up the same *proportion of what they could spare*, rather than the
+        // trailing column giving up everything. A column's slack is the distance between what it
+        // wants and what it needs, so nothing can be pushed below its own minimum however tight the
+        // window gets — and when it is tighter than every minimum put together, the column set has
+        // already had a column taken out of it by `columns(fittingWindowOfWidth:)`.
+        let over = spoken - windowWidth
+        if over > 0 {
+            let slack = wanted.reduce(into: CGFloat.zero) { total, entry in
+                total += entry.value - minimumWidth(of: entry.key, sidebarWidth: sidebarFootprint)
+            }
+
+            if slack > 0 {
+                let toGiveUp = Swift.min(over, slack)
+                for (column, width) in wanted {
+                    let floorWidth = minimumWidth(of: column, sidebarWidth: sidebarFootprint)
+                    let share = (width - floorWidth) / slack
+                    wanted[column] = (width - toGiveUp * share).rounded(.down)
+                }
+            } else {
+                for column in wanted.keys {
+                    wanted[column] = minimumWidth(of: column, sidebarWidth: sidebarFootprint)
+                }
+            }
+        } else if over < 0 {
+            // Room to spare goes to the reading surface — the editor where there is one, the canvas
+            // where the module *is* one — up to whatever that column's own policy allows. A list
+            // never takes it: a wider list is a longer line of the same three fields, which is the
+            // habit that produced a 1,170-point column of titles in the first place.
+            let elastic: Column = visible.contains(.detail) ? .detail : .primary
+            if let current = wanted[elastic] {
+                let ceiling = bounds(of: elastic).maximum ?? .greatestFiniteMagnitude
+                wanted[elastic] = Swift.min(ceiling, current - over)
+            }
+        }
+
+        return Widths(
+            sidebar: visible.contains(.sidebar) ? sidebarFootprint : nil,
+            primary: wanted[.primary] ?? 0,
+            detail: visible.contains(.detail) ? wanted[.detail] : nil,
+            inspector: visible.contains(.inspector) ? wanted[.inspector] : nil
+        )
+    }
+
+    /// The declared range for one column.
+    private func bounds(of column: Column) -> PaneWidth {
+        switch column {
+        case .sidebar, .primary: primary
+        case .detail: detail.width
+        case .inspector: inspector.width
+        }
+    }
+
+    /// How much width one column may actually take, given the columns beside it.
+    ///
+    /// ### Why a stored width is not resolved against the window
+    /// Because a column does not have the window; it has what the other columns can spare. Resolving
+    /// against the window's own width — which is what this replaces — means a 1,100-point list is a
+    /// perfectly reasonable request in a 1,400-point window, and the editor beside it gets whatever
+    /// is left, which was 118 points. Every column is entitled to its minimum before any column is
+    /// entitled to its preference, so that is what comes off the top.
+    public func room(
+        for column: Column,
+        inWindowOfWidth width: CGFloat,
+        sidebarWidth: CGFloat,
+        showing visible: Set<Column>
+    ) -> CGFloat {
+        let spokenFor = visible
+            .subtracting([column])
+            .reduce(into: CGFloat.zero) { total, other in
+                total += minimumWidth(of: other, sidebarWidth: sidebarWidth)
+            }
+
+        return max(minimumWidth(of: column, sidebarWidth: sidebarWidth), width - spokenFor)
+    }
 }
