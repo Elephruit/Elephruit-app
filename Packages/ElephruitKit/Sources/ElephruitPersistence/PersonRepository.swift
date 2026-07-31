@@ -176,6 +176,13 @@ public protocol PersonRepository: AnyObject {
     /// Removes a relationship and its reciprocal.
     func unrelate(_ relationship: PersonRelationship) throws(AppError)
 
+    /// Changes a relationship and keeps its reciprocal in agreement.
+    func update(
+        _ relationship: PersonRelationship,
+        kind: RelationshipKind,
+        label: String?
+    ) throws(AppError)
+
     /// Finds somebody by name, or makes a placeholder for them.
     func resolveOrCreatePlaceholder(named name: String) throws(AppError) -> Item
 
@@ -555,6 +562,26 @@ public final class SwiftDataPersonRepository: PersonRepository {
             }
         }
         context.delete(relationship)
+        try save()
+    }
+
+    public func update(
+        _ relationship: PersonRelationship,
+        kind: RelationshipKind,
+        label: String?
+    ) throws(AppError) {
+        let trimmedLabel = label?.trimmingCharacters(in: .whitespacesAndNewlines)
+        relationship.kind = kind
+        relationship.customLabel = trimmedLabel?.isEmpty == false ? trimmedLabel : nil
+
+        if let reciprocalID = relationship.reciprocalID {
+            let descriptor = FetchDescriptor<PersonRelationship>(predicate: #Predicate { $0.id == reciprocalID })
+            if let reciprocal = try fetch(descriptor).first {
+                reciprocal.kind = kind.inverse
+                reciprocal.customLabel = nil
+            }
+        }
+
         try save()
     }
 

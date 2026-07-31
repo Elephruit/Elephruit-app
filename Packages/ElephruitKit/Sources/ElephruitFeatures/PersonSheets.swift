@@ -662,3 +662,108 @@ struct AddRelationshipSheet: View {
         onFinish()
     }
 }
+
+/// Repairs or removes an existing relationship while keeping both people's records in agreement.
+struct EditRelationshipSheet: View {
+    @Environment(\.services) private var services
+
+    let person: Item
+    let relationship: PersonRelationship
+    let onFinish: () -> Void
+
+    @State private var kind: RelationshipKind
+    @State private var label: String
+    @State private var isConfirmingDeletion = false
+
+    init(person: Item, relationship: PersonRelationship, onFinish: @escaping () -> Void) {
+        self.person = person
+        self.relationship = relationship
+        self.onFinish = onFinish
+        _kind = State(initialValue: relationship.kind)
+        _label = State(initialValue: relationship.customLabel ?? "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.large) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Edit relationship")
+                    .font(Theme.Text.title)
+                Text(relationship.other?.displayTitle ?? "Unknown person")
+                    .font(Theme.Text.rowSubtitle)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+
+            Form {
+                Picker("Relationship", selection: $kind) {
+                    ForEach(RelationshipKind.allCases, id: \.rawValue) { option in
+                        Label(option.displayName.capitalized, systemImage: option.symbolName).tag(option)
+                    }
+                }
+
+                TextField("Your wording (optional)", text: $label)
+                    .help("For example: son, daughter, best friend, or former colleague")
+            }
+            .formStyle(.grouped)
+
+            Text(reciprocalSentence)
+                .font(Theme.Text.rowSubtitle)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Button("Delete Relationship", systemImage: "trash", role: .destructive) {
+                    isConfirmingDeletion = true
+                }
+
+                Spacer()
+
+                Button("Cancel", role: .cancel, action: onFinish)
+                    .keyboardShortcut(.cancelAction)
+                Button("Save", action: save)
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(Theme.Spacing.section)
+        .frame(width: 440)
+        .confirmationDialog(
+            "Delete this relationship?",
+            isPresented: $isConfirmingDeletion,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Relationship", role: .destructive, action: delete)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the relationship from both people.")
+        }
+    }
+
+    private var reciprocalSentence: String {
+        guard let other = relationship.other else { return "Both sides will be updated together." }
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let word = trimmed.isEmpty ? kind.displayName : trimmed
+        return "\(other.displayTitle) is \(person.displayTitle)'s \(word); "
+            + "\(person.displayTitle) is \(other.displayTitle)'s \(kind.inverse.displayName)."
+    }
+
+    private func save() {
+        guard let services else { return }
+        services.perform {
+            try services.persons.update(relationship, kind: kind, label: label)
+            services.noteChange(to: person)
+            if let other = relationship.other { services.noteChange(to: other) }
+        }
+        onFinish()
+    }
+
+    private func delete() {
+        guard let services else { return }
+        let other = relationship.other
+        services.perform {
+            try services.persons.unrelate(relationship)
+            services.noteChange(to: person)
+            if let other { services.noteChange(to: other) }
+        }
+        onFinish()
+    }
+}
