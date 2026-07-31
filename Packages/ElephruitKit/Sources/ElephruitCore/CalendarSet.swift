@@ -141,7 +141,7 @@ public struct WorkingHours: Sendable, Hashable, Codable {
         "\(Self.timeLabel(startMinutes))–\(Self.timeLabel(endMinutes))"
     }
 
-    static func timeLabel(_ minutes: Int) -> String {
+    public static func timeLabel(_ minutes: Int) -> String {
         let hour = minutes / 60
         let minute = minutes % 60
         return String(format: "%d:%02d", hour, minute)

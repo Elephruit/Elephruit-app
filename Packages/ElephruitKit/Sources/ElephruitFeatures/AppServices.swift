@@ -41,8 +41,23 @@ public final class AppServices {
     /// The running timer, its heartbeat, and any recovery awaiting an answer.
     public let timer: TimerService
 
-    /// The user's calendar, read-only and off until they turn it on.
+    /// The user's calendar: what it holds, which sets are saved, and every write.
+    ///
+    /// Off until the user turns it on, on the same terms as Contacts.
     public let calendar: CalendarService
+
+    /// Saved ways of looking at the calendar.
+    public let calendarSets: CalendarSetService
+
+    /// Pre-filled event shapes.
+    public let eventTemplates: EventTemplateService
+
+    /// What Elephruit knows about an event that the calendar does not — people, notes, projects,
+    /// attachments, and the debrief.
+    public let eventLinks: EventAnnotationService
+
+    /// The calendar's own cache and index. Derived, and rebuilt from EventKit.
+    public let calendarSearch: any CalendarSearching
 
     /// People, computed from the links that already exist.
     public let people: PeopleService
@@ -271,9 +286,31 @@ public final class AppServices {
         self.timeEntries = timeEntries
         self.timer = TimerService(entries: timeEntries, dateProvider: dateProvider)
 
+        // Derived, and beside the search index for the same reasons. A stack with no location —
+        // previews and tests — gets a throwaway file.
+        let calendarIndexURL = stack.location?.calendarIndexURL
+            ?? URL.temporaryDirectory.appending(path: "ElephruitCalendarIndex-\(UUID().uuidString).sqlite")
+        let calendarSearch = FTSCalendarSearchEngine(indexURL: calendarIndexURL)
+        self.calendarSearch = calendarSearch
+
+        let calendarSets = CalendarSetService(
+            context: context, dateProvider: dateProvider, defaults: defaults
+        )
+        self.calendarSets = calendarSets
+        self.eventTemplates = EventTemplateService(context: context, dateProvider: dateProvider)
+
+        let eventLinks = EventAnnotationService(context: context, items: items, dateProvider: dateProvider)
+        self.eventLinks = eventLinks
+
         // The provider is built lazily, and only when the feature is enabled — so an app that never
         // turns the calendar on never constructs an `EKEventStore` and never prompts.
-        self.calendar = CalendarService(dateProvider: dateProvider) { EventKitCalendarProvider() }
+        self.calendar = CalendarService(
+            dateProvider: dateProvider,
+            defaults: defaults,
+            index: calendarSearch,
+            sets: calendarSets,
+            annotations: eventLinks
+        ) { EventKitCalendarProvider() }
         self.people = PeopleService(items: items, dateProvider: dateProvider)
 
         let persons = SwiftDataPersonRepository(context: context, items: items, dateProvider: dateProvider)
@@ -322,6 +359,14 @@ public final class AppServices {
         undoManager.groupsByEvent = false
         self.undoManager = undoManager
         self.undo = StructuralUndoCoordinator(items: items, undoManager: undoManager)
+        // Resolving a linked person's or project's name for the calendar index. Set after
+        // construction because the calendar needs the repository and the repository needs the
+        // context, and a closure is the smallest thing that can cross that.
+        self.calendar.titleResolver = { [weak items] id in
+            guard let items else { return nil }
+            return (try? items.item(id: id))?.displayTitle
+        }
+
         self.sidebar = SidebarModel(
             items: items,
             tags: tags,

@@ -156,6 +156,11 @@ public struct RootView: View {
             Group {
                 if navigation.selection == .time {
                     TimeView(navigation: navigation)
+                } else if navigation.selection == .calendar {
+                    // The calendar replaces the middle column rather than opening beside it, on the
+                    // same terms as Time and the People workspace: it *is* that column's contents
+                    // for this destination.
+                    CalendarWorkspaceView(navigation: navigation)
                 } else if navigation.selection == .home {
                     HomeView(navigation: navigation)
                 } else if case .people(let scope) = navigation.selection {
@@ -266,6 +271,17 @@ public struct RootView: View {
             },
             PaletteCommand(id: "go-time", title: "Go to Time", category: .navigate, symbolName: "timer") {
                 navigation.select(.time)
+            },
+            PaletteCommand(id: "go-calendar", title: "Go to Calendar", category: .navigate, symbolName: "calendar.day.timeline.left") {
+                navigation.select(.calendar)
+            },
+            PaletteCommand(id: "new-event", title: "New Event…", category: .create, symbolName: "calendar.badge.plus") {
+                navigation.select(.calendar)
+                navigation.isCalendarQuickEntryVisible = true
+            },
+            PaletteCommand(id: "search-calendar", title: "Search Calendar", category: .navigate, symbolName: "magnifyingglass") {
+                navigation.select(.calendar)
+                navigation.isCalendarSearchVisible = true
             },
             PaletteCommand(id: "people-bar", title: "People Command Bar", category: .navigate, symbolName: "person.text.rectangle") {
                 navigation.isPeopleCommandBarVisible = true

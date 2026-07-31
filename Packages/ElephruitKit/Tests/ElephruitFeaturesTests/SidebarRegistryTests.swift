@@ -54,13 +54,17 @@ struct SidebarRegistryTests {
         }
     }
 
-    @Test("Calendar is declared but not yet shown")
-    func laterDestinationsAreDeclared() {
-        // Declared now so the phase that builds it flips a flag rather than editing the sidebar.
-        // Events already appear in Today and Upcoming; a dedicated calendar grid is what is missing.
+    @Test("Calendar became available with the calendar module, in the primary band")
+    func calendarIsAvailable() {
+        // Declared with `isAvailable: false` from milestone 1 precisely so that the phase which
+        // built it would flip one flag rather than edit the sidebar. This is that flag.
         let calendar = SidebarRegistry.allDeclared.first { $0.id == "calendar" }
-        #expect(calendar != nil)
-        #expect(calendar?.isAvailable == false)
+        #expect(calendar?.isAvailable == true)
+
+        // Primary rather than Library: a calendar is where a day is worked, not somewhere work is
+        // filed — the same argument that puts Today above Notes.
+        #expect(calendar?.band == .primary)
+        #expect(SidebarRegistry.destinations(in: .primary).contains { $0.id == "calendar" })
     }
 
     @Test("Home became available in Phase E, first in the primary band")

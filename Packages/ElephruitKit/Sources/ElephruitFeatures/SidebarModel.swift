@@ -192,19 +192,16 @@ public enum SidebarRegistry {
             hint: "Deleted, and recoverable until you empty it."
         ),
 
-        // MARK: Declared, not yet available
-        //
-        // These exist so the phase that builds them changes one flag. Until then they are invisible:
-        // no row, no customisation entry, no menu item.
-
+        // Available as of the calendar module. In the primary band, because a calendar is where a
+        // day is worked rather than somewhere work is filed — the same argument that puts Today
+        // above Notes.
         SidebarDestination(
             id: "calendar",
             selection: .calendar,
-            band: .library,
+            band: .primary,
             title: "Calendar",
             symbolName: "calendar.day.timeline.left",
-            hint: "Your days, laid out.",
-            isAvailable: false
+            hint: "Your days, laid out, and everything you know about them."
         ),
 
         // Available as of Phase C. In the Library band rather than the top one, by decision: time is
