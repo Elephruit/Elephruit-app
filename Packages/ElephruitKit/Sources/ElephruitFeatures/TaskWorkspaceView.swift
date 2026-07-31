@@ -19,6 +19,10 @@ struct TaskWorkspaceView: View {
 
     @State private var sections: [TaskSectionGroup] = []
     @State private var flatTasks: [Item] = []
+
+    /// ``flatTasks`` keyed by identifier, so a section can find its rows without the list rebuilding
+    /// the index once per section.
+    @State private var tasksByID: [UUID: Item] = [:]
     @State private var agenda: [AgendaGroup] = []
     @State private var isPlanning = false
     @State private var draftTitle = ""
@@ -428,54 +432,46 @@ struct TaskWorkspaceView: View {
 
         services.perform {
             switch navigation.selection {
-            case .taskView(.today):
-                sections = try services.taskViews.today()
-                flatTasks = try services.taskViews.tasks(in: .today)
-
-            case .taskView(.upcoming):
-                agenda = try services.taskViews.upcoming()
-                flatTasks = try services.taskViews.tasks(in: .upcoming)
-                sections = []
-
-            case .taskView(.anytime):
-                sections = try services.taskViews.anytime()
-                flatTasks = try services.taskViews.tasks(in: .anytime)
-
-            case .taskView(.someday):
-                sections = try services.taskViews.someday()
-                flatTasks = try services.taskViews.tasks(in: .someday)
-
-            case .taskView(.completed):
-                sections = try services.taskViews.logbook()
-                flatTasks = try services.taskViews.tasks(in: .completed)
-
+            // One call rather than two. Each of the pair this replaced fetched every open task and
+            // ran the scheduling rules over all of it, so arriving here traversed the library twice
+            // to answer one question — see ``TaskViewService/contents(of:)``.
             case .taskView(let view):
-                let tasks = try services.taskViews.tasks(in: view)
-                flatTasks = tasks
-                sections = [TaskSectionGroup(heading: .none, taskIDs: tasks.map(\.id))]
+                let contents = try services.taskViews.contents(of: view)
+                sections = contents.sections
+                agenda = contents.agenda
+                flatTasks = contents.tasks
 
             case .builtInSmartList(let id):
                 let filter = BuiltInSmartList.list(id: id)?.filter ?? TaskFilter()
                 let tasks = try services.taskViews.tasks(matching: filter)
                 flatTasks = tasks
                 sections = [TaskSectionGroup(heading: .none, taskIDs: tasks.map(\.id))]
+                agenda = []
 
             case .smartList(let id):
                 let saved = services.taskViews.smartLists().first { $0.id == id }
                 let tasks = try services.taskViews.tasks(matching: saved?.taskFilter ?? TaskFilter())
                 flatTasks = tasks
                 sections = [TaskSectionGroup(heading: .none, taskIDs: tasks.map(\.id))]
+                agenda = []
 
             default:
                 sections = []
                 flatTasks = []
+                agenda = []
             }
+
+            tasksByID = Dictionary(flatTasks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         }
     }
 
+    /// The tasks in one section.
+    ///
+    /// The index is built when the tasks are loaded rather than here: this is called once per
+    /// section from inside the body, and rebuilding a dictionary of every task for each of them made
+    /// drawing the list quadratic in the number of sections for no reason.
     private func tasks(in section: TaskSectionGroup) -> [Item] {
-        let byID = Dictionary(flatTasks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        return section.taskIDs.compactMap { byID[$0] }
+        section.taskIDs.compactMap { tasksByID[$0] }
     }
 
     // MARK: - Actions

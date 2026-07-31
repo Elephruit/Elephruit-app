@@ -693,3 +693,98 @@ struct SystemViewTests {
         #expect(groups.last?.heading == .unfiled)
     }
 }
+
+/// ``TaskViewService/contents(of:)`` exists to stop the workspace traversing the library twice for
+/// one destination, and the only way that is worth having is if it gives the same answer as the two
+/// calls it replaced. This is that check, over a library with a task in each of the states the views
+/// distinguish — because an agreement that only holds for an empty store is not an agreement.
+@Suite("One pass says what two passes said")
+@MainActor
+struct TaskViewContentsTests {
+    /// A library with something in every view.
+    private func populated() throws -> TaskFixture {
+        let fixture = try TaskFixture()
+        let project = try fixture.store.makeProject(title: "Launch")
+
+        try fixture.task("Loose end")
+        let overdue = try fixture.task("Overdue thing", in: project)
+        try fixture.tasks.setDeadline(fixture.day(-3), on: overdue)
+
+        let committed = try fixture.task("Chosen for today", in: project)
+        try fixture.tasks.commitToToday(committed)
+
+        let later = try fixture.task("Starts next month")
+        try fixture.tasks.setStartDate(fixture.day(30), on: later)
+
+        let due = try fixture.task("Due Friday", in: project)
+        try fixture.tasks.setDeadline(fixture.day(5), on: due)
+
+        let parked = try fixture.task("Learn piano")
+        try fixture.tasks.setSomeday(true, on: parked)
+
+        let flagged = try fixture.task("Flagged one")
+        try fixture.tasks.setFlagged(true, on: flagged)
+
+        let waiting = try fixture.task("Waiting on Sam")
+        try fixture.tasks.markWaiting(waiting, on: nil)
+
+        let done = try fixture.task("Finished")
+        try fixture.store.items.toggleCompletion(done)
+
+        return fixture
+    }
+
+    /// Guards the two tests below, which would pass on an empty store and prove nothing.
+    @Test("The library used here reaches every view", arguments: TaskSystemView.allCases)
+    func fixtureIsNotVacuous(view: TaskSystemView) throws {
+        let fixture = try populated()
+        #expect(try !fixture.views.contents(of: view).tasks.isEmpty, "\(view.title) is empty")
+    }
+
+    @Test("Every view's tasks are the ones the pair of calls returned", arguments: TaskSystemView.allCases)
+    func tasksAgree(view: TaskSystemView) throws {
+        let fixture = try populated()
+
+        let contents = try fixture.views.contents(of: view)
+        let separately = try fixture.views.tasks(in: view)
+
+        #expect(
+            Set(contents.tasks.map(\.id)) == Set(separately.map(\.id)),
+            "\(view.title) names a different set of tasks in one pass than in two"
+        )
+    }
+
+    @Test("Every view's grouping is the one the section call returned")
+    func sectionsAgree() throws {
+        let fixture = try populated()
+
+        #expect(try ids(fixture.views.contents(of: .today).sections) == ids(fixture.views.today()))
+        #expect(try ids(fixture.views.contents(of: .anytime).sections) == ids(fixture.views.anytime()))
+        #expect(try ids(fixture.views.contents(of: .someday).sections) == ids(fixture.views.someday()))
+        #expect(try ids(fixture.views.contents(of: .completed).sections) == ids(fixture.views.logbook()))
+
+        let agenda = try fixture.views.contents(of: .upcoming).agenda
+        let separately = try fixture.views.upcoming()
+        #expect(agenda.map(\.id) == separately.map(\.id))
+    }
+
+    /// The flat list has to hold every task the sections name, or a row would draw as a gap and a
+    /// selection would act on nothing.
+    @Test("Nothing a section names is missing from the flat list")
+    func sectionsAreCovered() throws {
+        let fixture = try populated()
+
+        for view in TaskSystemView.allCases {
+            let contents = try fixture.views.contents(of: view)
+            let named = Set(contents.sections.flatMap(\.taskIDs))
+            #expect(
+                named.isSubset(of: Set(contents.tasks.map(\.id))),
+                "\(view.title) draws a section naming a task it did not load"
+            )
+        }
+    }
+
+    private func ids(_ groups: [TaskSectionGroup]) -> [String] {
+        groups.map { "\($0.id):\($0.taskIDs.map(\.uuidString).joined(separator: ","))" }
+    }
+}
