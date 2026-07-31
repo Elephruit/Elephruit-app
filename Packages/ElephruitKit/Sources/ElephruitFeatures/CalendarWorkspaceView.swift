@@ -18,6 +18,9 @@ public struct CalendarWorkspaceView: View {
     @State private var isShowingSetEditor = false
     @State private var isShowingTemplates = false
 
+    /// Whether the calendar has the keyboard. See the note on `focusable()` below.
+    @FocusState private var isGridFocused: Bool
+
     let navigation: NavigationModel
 
     public init(navigation: NavigationModel) {
@@ -164,6 +167,14 @@ public struct CalendarWorkspaceView: View {
             guard let link = CalendarDeepLink.parse(url) else { return }
             Task { await follow(link, services: services, workspace: workspace) }
         }
+        // Focusable, and focused on appearing. `onKeyPress` only fires on a focused view, so
+        // without this every keyboard shortcut in the calendar would compile, read correctly, and
+        // do nothing — the sort of failure that survives a code review and fails the first person
+        // who presses an arrow key.
+        .focusable()
+        .focusEffectDisabled()
+        .focused($isGridFocused)
+        .onAppear { isGridFocused = true }
         .onKeyPress(action: { press in handle(press, services: services, workspace: workspace) })
     }
 
