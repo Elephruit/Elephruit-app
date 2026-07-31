@@ -22,6 +22,7 @@ struct IsolatedPeopleSidebarSection: View {
 
     @State private var groups: [PersonGroupSummary] = []
     @State private var hasLinkedPeople = false
+    @State private var isShowingContactImport = false
 
     var body: some View {
         Section {
@@ -51,7 +52,7 @@ struct IsolatedPeopleSidebarSection: View {
             }
         }
 
-        Section("Groups") {
+        Section {
             ForEach(groups) { group in
                 let scope = PeopleScope.group(id: group.id)
                 Button {
@@ -64,8 +65,35 @@ struct IsolatedPeopleSidebarSection: View {
                 .help(scope.hint)
                 .accessibilityIdentifier(SidebarSelection.people(scope).accessibilityIdentifier)
             }
+
+            Button("Import from Contacts…", systemImage: "person.crop.rectangle.stack") {
+                isShowingContactImport = true
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.Colors.secondaryText)
+            .help("Bring people in from your address book. Elephruit reads it and never writes to it.")
+            .accessibilityIdentifier("sidebar.people.import")
+        } header: {
+            HStack {
+                Text("Groups")
+                Spacer()
+
+                Button {
+                    navigation.isPeopleCommandBarVisible = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.plain)
+                .help("Add a person")
+                .accessibilityLabel("Add a person")
+                .accessibilityIdentifier("sidebar.people.add")
+            }
         }
         .task { loadSidebar() }
+        .onChange(of: services?.changeToken) { _, _ in loadSidebar() }
+        .sheet(isPresented: $isShowingContactImport) {
+            ContactOnboardingView(navigation: navigation)
+        }
     }
 
     private func loadSidebar() {
