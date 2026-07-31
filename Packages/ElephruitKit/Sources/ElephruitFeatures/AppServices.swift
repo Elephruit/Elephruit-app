@@ -41,6 +41,26 @@ public final class AppServices {
     /// The running timer, its heartbeat, and any recovery awaiting an answer.
     public let timer: TimerService
 
+    // MARK: The Tasks module
+
+    /// Every way a task can change, and the one place its invariants are applied.
+    public let tasks: TaskService
+
+    /// The system views, assembled from the store.
+    public let taskViews: TaskViewService
+
+    /// What the Tasks band of the sidebar reads. Computed on change, never during a render.
+    public let taskSidebar: TaskSidebarModel
+
+    /// Apple Reminders, off until the user turns it on.
+    public let reminders: RemindersService
+
+    /// Keeping linked tasks and system reminders in step, and saying so when it cannot.
+    public let reminderSync: ReminderSyncEngine
+
+    /// Turning a line of typed text into a task, once the library has had its say.
+    public let taskEntry: TaskEntryComposer
+
     /// The user's calendar, read-only and off until they turn it on.
     public let calendar: CalendarService
 
@@ -210,6 +230,9 @@ public final class AppServices {
     ///     lazily and only once the user turns the integration on. A test passes a
     ///     ``ElephruitIntegrations/FixtureContactsProvider`` here, which is what lets the whole
     ///     import flow be exercised without `CNContactStore` ever being constructed.
+    ///   - remindersProvider: How to build the Reminders adapter, on the same terms. A test passes
+    ///     a ``ElephruitIntegrations/FixtureRemindersProvider``, which is what lets the whole sync
+    ///     flow be exercised without `EKEventStore` ever being constructed.
     ///   - defaults: Where per-device preferences live. A test passes a scratch suite so that
     ///     enabling Contacts in one does not leave the flag set for the user or for the next test.
     public init(
@@ -217,6 +240,7 @@ public final class AppServices {
         dateProvider: any DateProvider = SystemDateProvider(),
         isDevelopmentMode: Bool = false,
         contactsProvider: (@Sendable () -> any ContactsProviding)? = nil,
+        remindersProvider: (@Sendable () -> any RemindersProviding)? = nil,
         defaults: UserDefaults = .standard
     ) {
         self.stack = stack
@@ -270,6 +294,30 @@ public final class AppServices {
         )
         self.timeEntries = timeEntries
         self.timer = TimerService(entries: timeEntries, dateProvider: dateProvider)
+
+        let tasks = TaskService(items: items, context: context, dateProvider: dateProvider)
+        let taskViews = TaskViewService(items: items, context: context, dateProvider: dateProvider)
+        self.tasks = tasks
+        self.taskViews = taskViews
+        self.taskSidebar = TaskSidebarModel(items: items, views: taskViews)
+
+        // Built lazily and only when the feature is enabled, on the same terms as the calendar and
+        // the address book — so an app that never links a reminder never constructs an
+        // `EKEventStore` and never prompts.
+        let reminders = RemindersService(
+            dateProvider: dateProvider,
+            defaults: defaults,
+            makeProvider: remindersProvider ?? { EventKitRemindersProvider() }
+        )
+        self.reminders = reminders
+        self.reminderSync = ReminderSyncEngine(
+            items: items,
+            tasks: tasks,
+            context: context,
+            dateProvider: dateProvider,
+            provider: reminders.provider
+        )
+        self.taskEntry = TaskEntryComposer(items: items, tasks: tasks, dateProvider: dateProvider)
 
         // The provider is built lazily, and only when the feature is enabled — so an app that never
         // turns the calendar on never constructs an `EKEventStore` and never prompts.
@@ -340,6 +388,7 @@ public final class AppServices {
         dateProvider: any DateProvider = FixedDateProvider.reference,
         populated: Bool = true,
         contactsProvider: (@Sendable () -> any ContactsProviding)? = nil,
+        remindersProvider: (@Sendable () -> any RemindersProviding)? = nil,
         defaults: UserDefaults = .standard
     ) -> AppServices {
         // Previews must never crash a canvas, and an in-memory store failing to open would mean
@@ -354,6 +403,7 @@ public final class AppServices {
             dateProvider: dateProvider,
             isDevelopmentMode: true,
             contactsProvider: contactsProvider,
+            remindersProvider: remindersProvider,
             defaults: defaults
         )
         if populated {
@@ -533,6 +583,7 @@ public final class AppServices {
     public func refreshDerivedState() {
         counts.refresh()
         sidebar.refresh()
+        taskSidebar.refresh()
     }
 
     // MARK: - Sample data
@@ -547,7 +598,10 @@ public final class AppServices {
             Diagnostics.features.error("Sample data requested outside development mode; refused")
             return
         }
-        perform { try SampleData.populate(services: self) }
+        perform {
+            try SampleData.populate(services: self)
+            try TaskSampleData.populate(services: self)
+        }
     }
 }
 

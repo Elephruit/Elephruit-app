@@ -9,7 +9,7 @@ import Testing
 private struct TimeFixture {
     let store: StoreFixture
     let time: SwiftDataTimeEntryRepository
-    var clock: FixedDateProvider { store.dateProvider }
+    var clock: any DateProvider { store.dateProvider }
 
     init() throws {
         store = try StoreFixture()

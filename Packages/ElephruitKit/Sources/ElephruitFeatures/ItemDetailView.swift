@@ -69,7 +69,10 @@ public struct ItemDetailView: View {
     @ViewBuilder
     private func surface(for item: Item) -> some View {
         switch item.kind {
-        case .project, .area, .goal:
+        // A list is a container of tasks with headings, which is the same surface a project needs.
+        // What differs is what the header says about it — a list has no outcome and no progress —
+        // and that difference lives inside `ProjectDetailView` rather than in a second view.
+        case .project, .area, .goal, .list:
             ProjectDetailView(
                 project: item,
                 navigation: navigation,
