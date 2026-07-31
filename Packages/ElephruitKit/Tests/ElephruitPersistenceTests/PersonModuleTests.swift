@@ -190,6 +190,23 @@ struct PersonModuleTests {
         #expect(try fixture.people.relationships(of: jack).isEmpty, "a one-sided relationship is a bug, not a state")
     }
 
+    @Test("Editing a relationship updates both halves")
+    func editingIsSymmetric() throws {
+        let fixture = try Fixture()
+        let maya = try fixture.people.createPerson(PersonDraft(fullName: "Maya Chen"))
+        let stella = try fixture.people.createPerson(PersonDraft(fullName: "Stella"))
+        let relationship = try fixture.people.relate(maya, to: stella, as: .friend, label: nil)
+
+        try fixture.people.update(relationship, kind: .child, label: "daughter")
+
+        let mayaSide = try #require(try fixture.people.relationships(of: maya).first)
+        let stellaSide = try #require(try fixture.people.relationships(of: stella).first)
+        #expect(mayaSide.kind == .child)
+        #expect(mayaSide.customLabel == "daughter")
+        #expect(stellaSide.kind == .parent)
+        #expect(stellaSide.customLabel == nil)
+    }
+
     @Test("Relating the same pair twice changes nothing")
     func relatingIsIdempotent() throws {
         let fixture = try Fixture()

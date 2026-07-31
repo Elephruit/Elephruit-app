@@ -401,6 +401,7 @@ struct PersonRelationshipsSection: View {
 
     @State private var isAddingRelationship = false
     @State private var relationshipKind: RelationshipKind = .friend
+    @State private var editingRelationship: PersonRelationship?
     @State private var relationships: [PersonRelationship] = []
     @State private var childPortraits: [UUID: PersonPortrait] = [:]
 
@@ -463,7 +464,8 @@ struct PersonRelationshipsSection: View {
                                 ChildProfileCard(
                                     child: child,
                                     portrait: childPortraits[child.id],
-                                    onOpen: { onOpenPerson(child.id) }
+                                    onOpen: { onOpenPerson(child.id) },
+                                    onEdit: { editingRelationship = relationship }
                                 )
                             }
                         }
@@ -482,6 +484,8 @@ struct PersonRelationshipsSection: View {
                                     isPlaceholder: other.personProfile?.isPlaceholder ?? false
                                 ) {
                                     onOpenPerson(other.id)
+                                } onEdit: {
+                                    editingRelationship = relationship
                                 }
                             }
                         }
@@ -495,6 +499,12 @@ struct PersonRelationshipsSection: View {
         .sheet(isPresented: $isAddingRelationship) {
             AddRelationshipSheet(person: person, initialKind: relationshipKind) {
                 isAddingRelationship = false
+                reload()
+            }
+        }
+        .sheet(item: $editingRelationship) { relationship in
+            EditRelationshipSheet(person: person, relationship: relationship) {
+                editingRelationship = nil
                 reload()
             }
         }
@@ -524,6 +534,7 @@ private struct ChildProfileCard: View {
     let child: Item
     let portrait: PersonPortrait?
     let onOpen: () -> Void
+    let onEdit: () -> Void
 
     var body: some View {
         Button(action: onOpen) {
@@ -554,7 +565,10 @@ private struct ChildProfileCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Open (child.displayTitle) to add age, school, interests, and notes")
+        .help("Open \(child.displayTitle) to add age, school, interests, and notes")
+        .contextMenu {
+            Button("Edit Relationship…", systemImage: "pencil", action: onEdit)
+        }
     }
 
     private var detail: String {
@@ -570,6 +584,7 @@ struct RelatedPersonChip: View {
     let colorName: String?
     let isPlaceholder: Bool
     let onOpen: () -> Void
+    let onEdit: () -> Void
 
     var body: some View {
         Button(action: onOpen) {
@@ -594,6 +609,9 @@ struct RelatedPersonChip: View {
         .buttonStyle(.plain)
         .help(isPlaceholder ? "\(name) — a lightweight record with no details yet" : name)
         .accessibilityLabel("\(name), \(label)")
+        .contextMenu {
+            Button("Edit Relationship…", systemImage: "pencil", action: onEdit)
+        }
     }
 }
 
