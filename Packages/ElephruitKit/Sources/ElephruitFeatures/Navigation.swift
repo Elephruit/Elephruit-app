@@ -235,7 +235,30 @@ public final class NavigationModel {
     public var layoutMode: LayoutMode = .full
     public var focusedPane: ShellPane = .list
 
-    public var isInspectorVisible = false
+    /// Whether the inspector is open, in the module the window is currently in.
+    ///
+    /// ### Why this is per module and not one flag
+    /// It was one flag, and one flag is the same mistake as one width. The inspector shows a
+    /// different thing in every module — an event in the calendar, a person's context in People,
+    /// the field editor elsewhere — so "I want the inspector" is a sentence about the module you
+    /// said it in. Opening the event inspector to check a meeting's guest list should not mean that
+    /// every note you open for the rest of the session arrives with a field editor beside it.
+    ///
+    /// Per *window*, not persisted, unlike the widths: a width is an opinion about the module and a
+    /// window's open panes are the shape of this window's session. Two windows in People are
+    /// entitled to disagree about whether the context sidebar is showing.
+    ///
+    /// A module absent from the dictionary uses its own policy's answer, so a module whose
+    /// inspector is the point of it does not start closed.
+    public var isInspectorVisible: Bool {
+        get {
+            inspectorVisibility[activeModule] ?? !activeModule.shellLayout.inspector.hidesWhenNothingSelected
+        }
+        set { inspectorVisibility[activeModule] = newValue }
+    }
+
+    private var inspectorVisibility: [AppModule?: Bool] = [:]
+
     public var isQuickCaptureVisible = false
 
     /// The task entry surface.
