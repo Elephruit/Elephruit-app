@@ -295,6 +295,106 @@ struct SourceHygieneTests {
         )
     }
 
+    /// Decoration that accumulates, caught before it ships.
+    ///
+    /// ### What actually goes wrong
+    /// The failure mode is not one ugly view. It is a second material under a surface that already
+    /// had one, or a shadow added to a row that is drawn inside a card that also casts one — each
+    /// edit reasonable on its own, the result a window of stacked haze that nobody chose. It
+    /// compounds silently, because every intermediate state still renders.
+    ///
+    /// The rule is one layer of each kind per surface: at most one shadow, at most one material or
+    /// glass backing, and no shadow large enough to read as a glow. A floating card wants exactly
+    /// one of each — see the link-suggestion popover in `KindDetailViews`, which is the shape this
+    /// permits.
+    ///
+    /// ### What this cannot see
+    /// A text scan, like the rest of this suite. It reads a modifier chain as a run of consecutive
+    /// lines beginning with a dot, so decoration split across a multi-line `overlay` reads as two
+    /// chains rather than one, and nesting spread across two *views* — a card inside a card — is
+    /// invisible to it entirely. It catches the accumulation written in one place, which is how
+    /// this arrives in practice.
+    @Test("No view stacks shadows, materials, or glass on one surface")
+    func decorationDoesNotAccumulate() {
+        var offenders: [String] = []
+
+        // Every backing that composites what is behind it. A surface wants at most one.
+        let backings = [
+            ".glassEffect(",
+            ".regularMaterial", ".thinMaterial", ".ultraThinMaterial",
+            ".thickMaterial", ".ultraThickMaterial",
+        ]
+
+        for file in Self.swiftFiles() {
+            for chain in Self.modifierChains(of: file) {
+                let shadows = chain.filter { $0.text.contains(".shadow(") }
+                if shadows.count > 1 {
+                    offenders.append(
+                        "\(file.lastPathComponent):\(shadows[0].number) — \(shadows.count) shadows on one surface"
+                    )
+                }
+
+                let backed = chain.filter { line in backings.contains { line.text.contains($0) } }
+                if backed.count > 1 {
+                    offenders.append(
+                        "\(file.lastPathComponent):\(backed[0].number) — \(backed.count) materials on one surface"
+                    )
+                }
+
+                for line in shadows where Self.shadowRadius(in: line.text).map({ $0 > 24 }) == true {
+                    offenders.append("\(file.lastPathComponent):\(line.number) — shadow reads as a glow")
+                }
+            }
+        }
+
+        #expect(
+            offenders.isEmpty,
+            """
+            Depth is one shadow and one material, not several. Stacked layers compound into haze \
+            that no single edit chose and none of them looks wrong alone: \(offenders)
+            """
+        )
+    }
+
+    /// A run of consecutive lines that begin with a dot — one view's modifiers, near enough.
+    ///
+    /// Lines that are only closing brackets continue the run, so a chain survives a multi-line
+    /// modifier's tail. Anything else ends it.
+    private static func modifierChains(of url: URL) -> [[(number: Int, text: String)]] {
+        var chains: [[(number: Int, text: String)]] = []
+        var current: [(number: Int, text: String)] = []
+        var previousNumber = -1
+
+        func isCloser(_ text: String) -> Bool {
+            !text.isEmpty && text.allSatisfy { ")}],".contains($0) }
+        }
+
+        for line in codeLines(of: url) {
+            let continues = line.number == previousNumber + 1
+            let belongs = line.text.hasPrefix(".") || (continues && isCloser(line.text))
+
+            if belongs, continues || line.text.hasPrefix(".") {
+                if !continues { chains.append(current); current = [] }
+                current.append(line)
+            } else {
+                if !current.isEmpty { chains.append(current) }
+                current = []
+            }
+            previousNumber = line.number
+        }
+
+        if !current.isEmpty { chains.append(current) }
+        return chains.filter { !$0.isEmpty }
+    }
+
+    /// The literal radius in `.shadow(radius: 8, y: 2)`, when one is written there.
+    private static func shadowRadius(in text: String) -> Double? {
+        guard let marker = text.range(of: "radius:") else { return nil }
+        let rest = text[marker.upperBound...]
+        let digits = rest.drop { $0 == " " }.prefix { $0.isNumber || $0 == "." }
+        return Double(digits)
+    }
+
     @Test("Log statements do not interpolate values without a privacy annotation")
     func logsAnnotatePrivacy() {
         var offenders: [String] = []
