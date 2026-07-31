@@ -191,6 +191,44 @@ public enum SchemaV6: VersionedSchema {
     public static var models: [any PersistentModel.Type] { SchemaV5.models }
 }
 
+/// The seventh schema: the Tasks module.
+///
+/// **No new entities.** Twenty-one new attributes on ``Item`` — the reminder and its ownership, the
+/// planning marks, the checklist blob, the recurrence-series identity, the external-reminder link,
+/// and the migration's review marker — plus one on ``SavedSearch`` for a smart list's rules. Every
+/// one is optional or defaulted, so this is additive throughout: a store opened under this version
+/// gains a set of nullable columns it is free to ignore, and nothing existing changes shape.
+///
+/// ### Why so many columns rather than a satellite entity
+/// A `TaskDetail` entity hanging off `Item` was the alternative, and it is worse in the two places
+/// that matter. Every task view would fault in a second row to decide whether a task is in Today —
+/// which is the query that runs most often and has the tightest budget — and every one of these
+/// fields would have to be optional *twice*: once because the column is nullable and once because
+/// the satellite might be absent. `Item` is already a wide row by decision (ADR 0002), and
+/// `ItemFields` plus `ItemValidator` are the mechanism that stops a note acquiring a task's columns.
+/// That mechanism is extended here rather than worked around.
+///
+/// ### What is deliberately *not* here
+/// - **No new date column.** `dueAt` becomes the deadline and `startAt` the availability date; both
+///   already existed. Adding a third would have meant migrating live data on a guess about what an
+///   old value meant, which is exactly what `TaskDateMigration` refuses to do.
+/// - **No entity for smart lists.** A `SavedSearch` already carries a name, a symbol, a colour, a
+///   sidebar place, an order, and a soft delete. See the note on `SavedSearch.taskFilterData`.
+/// - **No entity for checklist items.** They are never queried, linked, or listed on their own.
+///
+/// ### Why it is a version at all
+/// For the reason spelled out on ``SchemaV3``: the version identifier is what the `.schema-version`
+/// stamp beside the store is compared against, and a mismatch is what triggers the backup in
+/// `PersistenceStack`. A schema change that did not bump the version would migrate real user data
+/// with no backup taken.
+public enum SchemaV7: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 7) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV6.models
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -203,7 +241,7 @@ public enum SchemaV6: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV6.self]
+        [SchemaV7.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -223,13 +261,13 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV6.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV7.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV6.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV7.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {
-        let version = SchemaV6.versionIdentifier
+        let version = SchemaV7.versionIdentifier
         return "\(version.major).\(version.minor).\(version.patch)"
     }
 }

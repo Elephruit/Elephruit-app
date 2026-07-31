@@ -14,7 +14,7 @@ phase plan and its definition of done.
 |---|---|
 | `xcodebuild` Debug and Release | Succeeds, zero warnings |
 | `swift build` (all eight modules) | Succeeds, zero warnings |
-| `swift test` | 922 tests, all passing |
+| `swift test` | 1,179 tests, all passing |
 | Sandboxed, five entitlements only | Verified against the signed binary |
 | Store opens on disk, all fifteen entities materialise | Verified against the running app |
 | Light visual review | Done — People workspace, estimates, groups, duplicates |
@@ -61,6 +61,35 @@ talked into showing fiction where somebody expects their own address book.
 **To use your real contacts instead**, launch without that flag and turn the integration on in
 Settings ▸ People. Elephruit reads them and never writes: `ContactsProviding` has no write method,
 and `ContactsWriteSafetyTests` fails if the adapter ever reaches past it.
+
+### Reviewing the Tasks module, and its Reminders link
+
+Sample data includes one of every state Tasks can be in — a planned Today with a manual order, Later
+Today, an overdue deadline, a future start date, a reminder that is not a deadline, a project with
+sections, a list, Someday, waiting on a person, both kinds of repeat, steps, subtasks, a promise, a
+task made from a note, completed and cancelled history, and all four Reminders states. **None of it
+touches your Reminders**: the linked rows are written directly, so no permission is requested.
+
+Apple Reminders is the **first integration in this app that writes**. Calendar and Contacts are
+read-only by construction — their protocols have no write method — and that is not available for a
+task manager that has to be able to tick a reminder off. So the guarantee is different and is
+checked rather than compiled: every write is a `ReminderWrite` value that can be shown before it
+happens, `apply(_:)` is the only door, and `RemindersWriteSafetyTests` counts the EventKit write
+calls in the adapter so that adding one has to be justified.
+
+Nothing private crosses. Areas, projects, sections, Today, Someday, waiting-for, linked people, and
+provenance stay here and are never written into a reminder's title or notes — that text would appear
+in Apple's own app on every device, and in a shared list to everybody it is shared with. The full
+list, with a reason for each, is in Settings ▸ Tasks.
+
+**To connect your real Reminders**, open Settings ▸ Tasks, read the explanation, and press *Connect
+Reminders…*. No list participates until you tick it, and disconnecting leaves every existing link
+intact.
+
+No automated test can reach a real Reminders database: the test targets never import EventKit, and
+`FixtureRemindersProvider` — an in-memory store with a read-only shared list, a timed reminder, an
+all-day one, a repeating one, and one already completed — is the only implementation they can
+construct.
 
 ## Requirements
 
@@ -109,6 +138,7 @@ Read these before changing anything structural.
 | [22 — People module record](docs/22-people-module-record.md) | What was built, the bugs found, what was deliberately left |
 | [23 — Contacts import scope](docs/23-contacts-import-scope.md) | The six decisions behind reading the address book |
 | [24 — Contacts import record](docs/24-contacts-import-record.md) | Permission, provenance, refresh, and two SDK facts worth knowing |
+| [25 — Tasks module record](docs/25-tasks-module-record.md) | The three dates, Today as a plan, the Reminders write guarantee, and what was left |
 
 Phase records: [10 — A scope](docs/10-phase-a-scope.md) ·
 [11 — B](docs/11-phase-b-record.md) · [12 — C](docs/12-phase-c-record.md) ·

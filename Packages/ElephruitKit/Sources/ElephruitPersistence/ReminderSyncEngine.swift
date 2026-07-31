@@ -1,0 +1,431 @@
+import ElephruitCore
+import ElephruitModel
+import Foundation
+import SwiftData
+
+/// What one reconciliation pass did.
+///
+/// Counts rather than a Boolean, because the interesting failures here are quiet ones: a pass that
+/// pushed forty times when it should have pushed once, or that created a duplicate every time the
+/// store-change notification fired. Both are visible in these numbers and in nothing else.
+public struct ReminderSyncReport: Sendable, Hashable {
+    public var examined = 0
+    public var adopted = 0
+    public var pushed = 0
+    public var conflicted = 0
+    public var missing = 0
+    public var readOnly = 0
+    public var imported = 0
+    public var failures: [String] = []
+
+    public init() {}
+
+    public var changedAnything: Bool {
+        adopted > 0 || pushed > 0 || imported > 0 || conflicted > 0 || missing > 0
+    }
+
+    public var summary: String {
+        var parts: [String] = []
+        if imported > 0 { parts.append("\(imported) brought in") }
+        if adopted > 0 { parts.append("\(adopted) updated from Reminders") }
+        if pushed > 0 { parts.append("\(pushed) sent to Reminders") }
+        if conflicted > 0 { parts.append("\(conflicted) need a decision") }
+        if missing > 0 { parts.append("\(missing) no longer in Reminders") }
+        if readOnly > 0 { parts.append("\(readOnly) on a read-only list") }
+        return parts.isEmpty ? "Everything is in step." : parts.joined(separator: ", ")
+    }
+}
+
+/// Keeps linked tasks and system reminders in step, and says so when it cannot.
+///
+/// ### The three rules this type exists to keep
+/// 1. **Nothing in the user's Reminders changes without their intent.** Every write goes through
+///    ``RemindersProviding/apply(_:)`` as a describable value, and the only decision that produces
+///    one is ``ReminderMergeDecision/pushLocal`` — which follows from a local edit the user made.
+///    Deletions are produced only from an explicit ``LinkedDeletionChoice``.
+/// 2. **Repeating a pass changes nothing the second time.** The fingerprint recorded after a write
+///    is taken from the reminder as it came *back* from the store, not from what was sent, because
+///    the store normalises what it is given and a mismatch there makes every pass a push.
+/// 3. **App-only data is never destroyed by a remote change.** Adopting a remote reminder writes the
+///    mapped fields and nothing else; the notes, links, area, project, waiting state, and history all
+///    survive.
+@MainActor
+public final class ReminderSyncEngine {
+    private let items: any ItemRepository
+    private let tasks: TaskService
+    private let context: ModelContext
+    private let dateProvider: any DateProvider
+    private let provider: any RemindersProviding
+
+    public init(
+        items: any ItemRepository,
+        tasks: TaskService,
+        context: ModelContext,
+        dateProvider: any DateProvider,
+        provider: any RemindersProviding
+    ) {
+        self.items = items
+        self.tasks = tasks
+        self.context = context
+        self.dateProvider = dateProvider
+        self.provider = provider
+    }
+
+    private var calendar: Calendar { dateProvider.calendar }
+
+    // MARK: - Mapping
+
+    /// The reminder a task should become, for a given list.
+    ///
+    /// Only the mapped fields. See ``ReminderFieldMapping/appOnlyFields`` for what stays here and
+    /// why writing it into a title or a note would be wrong.
+    public func snapshot(for task: Item, listID: String, existingID: String? = nil) -> ReminderSnapshot {
+        var snapshot = ReminderSnapshot(id: existingID ?? "", listID: listID)
+        snapshot.title = task.title
+        snapshot.notes = task.body.isEmpty ? nil : task.body
+
+        if let startAt = task.availableFrom {
+            snapshot.startComponents = ReminderFieldMapping.components(
+                from: startAt, hasTime: false, calendar: calendar
+            )
+        }
+        if let deadline = task.dueAt {
+            snapshot.dueComponents = ReminderFieldMapping.components(
+                from: deadline, hasTime: false, calendar: calendar
+            )
+        }
+        if let reminderAt = task.reminderAt {
+            snapshot.alarmDates = [reminderAt]
+            // A reminder time with no due date has nowhere to live in EventKit's model, which shows
+            // alarms against the due date. Writing the due date too would fabricate a deadline, so
+            // the alarm goes out on its own and the interface says the reminder is app-owned.
+        }
+
+        snapshot.isCompleted = task.status == .completed
+        snapshot.completionDate = task.completedAt
+        snapshot.priority = ReminderFieldMapping.eventKitPriority(
+            from: task.priority == .normal ? nil : task.priority
+        )
+        snapshot.hasRecurrence = task.recurrence.map(ReminderFieldMapping.isRepresentableInEventKit) ?? false
+
+        return snapshot
+    }
+
+    /// Writes a reminder's mapped fields onto a task, leaving everything else exactly as it was.
+    public func adopt(_ snapshot: ReminderSnapshot, into task: Item) throws(AppError) {
+        try tasks.mutate(task) { subject in
+            subject.title = snapshot.title
+            if let notes = snapshot.notes { subject.body = notes }
+
+            subject.startAt = ReminderFieldMapping
+                .date(from: snapshot.startComponents, calendar: self.calendar)?.date
+            subject.dueAt = ReminderFieldMapping
+                .date(from: snapshot.dueComponents, calendar: self.calendar)?.date
+
+            if let alarm = snapshot.alarmDates.min() {
+                subject.reminderAt = alarm
+                subject.reminderIsTimed = true
+                // The system already holds this alarm. Scheduling a second one here is how a person
+                // ends up being told twice about the same task.
+                subject.reminderOwner = .system
+            } else {
+                subject.reminderAt = nil
+                subject.reminderOwner = .none
+            }
+
+            if let priority = ReminderFieldMapping.priority(fromEventKit: snapshot.priority) {
+                subject.priority = priority
+            }
+
+            if snapshot.isCompleted {
+                subject.status = .completed
+                subject.completedAt = snapshot.completionDate ?? self.dateProvider.now
+            } else if subject.status == .completed {
+                subject.status = .open
+                subject.completedAt = nil
+            }
+        }
+    }
+
+    // MARK: - Linking
+
+    /// Brings a system reminder in as a task, linked to it.
+    @discardableResult
+    public func importReminder(
+        _ snapshot: ReminderSnapshot,
+        into container: Item? = nil
+    ) throws(AppError) -> Item {
+        let task = try items.create(
+            ItemDraft(
+                kind: .task,
+                title: snapshot.title,
+                parentID: container?.id,
+                source: ItemSource(kind: .systemStore, identifier: snapshot.id)
+            )
+        )
+
+        try adopt(snapshot, into: task)
+        try record(snapshot, on: task, localStampFrom: task)
+        return task
+    }
+
+    /// Brings a reminder in and immediately breaks the link, leaving a private local task.
+    ///
+    /// Offered as its own action because "I want this in my task manager" and "I want this kept in
+    /// step with my phone" are different wishes, and defaulting to the second means the app starts
+    /// writing to somebody's iCloud account on the strength of an import.
+    @discardableResult
+    public func importAsLocalOnly(
+        _ snapshot: ReminderSnapshot,
+        into container: Item? = nil
+    ) throws(AppError) -> Item {
+        let task = try importReminder(snapshot, into: container)
+        try unlink(task)
+        return task
+    }
+
+    /// Sends an existing local task out to a list, and links the two.
+    public func export(_ task: Item, toList listID: String) async -> ReminderWriteResult {
+        let outgoing = snapshot(for: task, listID: listID)
+        let result = await provider.apply(.create(outgoing))
+
+        if case .saved(let saved) = result {
+            try? record(saved, on: task, localStampFrom: task)
+        }
+        return result
+    }
+
+    /// Points an existing local task at an existing reminder, adopting the reminder's values.
+    ///
+    /// The remote wins on the mapped fields, because the user has just said "this task *is* that
+    /// reminder" and the reminder is the copy their other devices already agree about.
+    public func link(_ task: Item, to snapshot: ReminderSnapshot) throws(AppError) {
+        try adopt(snapshot, into: task)
+        try record(snapshot, on: task, localStampFrom: task)
+    }
+
+    /// Breaks a link without touching the reminder.
+    public func unlink(_ task: Item) throws(AppError) {
+        try items.update(task) { subject in
+            subject.setReminderLink(nil)
+            subject.syncState = .local
+            if subject.reminderOwner == .system {
+                // The alarm belonged to the reminder. Leaving the owner set would mean nothing ever
+                // delivers it; taking it means this app now does.
+                subject.reminderOwner = subject.reminderAt == nil ? .none : .app
+            }
+        }
+    }
+
+    /// Records a successful reconciliation.
+    ///
+    /// The local stamp is taken from the task **after** the write that just happened, so the next
+    /// pass does not read that write as a fresh local edit — which would make every pass a push and
+    /// every push a conflict. This is the bug the idempotence test in `ReminderBridgeTests` exists
+    /// to prevent, seen from the other side.
+    private func record(
+        _ snapshot: ReminderSnapshot,
+        on task: Item,
+        localStampFrom stampSource: Item
+    ) throws(AppError) {
+        let stamp = stampSource.updatedAt
+        try items.update(task) { subject in
+            subject.setReminderLink(
+                ReminderLinkState(
+                    externalID: snapshot.id,
+                    listID: snapshot.listID,
+                    lastSyncedFingerprint: snapshot.fingerprint,
+                    lastSyncedAt: self.dateProvider.now,
+                    lastSyncedLocalStamp: max(stamp, subject.updatedAt)
+                )
+            )
+            subject.syncState = snapshot.isReadOnly ? .externalReadOnly : .linked
+        }
+    }
+
+    // MARK: - The pass
+
+    /// Reconciles every linked task.
+    ///
+    /// Reads first, decides second, writes last — so a pass that finds nothing to do performs no
+    /// writes at all, which is what makes "reminders are never changed without intent" testable.
+    @discardableResult
+    public func reconcile() async -> ReminderSyncReport {
+        var report = ReminderSyncReport()
+
+        guard await provider.authorization.canRead else { return report }
+
+        let linked = (try? linkedTasks()) ?? []
+        report.examined = linked.count
+
+        for task in linked {
+            guard let state = task.reminderLink else { continue }
+
+            let remote = await provider.reminder(withIdentifier: state.externalID)
+            let decision = ReminderReconciliation.decide(
+                link: state,
+                remote: remote,
+                localUpdatedAt: task.updatedAt
+            )
+
+            switch decision {
+            case .unchanged:
+                continue
+
+            case .adoptRemote:
+                guard let remote else { continue }
+                do {
+                    try adopt(remote, into: task)
+                    try record(remote, on: task, localStampFrom: task)
+                    report.adopted += 1
+                } catch {
+                    report.failures.append("\(task.displayTitle): \(error.localizedDescription)")
+                }
+
+            case .pushLocal:
+                let outgoing = snapshot(for: task, listID: state.listID, existingID: state.externalID)
+                switch await provider.apply(.update(outgoing)) {
+                case .saved(let saved):
+                    try? record(saved, on: task, localStampFrom: task)
+                    report.pushed += 1
+                case .readOnly:
+                    try? mark(task, as: .externalReadOnly)
+                    report.readOnly += 1
+                case .missing:
+                    try? mark(task, as: .externalMissing)
+                    report.missing += 1
+                case .failed(let reason):
+                    report.failures.append("\(task.displayTitle): \(reason)")
+                }
+
+            case .conflict:
+                try? mark(task, as: .conflicted)
+                report.conflicted += 1
+
+            case .remoteMissing:
+                // The task keeps everything. The user is asked what to do about the link, and until
+                // they answer nothing is deleted anywhere.
+                try? mark(task, as: .externalMissing)
+                report.missing += 1
+
+            case .remoteReadOnly:
+                try? mark(task, as: .externalReadOnly)
+                report.readOnly += 1
+            }
+        }
+
+        return report
+    }
+
+    private func mark(_ task: Item, as state: TaskSyncState) throws(AppError) {
+        guard task.syncState != state else { return }
+        try items.update(task) { $0.syncState = state }
+    }
+
+    private func linkedTasks() throws(AppError) -> [Item] {
+        var query = ItemQuery()
+        query.kinds = [.task]
+        query.scope = .all
+        let all = try items.items(matching: query)
+        return all.filter { $0.externalIdentifier != nil && $0.deletedAt == nil }
+    }
+
+    // MARK: - Resolving
+
+    /// Applies the user's answer to a conflict.
+    public func resolve(_ task: Item, as resolution: ConflictResolution) async -> ReminderWriteResult? {
+        guard let state = task.reminderLink else { return nil }
+
+        switch resolution {
+        case .keepLocal:
+            let outgoing = snapshot(for: task, listID: state.listID, existingID: state.externalID)
+            let result = await provider.apply(.update(outgoing))
+            if case .saved(let saved) = result {
+                try? record(saved, on: task, localStampFrom: task)
+            }
+            return result
+
+        case .keepRemote:
+            guard let remote = await provider.reminder(withIdentifier: state.externalID) else {
+                try? mark(task, as: .externalMissing)
+                return nil
+            }
+            try? adopt(remote, into: task)
+            try? record(remote, on: task, localStampFrom: task)
+            return .saved(remote)
+
+        case .keepBoth:
+            // The reminder is left exactly as it is. The local edits become their own task, linked
+            // to the original so neither version is orphaned.
+            guard let remote = await provider.reminder(withIdentifier: state.externalID) else {
+                return nil
+            }
+            try? splitLocalCopy(of: task)
+            try? adopt(remote, into: task)
+            try? record(remote, on: task, localStampFrom: task)
+            return .saved(remote)
+        }
+    }
+
+    /// Preserves the local version of a conflicted task as a separate, local-only task.
+    private func splitLocalCopy(of task: Item) throws(AppError) {
+        let copy = try items.create(
+            ItemDraft(
+                kind: .task,
+                title: task.title,
+                body: task.body,
+                tagSlugs: task.tags.map(\.slug),
+                parentID: task.parent?.id,
+                dueAt: task.dueAt,
+                startAt: task.availableFrom,
+                priority: task.priority,
+                source: ItemSource(kind: .generated, identifier: "conflict-copy")
+            )
+        )
+        try items.link(copy, to: task, kind: .conflictCopy)
+    }
+
+    /// Applies the user's answer about a reminder that has vanished.
+    public func resolveMissing(_ task: Item, as choice: MissingReminderChoice) throws(AppError) {
+        switch choice {
+        case .keepAsLocal:
+            try unlink(task)
+        case .deleteLocally:
+            try items.moveToTrash(task)
+        case .relink:
+            // The picker does the relinking; this only clears the stale pointer so the picker has
+            // somewhere to write.
+            try unlink(task)
+        }
+    }
+
+    /// Deletes a linked task, asking nothing of the system store unless told to.
+    ///
+    /// The default is ``LinkedDeletionChoice/removeLocally``, and there is no code path that deletes
+    /// a reminder without one of these values being passed in. Deleting somebody's reminder out of
+    /// an iCloud account — where it may be shared with other people — because they tidied up in a
+    /// different app is not a recoverable mistake.
+    public func delete(_ task: Item, choice: LinkedDeletionChoice) async -> ReminderWriteResult? {
+        var result: ReminderWriteResult?
+
+        if choice == .deleteBoth, let identifier = task.externalIdentifier {
+            result = await provider.apply(.delete(id: identifier))
+        }
+
+        try? items.moveToTrash(task)
+        return result
+    }
+
+    // MARK: - Discovery
+
+    /// Reminders in the chosen lists that are not linked to anything here yet.
+    public func unlinkedReminders(inLists listIDs: [String]) async -> [ReminderSnapshot] {
+        let remote = await provider.reminders(inLists: listIDs, includingCompleted: false)
+        let known = Set(((try? linkedTasks()) ?? []).compactMap(\.externalIdentifier))
+        return remote.filter { !known.contains($0.id) }
+    }
+
+    public func lists() async -> [ReminderListSummary] {
+        await provider.lists()
+    }
+}
