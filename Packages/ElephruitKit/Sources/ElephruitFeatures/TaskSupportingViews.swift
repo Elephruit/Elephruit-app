@@ -358,12 +358,36 @@ struct TaskContextMenu: View {
 
         Divider()
 
-        Button("Move to Trash", systemImage: "trash", role: .destructive) {
-            // A linked task asks before it takes a reminder with it — see `TaskDeletionPrompt`.
-            act { try $0.items.moveToTrash(task) }
+        // ### Why a linked task gets two items rather than one plus a warning
+        // Deleting somebody's reminder out of an iCloud account — where it may be shared with other
+        // people — because they tidied up in a different app is not a recoverable mistake. So the
+        // question is not asked in a dialogue that can be dismissed with Return; it is asked by
+        // there being two commands, each of which says what it does.
+        if task.syncState == .local {
+            Button("Move to Trash", systemImage: "trash", role: .destructive) {
+                act { try $0.items.moveToTrash(task) }
+            }
+        } else {
+            Button("Remove from Elephruit Only", systemImage: "trash", role: .destructive) {
+                guard let services else { return }
+                Task {
+                    _ = await services.reminderSync.delete(task, choice: .removeLocally)
+                    services.noteRemoval(of: task.id)
+                    onChange()
+                }
+            }
+            .help("The reminder stays exactly where it is.")
+
+            Button("Delete Here and in Reminders", systemImage: "trash.slash", role: .destructive) {
+                guard let services else { return }
+                Task {
+                    _ = await services.reminderSync.delete(task, choice: .deleteBoth)
+                    services.noteRemoval(of: task.id)
+                    onChange()
+                }
+            }
+            .help("Removes the reminder from Reminders too, on every device it syncs to.")
         }
-        .disabled(task.syncState != .local)
-        .help(task.syncState == .local ? "" : "This task is linked to a reminder. Use Delete… so you can say what happens to it.")
     }
 
     private func act(_ work: (AppServices) throws -> Void) {
