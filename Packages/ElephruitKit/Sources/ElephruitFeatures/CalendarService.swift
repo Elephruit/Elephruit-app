@@ -98,8 +98,13 @@ public final class CalendarService {
         let enabled = defaults.bool(forKey: Self.enabledKey)
         self.isEnabled = enabled
 
+        // The device zone comes from the injected calendar rather than from `TimeZone.current`.
+        // In production they are the same thing; in a test they are not, and reading the machine's
+        // zone there means the grid is laid out on different day boundaries from the ones the test
+        // is asserting against — which is a failure that looks like a date bug and is really a
+        // dependency-injection one.
         self.timeZoneDisplay = TimeZoneDisplay(
-            deviceZoneIdentifier: TimeZone.autoupdatingCurrent.identifier,
+            deviceZoneIdentifier: dateProvider.calendar.timeZone.identifier,
             displayZoneIdentifier: defaults.string(forKey: Self.displayZoneKey),
             secondaryZoneIdentifier: defaults.string(forKey: Self.secondaryZoneKey),
             favouriteZoneIdentifiers: defaults.stringArray(forKey: Self.favouriteZonesKey) ?? [],
