@@ -53,8 +53,15 @@ what the app does with the access and that it is optional:
   daily notes and link meetings to projects. Your calendar stays on your Mac and in
   iCloud; Elephruit never sends it anywhere."
 - `NSContactsUsageDescription` — "Elephruit can link the people in your notes to
-  your existing contacts, so you do not have to retype them. Contacts are read on
-  demand and never copied out of your Mac."
+  your existing contacts, so you do not have to retype them. It changes a contact
+  only when you edit that person in Elephruit and confirm the change, and only
+  their email addresses, phone numbers, websites, job title, and company. It never
+  creates or deletes contacts, and nothing is copied out of your Mac."
+
+  Contacts has a single access tier, so read access carries write access and the
+  user cannot grant less. This string is therefore where the app states the limit
+  it holds itself to, and `ContactsWriteSafetyTests` is where that limit is
+  enforced against the source rather than against a reviewer's memory.
 - `NSRemindersFullAccessUsageDescription` — written only if Reminders import ships.
 
 ### App Store privacy declaration
