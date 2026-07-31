@@ -41,7 +41,7 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 | F23 | Structured filters `type/tag/project/person/is/due` | Met | `SearchQuery.swift:181-184`; 12 `is:` values | — |
 | F24 | Filters `duration:` `source:` `type:time` | Absent | Not in `recognisedKeys` | S13 |
 | F25 | Result categories and quotas | Absent | One flat `limit: 200`; grouping is view-level only | S13 |
-| F26 | Permissions and privacy centre | Partial | Calendar has 5 explicitly-mapped states with per-state explanations and one Settings toggle. No centre | S11 |
+| F26 | Permissions and privacy centre | Partial | Calendar and Contacts each have explicitly-mapped states with per-state explanations and Settings toggles; the calendar adds an offline banner naming why. Still no single centre | S11 |
 | F27 | App degrades gracefully when a permission is denied | Met | `EventKitCalendarProvider.swift:45-56`; `.writeOnly → .denied` | — |
 
 ## Quick Jot
@@ -101,7 +101,7 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 | P7 | People overview | **Met** (S16) | Six scopes plus groups, each with its own empty state | — |
 | P8 | Merged reverse-chronological timeline | **Met** (S16) | `PersonWorkspaceService.timeline` walks both link directions, grouped by month, five filters | — |
 | P9 | Celebrations | **Met** (S16) | `CelebrationCalendar`; partial dates, leap days compared by year, memorials never celebratory | — |
-| P10 | Attendee → person matching | Partial | Meetings link to attendees and appear in the timeline; automatic name→person matching on calendar import is not built. The identity layer S17 added is what it should route through | Deferred |
+| P10 | Attendee → person matching | **Met** (calendar module) | `EventInspectorView.unmatchedAttendees` matches by email then name and *offers* the link rather than making it — two people called James Wilson is not a rare case | — |
 | P11 | Contacts identity and linking | **Met** (S17) | Onboarding, full import with review, `SystemContactLink` + `ImportedContactValue` provenance, ongoing refresh, unlink/relink. Read-only by construction | — |
 | P12 | Reciprocal relationships | **Met** (S16) | `PersonRelationship` written as a pair; involution asserted over `allCases`; the user's own word is never mirrored | — |
 | P13 | Observations with history and provenance | **Met** (S16) | `PersonObservationRecord` + `FactLedger`; correction appends and never deletes | — |
@@ -127,7 +127,7 @@ deliberately not implemented, with an ADR saying why. It is not a gap and no sli
 | T8 | Start from the command palette | Absent | Zero timer references in `CommandPaletteView` | S12 |
 | T9 | Keyboard manual entry | Met | `ManualTimeEntrySheet`; `manualEntryNeedsDuration:119` | — |
 | T10 | Today time surface | Absent | Home shows one line; no per-day timeline | S12 |
-| T11 | Calendar day/week grid, planned vs actual | Absent | The `calendar` destination is declared-but-unavailable | Deferred |
+| T11 | Calendar day/week grid, planned vs actual | Partial (calendar module) | Six views built, with drag to move, resize, and create. Planned-vs-actual overlay of tracked time onto the grid is **not** built: the module's own rule is that tasks and time never appear inside a calendar view, and that overlay is the one place the two would meet. Wanted, and a decision rather than an oversight | Deferred |
 | T12 | Split / merge | Absent | No repository method | S12 |
 | T13 | Overlap detected, never silently changed | Absent | Two manual entries covering the same hour are accepted silently | S12 |
 | T14 | Estimate vs actual — the stored field | **Met** (S4) | `Item.estimateMinutes`, optional so absence is not a zero; survives a real legacy-store migration | — |
