@@ -25,14 +25,23 @@ public struct RootView: View {
     /// Held for the window's lifetime so the observation is not cancelled the moment `task` returns.
     @State private var contactRefresh: ContactRefreshCoordinator?
 
-    /// What the menu bar or an intent asked for, when the window is opening because of one.
+    /// What the menu bar or an intent has asked for, if anything.
     ///
-    /// Passed in rather than read from a shared place, because a request belongs to the window that
-    /// is about to act on it — and an app with two windows open should not have both react.
+    /// Read rather than consumed here: taking it would be a mutation during a view's body, which
+    /// SwiftUI is entitled to run at any time and more than once. The window clears it through
+    /// ``onCalendarRequestHandled`` once it has actually acted, which is also what stops two open
+    /// windows both reacting to one click.
     private let pendingCalendarRequest: PendingCalendarRequest?
 
-    public init(pendingCalendarRequest: PendingCalendarRequest? = nil) {
+    /// Called once the request above has been acted on.
+    private let onCalendarRequestHandled: () -> Void
+
+    public init(
+        pendingCalendarRequest: PendingCalendarRequest? = nil,
+        onCalendarRequestHandled: @escaping () -> Void = {}
+    ) {
         self.pendingCalendarRequest = pendingCalendarRequest
+        self.onCalendarRequestHandled = onCalendarRequestHandled
     }
 
     public var body: some View {
@@ -90,18 +99,13 @@ public struct RootView: View {
         } message: {
             Text(transferSummary ?? "")
         }
+        .onChange(of: pendingCalendarRequest) { _, request in
+            handleCalendarRequest(request)
+        }
         .task {
-            if let pendingCalendarRequest {
-                navigation.select(.calendar)
-                switch pendingCalendarRequest {
-                case .open:
-                    break
-                case .quickEntry:
-                    navigation.isCalendarQuickEntryVisible = true
-                case .day(let day):
-                    navigation.requestedCalendarDay = day
-                }
-            }
+            // On launch, when the request arrived before this window existed — which is the case
+            // when a Shortcut or a link started the app rather than merely bringing it forward.
+            handleCalendarRequest(pendingCalendarRequest)
 
             // Watching for address-book changes, so a number edited in Contacts reaches the CRM
             // without anybody pressing anything. Coalesced inside the coordinator, and a no-op until
@@ -226,6 +230,23 @@ public struct RootView: View {
             export: { isExportPresented = true },
             importFiles: { isImportPresented = true }
         ))
+    }
+
+    /// Acts on a request from the menu bar, an intent, or a link.
+    private func handleCalendarRequest(_ request: PendingCalendarRequest?) {
+        guard let request else { return }
+
+        navigation.select(.calendar)
+        switch request {
+        case .open:
+            break
+        case .quickEntry:
+            navigation.isCalendarQuickEntryVisible = true
+        case .day(let day):
+            navigation.requestedCalendarDay = day
+        }
+
+        onCalendarRequestHandled()
     }
 
     // MARK: - Palette commands

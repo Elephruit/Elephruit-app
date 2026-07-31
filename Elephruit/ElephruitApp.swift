@@ -96,9 +96,12 @@ private struct RootWindow: View {
                     .accessibilityLabel("Opening your library")
 
             case .ready(let services):
-                RootView(pendingCalendarRequest: environment.consumeCalendarRequest())
-                    .appServices(services)
-                    .environment(\.prefersMonospacedEditor, prefersMonospacedEditor)
+                RootView(
+                    pendingCalendarRequest: environment.pendingCalendarRequest,
+                    onCalendarRequestHandled: { environment.clearCalendarRequest() }
+                )
+                .appServices(services)
+                .environment(\.prefersMonospacedEditor, prefersMonospacedEditor)
 
             case .failed(let error):
                 FailureStateView(error: error) { option in
