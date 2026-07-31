@@ -481,3 +481,44 @@ struct CalendarVisibilityToggleTests {
         #expect(service.setAfterActive() == nil)
     }
 }
+
+@Suite("Two things looking at two windows")
+@MainActor
+struct CalendarWindowIndependenceTests {
+    private static let clock = FixedDateProvider.reference
+
+    private static func event(_ title: String, daysFromToday: Int) -> CalendarEventSummary {
+        let start = clock.startOfDay(daysFromToday: daysFromToday).addingTimeInterval(9 * 3_600)
+        return CalendarEventSummary(
+            identity: EventIdentity(externalIdentifier: title),
+            title: title,
+            startAt: start,
+            endAt: start.addingTimeInterval(3_600),
+            calendarIdentifier: "work"
+        )
+    }
+
+    @Test("Peeking at a window does not change the one on screen")
+    func peekingIsNotLoading() async {
+        let provider = FakeCalendarProvider(events: [
+            Self.event("Today", daysFromToday: 0),
+            Self.event("Next week", daysFromToday: 8),
+        ])
+        let service = await writingService(provider: provider)
+
+        // The window a view is showing: a fortnight.
+        await service.load(range: Self.clock.startOfToday..<Self.clock.startOfDay(daysFromToday: 14))
+        #expect(service.events.count == 2)
+
+        // What the menu bar wants: two days.
+        let peeked = await service.peek(
+            range: Self.clock.startOfToday..<Self.clock.startOfDay(daysFromToday: 2)
+        )
+
+        #expect(peeked.map(\.title) == ["Today"])
+        #expect(service.events.count == 2, """
+            A menu bar refreshing must not shrink the week a window is showing — and the next change
+            notification would otherwise reload whichever of them called last
+            """)
+    }
+}
