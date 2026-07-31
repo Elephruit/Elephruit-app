@@ -537,9 +537,16 @@ public struct RootView: View {
     }
 
     /// Says what to do with a width once the recorder has decided it was one the user chose.
+    ///
+    /// The two models are captured by name rather than through `self`, deliberately: the recorder
+    /// holds this closure for the window's lifetime, and capturing the view would mean the closure
+    /// held the `@State` that holds the recorder.
     private func wireWidthRecorder() {
+        let layout = moduleLayout
+        let navigation = navigation
+
         widthRecorder.onDrag = { column, width, windowWidth in
-            moduleLayout.setWidth(width, of: column, in: navigation.activeModule, available: windowWidth)
+            layout.setWidth(width, of: column, in: navigation.activeModule, available: windowWidth)
         }
     }
 
