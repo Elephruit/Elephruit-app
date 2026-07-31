@@ -118,16 +118,17 @@ struct ModuleNavigationTests {
         #expect(navigation.selection == .tag(slug: "reading"))
     }
 
-    @Test("Leaving a module keeps the window on what it was showing")
-    func leavingDoesNotChangeTheSelection() {
-        // Back is a change of sidebar, not of destination. Making it select Home would mean the
-        // back button silently closed whatever was open.
+    @Test("Leaving a module returns to a real main view")
+    func leavingReturnsHome() {
         let navigation = NavigationModel()
         navigation.enterModule(.people)
         navigation.select(.people(.favorites))
         navigation.leaveModule()
 
         #expect(navigation.activeModule == nil)
+        #expect(navigation.selection == .home)
+        navigation.goBack()
+        #expect(navigation.activeModule == .people)
         #expect(navigation.selection == .people(.favorites))
     }
 
@@ -146,8 +147,6 @@ struct ModuleNavigationTests {
 
     @Test("Stepping back into the module you just left works")
     func reEnteringAfterLeavingWorks() {
-        // The awkward case: `leaveModule` does not move the selection, so entering again has
-        // nothing to select and must set the module explicitly rather than relying on that.
         let navigation = NavigationModel()
         navigation.enterModule(.notes)
         navigation.leaveModule()

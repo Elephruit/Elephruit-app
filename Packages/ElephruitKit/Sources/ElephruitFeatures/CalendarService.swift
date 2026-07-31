@@ -52,6 +52,10 @@ public final class CalendarService {
     /// The set currently applied, or `nil` for "everything".
     public private(set) var activeSet: CalendarSetDefinition?
 
+    /// Calendars switched off by hand. Stored as observable state so the sidebar checkmark changes
+    /// immediately even when reloading produces the same event list.
+    public private(set) var hiddenCalendarIdentifiers: Set<String>
+
     /// The zone the grid is drawn in, and any second zone beside it.
     public var timeZoneDisplay: TimeZoneDisplay {
         didSet { saveTimeZoneDisplay() }
@@ -99,6 +103,7 @@ public final class CalendarService {
 
         let enabled = defaults.bool(forKey: Self.enabledKey)
         self.isEnabled = enabled
+        self.hiddenCalendarIdentifiers = Set(defaults.stringArray(forKey: Self.hiddenCalendarsKey) ?? [])
 
         // The device zone comes from the injected calendar rather than from `TimeZone.current`.
         // In production they are the same thing; in a test they are not, and reading the machine's
@@ -248,23 +253,24 @@ public final class CalendarService {
     ///
     /// So the two compose: the set decides which calendars are *in scope*, and this hides some of
     /// them for now. Per-device, because it is a statement about this screen.
-    public var hiddenCalendarIdentifiers: Set<String> {
-        get { Set(defaults.stringArray(forKey: Self.hiddenCalendarsKey) ?? []) }
-        set { defaults.set(Array(newValue).sorted(), forKey: Self.hiddenCalendarsKey) }
-    }
-
     /// Switches one calendar on or off for now, and re-reads.
     public func toggleVisibility(of identifier: String) async {
         var hidden = hiddenCalendarIdentifiers
         if hidden.contains(identifier) { hidden.remove(identifier) } else { hidden.insert(identifier) }
         hiddenCalendarIdentifiers = hidden
+        saveHiddenCalendars()
         await reload()
     }
 
     /// Turns every calendar back on.
     public func showAllCalendars() async {
         hiddenCalendarIdentifiers = []
+        saveHiddenCalendars()
         await reload()
+    }
+
+    private func saveHiddenCalendars() {
+        defaults.set(Array(hiddenCalendarIdentifiers).sorted(), forKey: Self.hiddenCalendarsKey)
     }
 
     public func isVisible(_ calendar: CalendarInfo) -> Bool {

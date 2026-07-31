@@ -433,17 +433,18 @@ public final class NavigationModel {
         }
     }
 
-    /// Returns to the primary navigation without changing what the window is showing.
-    ///
-    /// Leaving a module is a change of *sidebar*, not of destination: the list and the editor still
-    /// hold what you were reading, and the module is remembered so stepping back in resumes. Making
-    /// this select Home instead would mean the back button silently closed whatever was open.
+    /// Returns to the primary navigation's Home view and remembers where the module was left.
+    /// Browser-style Back still returns to the module, while the main sidebar never frames a module
+    /// workspace as though it were a narrow generic list.
     public func leaveModule() {
         guard let activeModule else { return }
         recordNavigation(currentLocation)
         withoutRecordingHistory {
             moduleSelections[activeModule] = selection
             self.activeModule = nil
+            selection = .home
+            selectedItemIDs = []
+            sortOverride = nil
         }
     }
 
