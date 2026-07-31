@@ -103,12 +103,12 @@ struct TaskDetailView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-                    MarkdownTextEditor(
+                    NotesField(
                         text: $bodyText,
-                        isMonospaced: prefersMonospaced,
+                        placeholder: "Add notes…",
                         isEditable: !item.isInTrash
                     )
-                    .frame(minHeight: 120)
+                    .padding(.horizontal, Theme.Spacing.large)
 
                     // Scheduling, steps, waiting, and the sync notice. Above the subtasks because
                     // they describe *this* task; the subtasks are other tasks that happen to live
@@ -222,12 +222,15 @@ struct BookmarkDetailView: View {
 
             Divider()
 
-            MarkdownTextEditor(
-                text: $bodyText,
-                isMonospaced: prefersMonospaced,
-                isEditable: !item.isInTrash
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ScrollView {
+                NotesField(
+                    text: $bodyText,
+                    title: "Notes",
+                    placeholder: "What is this link for?",
+                    isEditable: !item.isInTrash
+                )
+                .padding(Theme.Spacing.large)
+            }
         }
         .accessibilityIdentifier(AccessibilityID.Detail.root)
     }
@@ -261,12 +264,12 @@ struct PersonDetailView: View {
                 VStack(alignment: .leading, spacing: Theme.Spacing.section) {
                     relationshipSummary
 
-                    MarkdownTextEditor(
+                    NotesField(
                         text: $bodyText,
-                        isMonospaced: prefersMonospaced,
+                        placeholder: "What is worth remembering about them?",
                         isEditable: !item.isInTrash
                     )
-                    .frame(minHeight: 120)
+                    .padding(.horizontal, Theme.Spacing.large)
 
                     if !openWithThem.isEmpty {
                         VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
