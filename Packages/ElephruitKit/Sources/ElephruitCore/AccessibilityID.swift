@@ -173,7 +173,39 @@ public enum AccessibilityID {
         public static let statusBanner = "calendar.status"
         public static let enableToggle = "calendar.enable"
 
+        // The workspace.
+        public static let workspace = "calendar.workspace"
+        public static let viewSwitcher = "calendar.viewSwitcher"
+        public static let todayButton = "calendar.today"
+        public static let previousButton = "calendar.previous"
+        public static let nextButton = "calendar.next"
+        public static let setSwitcher = "calendar.setSwitcher"
+        public static let dayPopover = "calendar.dayPopover"
+        public static let offlineBanner = "calendar.offline"
+
+        // Creating and editing.
+        public static let quickEntry = "calendar.quickEntry"
+        public static let quickEntryField = "calendar.quickEntry.field"
+        public static let quickEntryTokens = "calendar.quickEntry.tokens"
+        public static let editor = "calendar.editor"
+        public static let editorTitle = "calendar.editor.title"
+        public static let editorCalendar = "calendar.editor.calendar"
+        public static let recurrenceEditor = "calendar.recurrenceEditor"
+        public static let scopeSheet = "calendar.scopeSheet"
+        public static let inspector = "calendar.inspector"
+
+        // Sets and templates.
+        public static let setEditor = "calendar.setEditor"
+        public static let templateMenu = "calendar.templateMenu"
+        public static let templateEditor = "calendar.templateEditor"
+
+        // Searching and preparing.
+        public static let search = "calendar.search"
+        public static let searchField = "calendar.search.field"
+        public static let meetingPrep = "calendar.meetingPrep"
+
         public static func eventRow(id: String) -> String { "calendar.event.\(id)" }
+        public static func setRow(id: String) -> String { "calendar.set.\(id)" }
     }
 
     public enum Trash {

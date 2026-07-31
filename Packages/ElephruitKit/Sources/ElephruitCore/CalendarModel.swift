@@ -331,7 +331,7 @@ public struct EventAlarm: Sendable, Hashable, Codable, Identifiable {
         }
     }
 
-    static func durationPhrase(_ minutes: Int) -> String {
+    public static func durationPhrase(_ minutes: Int) -> String {
         switch minutes {
         case ..<60:
             return "\(minutes) minute\(minutes == 1 ? "" : "s")"
