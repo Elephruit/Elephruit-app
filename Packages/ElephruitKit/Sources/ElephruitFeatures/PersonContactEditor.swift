@@ -37,59 +37,122 @@ struct EditContactDetailsSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-            Text("Edit \(person.displayTitle)")
-                .font(Theme.Text.title)
+        VStack(spacing: 0) {
+            editorHeader
 
-            Form {
-                Section("Name") {
-                    // In parts, because Contacts keeps them in parts and the header's single field
-                    // is what makes them drift. Somebody whose family name comes first, or who has a
-                    // suffix, can say so here instead of having it guessed from a rename.
-                    TextField("Prefix", text: $edit.namePrefix)
-                    TextField("First", text: $edit.givenName)
-                    TextField("Middle", text: $edit.middleName)
-                    TextField("Last", text: $edit.familyName)
-                    TextField("Suffix", text: $edit.nameSuffix)
-                    TextField("Nickname", text: $edit.nickname)
-                }
+            Divider()
 
-                Section("Work") {
-                    TextField("Role", text: $edit.roleTitle)
-                    TextField("Department", text: $edit.departmentName)
-                    TextField("Organisation", text: $edit.organizationName)
-                    TextField("Location", text: $edit.locationText)
-                }
+            ScrollView {
+                LazyVStack(spacing: Theme.Spacing.large) {
+                    nameCard
+                    workCard
+                    birthdayCard
 
-                Section("Birthday") {
-                    Toggle("Has a birthday recorded", isOn: $edit.hasBirthday)
-
-                    if edit.hasBirthday {
-                        DatePicker("Date", selection: $edit.birthday, displayedComponents: .date)
-
-                        // The year is genuinely often unknown, and both this app and Contacts store
-                        // that as an absence. A toggle rather than a blank field, so "I do not know
-                        // the year" is a thing somebody can say rather than a thing they leave.
-                        Toggle("The year is known", isOn: $edit.birthdayHasYear)
+                    ForEach(ContactDetailKind.allCases, id: \.rawValue) { kind in
+                        ContactEditorCard(
+                            title: kind.displayName,
+                            systemImage: kind.symbolName,
+                            tint: kind.editorTint
+                        ) {
+                            ValueListSection(kind: kind, values: binding(for: kind))
+                        }
                     }
                 }
+                .padding(Theme.Spacing.section)
+            }
 
-                ForEach(ContactDetailKind.allCases, id: \.rawValue) { kind in
-                    ValueListSection(kind: kind, values: binding(for: kind))
+            Divider()
+            editorFooter
+        }
+        .background(Theme.Colors.windowBackground)
+        .frame(width: 720)
+        .frame(minHeight: 640)
+        .accessibilityIdentifier(AccessibilityID.People.contactEditor)
+    }
+
+    private var editorHeader: some View {
+        HStack(spacing: Theme.Spacing.medium) {
+            Image(systemName: "person.crop.circle.fill")
+                .font(.system(size: 36, weight: .medium))
+                .foregroundStyle(.white, Theme.Colors.selection)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+                Text("Edit contact")
+                    .font(Theme.Text.title)
+                Text(person.displayTitle)
+                    .font(Theme.Text.rowSubtitle)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, Theme.Spacing.section)
+        .padding(.vertical, Theme.Spacing.large)
+    }
+
+    private var nameCard: some View {
+        ContactEditorCard(title: "Name", systemImage: "person.text.rectangle", tint: .blue) {
+            VStack(spacing: Theme.Spacing.medium) {
+                HStack(alignment: .top, spacing: Theme.Spacing.medium) {
+                    EditorField("Prefix", text: $edit.namePrefix, width: 92)
+                    EditorField("First name", text: $edit.givenName)
+                    EditorField("Middle name", text: $edit.middleName)
+                }
+
+                HStack(alignment: .top, spacing: Theme.Spacing.medium) {
+                    EditorField("Last name", text: $edit.familyName)
+                    EditorField("Suffix", text: $edit.nameSuffix, width: 92)
+                    EditorField("Nickname", text: $edit.nickname)
                 }
             }
-            .formStyle(.grouped)
+        }
+    }
 
+    private var workCard: some View {
+        ContactEditorCard(title: "Work", systemImage: "briefcase.fill", tint: Theme.Colors.workDetail) {
+            VStack(spacing: Theme.Spacing.medium) {
+                HStack(alignment: .top, spacing: Theme.Spacing.medium) {
+                    EditorField("Role", text: $edit.roleTitle)
+                    EditorField("Department", text: $edit.departmentName)
+                }
+                HStack(alignment: .top, spacing: Theme.Spacing.medium) {
+                    EditorField("Organisation", text: $edit.organizationName)
+                    EditorField("Location", text: $edit.locationText)
+                }
+            }
+        }
+    }
+
+    private var birthdayCard: some View {
+        ContactEditorCard(title: "Birthday", systemImage: "birthday.cake.fill", tint: .pink) {
+            VStack(spacing: Theme.Spacing.medium) {
+                Toggle("Birthday recorded", isOn: $edit.hasBirthday)
+
+                if edit.hasBirthday {
+                    Divider()
+                    HStack {
+                        DatePicker("Date", selection: $edit.birthday, displayedComponents: .date)
+                        Spacer()
+                        Toggle("Year is known", isOn: $edit.birthdayHasYear)
+                    }
+                }
+            }
+        }
+    }
+
+    private var editorFooter: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
             if let saveFailure {
-                Label(saveFailure.localizedDescription, systemImage: "exclamationmark.triangle")
+                Label(saveFailure.localizedDescription, systemImage: "exclamationmark.triangle.fill")
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.overdue)
             }
 
-            HStack {
+            HStack(spacing: Theme.Spacing.medium) {
                 if isLinked {
                     Label(
-                        "Linked to your address book — you will be asked before anything is written there.",
+                        "Address Book changes are always confirmed first",
                         systemImage: "person.crop.rectangle.stack"
                     )
                     .font(Theme.Text.metadata)
@@ -101,15 +164,13 @@ struct EditContactDetailsSheet: View {
                 Button("Cancel", role: .cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
 
-                Button("Save", action: save)
+                Button("Save Changes", action: save)
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
             }
         }
-        .padding(Theme.Spacing.large)
-        .frame(width: 680)
-        .frame(minHeight: 560)
-        .accessibilityIdentifier(AccessibilityID.People.contactEditor)
+        .padding(.horizontal, Theme.Spacing.section)
+        .padding(.vertical, Theme.Spacing.medium)
     }
 
     private var isLinked: Bool {
@@ -156,25 +217,112 @@ struct EditContactDetailsSheet: View {
     }
 }
 
+/// A distinct editing region with just enough colour to make a long form easy to scan.
+private struct ContactEditorCard<Content: View>: View {
+    let title: String
+    let systemImage: String
+    let tint: Color
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            HStack(spacing: Theme.Spacing.small) {
+                Image(systemName: systemImage)
+                    .font(.system(.callout, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 30, height: 30)
+                    .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                Text(title)
+                    .font(.system(.headline, weight: .semibold))
+            }
+
+            content
+        }
+        .padding(Theme.Spacing.large)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
+                .fill(Theme.Colors.contentBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
+                .strokeBorder(Theme.Colors.separator.opacity(0.7))
+        )
+        .shadow(color: .black.opacity(0.035), radius: 8, y: 2)
+    }
+}
+
+/// A field whose label stays above the value, so editing always begins at the leading edge.
+private struct EditorField: View {
+    let title: String
+    @Binding var text: String
+    let width: CGFloat?
+
+    init(_ title: String, text: Binding<String>, width: CGFloat? = nil) {
+        self.title = title
+        _text = text
+        self.width = width
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+            Text(title)
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.secondaryText)
+
+            TextField("", text: $text)
+                .labelsHidden()
+                .textFieldStyle(.plain)
+                .multilineTextAlignment(.leading)
+                .padding(.horizontal, Theme.Spacing.small)
+                .frame(height: 32)
+                .background(fieldBackground)
+                .accessibilityLabel(title)
+        }
+        .frame(width: width)
+        .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
+    }
+
+    private var fieldBackground: some View {
+        RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+            .fill(Theme.Colors.windowBackground)
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                    .strokeBorder(Theme.Colors.separator.opacity(0.8))
+            )
+    }
+}
+
 /// One kind's list of labelled values, with the controls that make it a list rather than a display.
 private struct ValueListSection: View {
     let kind: ContactDetailKind
     @Binding var values: [LabelledValue]
 
     var body: some View {
-        Section(kind.displayName) {
-            ForEach($values, id: \.self) { $value in
+        VStack(spacing: Theme.Spacing.medium) {
+            ForEach(values.indices, id: \.self) { index in
                 HStack(alignment: .center, spacing: Theme.Spacing.medium) {
-                    LabelField(label: $value.label, kind: kind)
+                    LabelField(label: $values[index].label, kind: kind)
 
-                    TextField("Value", text: $value.value)
+                    TextField("", text: $values[index].value)
                         .labelsHidden()
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.plain)
+                        .multilineTextAlignment(.leading)
+                        .padding(.horizontal, Theme.Spacing.small)
+                        .frame(height: 32)
+                        .background(
+                            RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                                .fill(Theme.Colors.windowBackground)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                                        .strokeBorder(Theme.Colors.separator.opacity(0.8))
+                                )
+                        )
                         .frame(maxWidth: .infinity)
                         .accessibilityLabel(kind.displayName)
 
                     Button {
-                        remove(value)
+                        values.remove(at: index)
                     } label: {
                         Image(systemName: "minus.circle.fill")
                             .foregroundStyle(Theme.Colors.tertiaryText)
@@ -183,7 +331,10 @@ private struct ValueListSection: View {
                     .help("Remove this \(kind.displayName.lowercased())")
                     .accessibilityLabel("Remove this \(kind.displayName.lowercased())")
                 }
-                .padding(.vertical, Theme.Spacing.hairline)
+
+                if index != values.indices.last {
+                    Divider()
+                }
             }
 
             Button {
@@ -192,14 +343,9 @@ private struct ValueListSection: View {
                 Label("Add \(kind.displayName.lowercased())", systemImage: "plus.circle")
             }
             .buttonStyle(.borderless)
-            .foregroundStyle(Theme.Colors.secondaryText)
-            .padding(.vertical, Theme.Spacing.hairline)
+            .foregroundStyle(kind.editorTint)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-    }
-
-    private func remove(_ value: LabelledValue) {
-        guard let index = values.firstIndex(of: value) else { return }
-        values.remove(at: index)
     }
 }
 
@@ -210,10 +356,11 @@ private struct LabelField: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.tight) {
-            TextField("Label", text: $label)
+            TextField("", text: $label)
                 .labelsHidden()
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 112)
+                .textFieldStyle(.plain)
+                .multilineTextAlignment(.leading)
+                .padding(.leading, Theme.Spacing.small)
                 .accessibilityLabel("Label")
 
             Menu {
@@ -229,7 +376,15 @@ private struct LabelField: View {
             .help("Common labels")
             .accessibilityLabel("Choose a common label")
         }
-        .frame(width: 138, alignment: .leading)
+        .frame(width: 146, height: 32, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                .fill(Theme.Colors.windowBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                        .strokeBorder(Theme.Colors.separator.opacity(0.8))
+                )
+        )
     }
 }
 
@@ -370,6 +525,15 @@ private extension String {
 }
 
 private extension ContactDetailKind {
+    var editorTint: Color {
+        switch self {
+        case .email: .blue
+        case .phone: .green
+        case .address: .orange
+        case .website: .purple
+        }
+    }
+
     /// The label a newly added row starts with.
     var defaultLabel: String {
         switch self {
