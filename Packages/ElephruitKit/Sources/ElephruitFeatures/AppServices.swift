@@ -80,6 +80,25 @@ public final class AppServices {
     /// Reads text off a scanned card. Inert until the scan flow is used.
     public let textRecognizer: any TextRecognizing
 
+    // MARK: Communications
+
+    /// What the app knows about messages it handed to other applications, and how it knows it.
+    public let communications: CommunicationService
+
+    /// How a communication reaches the application that owns it.
+    ///
+    /// A protocol, so previews and tests run
+    /// ``ElephruitIntegrations/InertCommunicationLauncher`` and nothing on the machine running them
+    /// opens a compose window.
+    public let communicationLauncher: any CommunicationLaunching
+
+    /// Optional stronger verification for email. ``ElephruitIntegrations/NoProviderMessageService``
+    /// in every shipping configuration — see the note on ``ElephruitIntegrations/ProviderMessageService``.
+    public let messageProvider: any ProviderMessageService
+
+    /// The outstanding "did you send that?" question, and the launcher's reports.
+    public let communicationConfirmations: InteractionConfirmationCoordinator
+
     /// Named subsets of the user's own details, for handing out.
     ///
     /// In `UserDefaults` rather than the store because they are a preference about *this machine's*
@@ -212,12 +231,18 @@ public final class AppServices {
     ///     import flow be exercised without `CNContactStore` ever being constructed.
     ///   - defaults: Where per-device preferences live. A test passes a scratch suite so that
     ///     enabling Contacts in one does not leave the flag set for the user or for the next test.
+    ///   - communicationLauncher: How a communication reaches another application. Defaults to the
+    ///     real one. A test — and a preview — passes an
+    ///     ``ElephruitIntegrations/InertCommunicationLauncher``, which records what *would* have been
+    ///     opened and opens nothing, so the whole tracking layer is exercisable without a compose
+    ///     window appearing on somebody's screen.
     public init(
         stack: PersistenceStack,
         dateProvider: any DateProvider = SystemDateProvider(),
         isDevelopmentMode: Bool = false,
         contactsProvider: (@Sendable () -> any ContactsProviding)? = nil,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        communicationLauncher: (any CommunicationLaunching)? = nil
     ) {
         self.stack = stack
         self.dateProvider = dateProvider
@@ -274,11 +299,34 @@ public final class AppServices {
         // The provider is built lazily, and only when the feature is enabled — so an app that never
         // turns the calendar on never constructs an `EKEventStore` and never prompts.
         self.calendar = CalendarService(dateProvider: dateProvider) { EventKitCalendarProvider() }
-        self.people = PeopleService(items: items, dateProvider: dateProvider)
+        let people = PeopleService(items: items, dateProvider: dateProvider)
+        self.people = people
+
+        // Built before the workspace service, which reads communication status when assembling a
+        // timeline, and before the coordinator, which owns the launcher's reports.
+        let communications = CommunicationService(
+            context: context,
+            items: items,
+            people: people,
+            dateProvider: dateProvider,
+            defaults: defaults
+        )
+        self.communications = communications
+
+        let launcher = communicationLauncher ?? SystemCommunicationLauncher()
+        self.communicationLauncher = launcher
+        self.messageProvider = NoProviderMessageService()
+        self.communicationConfirmations = InteractionConfirmationCoordinator(
+            communications: communications,
+            launcher: launcher,
+            dateProvider: dateProvider
+        )
 
         let persons = SwiftDataPersonRepository(context: context, items: items, dateProvider: dateProvider)
         self.persons = persons
-        self.personWorkspace = PersonWorkspaceService(people: persons, items: items, dateProvider: dateProvider)
+        self.personWorkspace = PersonWorkspaceService(
+            people: persons, items: items, dateProvider: dateProvider, communications: communications
+        )
         self.personIdentity = PersonIdentityService(
             context: context, people: persons, items: items, dateProvider: dateProvider
         )
@@ -340,13 +388,20 @@ public final class AppServices {
         dateProvider: any DateProvider = FixedDateProvider.reference,
         populated: Bool = true,
         contactsProvider: (@Sendable () -> any ContactsProviding)? = nil,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        communicationLauncher: (any CommunicationLaunching)? = nil
     ) -> AppServices {
         // Previews must never crash a canvas, and an in-memory store failing to open would mean
         // the schema itself is broken — which the persistence tests already cover. A minimal
         // fallback keeps this non-throwing without hiding a real failure.
         guard let stack = try? PersistenceStack.inMemory() else {
-            return AppServices(stack: PersistenceStack.previewFallback(), dateProvider: dateProvider)
+            return AppServices(
+                stack: PersistenceStack.previewFallback(),
+                dateProvider: dateProvider,
+                // A preview canvas must never open somebody's mail app, and a fallback stack is
+                // reached only when things have already gone wrong.
+                communicationLauncher: communicationLauncher ?? InertCommunicationLauncher()
+            )
         }
 
         let services = AppServices(
@@ -354,7 +409,10 @@ public final class AppServices {
             dateProvider: dateProvider,
             isDevelopmentMode: true,
             contactsProvider: contactsProvider,
-            defaults: defaults
+            defaults: defaults,
+            // Previews and tests never launch anything. A canvas that opened Mail on redraw would be
+            // a genuinely unpleasant surprise, and a test suite that did it would be worse.
+            communicationLauncher: communicationLauncher ?? InertCommunicationLauncher()
         )
         if populated {
             services.loadSampleData()

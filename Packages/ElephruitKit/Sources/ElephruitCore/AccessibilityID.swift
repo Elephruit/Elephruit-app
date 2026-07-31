@@ -111,6 +111,13 @@ public enum AccessibilityID {
         public static func row(id: String) -> String { "attachments.row.\(id)" }
     }
 
+    /// What the app knows about a message it handed to another application.
+    public enum Communications {
+        public static let confirmationBar = "communications.confirmationBar"
+        public static let callOutcomeSheet = "communications.callOutcomeSheet"
+        public static let privacySection = "communications.privacy"
+    }
+
     public enum People {
         public static let relationshipSummary = "people.summary"
         public static let recordInteraction = "people.recordInteraction"

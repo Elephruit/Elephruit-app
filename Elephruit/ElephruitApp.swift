@@ -318,6 +318,12 @@ struct SettingsView: View {
             if case .ready(let services) = environment.state {
                 ContactsSettingsSection()
                     .appServices(services)
+
+                // Beside Contacts rather than under General, for the same reason: it is a standing
+                // decision about what the app keeps of the user's own correspondence, and burying it
+                // would make it undiscoverable at the moment somebody goes looking.
+                CommunicationPrivacySection()
+                    .appServices(services)
             } else {
                 Text("Available once your library is open.")
                     .font(Theme.Text.metadata)

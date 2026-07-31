@@ -139,7 +139,7 @@ struct PersonWorkspaceView: View {
             ContactActionConfirmationSheet(request: request) { outcome in
                 pendingAction = nil
                 if case .performed(let channel, let destination) = outcome {
-                    logInitiatedContact(channel: channel, destination: destination)
+                    launch(channel: channel, destination: destination)
                 }
             }
         }
@@ -216,26 +216,39 @@ struct PersonWorkspaceView: View {
         reload()
     }
 
-    /// Records that the user *started* reaching somebody — never that they spoke.
+    /// Starts reaching somebody, and records that starting is all that happened.
     ///
-    /// The app saw a button press and nothing more. Recording "spoke to Maya" on that basis would put
-    /// a fact in the timeline nobody stated, and the last-contact line is only worth having because
-    /// it is never wrong in that direction.
-    private func logInitiatedContact(channel: ContactChannel, destination: ContactDestination) {
+    /// ### What changed here, and why it matters
+    /// This used to write an interaction immediately — "Email started" — on the strength of a button
+    /// press. That row was honest about its provenance and dishonest about its existence: a message
+    /// the user then never sent had a permanent entry on their page saying they had been in touch,
+    /// distinguishable from a real one only by a word in the subtitle.
+    ///
+    /// It now writes a *communication intent*, which is not a claim about anything, and an
+    /// interaction appears only once somebody or something says the message went. See
+    /// ``ElephruitPersistence/CommunicationService/promoteToInteractionIfEarned(_:)``.
+    ///
+    /// A channel that reaches nobody — a map, a website — gets no intent at all, and the sheet still
+    /// opens it: ``ElephruitCore/ContactChannel/isExternallyVisible`` is the line, and it has not
+    /// moved.
+    private func launch(channel: ContactChannel, destination: ContactDestination) {
         guard let services else { return }
-        services.perform {
-            let interaction = try services.people.recordInteraction(
-                with: person,
-                summary: "\(channel.displayName) started",
-                at: services.dateProvider.now
-            )
-            try services.items.update(interaction) { subject in
-                subject.sourceIdentifier = InteractionProvenance.initiated.rawValue
-                subject.sourceURLString = ContactActionURL.url(for: channel, destination: destination.value)?
-                    .absoluteString
+
+        guard CommunicationChannel(contactChannel: channel) != nil else {
+            if let url = ContactActionURL.url(for: channel, destination: destination.value) {
+                NSWorkspace.shared.open(url)
             }
-            services.noteChange(to: interaction)
+            return
         }
+
+        services.communicationConfirmations.start(
+            contactChannel: channel,
+            person: person,
+            destination: destination,
+            source: CommunicationSourceContext(
+                itemID: person.id, itemKind: person.kind, itemTitle: person.displayTitle
+            )
+        )
         reload()
     }
 }

@@ -287,10 +287,25 @@ struct PeopleCommandBarView: View {
             let destinations = ContactDestinationPolicy.candidates(
                 for: channel, from: person.personProfile?.destinations() ?? []
             )
-            guard let destination = destinations.first,
-                  let url = ContactActionURL.url(for: channel, destination: destination.value)
-            else { return }
-            NSWorkspace.shared.open(url)
+            guard let destination = destinations.first else { return }
+
+            // Through the tracking layer, so a command-bar contact is recorded on exactly the same
+            // terms as one started from somebody's page — an intent first, and an interaction only
+            // if the message turns out to have gone.
+            if CommunicationChannel(contactChannel: channel) != nil {
+                services.communicationConfirmations.start(
+                    contactChannel: channel,
+                    person: person,
+                    destination: destination,
+                    source: CommunicationSourceContext(
+                        itemID: person.id, itemKind: person.kind, itemTitle: person.displayTitle
+                    )
+                )
+            } else if let url = ContactActionURL.url(for: channel, destination: destination.value) {
+                NSWorkspace.shared.open(url)
+            } else {
+                return
+            }
             feedback = "\(channel.displayName) opened for \(person.displayTitle). Nothing was sent."
 
         case .schedule(let personID, let day, let time):
@@ -396,8 +411,16 @@ struct PeopleCommandBarView: View {
             feedback = "Tagged \(preview.recipients.count) people."
 
         case .email, .message, .invite:
-            guard let url = preview.url else { return }
-            NSWorkspace.shared.open(url)
+            let people = preview.recipients.compactMap { try? services.persons.person(id: $0.id) }
+            guard services.communicationConfirmations.start(
+                groupAction: action,
+                preview: preview,
+                people: people,
+                // The group's name and no identifier: a smart group *is* a saved search and a fixed
+                // one is a collection, so `group.id` names neither an `Item` nor anything the
+                // interaction could usefully be linked back to.
+                source: CommunicationSourceContext(itemTitle: group.name)
+            ) != nil else { return }
             feedback = "Opened a draft to \(preview.recipients.count) people. Nothing was sent."
 
         case .export:

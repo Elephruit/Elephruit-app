@@ -167,6 +167,38 @@ public enum SchemaV5: VersionedSchema {
     }
 }
 
+/// The sixth schema: what the app knows about a message it did not send itself.
+///
+/// Two new entities — ``CommunicationIntentRecord`` and ``CommunicationEventRecord`` — and nothing
+/// else. **Additive**, so a store opened under this version gains two empty tables and keeps
+/// everything it had. No existing entity changes shape; in particular `Item` is untouched, and an
+/// interaction created by this module is the same `Item` the People module already writes, found
+/// from the intent by ``CommunicationIntentRecord/interactionID``.
+///
+/// ### Why the communication is not columns on the interaction
+/// Because most communications never become an interaction. A composer that opened and was closed,
+/// a `mailto:` the user answered "not sent" to, a share the user canceled — each is a real thing to
+/// have recorded and none of them is a conversation. Columns on `Item` would mean writing an
+/// interaction first and correcting it afterwards, which is exactly the false "Sent" this module
+/// exists to avoid, and would widen every note in the library with fields only a message uses.
+///
+/// ### Why lightweight inference is still right
+/// The same argument as `SchemaV4` and `SchemaV5`, with more evidence behind it each time: entities
+/// added under a single declared version migrate real bytes correctly, and `RealStoreMigrationTests`
+/// carries a store written before any of them all the way here. ADR 0005 reserves the model-type
+/// freeze for the first change inference cannot perform — a rename, a type change, a computed value
+/// — and there is none here.
+public enum SchemaV6: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 6) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV5.models + [
+            CommunicationIntentRecord.self,
+            CommunicationEventRecord.self,
+        ]
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -179,7 +211,7 @@ public enum SchemaV5: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV5.self]
+        [SchemaV6.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -199,13 +231,13 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV5.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV6.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV5.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV6.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {
-        let version = SchemaV5.versionIdentifier
+        let version = SchemaV6.versionIdentifier
         return "\(version.major).\(version.minor).\(version.patch)"
     }
 }

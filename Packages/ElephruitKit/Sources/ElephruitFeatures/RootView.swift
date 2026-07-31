@@ -92,6 +92,10 @@ public struct RootView: View {
                 coordinator.start()
             }
 
+            // Listening for share-sheet callbacks. Nothing arrives until something is launched, and
+            // the launcher is inert in previews and tests.
+            services?.communicationConfirmations.beginObserving()
+
             services?.checkForContainmentRepair()
             // Housekeeping, in the same place and on the same terms: looked at once the store is
             // open, reported if there is anything to say, and never acted on unasked.
@@ -116,6 +120,24 @@ public struct RootView: View {
                 )
             }
         }
+        // Coming back to Elephruit is the one moment the confirmation question makes sense: the user
+        // has just been in Mail or Messages and either sent it or did not. Whether anything is
+        // actually asked is the coordinator's decision, and it declines far more often than it asks.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            services?.communicationConfirmations.refreshPendingQuestion()
+        }
+        .sheet(item: callOutcomeBinding) { intent in
+            if let services {
+                CallOutcomeSheet(
+                    intent: intent,
+                    personName: callOutcomePersonName(for: intent),
+                    onLog: { outcome, duration, notes in
+                        services.communicationConfirmations.logCall(outcome, duration: duration, notes: notes)
+                    },
+                    onDismiss: { services.communicationConfirmations.dismissCallOutcome() }
+                )
+            }
+        }
         // One handler for the whole window. The ladder decides; the view only reports the key.
         // Returning `.ignored` when nothing happened lets the event fall through rather than being
         // silently swallowed.
@@ -136,6 +158,18 @@ public struct RootView: View {
                     isRepairSheetPresented = true
                 }
             }
+
+            // Asked at the window level because the question outlives the view that raised it: the
+            // user pressed Email on somebody's page, went to Mail, and came back to whatever they
+            // felt like looking at. See `InteractionConfirmationCoordinator`.
+            if let services, let question = services.communicationConfirmations.pendingQuestion {
+                CommunicationConfirmationBar(
+                    intent: question,
+                    onAnswer: { services.communicationConfirmations.answer($0) },
+                    onSetAside: { services.communicationConfirmations.setQuestionAside() }
+                )
+            }
+
             splitView
         }
     }
@@ -369,6 +403,21 @@ public struct RootView: View {
 
     private var errorTitle: String {
         services?.lastError?.errorDescription ?? "Something went wrong"
+    }
+
+    /// The call whose outcome only the user can supply.
+    ///
+    /// Offered rather than demanded: dismissing it records nothing, which is the correct outcome for
+    /// somebody who dialled a number and does not want the fact filed anywhere.
+    private var callOutcomeBinding: Binding<CommunicationIntent?> {
+        Binding(
+            get: { services?.communicationConfirmations.pendingCallOutcome },
+            set: { if $0 == nil { services?.communicationConfirmations.dismissCallOutcome() } }
+        )
+    }
+
+    private func callOutcomePersonName(for intent: CommunicationIntent) -> String? {
+        intent.intendedRecipients.compactMap(\.displayName).first
     }
 
     // MARK: - Actions

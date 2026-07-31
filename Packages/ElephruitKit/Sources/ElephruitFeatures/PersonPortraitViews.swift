@@ -516,9 +516,17 @@ struct TimelineEntryRow: View {
                             .foregroundStyle(Theme.Colors.tertiaryText)
                     }
 
-                    Text(entry.provenanceLine)
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.secondaryText)
+                    // A communication states its own evidence, with the fact and the source drawn
+                    // apart — "Email sent" is what happened and "confirmed by you" is who says so,
+                    // and running them together in one weight would read as the app having
+                    // established both. Everything else keeps the plain provenance line.
+                    if let status = entry.statusLabel {
+                        CommunicationStatusLine(label: status)
+                    } else {
+                        Text(entry.provenanceLine)
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                    }
 
                     if let excerpt = entry.excerpt {
                         Text(excerpt)

@@ -483,7 +483,7 @@ struct AdHocGroupActionSheet: View {
                 Button("Cancel", role: .cancel, action: onFinish)
                     .keyboardShortcut(.cancelAction)
                 Button("Open a draft") {
-                    if let url = preview?.url { NSWorkspace.shared.open(url) }
+                    openDraft()
                     onFinish()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -506,6 +506,20 @@ struct AdHocGroupActionSheet: View {
             definition: .fixed, memberIDs: personIDs
         )
         preview = try? services.personGroups.preview(.email, for: group)
+    }
+
+    /// Hands the draft over through the tracking layer, so a batch email is recorded on the same
+    /// terms as a single one: one intent naming everybody, and no interaction until it is earned.
+    private func openDraft() {
+        guard let services, let preview else { return }
+
+        let people = preview.recipients.compactMap { try? services.persons.person(id: $0.id) }
+        services.communicationConfirmations.start(
+            groupAction: .email,
+            preview: preview,
+            people: people,
+            source: CommunicationSourceContext(itemTitle: "Selected people")
+        )
     }
 }
 

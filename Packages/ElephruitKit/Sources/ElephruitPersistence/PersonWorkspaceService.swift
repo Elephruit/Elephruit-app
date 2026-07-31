@@ -17,10 +17,23 @@ public final class PersonWorkspaceService {
     private let items: any ItemRepository
     private let dateProvider: any DateProvider
 
-    public init(people: any PersonRepository, items: any ItemRepository, dateProvider: any DateProvider) {
+    /// What is known about the messages behind a person's interactions.
+    ///
+    /// Optional, and absent in every test that predates the communication layer. A timeline assembled
+    /// without it is the same timeline with plainer status lines — which is also what a library
+    /// holding no communication records produces, so the two cases exercise one code path.
+    private let communications: CommunicationService?
+
+    public init(
+        people: any PersonRepository,
+        items: any ItemRepository,
+        dateProvider: any DateProvider,
+        communications: CommunicationService? = nil
+    ) {
         self.people = people
         self.items = items
         self.dateProvider = dateProvider
+        self.communications = communications
     }
 
     // MARK: - Timeline
@@ -75,7 +88,32 @@ public final class PersonWorkspaceService {
             consider(target)
         }
 
-        return Array(entries.sorted { $0.date > $1.date }.prefix(limit))
+        let ordered = Array(entries.sorted { $0.date > $1.date }.prefix(limit))
+        return try attachCommunications(to: ordered)
+    }
+
+    /// Fills in what is known about the messages behind the interactions on a timeline.
+    ///
+    /// One fetch for the whole page, keyed by interaction identifier. A lookup per row would turn a
+    /// person with three hundred interactions into three hundred queries — rule R5's argument in
+    /// miniature, applied before the shape is baked in rather than after it is measured.
+    private func attachCommunications(
+        to entries: [PersonTimelineEntry]
+    ) throws(AppError) -> [PersonTimelineEntry] {
+        guard let communications else { return entries }
+
+        let interactionIDs = entries.filter { $0.kind == .interaction }.map(\.id)
+        guard !interactionIDs.isEmpty else { return entries }
+
+        let statuses = try communications.statuses(forInteractionIDs: interactionIDs)
+        guard !statuses.isEmpty else { return entries }
+
+        return entries.map { entry in
+            guard let status = statuses[entry.id] else { return entry }
+            var updated = entry
+            updated.communication = status
+            return updated
+        }
     }
 
     /// How the app came to know about an interaction.

@@ -28,8 +28,16 @@ enum ContactActionOutcome {
 /// the entire class of "it rang the wrong Maya". When there are several numbers it is also the only
 /// place the choice can be made honestly, because the app has no basis for picking one.
 ///
-/// Handing the URL to `NSWorkspace` opens the user's own app with the fields filled in and stops
-/// there. Elephruit never sends anything itself.
+/// ### Why this sheet no longer opens anything itself
+/// It used to call `NSWorkspace.open` and report `.performed`, which put the one irreversible,
+/// externally-visible act in the app inside a view body — where it could not be tested, could not be
+/// recorded, and could not be told apart from a share that failed. The sheet now only decides
+/// *which destination*; the caller hands that to
+/// ``InteractionConfirmationCoordinator/start(contactChannel:person:destination:source:)``, which
+/// writes a communication intent first and launches second.
+///
+/// Either way the promise on the sheet holds: the user's own app opens with the fields filled in and
+/// stops there. Elephruit never sends anything itself.
 struct ContactActionConfirmationSheet: View {
     let request: ContactActionRequest
     let onFinish: (ContactActionOutcome) -> Void
@@ -111,14 +119,10 @@ struct ContactActionConfirmationSheet: View {
     }
 
     private func perform() {
-        guard let selection,
-              let url = ContactActionURL.url(for: request.channel, destination: selection.value)
-        else {
+        guard let selection else {
             onFinish(.cancelled)
             return
         }
-
-        NSWorkspace.shared.open(url)
         onFinish(.performed(channel: request.channel, destination: selection))
     }
 }

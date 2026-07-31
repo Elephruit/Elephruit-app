@@ -31,6 +31,14 @@ public struct PersonTimelineEntry: Sendable, Hashable, Identifiable {
     /// Which channel it happened through, when that is known.
     public var channel: ContactChannel?
 
+    /// What is actually known about a communication this entry came from.
+    ///
+    /// Present only for an interaction Elephruit launched. When it is present the row's status line
+    /// comes from it rather than from ``provenance``, because it can say considerably more: which
+    /// mechanism was used, who says the message went, and — for a handoff nobody has answered a
+    /// question about — that the answer is not known.
+    public var communication: CommunicationIntent?
+
     public var tagSlugs: [String]
 
     /// Everybody else involved.
@@ -59,6 +67,7 @@ public struct PersonTimelineEntry: Sendable, Hashable, Identifiable {
         source: SourceKind = .manual,
         provenance: InteractionProvenance? = nil,
         channel: ContactChannel? = nil,
+        communication: CommunicationIntent? = nil,
         tagSlugs: [String] = [],
         otherPeople: [PersonReference] = [],
         confirmedFactCount: Int = 0,
@@ -75,6 +84,7 @@ public struct PersonTimelineEntry: Sendable, Hashable, Identifiable {
         self.source = source
         self.provenance = provenance
         self.channel = channel
+        self.communication = communication
         self.tagSlugs = tagSlugs
         self.otherPeople = otherPeople
         self.confirmedFactCount = confirmedFactCount
@@ -84,11 +94,22 @@ public struct PersonTimelineEntry: Sendable, Hashable, Identifiable {
         self.attachmentCount = attachmentCount
     }
 
+    /// The status label for a communication, when this row is one.
+    public var statusLabel: CommunicationStatusLabel? {
+        communication.map(CommunicationStatusLabel.make(for:))
+    }
+
     /// The line beneath the title: what kind of thing this is, where it came from, and who else.
+    ///
+    /// A communication states its own evidence and takes precedence, because
+    /// ``InteractionProvenance`` has only three values and cannot distinguish a share that completed
+    /// from a send the user confirmed — which is the distinction this module exists to preserve.
     public var provenanceLine: String {
         var parts: [String] = []
 
-        if let provenance {
+        if let statusLabel {
+            parts.append(statusLabel.sentence)
+        } else if let provenance {
             parts.append(provenance.phrase(channel: channel))
         } else {
             parts.append(kind.displayName.lowercased())
@@ -110,8 +131,13 @@ public struct PersonTimelineEntry: Sendable, Hashable, Identifiable {
     /// The same rule as ``ContactMoment/isContact``, plus the provenance test that says a call the
     /// user *started* is not a call they had. Both rules live in one expression so a timeline row
     /// and a last-contact line cannot disagree.
+    ///
+    /// A communication answers first and answers more precisely: a message whose only evidence is
+    /// that a composer opened is not contact no matter what provenance the interaction carries, and
+    /// ``CommunicationState/countsAsReachingOut`` is where that line is drawn.
     public var isContact: Bool {
         guard kind == .meeting || kind == .interaction else { return false }
+        if let communication { return communication.state.countsAsReachingOut }
         guard let provenance else { return true }
         return provenance.countsAsContact
     }
