@@ -353,9 +353,9 @@ struct PersonRow: View {
         .padding(.vertical, Theme.Spacing.tight)
         .frame(minHeight: Theme.Size.rowHeightExpanded)
         .hoverHighlight(isEnabled: !isSelected, extending: Theme.Spacing.small)
-        // Name *and* the line beneath it. The subtitle is truncated to one line in the row, and it
-        // is the half that says where the relationship stands — worth being able to read in full
-        // without opening somebody.
+        // Name, then whichever supporting lines the row actually drew. Each is truncated to one line
+        // in the row and each is worth reading in full — who somebody is, and where the relationship
+        // stands — without having to open them.
         .help(tooltip)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
@@ -368,9 +368,17 @@ struct PersonRow: View {
         }
     }
 
+    /// The row's own lines, rejoined.
+    ///
+    /// Assembled from the same two properties the row draws from rather than from a third source, so
+    /// a tooltip cannot describe a row that is no longer there. It said `subtitle` until this file
+    /// grew ``identityLine`` and ``relationshipLine`` in its place, and the stale name was a build
+    /// failure rather than a wrong tooltip only because nothing else in the file happened to define
+    /// one.
     private var tooltip: String {
-        guard let subtitle, !subtitle.isEmpty else { return person.displayTitle }
-        return "\(person.displayTitle)\n\(subtitle)"
+        let lines = [identityLine, relationshipLine].compactMap { $0 }.filter { !$0.isEmpty }
+        guard !lines.isEmpty else { return person.displayTitle }
+        return ([person.displayTitle] + lines).joined(separator: "\n")
     }
 
     /// Whether this person's details come from the address book, and whether that still works.
