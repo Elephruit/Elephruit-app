@@ -815,4 +815,65 @@ struct PersonModuleTests {
         #expect(try fixture.people.myCard()?.id == second.id)
         #expect(first.personProfile?.isMyCard == false, "choosing a new card clears the old one")
     }
+
+    // MARK: - Names staying in step
+
+    @Test("Renaming a person re-splits their name rather than leaving the old one behind")
+    func renameKeepsNamePartsInStep() throws {
+        let fixture = try Fixture()
+
+        let maya = try fixture.people.createPerson(PersonDraft(fullName: "Maya Chen"))
+        #expect(maya.personProfile?.givenName == "Maya")
+        #expect(maya.personProfile?.familyName == "Chen")
+
+        try fixture.store.items.update(maya) { $0.title = "Maya Okonkwo" }
+
+        #expect(
+            maya.personProfile?.familyName == "Okonkwo",
+            """
+            The parts were split once at creation and never again, so a rename left the profile \
+            spelling the old name — which searched wrongly and would have offered the address book \
+            a name the user had already changed.
+            """
+        )
+        #expect(maya.personProfile?.givenName == "Maya")
+    }
+
+    @Test("A name set deliberately in parts survives an unrelated edit")
+    func deliberatePartsAreNotReSplit() throws {
+        let fixture = try Fixture()
+
+        let maya = try fixture.people.createPerson(PersonDraft(fullName: "Maya Chen"))
+
+        // What the editor writes: parts that say more than a two-word split could work out, and a
+        // title assembled from them.
+        try fixture.people.updateProfile(of: maya) { profile in
+            profile.namePrefix = "Dr"
+            profile.givenName = "Maya"
+            profile.middleName = "Lin"
+            profile.familyName = "Chen"
+            profile.nameSuffix = "PhD"
+        }
+        try fixture.store.items.update(maya) { $0.title = "Dr Maya Lin Chen PhD" }
+
+        // Any later edit at all. This is the one that used to undo the correction.
+        try fixture.store.items.update(maya) { $0.isFavorite = true }
+
+        #expect(maya.personProfile?.givenName == "Maya", "a prefix must not become somebody's first name")
+        #expect(maya.personProfile?.familyName == "Chen")
+        #expect(maya.personProfile?.namePrefix == "Dr")
+        #expect(maya.personProfile?.nameSuffix == "PhD")
+    }
+
+    @Test("A person renamed to nothing keeps the parts they had")
+    func emptyRenameLeavesPartsAlone() throws {
+        let fixture = try Fixture()
+
+        let maya = try fixture.people.createPerson(PersonDraft(fullName: "Maya Chen"))
+        // Validation refuses an empty title, so the parts must survive the rejection intact.
+        try? fixture.store.items.update(maya) { $0.title = "   " }
+
+        #expect(maya.personProfile?.givenName == "Maya")
+        #expect(maya.personProfile?.familyName == "Chen")
+    }
 }
