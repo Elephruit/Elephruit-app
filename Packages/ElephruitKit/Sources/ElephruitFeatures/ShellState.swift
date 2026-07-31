@@ -49,6 +49,10 @@ extension LayoutMode {
 /// What Escape should do next.
 public enum EscapeOutcome: Sendable, Hashable {
     case dismissOverlay
+
+    /// A row has its swipe actions exposed. Escape puts them away.
+    case closeRowActions
+
     case leaveSearch
     case focusList
     case leaveFocusMode
@@ -62,17 +66,23 @@ public enum EscapeOutcome: Sendable, Hashable {
 /// point without a window.
 public struct ShellState: Sendable, Hashable {
     public var hasOverlay: Bool
+
+    /// Whether a list row is showing its swipe actions.
+    public var hasRevealedRowActions: Bool
+
     public var isSearchActive: Bool
     public var focusedPane: ShellPane
     public var layoutMode: LayoutMode
 
     public init(
         hasOverlay: Bool = false,
+        hasRevealedRowActions: Bool = false,
         isSearchActive: Bool = false,
         focusedPane: ShellPane = .list,
         layoutMode: LayoutMode = .full
     ) {
         self.hasOverlay = hasOverlay
+        self.hasRevealedRowActions = hasRevealedRowActions
         self.isSearchActive = isSearchActive
         self.focusedPane = focusedPane
         self.layoutMode = layoutMode
@@ -86,14 +96,19 @@ public struct ShellState: Sendable, Hashable {
 ///
 /// ```
 /// 1.  An open sheet, palette, popover, or menu   → dismiss it, and stop
-/// 2.  Search                                     → leave search, restore the previous list
+/// 2.  A row showing its swipe actions            → close them, and stop
+/// 3.  Search                                     → leave search, restore the previous list
 ///                                                   and selection, keep the query internally
-/// 3.  Detail or inspector                        → focus the list
-/// 4.  List, in focus mode                        → leave focus mode
-/// 5.  List, sidebar visible                      → focus the sidebar
-/// 6.  List, sidebar hidden                       → nothing
-/// 7.  Sidebar                                    → nothing
+/// 4.  Detail or inspector                        → focus the list
+/// 5.  List, in focus mode                        → leave focus mode
+/// 6.  List, sidebar visible                      → focus the sidebar
+/// 7.  List, sidebar hidden                       → nothing
+/// 8.  Sidebar                                    → nothing
 /// ```
+///
+/// Revealed swipe actions sit above search because they are the more transient of the two and the
+/// more likely to be what the hand is currently doing. They sit below an overlay because a sheet is
+/// modal and a half-open row is not.
 ///
 /// Rung 3 carries the visibility guard that makes the whole thing safe: in focus mode the list is not
 /// on screen, so Escape from the detail leaves focus mode — which is what *reveals* the list — rather
@@ -105,6 +120,10 @@ public enum EscapeLadder {
     public static func outcome(for state: ShellState) -> EscapeOutcome {
         if state.hasOverlay {
             return .dismissOverlay
+        }
+
+        if state.hasRevealedRowActions {
+            return .closeRowActions
         }
 
         if state.isSearchActive {
@@ -136,7 +155,7 @@ public enum EscapeLadder {
         switch outcome {
         case .focusList: .list
         case .focusSidebar: .sidebar
-        case .dismissOverlay, .leaveSearch, .leaveFocusMode, .nothing: nil
+        case .dismissOverlay, .closeRowActions, .leaveSearch, .leaveFocusMode, .nothing: nil
         }
     }
 }

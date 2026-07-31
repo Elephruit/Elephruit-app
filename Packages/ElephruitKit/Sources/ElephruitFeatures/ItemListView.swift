@@ -24,6 +24,13 @@ public struct ItemListView: View {
 
     @State private var pendingSavedSearchName: String?
 
+    /// The row a permanent deletion has been asked for.
+    ///
+    /// Only reachable inside the Trash, which is the one view in this app that genuinely represents
+    /// a permanent-delete context. Even there the gesture stops at the button and the button asks,
+    /// because nothing brings this one back.
+    @State private var pendingPermanentDeletion: Item?
+
     @FocusState private var isSearchFieldFocused: Bool
 
     /// Events for the current window, when the selection is one that shows a calendar.
@@ -35,7 +42,18 @@ public struct ItemListView: View {
 
     public var body: some View {
         content
-            .navigationTitle(navigation.isSearchActive ? "Search" : navigation.selection.title)
+            .background { permanentDeletionDialog }
+            // ⌫, and the menu item that shows the shortcut for it. In the Trash the key does
+            // nothing: a permanent deletion is not something a single keystroke may cause.
+            .onDeleteCommand { trashSelection() }
+            .focusedSceneValue(
+                \.rowActions,
+                RowActions(
+                    isEnabled: !navigation.selectedItemIDs.isEmpty
+                        && !navigation.selection.showsTrashedItems
+                ) { trashSelection() }
+            )
+            .navigationTitle(navigation.isSearchActive ? "Search" : navigation.windowTitle)
             .navigationSubtitle(subtitle)
             .searchable(text: searchBinding, placement: .toolbar, prompt: searchPrompt)
             .searchScopes(scopeBinding) {
@@ -169,6 +187,7 @@ public struct ItemListView: View {
                                     row(for: item)
                                 }
                                 .contextMenu { contextMenu(for: item) }
+                                .modifier(ItemSwipeActions(item: item, navigation: navigation, onPermanentDeletion: { pendingPermanentDeletion = $0 }, onChange: { Task { await reload() } }))
                             }
                         } header: {
                             SectionHeader(navigation.selection.title, count: displayedItems.count)
@@ -272,6 +291,7 @@ public struct ItemListView: View {
                     row(for: item)
                 }
                 .contextMenu { contextMenu(for: item) }
+                .modifier(ItemSwipeActions(item: item, navigation: navigation, onPermanentDeletion: { pendingPermanentDeletion = $0 }, onChange: { Task { await reload() } }))
             }
         }
         .listStyle(.inset)
@@ -296,6 +316,12 @@ public struct ItemListView: View {
         runBatch { undo, targets in try undo.moveToTrash(targets) }
         navigation.selectedItemIDs = []
         services?.noteRemoval(of: ids.first ?? UUID())
+    }
+
+    /// ⌫ on the selection, as one undo step.
+    private func trashSelection() {
+        guard !navigation.selection.showsTrashedItems else { return }
+        batchTrash()
     }
 
     private func batchRestore() {
@@ -552,6 +578,32 @@ public struct ItemListView: View {
         }
     }
 
+    /// The confirmation that stands between the Trash and the end.
+    ///
+    /// `deletePermanently` is the one operation in this app that structural undo cannot reverse —
+    /// there is no restore point for a row that no longer exists — so it is the one operation a
+    /// gesture is not allowed to complete and a click is not allowed to complete silently.
+    @ViewBuilder
+    private var permanentDeletionDialog: some View {
+        EmptyView()
+            .confirmationDialog(
+                "Delete \u{201C}\(pendingPermanentDeletion?.displayTitle ?? "")\u{201D} permanently?",
+                isPresented: Binding(
+                    get: { pendingPermanentDeletion != nil },
+                    set: { if !$0 { pendingPermanentDeletion = nil } }
+                ),
+                presenting: pendingPermanentDeletion
+            ) { item in
+                Button("Delete Permanently", role: .destructive) {
+                    pendingPermanentDeletion = nil
+                    deletePermanently(item)
+                }
+                Button("Cancel", role: .cancel) { pendingPermanentDeletion = nil }
+            } message: { _ in
+                Text("This cannot be undone.")
+            }
+    }
+
     /// Kinds this item could reasonably become. Areas and projects are excluded from casual
     /// conversion because they carry children whose containment would break.
     private func convertibleKinds(from kind: ItemKind) -> [ItemKind] {
@@ -750,11 +802,17 @@ public struct ItemListView: View {
         Task { await reload() }
     }
 
+    /// One row to the Trash, as one undo step.
+    ///
+    /// Through `StructuralUndoCoordinator` rather than straight at the repository, which is what the
+    /// batch bar has always done and what this had not: trashing one row and trashing four were the
+    /// same user action with different `⌘Z` behaviour, and only one of them was right.
     private func moveToTrash(_ item: Item) {
         guard let services else { return }
         let id = item.id
-        services.perform { try services.items.moveToTrash(item) }
+        services.perform { try services.undo.moveToTrash([item]) }
         navigation.selectedItemIDs.remove(id)
+        services.refreshDerivedState()
         services.noteRemoval(of: id)
         Task { await reload() }
     }

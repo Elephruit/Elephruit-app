@@ -11,23 +11,30 @@ import Observation
 public struct SidebarDestination: Identifiable, Hashable, Sendable {
     /// Which band a destination belongs to.
     ///
-    /// The bands are the whole point of the redesign: the previous sidebar mixed *where I work* with
-    /// *where things are filed* in one undifferentiated list, which is what made it read as a file
-    /// browser rather than a workspace.
+    /// The bands are the whole point of the redesign: the top of the sidebar answers *where am I in
+    /// my day*, and everything else is inside a module. A destination in the `.module` band is
+    /// **never** drawn at the top level — it appears only once its module has been entered, which is
+    /// what keeps ten features' navigation from being on screen at the same time.
     public enum Band: Int, Hashable, Sendable, CaseIterable {
-        /// The three views a day is actually worked in. No header — it is simply where you are.
+        /// The four destinations that belong to no module. No header — it is simply where you are.
         case primary
 
         /// What the user chose to keep close. Absent entirely when empty.
         case pinned
 
-        /// Everything else, collapsible.
-        case library
+        /// Inside a module, and reachable only from within it.
+        case module
     }
 
     public var id: String
     public var selection: SidebarSelection
     public var band: Band
+
+    /// The module this destination lives in, for a `.module`-band row.
+    ///
+    /// `nil` for the primary band, which is what "belongs to no module" means here.
+    public var module: AppModule?
+
     public var title: String
     public var symbolName: String
 
@@ -59,6 +66,7 @@ public struct SidebarDestination: Identifiable, Hashable, Sendable {
         id: String,
         selection: SidebarSelection,
         band: Band,
+        module: AppModule? = nil,
         title: String,
         symbolName: String,
         hint: String,
@@ -69,6 +77,7 @@ public struct SidebarDestination: Identifiable, Hashable, Sendable {
         self.id = id
         self.selection = selection
         self.band = band
+        self.module = module
         self.title = title
         self.symbolName = symbolName
         self.hint = hint
@@ -87,9 +96,12 @@ public enum SidebarRegistry {
     /// Every declared destination, available or not. For tests and for the phase that enables one.
     public static let allDeclared: [SidebarDestination] = [
         // MARK: Primary
+        //
+        // The four destinations that belong to no module, in the order they are read in. Everything
+        // else moved inside a module when the sidebar was rebuilt around them.
 
-        // Available as of Phase E, and first, because it answers the question you have when you
-        // open the app rather than one you go looking for.
+        // First, because it answers the question you have when you open the app rather than one you
+        // go looking for.
         SidebarDestination(
             id: "home",
             selection: .home,
@@ -105,7 +117,7 @@ public enum SidebarRegistry {
             band: .primary,
             title: "Today",
             symbolName: "circle.circle",
-            hint: "Due today, plus anything already overdue.",
+            hint: "Everything due today, of every kind, plus anything already overdue.",
             showsCount: true
         ),
         SidebarDestination(
@@ -114,7 +126,7 @@ public enum SidebarRegistry {
             band: .primary,
             title: "Upcoming",
             symbolName: "calendar",
-            hint: "Dated work, ahead of today."
+            hint: "Dated work of every kind, ahead of today."
         ),
         SidebarDestination(
             id: "inbox",
@@ -126,33 +138,66 @@ public enum SidebarRegistry {
             showsCount: true
         ),
 
-        // MARK: Library
+        // MARK: Inside a module
+        //
+        // Each of these is the front door of its module. It is drawn only once that module has been
+        // entered, which is the difference between this sidebar and the one it replaced.
 
         SidebarDestination(
             id: "notes",
             selection: .kind(.note),
-            band: .library,
-            title: "Notes",
+            band: .module,
+            module: .notes,
+            title: "All Notes",
             symbolName: "note.text",
             hint: "Every note in the library, newest first."
         ),
         SidebarDestination(
+            id: "ideas",
+            selection: .kind(.idea),
+            band: .module,
+            module: .notes,
+            title: "Ideas",
+            symbolName: "lightbulb",
+            hint: "Half-formed on purpose. Nothing here is late."
+        ),
+        SidebarDestination(
+            id: "references",
+            selection: .kind(.reference),
+            band: .module,
+            module: .notes,
+            title: "Reference",
+            symbolName: "books.vertical",
+            hint: "Kept to look up rather than to act on."
+        ),
+        SidebarDestination(
+            id: "daily",
+            selection: .kind(.dailyEntry),
+            band: .module,
+            module: .notes,
+            title: "Daily Notes",
+            symbolName: "sun.horizon",
+            hint: "One entry per day, in the order the days happened."
+        ),
+        SidebarDestination(
             id: "projects",
             selection: .kind(.project),
-            band: .library,
-            title: "Projects",
+            band: .module,
+            module: .projects,
+            title: "All Projects",
             symbolName: "square.stack.3d.up",
             hint: "Work with an outcome and an end."
         ),
         SidebarDestination(
             id: "areas",
             selection: .kind(.area),
-            band: .library,
-            title: "Areas",
+            band: .module,
+            module: .areas,
+            title: "All Areas",
             symbolName: "square.grid.2x2",
             hint: "Standing responsibilities, which never finish."
         ),
-        // Superseded by `PeopleSidebarSection`, which is a band of its own.
+        // Superseded by `PeopleSidebarSection`, which is the People module's own sidebar.
         //
         // Declared rather than deleted, on the same terms as every other unavailable destination: a
         // scene restored from a build that predates the People module still decodes, and the row is
@@ -161,7 +206,8 @@ public enum SidebarRegistry {
         SidebarDestination(
             id: "people",
             selection: .kind(.person),
-            band: .library,
+            band: .module,
+            module: .people,
             title: "People",
             symbolName: "person",
             hint: "Everybody in the library, as a flat list.",
@@ -170,47 +216,45 @@ public enum SidebarRegistry {
         SidebarDestination(
             id: "bookmarks",
             selection: .kind(.bookmark),
-            band: .library,
-            title: "Bookmarks",
+            band: .module,
+            module: .bookmarks,
+            title: "All Bookmarks",
             symbolName: "bookmark",
             hint: "Links kept for later."
         ),
         SidebarDestination(
             id: "archive",
             selection: .archive,
-            band: .library,
-            title: "Archive",
+            band: .module,
+            module: .archive,
+            title: "Everything Archived",
             symbolName: "archivebox",
             hint: "Finished, kept, and out of the way of today."
         ),
         SidebarDestination(
             id: "trash",
             selection: .trash,
-            band: .library,
-            title: "Trash",
+            band: .module,
+            module: .trash,
+            title: "Deleted Items",
             symbolName: "trash",
             hint: "Deleted, and recoverable until you empty it."
         ),
-
-        // Available as of the calendar module. In the primary band, because a calendar is where a
-        // day is worked rather than somewhere work is filed — the same argument that puts Today
-        // above Notes.
         SidebarDestination(
             id: "calendar",
             selection: .calendar,
-            band: .primary,
+            band: .module,
+            module: .calendar,
             title: "Calendar",
             symbolName: "calendar.day.timeline.left",
             hint: "Your days, laid out, and everything you know about them."
         ),
-
-        // Available as of Phase C. In the Library band rather than the top one, by decision: time is
-        // something you look *back* at, and the top band is for what you are doing now.
         SidebarDestination(
             id: "time",
             selection: .time,
-            band: .library,
-            title: "Time",
+            band: .module,
+            module: .time,
+            title: "Tracked Time",
             symbolName: "timer",
             hint: "Tracked time, and what it went on."
         ),
@@ -221,23 +265,40 @@ public enum SidebarRegistry {
         allDeclared.filter { $0.isAvailable && $0.band == band }
     }
 
-    /// Every available destination, in display order. Drives `⌘1`–`⌘9`.
+    /// The destinations a module draws at the top of its own sidebar, in display order.
+    public static func destinations(in module: AppModule) -> [SidebarDestination] {
+        allDeclared.filter { $0.isAvailable && $0.module == module }
+    }
+
+    /// Every available destination, in display order.
     public static var available: [SidebarDestination] {
         SidebarDestination.Band.allCases.flatMap { destinations(in: $0) }
     }
 
     /// The destination a numeric shortcut selects, if any.
     ///
-    /// Derived from the visible order, so the shortcut always matches what the user can see.
+    /// Global destinations first, then one per module in module order, so `⌘1`–`⌘4` are Home,
+    /// Today, Upcoming and Inbox and the rest step through the modules exactly as the sidebar lists
+    /// them. Derived from the visible order, so the shortcut always matches what the user can see.
     public static func destination(forShortcutIndex index: Int) -> SidebarDestination? {
-        let ordered = destinations(in: .primary) + destinations(in: .library)
+        let ordered = shortcutOrder
         guard index >= 1, index <= ordered.count else { return nil }
         return ordered[index - 1]
     }
 
+    /// Global destinations, then each module's front door.
+    public static var shortcutOrder: [SidebarDestination] {
+        destinations(in: .primary) + AppModule.displayOrder.compactMap { module in
+            destinations(in: module).first
+        }
+    }
+
     /// Titles that must never be truncated, so the sidebar's minimum width can be derived from them.
+    ///
+    /// Module names are included alongside the destinations: the module list is primary navigation
+    /// now, and "Bookm…" would be exactly the ambiguity the rule exists to prevent.
     public static var nonTruncatingTitles: [String] {
-        available.filter { !$0.mayTruncate }.map(\.title)
+        available.filter { !$0.mayTruncate }.map(\.title) + AppModule.displayOrder.map(\.title)
     }
 }
 

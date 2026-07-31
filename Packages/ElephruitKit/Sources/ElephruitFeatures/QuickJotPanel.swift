@@ -59,6 +59,19 @@ public final class QuickJotController {
     private var panel: QuickJotPanel?
 
     /// What was frontmost when the panel opened, so it can be given focus back.
+    ///
+    /// ### Why this is not used to activate anything
+    /// It used to be. `previousApplication.activate()` reaches *into another process* to bring it
+    /// forward, which is the sort of operation the sandbox is entitled to refuse and which fails
+    /// outright once that process has quit — and a process quitting while a floating capture panel
+    /// is open is not a rare case, it is Tuesday. `NSRunningApplication` also went on being held
+    /// after the panel closed, so a terminated application stayed referenced indefinitely.
+    ///
+    /// macOS 14 added ``NSApplication/yieldActivation(to:)`` for exactly this: the app *gives up*
+    /// its own activation and names who should have it, and the window server does the rest. It
+    /// asks nothing of the other process, so there is nothing for a dead one to refuse. The
+    /// reference is kept only to name the recipient and to check it is still alive, and is released
+    /// the moment the panel closes.
     private var previousApplication: NSRunningApplication?
 
     private let services: AppServices
@@ -113,12 +126,21 @@ public final class QuickJotController {
         hide()
     }
 
+    /// Hands activation back to whatever had it, without touching that process.
+    ///
+    /// Three ways this can be asked and cannot be answered, each handled rather than attempted:
+    /// there was nothing frontmost, the thing that was frontmost was *us*, or it has since quit.
+    /// The last is the one that matters — a capture panel is open precisely while somebody is doing
+    /// something else, and that something else is free to end.
     private func restoreFocus() {
-        guard let previousApplication, previousApplication.bundleIdentifier != Bundle.main.bundleIdentifier else {
-            return
-        }
-        previousApplication.activate()
-        self.previousApplication = nil
+        defer { previousApplication = nil }
+
+        guard let previousApplication,
+              previousApplication.bundleIdentifier != Bundle.main.bundleIdentifier,
+              !previousApplication.isTerminated
+        else { return }
+
+        NSApp.yieldActivation(to: previousApplication)
     }
 
     /// Captures what is in the field.
