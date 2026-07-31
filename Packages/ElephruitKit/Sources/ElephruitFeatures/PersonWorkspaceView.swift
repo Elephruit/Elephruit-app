@@ -146,9 +146,7 @@ struct PersonWorkspaceView: View {
                 onSave: { edit in
                     isEditingContactDetails = false
                     reload()
-                    // Saved here either way. The address book is a separate question, and only one
-                    // worth asking for somebody whose record came from there.
-                    if person.personProfile?.contactsIdentifier != nil { pendingWriteBack = edit }
+                    offerContactWriteBack(for: edit)
                 },
                 onCancel: { isEditingContactDetails = false }
             )
@@ -177,6 +175,22 @@ struct PersonWorkspaceView: View {
     }
 
     // MARK: - Loading
+
+    /// Offers the address-book write only when it can actually be performed.
+    ///
+    /// A Contacts identifier survives permission being revoked and the integration being switched
+    /// off, because the local person and their imported details survive too. The identifier alone
+    /// therefore cannot decide whether to show a write prompt. Re-reading macOS authorization here
+    /// also avoids trusting the state captured when the app launched.
+    private func offerContactWriteBack(for edit: ContactDetailsEdit) {
+        guard let services, person.personProfile?.contactsIdentifier != nil else { return }
+
+        Task {
+            await services.contacts.refreshAuthorization()
+            guard services.contacts.isEnabled, services.contacts.authorization.canRead else { return }
+            pendingWriteBack = edit
+        }
+    }
 
     private func reload() {
         guard let services else { return }
