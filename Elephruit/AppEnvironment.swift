@@ -72,6 +72,16 @@ final class AppEnvironment {
         let useFixtureContacts = isDevelopmentMode
             && ProcessInfo.processInfo.arguments.contains("-ElephruitUseFixtureContacts")
 
+        // A synthetic calendar, for the same reason and on the same terms.
+        //
+        // The whole module — the week grid with a clashing morning, a four-day trip in the all-day
+        // band, a recurring standup, a declined invitation, a read-only subscribed calendar
+        // refusing an edit — is demonstrable against invented events. Gated on development mode as
+        // well as the argument, so a release build can never be talked into showing fiction where
+        // somebody expects their own calendar. `EKEventStore` is never constructed.
+        let useFixtureCalendar = isDevelopmentMode
+            && ProcessInfo.processInfo.arguments.contains("-ElephruitUseFixtureCalendar")
+
         do {
             let location = useTemporaryStore
                 ? StoreLocation.temporary(name: "UITests")
@@ -89,15 +99,24 @@ final class AppEnvironment {
             }
             let contactsProvider = useFixtureContacts ? makeFixtureContacts : nil
 
+            let makeFixtureCalendar: @Sendable () -> any CalendarProviding = {
+                FixtureCalendarProvider()
+            }
+            let calendarProvider = useFixtureCalendar ? makeFixtureCalendar : nil
+
             let services = AppServices(
                 stack: stack,
                 dateProvider: SystemDateProvider(),
                 isDevelopmentMode: isDevelopmentMode,
-                contactsProvider: contactsProvider
+                contactsProvider: contactsProvider,
+                calendarProvider: calendarProvider
             )
 
             if useFixtureContacts {
                 Diagnostics.features.info("Using a synthetic address book; no real contacts are read")
+            }
+            if useFixtureCalendar {
+                Diagnostics.features.info("Using a synthetic calendar; no real events are read or written")
             }
 
             // An intent firing in this process now uses the container that is already open, rather
