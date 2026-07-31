@@ -573,6 +573,15 @@ struct PersonSearchTests {
         #expect(PersonQueryParser.parse("open promises").hasOpenPromises)
     }
 
+    @Test("A surname containing owe stays a name search")
+    func promiseKeywordDoesNotConsumeHowe() {
+        let query = PersonQueryParser.parse("Howe")
+
+        #expect(query.freeText == "howe")
+        #expect(!query.hasOpenPromises)
+        #expect(!query.isStructural)
+    }
+
     @Test("dog trainer falls through to free text")
     func freeTextSearch() {
         let query = PersonQueryParser.parse("dog trainer")

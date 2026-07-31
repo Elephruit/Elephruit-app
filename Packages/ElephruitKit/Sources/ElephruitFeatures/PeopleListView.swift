@@ -2,6 +2,7 @@ import ElephruitCore
 import ElephruitDesign
 import ElephruitModel
 import ElephruitPersistence
+import AppKit
 import SwiftUI
 
 /// Which slice of People the middle column is showing.
@@ -169,11 +170,11 @@ struct PeopleListView: View {
         // stayed exactly as it was.
         .onChange(of: navigation.isSearchActive) { _, isActive in
             guard isActive, navigation.selection.isPeopleDestination else { return }
-            isSearchFocused = true
+            focusSearchField(selectingContents: !searchText.isEmpty)
         }
         .onChange(of: navigation.searchFocusRequest) { _, _ in
             guard navigation.isSearchActive, navigation.selection.isPeopleDestination else { return }
-            isSearchFocused = true
+            focusSearchField(selectingContents: !searchText.isEmpty)
         }
         .navigationTitle(navigation.windowTitle)
         .accessibilityIdentifier(AccessibilityID.People.list)
@@ -483,6 +484,19 @@ struct PeopleListView: View {
     }
 
     // MARK: - Searching
+
+    private func focusSearchField(selectingContents: Bool) {
+        isSearchFocused = true
+        guard selectingContents else { return }
+
+        // `.searchFocused` makes the toolbar field first responder on the next run-loop turn. Send
+        // the standard AppKit action then, so this keeps working with SwiftUI's private search field.
+        Task { @MainActor in
+            await Task.yield()
+            NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+            navigation.didSelectSearchQuery()
+        }
+    }
 
     /// Runs the search off the main thread and abandons a query the user has typed past.
     ///

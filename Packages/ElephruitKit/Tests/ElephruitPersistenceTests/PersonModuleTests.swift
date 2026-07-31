@@ -94,6 +94,15 @@ struct PersonModuleTests {
         #expect(!stored.searchText.contains("5550192"), "“555” must not match three people for invisible reasons")
     }
 
+    @Test("A complete surname remains searchable when it contains a command word")
+    func surnameContainingPromiseKeywordIsSearchable() throws {
+        let fixture = try Fixture()
+        _ = try fixture.people.createPerson(PersonDraft(fullName: "Caroline Howe"))
+
+        #expect(try fixture.search.search("how").map(\.name) == ["Caroline Howe"])
+        #expect(try fixture.search.search("howe").map(\.name) == ["Caroline Howe"])
+    }
+
     @Test("Adding details never removes the ones already there")
     func addingDetailsIsAdditive() throws {
         let fixture = try Fixture()

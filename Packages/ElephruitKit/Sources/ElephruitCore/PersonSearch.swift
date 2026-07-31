@@ -119,12 +119,34 @@ public enum PersonQueryParser {
     }
 
     private static func consumeOpenPromises(_ text: String, into query: inout PersonQuery) -> String {
-        for phrase in ["open promises", "open promise", "promises", "i promised", "owe"]
-        where text.contains(phrase) {
+        for phrase in ["open promises", "open promise", "promises", "i promised", "owe"] {
+            guard let range = wholePhraseRange(of: phrase, in: text) else { continue }
             query.hasOpenPromises = true
-            return text.replacingOccurrences(of: phrase, with: "")
+            return text.replacingCharacters(in: range, with: "")
         }
         return text
+    }
+
+    /// Finds a search-language keyword only when it stands on its own.
+    ///
+    /// Substring matching made `Howe` contain the promise keyword `owe`, turning a surname search
+    /// into a structural query. Natural-language commands may sit inside a longer sentence, but
+    /// they may never consume letters from an ordinary word.
+    private static func wholePhraseRange(of phrase: String, in text: String) -> Range<String.Index>? {
+        var searchStart = text.startIndex
+
+        while searchStart < text.endIndex,
+              let range = text.range(of: phrase, range: searchStart..<text.endIndex) {
+            let beginsAtBoundary = range.lowerBound == text.startIndex
+                || !text[text.index(before: range.lowerBound)].isLetter
+            let endsAtBoundary = range.upperBound == text.endIndex
+                || !text[range.upperBound].isLetter
+
+            if beginsAtBoundary, endsAtBoundary { return range }
+            searchStart = range.upperBound
+        }
+
+        return nil
     }
 
     /// `haven't contacted in six months` · `not spoken to in a year`.

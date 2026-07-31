@@ -3,6 +3,7 @@ import ElephruitDesign
 import ElephruitModel
 import ElephruitPersistence
 import ElephruitSearch
+import AppKit
 import SwiftUI
 
 /// The middle column: whatever the sidebar selected.
@@ -69,7 +70,7 @@ public struct ItemListView: View {
             }
             .onChange(of: navigation.searchFocusRequest) { _, _ in
                 guard navigation.isSearchActive else { return }
-                isSearchFieldFocused = true
+                focusSearchField(selectingContents: !(session?.text.isEmpty ?? true))
             }
             .accessibilityIdentifier(AccessibilityID.ItemList.root)
     }
@@ -142,7 +143,18 @@ public struct ItemListView: View {
             navigation.didSelectSearchQuery()
         }
         session.listItemIDs = Set(items.map(\.id))
+        focusSearchField(selectingContents: !session.text.isEmpty)
+    }
+
+    private func focusSearchField(selectingContents: Bool) {
         isSearchFieldFocused = true
+        guard selectingContents else { return }
+
+        Task { @MainActor in
+            await Task.yield()
+            NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+            navigation.didSelectSearchQuery()
+        }
     }
 
     /// Today and Upcoming, where a calendar adds something. Elsewhere it would be noise.
