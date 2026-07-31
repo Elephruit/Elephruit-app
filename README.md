@@ -14,14 +14,14 @@ phase plan and its definition of done.
 |---|---|
 | `xcodebuild` Debug and Release | Succeeds, zero warnings |
 | `swift build` (all eight modules) | Succeeds, zero warnings |
-| `swift test` | 922 tests, all passing |
+| `swift test` | 1,161 tests, all passing |
 | Sandboxed, five entitlements only | Verified against the signed binary |
-| Store opens on disk, all fifteen entities materialise | Verified against the running app |
-| Light visual review | Done — People workspace, estimates, groups, duplicates |
+| Store opens on disk, all seventeen entities materialise | Verified against the running app |
+| Light visual review | Done — People workspace, estimates, groups, duplicates. **Not** the calendar |
 | Dark visual review | **Not done** — see below |
 
-The interface has been reviewed on screen in light mode. **Dark mode has not been checked
-visually** — switching it means changing a system setting, which the session that built the People
+The People module has been reviewed on screen in light mode. **The calendar module has not been
+reviewed on screen at all, in either appearance**, and dark mode has never been checked — switching it means changing a system setting, which the session that built the People
 module could not do. What is enforced instead is that no view names a literal colour
 (`SourceHygieneTests.coloursComeFromTheDesignSystem`), so every colour resolves through AppKit's
 semantic palette in light, dark, Increase Contrast, and under a non-default accent. That is the part
@@ -45,6 +45,27 @@ open -n "$(xcodebuild -project Elephruit.xcodeproj -scheme Elephruit -showBuildS
 Sample data then appears under **Settings ▸ Advanced ▸ Load Sample Data**. Switch appearance in
 System Settings ▸ Appearance, and turn on Reduce Motion and Increase Contrast in
 Accessibility ▸ Display to exercise those paths.
+
+### Reviewing the calendar without using your own calendar
+
+Add `-ElephruitUseFixtureCalendar` to the launch arguments above. The app then reads a **synthetic**
+calendar of invented events on fictional calendars, and `EKEventStore` is never constructed.
+
+It deliberately contains the cases worth looking at rather than the ones that are typical: a morning
+where three meetings clash, a four-day trip spanning the all-day band, a recurring standup, an
+invitation that was declined, a meeting that was cancelled and is still visible, a call pinned to
+another time zone, and a subscribed calendar that refuses an edit and says why. A calendar of tidy
+one-hour meetings demonstrates nothing.
+
+The whole module is then reachable from **Calendar** in the sidebar, or `⌘6`. The flag is ignored
+outside development mode, so a release build can never be talked into showing fiction where somebody
+expects their own calendar.
+
+**To use your real calendar instead**, launch without that flag and turn it on in Settings ▸ General
+▸ Calendar. Unlike Contacts, Elephruit *does* write here — creating and changing the events you ask
+it to. What it never writes is anything you record *about* a meeting: linked people, your own notes,
+what you promised. Those stay in Elephruit, and `EventDraft` has nowhere to put them —
+`CalendarWriteSafetyTests` fails if a field is added that could.
 
 ### Reviewing the Contacts import without using your own contacts
 
@@ -109,6 +130,8 @@ Read these before changing anything structural.
 | [22 — People module record](docs/22-people-module-record.md) | What was built, the bugs found, what was deliberately left |
 | [23 — Contacts import scope](docs/23-contacts-import-scope.md) | The six decisions behind reading the address book |
 | [24 — Contacts import record](docs/24-contacts-import-record.md) | Permission, provenance, refresh, and two SDK facts worth knowing |
+| [25 — Calendar module scope](docs/25-calendar-module-scope.md) | The nine decisions behind reading *and writing* the calendar |
+| [26 — Calendar module record](docs/26-calendar-module-record.md) | What was built, seven bugs found, and three EventKit limits worth knowing |
 
 Phase records: [10 — A scope](docs/10-phase-a-scope.md) ·
 [11 — B](docs/11-phase-b-record.md) · [12 — C](docs/12-phase-c-record.md) ·
@@ -120,6 +143,7 @@ Architecture decision records live in [docs/adr/](docs/adr/).
 ## Non-negotiables
 
 - No network requests. The app has no network entitlement.
+- Nothing recorded *about* a person or a meeting is ever written to a system calendar or contact.
 - No analytics, telemetry, or crash-reporting SDKs.
 - Secrets in the Keychain only — never in SwiftData, `UserDefaults`, logs, or source.
 - No force unwraps, no `try!`, no `fatalError` on a recoverable path.
