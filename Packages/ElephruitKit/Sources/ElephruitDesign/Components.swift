@@ -66,7 +66,7 @@ public struct ItemRow<Item: ContentItem>: View {
         if item.kind.supportsStatus, let onToggleStatus {
             Button(action: onToggleStatus) {
                 Image(systemName: item.status.symbolName)
-                    .foregroundStyle(item.isCompleted ? Theme.Colors.completed : Theme.Colors.secondaryText)
+                    .rowTint(item.isCompleted ? Theme.Colors.completed : Theme.Colors.secondaryText)
                     .frame(width: Theme.Size.rowGlyph)
             }
             .buttonStyle(.plain)
@@ -75,7 +75,7 @@ public struct ItemRow<Item: ContentItem>: View {
             .calmAnimation(Theme.Motion.standard, value: item.status)
         } else if showsKindGlyph {
             Image(systemName: item.effectiveSymbolName)
-                .foregroundStyle(glyphColor)
+                .rowTint(glyphColor)
                 .frame(width: Theme.Size.rowGlyph)
                 .accessibilityHidden(true)
         }
@@ -92,7 +92,7 @@ public struct ItemRow<Item: ContentItem>: View {
         HStack(spacing: Theme.Spacing.tight) {
             Text(item.displayTitle)
                 .font(item.isPinned ? Theme.Text.rowTitleEmphasised : Theme.Text.rowTitle)
-                .foregroundStyle(titleColor)
+                .rowForeground(titleEmphasis)
                 .strikethrough(item.isCompleted, color: Theme.Colors.tertiaryText)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -100,16 +100,16 @@ public struct ItemRow<Item: ContentItem>: View {
             if item.isFavorite {
                 Image(systemName: "star.fill")
                     .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.dueToday)
+                    .rowTint(Theme.Colors.dueToday)
                     .accessibilityHidden(true)
             }
         }
     }
 
-    private var titleColor: Color {
-        if item.isCompleted { return Theme.Colors.secondaryText }
-        if item.hasPlaceholderTitle { return Theme.Colors.placeholderText }
-        return Theme.Colors.primaryText
+    private var titleEmphasis: Theme.Emphasis {
+        if item.isCompleted { return .secondary }
+        if item.hasPlaceholderTitle { return .placeholder }
+        return .primary
     }
 
     /// The secondary line is assembled from whatever is actually present.
@@ -129,12 +129,12 @@ public struct ItemRow<Item: ContentItem>: View {
         HStack(spacing: Theme.Spacing.tight) {
             if showsParent, let parentTitle = item.parentTitle, !parentTitle.isEmpty {
                 Text(parentTitle)
-                    .foregroundStyle(Theme.Colors.tertiaryText)
-                Text("·").foregroundStyle(Theme.Colors.tertiaryText)
+                    .rowForeground(.tertiary)
+                Text("·").rowForeground(.tertiary)
             }
 
             Text(item.excerpt)
-                .foregroundStyle(Theme.Colors.secondaryText)
+                .rowForeground(.secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
@@ -152,7 +152,7 @@ public struct ItemRow<Item: ContentItem>: View {
             if let symbol = item.priority.symbolName, item.isActionable {
                 Image(systemName: symbol)
                     .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.overdue)
+                    .rowTint(Theme.Colors.overdue)
                     .accessibilityHidden(true)
             }
 
@@ -184,7 +184,7 @@ public struct DueDateLabel: View {
     public var body: some View {
         Text(relativeText)
             .font(Theme.Text.metadata)
-            .foregroundStyle(color)
+            .rowTint(color)
             .monospacedDigit()
             .accessibilityHidden(true)
     }
@@ -212,6 +212,9 @@ public struct DueDateLabel: View {
 
 /// A single tag.
 public struct TagChip: View {
+    /// `.increased` inside a selected, focused list row. See ``Theme/Emphasis``.
+    @Environment(\.backgroundProminence) private var prominence
+
     private let slug: String
     private let colorName: String?
     private let isSelected: Bool
@@ -225,14 +228,27 @@ public struct TagChip: View {
     public var body: some View {
         Text(displayName)
             .font(Theme.Text.chip)
-            .foregroundStyle(isSelected ? Color.white : tint)
+            .foregroundStyle(foreground)
             .padding(.horizontal, Theme.Spacing.small)
             .padding(.vertical, 1)
             .background(
                 RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                    .fill(isSelected ? tint : tint.opacity(0.14))
+                    .fill(background)
             )
             .accessibilityLabel("Tag \(displayName)")
+    }
+
+    /// On a selected row the tag's own colour is dropped for the selected-content colour: a tinted
+    /// pill on top of the accent fill is a colour clash *and* unreadable, and which tag it is matters
+    /// more than which colour the user gave it.
+    private var foreground: AnyShapeStyle {
+        if prominence == .increased { return AnyShapeStyle(.primary) }
+        return AnyShapeStyle(isSelected ? Color.white : tint)
+    }
+
+    private var background: AnyShapeStyle {
+        if prominence == .increased { return AnyShapeStyle(.quaternary) }
+        return AnyShapeStyle(isSelected ? tint : tint.opacity(0.14))
     }
 
     /// Hierarchical tags show only their leaf in a chip; the full path is available in the
@@ -268,7 +284,7 @@ public struct TagChipRow: View {
             if slugs.count > limit {
                 Text("+\(slugs.count - limit)")
                     .font(Theme.Text.chip)
-                    .foregroundStyle(Theme.Colors.tertiaryText)
+                    .rowForeground(.tertiary)
             }
         }
         .accessibilityElement(children: .combine)

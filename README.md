@@ -14,7 +14,7 @@ phase plan and its definition of done.
 |---|---|
 | `xcodebuild` Debug and Release | Succeeds, zero warnings |
 | `swift build` (all eight modules) | Succeeds, zero warnings |
-| `swift test` | 902 tests, all passing |
+| `swift test` | 922 tests, all passing |
 | Sandboxed, five entitlements only | Verified against the signed binary |
 | Store opens on disk, all fifteen entities materialise | Verified against the running app |
 | Light visual review | Done — People workspace, estimates, groups, duplicates |
@@ -25,7 +25,12 @@ visually** — switching it means changing a system setting, which the session t
 module could not do. What is enforced instead is that no view names a literal colour
 (`SourceHygieneTests.coloursComeFromTheDesignSystem`), so every colour resolves through AppKit's
 semantic palette in light, dark, Increase Contrast, and under a non-default accent. That is the part
-that stays true; it is not a substitute for looking. To check it yourself:
+that stays true; it is not a substitute for looking.
+
+The same applies to **selected** rows, which are their own appearance and were their own bug: naming
+a colour opts a row out of the selected-content colour a focused `List` sets, so every row in the app
+was dark text on the accent fill. Rows now ask for a `Theme.Emphasis` instead of a colour and
+`RowEmphasisTests` pins the rule down. To check any of this yourself:
 
 ```bash
 xcodebuild -project Elephruit.xcodeproj -scheme Elephruit -configuration Debug build
