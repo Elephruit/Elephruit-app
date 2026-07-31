@@ -166,7 +166,13 @@ private struct ValueListSection: View {
                 HStack(spacing: Theme.Spacing.small) {
                     LabelField(label: $value.label, kind: kind)
 
-                    TextField(kind.valuePrompt, text: $value.value)
+                    TextField(
+                        "Value",
+                        text: $value.value,
+                        prompt: Text(kind.valuePrompt)
+                    )
+                        .labelsHidden()
+                        .accessibilityLabel(kind.displayName)
                         .textFieldStyle(.roundedBorder)
 
                     Button {
