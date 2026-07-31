@@ -617,7 +617,7 @@ struct PersonQuickActions: View {
                     entry: interactionAction,
                     tint: .purple,
                     showsTitle: true,
-                    isProminent: true
+                    isProminent: false
                 ) { perform(interactionAction) }
             }
 
