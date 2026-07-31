@@ -631,7 +631,7 @@ public enum EventPhraseParser {
         }
     }
 
-    static func shortZoneName(_ identifier: String) -> String {
+    public static func shortZoneName(_ identifier: String) -> String {
         identifier.split(separator: "/").last.map { $0.replacingOccurrences(of: "_", with: " ") } ?? identifier
     }
 
