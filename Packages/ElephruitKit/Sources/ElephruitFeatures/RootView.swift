@@ -49,8 +49,12 @@ public struct RootView: View {
     /// this module wants forces the move; relaxing them a moment later gives the divider back.
     @State private var pinnedWidths: [ModuleShellLayout.Column: CGFloat] = [:]
 
-    /// Tells a divider the user dragged from one the window moved. See ``PaneDragDetector``.
-    @State private var dragDetectors: [ModuleShellLayout.Column: PaneDragDetector] = [:]
+    /// Watches the columns and records only the widths the user chose.
+    ///
+    /// A reference type rather than a dictionary in `@State`, and that is the point: it is written
+    /// to on every frame of every animation the shell runs, and writing to `@State` would invalidate
+    /// this view each time. See ``PaneWidthRecorder``.
+    @State private var widthRecorder = PaneWidthRecorder()
 
     @State private var isExportPresented = false
     @State private var isImportPresented = false
@@ -227,15 +231,46 @@ public struct RootView: View {
     /// The column widths the module this window is in has asked for.
     private var shellLayout: ModuleShellLayout { navigation.activeModule.shellLayout }
 
+    /// What primary navigation needs, at the current text size.
+    private var sidebarWidths: SidebarWidths {
+        SidebarMetrics.widths(fittingTitles: SidebarRegistry.nonTruncatingTitles)
+    }
+
+    /// Every column's width, decided together.
+    ///
+    /// ### Why one value rather than a question per pane
+    /// Because the panes were asked separately and each was told about the *window*. Each one then
+    /// helped itself to the space the window had spare, and there is only one lot of spare space —
+    /// so the list took it, the editor got 118 points of it, and the empty state in there wrapped a
+    /// syllable to a line. Which columns fit, and how wide each is, is one calculation over all of
+    /// them; this is where the window asks for it and
+    /// ``ElephruitDesign/ModuleShellLayout/widths(windowWidth:sidebarWidth:showsList:userWantsInspector:hasSelection:stored:)``
+    /// is where it is worked out and where it is tested.
+    private var shellWidths: ModuleShellLayout.Widths {
+        shellLayout.widths(
+            // Before the window has been measured, assume the size it opens at rather than zero —
+            // a window of no width holds no columns, and the first frame would drop the editor and
+            // then put it back.
+            windowWidth: windowWidth > 0 ? windowWidth : Theme.Size.assumedWindowWidth,
+            sidebarWidth: navigation.layoutMode.showsSidebar ? sidebarWidths.minimum : nil,
+            showsList: navigation.layoutMode.showsList,
+            userWantsInspector: navigation.isInspectorVisible,
+            hasSelection: hasInspectableSelection,
+            stored: moduleLayout.storedWidths(in: navigation.activeModule)
+        )
+    }
+
     private var splitView: some View {
         NavigationSplitView(columnVisibility: columnVisibilityBinding) {
             SidebarView(navigation: navigation)
                 // Derived, not fixed: the minimum is whatever primary navigation needs at the current
                 // text size, so a long or localised title widens the sidebar rather than truncating.
+                // Derived *once* per text size, because this runs on every evaluation of this body
+                // and measuring twenty-five titles is not free — see ``SidebarMetrics/widths(fittingTitles:)``.
                 .navigationSplitViewColumnWidth(
-                    min: SidebarMetrics.minimumWidth(fittingTitles: SidebarRegistry.nonTruncatingTitles),
-                    ideal: SidebarMetrics.idealWidth(fittingTitles: SidebarRegistry.nonTruncatingTitles),
-                    max: SidebarMetrics.maximumWidth
+                    min: sidebarWidths.minimum,
+                    ideal: sidebarWidths.ideal,
+                    max: sidebarWidths.maximum
                 )
         } content: {
             // Time replaces the list rather than opening beside it: it *is* the middle column's
@@ -274,19 +309,20 @@ public struct RootView: View {
             .moduleColumnWidth(
                 .primary,
                 layout: shellLayout,
-                store: moduleLayout,
-                module: navigation.activeModule,
-                windowWidth: windowWidth,
+                resolved: shellWidths.primary,
                 pinned: pinnedWidths[.primary]
             )
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
-                recordDrag(of: .primary, to: width)
+                sample(width, of: .primary)
             }
         } detail: {
             // A canvas module — the calendar, the time sheet — has nothing to put in a third column,
             // and the honest expression of that is no column rather than a narrow one. What used to
             // be here was 720 points of "Nothing selected" sitting where the month should have been.
-            if shellLayout.detail.isAvailable {
+            //
+            // A window too narrow to hold a usable editor gets no editor, on the same terms: a strip
+            // of wrapped fragments is not a smaller editor, it is a broken one.
+            if let detailWidth = shellWidths.detail {
                 ItemDetailView(navigation: navigation)
                     .frame(
                         // Focus mode caps the measure: long lines are hard to read, and the point of
@@ -297,13 +333,11 @@ public struct RootView: View {
                     .moduleColumnWidth(
                         .detail,
                         layout: shellLayout,
-                        store: moduleLayout,
-                        module: navigation.activeModule,
-                        windowWidth: windowWidth,
+                        resolved: detailWidth,
                         pinned: pinnedWidths[.detail]
                     )
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
-                        recordDrag(of: .detail, to: width)
+                        sample(width, of: .detail)
                     }
             } else {
                 Color.clear
@@ -315,12 +349,8 @@ public struct RootView: View {
             InspectorView(navigation: navigation)
                 .inspectorColumnWidth(
                     min: shellLayout.inspector.width.minimum,
-                    ideal: moduleLayout.width(
-                        of: .inspector,
-                        in: navigation.activeModule,
-                        available: windowWidth
-                    ),
-                    max: shellLayout.inspector.width.maximum ?? windowWidth
+                    ideal: shellWidths.inspector ?? shellLayout.inspector.width.ideal,
+                    max: shellWidths.inspector ?? shellLayout.inspector.width.ideal
                 )
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
@@ -331,6 +361,16 @@ public struct RootView: View {
         // its divider wherever it was last put, so without this, widening the pane to read somebody's
         // profile also moved the calendar's divider — and the calendar had no say in it.
         .task(id: navigation.activeModule) { await applyModuleLayout() }
+        .onAppear { wireWidthRecorder() }
+        // Hiding the sidebar makes every other column wider without the window changing size, which
+        // is precisely what the drag test mistakes for a preference. Saying so in advance is what
+        // stops collapsing the sidebar from rewriting the width of the pane beside it.
+        .onChange(of: navigation.layoutMode) { _, _ in
+            widthRecorder.expectShellMove(of: [.primary, .detail])
+        }
+        .onChange(of: inspectorBinding.wrappedValue) { _, _ in
+            widthRecorder.expectShellMove(of: [.primary, .detail])
+        }
         // A pane that closed itself for want of anything to show comes back when there is something.
         // A pane the *user* closed stays closed — see `shouldOpenAfterSelection`.
         .onChange(of: hasInspectableSelection) { _, hasSelection in
@@ -492,7 +532,7 @@ public struct RootView: View {
         let available = windowWidth
 
         // A drag detector that saw the old module's widths would read the snap as a preference.
-        for column in dragDetectors.keys { dragDetectors[column]?.reset() }
+        widthRecorder.expectShellMove(of: [.primary, .detail])
 
         pinnedWidths = [
             .primary: moduleLayout.width(of: .primary, in: module, available: available),
@@ -504,16 +544,29 @@ public struct RootView: View {
         pinnedWidths = [:]
     }
 
-    /// Remembers a width the user chose, and ignores one the window imposed.
-    private func recordDrag(of column: ModuleShellLayout.Column, to width: CGFloat) {
-        guard width > 0, windowWidth > 0, pinnedWidths.isEmpty else { return }
+    /// Hands a column's current width to the recorder, which decides later whether it was a choice.
+    ///
+    /// Nothing is stored here and nothing is invalidated: the recorder is a reference type precisely
+    /// so that a stream of widths arriving one per frame does not redraw the window that produced
+    /// them. Samples taken while the shell has the columns pinned are dropped outright — those
+    /// widths are the shell's, and it already knows what it asked for.
+    private func sample(_ width: CGFloat, of column: ModuleShellLayout.Column) {
+        guard pinnedWidths.isEmpty else { return }
+        widthRecorder.sample(width, of: column, windowWidth: windowWidth)
+    }
 
-        var detector = dragDetectors[column] ?? PaneDragDetector()
-        let isDrag = detector.isUserDrag(columnWidth: width, windowWidth: windowWidth)
-        dragDetectors[column] = detector
+    /// Says what to do with a width once the recorder has decided it was one the user chose.
+    ///
+    /// The two models are captured by name rather than through `self`, deliberately: the recorder
+    /// holds this closure for the window's lifetime, and capturing the view would mean the closure
+    /// held the `@State` that holds the recorder.
+    private func wireWidthRecorder() {
+        let layout = moduleLayout
+        let navigation = navigation
 
-        guard isDrag else { return }
-        moduleLayout.setWidth(width, of: column, in: navigation.activeModule, available: windowWidth)
+        widthRecorder.onDrag = { column, width, windowWidth in
+            layout.setWidth(width, of: column, in: navigation.activeModule, available: windowWidth)
+        }
     }
 
     // MARK: - Bindings
@@ -555,15 +608,17 @@ public struct RootView: View {
     /// the module makes about itself — see ``DetailPanePolicy/isVisible(userWants:hasSelection:windowWidth:)`` —
     /// and neither overwrites what the user asked for, so widening the window again brings the
     /// inspector back rather than making them ask twice.
+    /// The inspector is open when the user asked for it *and* the shell found room for a usable one.
+    ///
+    /// Both halves are decided in one place now. The module's policy still says whether an inspector
+    /// belongs here at all and whether it needs a selection to be about; what is new is that the
+    /// arithmetic gets a say — a pane that would have to be squeezed below its minimum is not shown
+    /// at all, because a strip of wrapped fragments is not a narrower inspector, it is a broken one.
+    /// Nothing here overwrites what the user asked for, so widening the window brings it back rather
+    /// than making them ask twice.
     private var inspectorBinding: Binding<Bool> {
         Binding(
-            get: {
-                shellLayout.inspector.isVisible(
-                    userWants: navigation.isInspectorVisible,
-                    hasSelection: hasInspectableSelection,
-                    windowWidth: windowWidth
-                )
-            },
+            get: { shellWidths.inspector != nil },
             set: { navigation.isInspectorVisible = $0 }
         )
     }

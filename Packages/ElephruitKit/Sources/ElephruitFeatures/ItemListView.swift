@@ -16,7 +16,6 @@ public struct ItemListView: View {
     private let navigation: NavigationModel
 
     @State private var items: [Item] = []
-    @State private var savedSearchResults: [SearchResult] = []
     @State private var isLoading = false
 
     /// Built on first appearance, because the engine comes from the environment.
@@ -613,29 +612,50 @@ public struct ItemListView: View {
     // MARK: - Data
 
     /// Changes that should trigger a refetch. A single value so `.task(id:)` handles it.
-    /// Re-reads the calendar when the destination changes or the feature is turned on.
-    private var calendarToken: String {
-        "\(String(describing: navigation.selection))|\(services?.calendar.isEnabled ?? false)|\(services?.calendar.events.count ?? 0)"
+    ///
+    /// ### Why these are values rather than a joined string
+    /// They were `String(describing:)` over the selection, which is reflection: about 1.7µs a call,
+    /// on a property read on every evaluation of this view's body, to produce a string whose only
+    /// use is to be compared for equality. Every part of it is already `Equatable`, which is all
+    /// `task(id:)` asks for, so the comparison can simply be the comparison.
+    private struct CalendarToken: Equatable {
+        var selection: SidebarSelection
+        var isEnabled: Bool
+        var eventCount: Int
     }
 
-    private var reloadToken: String {
-        var parts = [
-            String(describing: navigation.selection),
-            String(describing: navigation.sortOverride),
-        ]
-        // Ensures a refetch after items change, since the repository is not observable.
-        parts.append(String(items.count))
-        return parts.joined(separator: "|")
+    private var calendarToken: CalendarToken {
+        CalendarToken(
+            selection: navigation.selection,
+            isEnabled: services?.calendar.isEnabled ?? false,
+            eventCount: services?.calendar.events.count ?? 0
+        )
     }
 
-    private var displayedItems: [Item] {
-        if case .savedSearch = navigation.selection {
-            return savedSearchResults.compactMap { result in
-                try? services?.items.item(id: result.item.id)
-            }
-        }
-        return items
+    private struct ReloadToken: Equatable {
+        var selection: SidebarSelection
+        var sort: ItemQuery.Sort?
+
+        /// The library's own change counter — see ``AppServices/changeToken``.
+        ///
+        /// This used to be `items.count`, which was a loop rather than a signal: `reload` is the
+        /// only thing that sets `items`, so every navigation fetched, saw its own new count, and
+        /// fetched a second time. On the reduced benchmark corpus that is another twenty-six
+        /// milliseconds of main-thread work per module switch, spent confirming the answer it had
+        /// just been given. It also caught nothing: a title edited elsewhere leaves the count alone.
+        /// The change token is what the rest of the app already announces a write with.
+        var changeToken: Int
     }
+
+    private var reloadToken: ReloadToken {
+        ReloadToken(
+            selection: navigation.selection,
+            sort: navigation.sortOverride,
+            changeToken: services?.changeToken ?? 0
+        )
+    }
+
+    private var displayedItems: [Item] { items }
 
     private func reload() async {
         guard let services else { return }
@@ -654,9 +674,16 @@ public struct ItemListView: View {
         }
     }
 
+    /// Runs a saved search and resolves its hits to items, once.
+    ///
+    /// The resolution used to live in `displayedItems`, which is a computed property the body reads
+    /// three times — for the empty check, for the count in the subtitle, and for the rows — so a
+    /// saved search matching five hundred items performed fifteen hundred store lookups on every
+    /// evaluation. A search result names an item; turning the names into items is loading, and
+    /// loading belongs here.
     private func reloadSavedSearch(id: UUID, services: AppServices) async {
         guard let search = savedSearch(id: id, services: services) else {
-            savedSearchResults = []
+            items = []
             return
         }
 
@@ -665,10 +692,11 @@ public struct ItemListView: View {
 
         let query = SearchQueryParser.parse(search.queryString)
         do {
-            savedSearchResults = try await services.search.search(query, limit: 500)
+            let results = try await services.search.search(query, limit: 500)
+            items = results.compactMap { try? services.items.item(id: $0.item.id) }
         } catch {
             services.lastError = error
-            savedSearchResults = []
+            items = []
         }
     }
 

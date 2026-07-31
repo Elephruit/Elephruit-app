@@ -16,12 +16,23 @@ extension View {
     ///
     /// A module that says its pane is not resizable is pinned permanently, which is the same
     /// mechanism and needs no second one.
+    ///
+    /// ### Why there is no `if` in here
+    /// There was, and it was the whole fault. This used to return `Group { if pinned { … } else { … } }`,
+    /// and a split view reads a column's width from the column's own content — a width buried inside
+    /// a `Group`'s conditional never reached it. So *none* of ``ModuleLayoutPolicy``'s numbers were
+    /// ever applied to the middle or the detail column, and both columns sat wherever AppKit's
+    /// remembered divider happened to leave them: a list at 1,170 points against a declared maximum
+    /// of 480, and an editor squeezed to 118 against a declared minimum of 420.
+    ///
+    /// The tell was which columns were *right*. The sidebar and the inspector apply their modifiers
+    /// directly and were correctly sized in every module; the two routed through here were the two
+    /// that were broken. A pinned column is now expressed as a range whose three numbers are equal,
+    /// which is the same statement without a branch to lose it in.
     func moduleColumnWidth(
         _ column: ModuleShellLayout.Column,
         layout: ModuleShellLayout,
-        store: ModuleLayoutStore,
-        module: AppModule?,
-        windowWidth: CGFloat,
+        resolved: CGFloat,
         pinned: CGFloat?
     ) -> some View {
         let policy: DetailPanePolicy? = switch column {
@@ -31,28 +42,22 @@ extension View {
         }
 
         let bounds: PaneWidth = switch column {
-        case .primary: layout.primary
+        case .primary, .sidebar: layout.primary
         case .detail: layout.detail.width
         case .inspector: layout.inspector.width
-        case .sidebar: layout.primary
         }
 
-        let resolved = store.width(of: column, in: module, available: windowWidth)
         let fixedAt: CGFloat? = pinned ?? (policy?.isResizable == false ? resolved : nil)
 
-        return Group {
-            if let fixedAt {
-                self.navigationSplitViewColumnWidth(fixedAt)
-            } else {
-                self.navigationSplitViewColumnWidth(
-                    min: bounds.minimum,
-                    ideal: resolved,
-                    // An unbounded column is one the module wants to fill whatever is left — the
-                    // calendar's canvas. Handing it the window's own width says that without
-                    // needing `.infinity`, which a split view cannot divide by.
-                    max: bounds.maximum ?? max(windowWidth, bounds.minimum)
-                )
-            }
-        }
+        // The ceiling is what the shell worked out this column may have, never the whole window: a
+        // column that may grow to the window's width is a column that can take the space the pane
+        // beside it needed, which is what left an editor at 118 points.
+        let ceiling = max(resolved, bounds.minimum)
+
+        return navigationSplitViewColumnWidth(
+            min: fixedAt ?? bounds.minimum,
+            ideal: fixedAt ?? resolved,
+            max: fixedAt ?? ceiling
+        )
     }
 }
