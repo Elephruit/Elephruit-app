@@ -6,8 +6,8 @@ import SwiftUI
 
 /// A temporary switch for finding the People module's remaining load-time cost empirically.
 ///
-/// The production People list and the sidebar's fixed destinations and groups are enabled now.
-/// Counts, duplicate detection, celebrations, and the linked-contact scope remain isolated. Contact
+/// The production People list and the sidebar's fixed destinations, groups, and linked-contact scope
+/// are enabled now. Counts, duplicate detection, and celebration derivation remain isolated. Contact
 /// source badges are deliberately absent from rows: they added store work without useful information.
 enum PeoplePerformanceIsolation {
     static let usesIsolatedSidebar = true
@@ -21,10 +21,24 @@ struct IsolatedPeopleSidebarSection: View {
     let navigation: NavigationModel
 
     @State private var groups: [PersonGroupSummary] = []
+    @State private var hasLinkedPeople = false
 
     var body: some View {
         Section {
             ForEach(PeopleSidebarSection.scopes, id: \.self) { scope in
+                Button {
+                    navigation.select(.people(scope))
+                } label: {
+                    Label(scope.title, systemImage: scope.symbolName)
+                }
+                .buttonStyle(.plain)
+                .tag(SidebarSelection.people(scope))
+                .help(scope.hint)
+                .accessibilityIdentifier(SidebarSelection.people(scope).accessibilityIdentifier)
+            }
+
+            if hasLinkedPeople {
+                let scope = PeopleScope.fromContacts
                 Button {
                     navigation.select(.people(scope))
                 } label: {
@@ -51,12 +65,13 @@ struct IsolatedPeopleSidebarSection: View {
                 .accessibilityIdentifier(SidebarSelection.people(scope).accessibilityIdentifier)
             }
         }
-        .task { loadGroups() }
+        .task { loadSidebar() }
     }
 
-    private func loadGroups() {
+    private func loadSidebar() {
         guard let services else { return }
         groups = (try? services.personGroups.allGroupSummaries()) ?? []
+        hasLinkedPeople = (try? services.contactImports.hasLinkedPeople()) ?? false
     }
 }
 
