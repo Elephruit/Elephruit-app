@@ -141,6 +141,32 @@ public enum SchemaV4: VersionedSchema {
     }
 }
 
+/// The fifth schema: the address book as the CRM's starting population.
+///
+/// Three new entities — ``SystemContactLink``, ``ImportedContactValue``, ``ContactImportSession`` —
+/// and nothing else. **Additive**, so a store opened under this version gains three empty tables and
+/// keeps everything it had. `PersonProfile` is untouched: `contactsIdentifier` was already there and
+/// is now mirrored from the link rather than replaced, which is what keeps every view written before
+/// this slice working unchanged.
+///
+/// ### Why lightweight inference is still right
+/// The same argument as `SchemaV4`, with more evidence behind it now: `TimeEntry` added an entity and
+/// a relationship under a single declared version and migrates real bytes correctly, and `SchemaV4`
+/// did it three times over. `RealStoreMigrationTests` carries a store written before any of them all
+/// the way here. ADR 0005 reserves the model-type freeze for the first change that cannot be
+/// inferred — a rename, a type change, a computed value — and there is none.
+public enum SchemaV5: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 5) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV4.models + [
+            SystemContactLink.self,
+            ImportedContactValue.self,
+            ContactImportSession.self,
+        ]
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -153,7 +179,7 @@ public enum SchemaV4: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV4.self]
+        [SchemaV5.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -173,13 +199,13 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV4.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV5.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV4.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV5.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {
-        let version = SchemaV4.versionIdentifier
+        let version = SchemaV5.versionIdentifier
         return "\(version.major).\(version.minor).\(version.patch)"
     }
 }

@@ -29,6 +29,29 @@ public final class ContactsService {
     /// The last search's results.
     public private(set) var searchResults: [ContactSummary] = []
 
+    /// When linked contacts were last successfully refreshed.
+    public private(set) var lastRefreshedAt: Date?
+
+    /// What the last refresh did, shown once in Settings.
+    public private(set) var lastRefreshSummary: String?
+
+    public private(set) var isRefreshing = false
+
+    /// The opaque change-history token, persisted so an incremental refresh survives a relaunch.
+    ///
+    /// In `UserDefaults` rather than the store: it is a property of *this machine's* view of the
+    /// address book, it is meaningless anywhere else, and it must never travel in an archive.
+    private var historyToken: Data? {
+        get { defaults.data(forKey: Self.historyTokenKey) }
+        set {
+            if let newValue { defaults.set(newValue, forKey: Self.historyTokenKey) }
+            else { defaults.removeObject(forKey: Self.historyTokenKey) }
+        }
+    }
+
+    static let historyTokenKey = "contacts.historyToken"
+    static let lastRefreshKey = "contacts.lastRefreshedAt"
+
     private var provider: any ContactsProviding
     private let makeProvider: @Sendable () -> any ContactsProviding
     private let dateProvider: any DateProvider
@@ -48,6 +71,9 @@ public final class ContactsService {
         let enabled = defaults.bool(forKey: Self.enabledKey)
         self.isEnabled = enabled
         self.provider = enabled ? makeProvider() : NoContactsProvider()
+
+        let stamp = defaults.double(forKey: Self.lastRefreshKey)
+        self.lastRefreshedAt = stamp > 0 ? Date(timeIntervalSince1970: stamp) : nil
     }
 
     // MARK: - Enabling
@@ -79,6 +105,11 @@ public final class ContactsService {
         accounts = []
         searchResults = []
         authorization = .notRequested
+
+        // The token is dropped because it describes a store this app has stopped reading, and a
+        // stale one would produce a wrong delta if access came back much later. Nothing in the CRM
+        // is touched: turning the integration off stops refreshes, it does not remove people.
+        historyToken = nil
     }
 
     /// Re-reads the current authorisation without prompting.
@@ -108,6 +139,70 @@ public final class ContactsService {
     public func contact(withIdentifier identifier: String) async -> ContactSummary? {
         await provider.contact(withIdentifier: identifier)
     }
+
+    public func allContainers() async -> [ContactAccount] {
+        guard isEnabled else { return [] }
+        accounts = await provider.accounts()
+        return accounts
+    }
+
+    /// Streams every contact, in batches, without holding the library twice.
+    @discardableResult
+    public func enumerate(
+        containers: [String],
+        onBatch: @escaping @Sendable ([SystemContact]) async -> Void
+    ) async -> Int {
+        guard isEnabled else { return 0 }
+        return await provider.enumerateContacts(inContainers: containers, onBatch: onBatch)
+    }
+
+    public func systemContact(withIdentifier identifier: String) async -> SystemContact? {
+        guard isEnabled else { return nil }
+        return await provider.systemContact(withIdentifier: identifier)
+    }
+
+    /// Re-finds a contact whose identifier stopped resolving, by email or phone.
+    public func systemContact(matching signature: ContactIdentitySignature) async -> SystemContact? {
+        guard isEnabled else { return nil }
+        return await provider.systemContact(matching: signature)
+    }
+
+    public func thumbnail(forIdentifier identifier: String) async -> Data? {
+        guard isEnabled else { return nil }
+        return await provider.thumbnail(forIdentifier: identifier)
+    }
+
+    // MARK: - Change tracking
+
+    public func currentHistoryToken() async -> Data? {
+        await provider.currentHistoryToken()
+    }
+
+    /// What changed since the stored token, or `nil` when a full reconciliation is needed.
+    ///
+    /// `nil` is a normal answer, not a failure: it is what a missing, expired, or unsupported token
+    /// produces, and the caller reconciles fully instead. On this SDK the live provider always
+    /// answers `nil` — see `SystemContactsProvider.currentHistoryToken()`.
+    public func changesSinceStoredToken() async -> ContactChangeSet? {
+        guard let token = historyToken else { return nil }
+        return await provider.changes(since: token)
+    }
+
+    public func storeHistoryToken(_ token: Data?) {
+        historyToken = token
+    }
+
+    public func noteRefreshed(at date: Date, summary: String?) {
+        lastRefreshedAt = date
+        lastRefreshSummary = summary
+        defaults.set(date.timeIntervalSince1970, forKey: Self.lastRefreshKey)
+    }
+
+    public func beginRefreshing() { isRefreshing = true }
+    public func endRefreshing() { isRefreshing = false }
+
+    /// Fires when the address book changes.
+    public var changeStream: AsyncStream<Void> { provider.changes }
 
     // MARK: - Bridging
 

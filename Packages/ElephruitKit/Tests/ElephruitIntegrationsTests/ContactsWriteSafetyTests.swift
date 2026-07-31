@@ -94,14 +94,20 @@ struct ContactsWriteSafetyTests {
     /// prevent — data not fetched cannot leak.
     @Test("The adapter fetches no key it does not display")
     func adapterFetchesOnlyWhatItShows() throws {
+        // Revisited when the import arrived. `CNContactDatesKey` and `CNContactRelationsKey` left
+        // this list because they are now genuinely used — anniversaries appear as celebrations, and
+        // relations are shown as suggestions the user may act on. The rule is "nothing fetched that
+        // nothing displays", not "nothing new ever", and a key earns its place by being rendered.
+        //
+        // `CNContactNoteKey` stays forbidden and always will: reading it needs an entitlement Apple
+        // grants by request, the CRM has its own notes, and mixing the two is the flattening this
+        // whole module exists to prevent. Full-resolution image data stays forbidden because it is
+        // the largest thing Contacts holds and a list never needs it.
         let forbiddenKeys = [
             "CNContactNoteKey",
             "CNContactImageDataKey",
-            "CNContactThumbnailImageDataKey",
             "CNContactSocialProfilesKey",
             "CNContactInstantMessageAddressesKey",
-            "CNContactRelationsKey",
-            "CNContactDatesKey",
         ]
 
         var offenders: [String] = []
@@ -120,6 +126,34 @@ struct ContactsWriteSafetyTests {
         }
 
         #expect(offenders.isEmpty, "Fetching a key nothing displays is data taken for no reason: \(offenders)")
+    }
+
+    /// Thumbnails are legitimate and expensive, so *where* they are fetched is the thing to pin.
+    ///
+    /// One occurrence, in the per-contact `thumbnail(forIdentifier:)` path. Adding it to either bulk
+    /// key list would make a scan of several thousand contacts drag every avatar off disk to draw a
+    /// list that shows initials — which is precisely how an import becomes a beachball.
+    @Test("Image data is fetched one contact at a time, never for a whole scan")
+    func thumbnailsAreFetchedOnDemand() throws {
+        var occurrences = 0
+
+        for file in Self.swiftFiles(under: "ElephruitIntegrations") {
+            guard let contents = try? String(contentsOf: file, encoding: .utf8) else { continue }
+
+            for line in contents.components(separatedBy: .newlines) {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.hasPrefix("//"), !trimmed.hasPrefix("///") else { continue }
+                if trimmed.contains("CNContactThumbnailImageDataKey") { occurrences += 1 }
+            }
+        }
+
+        #expect(
+            occurrences <= 1,
+            """
+            The thumbnail key appears \(occurrences) times. It belongs only in the on-demand \
+            per-contact fetch; putting it in a bulk key list pulls every image off disk during a scan.
+            """
+        )
     }
 
     @Test("A refused Contacts permission is a state with nothing in it, not an error")

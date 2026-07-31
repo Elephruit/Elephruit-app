@@ -89,36 +89,10 @@ public final class NoCalendarProvider: CalendarProviding {
 
 // MARK: - Contacts
 
-/// A labelled value as Contacts holds it.
-public struct ContactLabelledValue: Sendable, Hashable {
-    public var label: String
-    public var value: String
-
-    public init(label: String, value: String) {
-        self.label = label
-        self.value = value
-    }
-}
-
-/// One of the accounts the operating system has configured — iCloud, Google, Exchange, On My Mac.
-///
-/// Surfaced so the user can see which account a linked record came from, and so a library that reads
-/// three accounts can say so rather than presenting one undifferentiated list.
-public struct ContactAccount: Sendable, Hashable, Identifiable {
-    public var id: String
-    public var name: String
-    public var contactCount: Int
-
-    /// Whether the account is read-only to this app — an Exchange directory usually is.
-    public var isReadOnly: Bool
-
-    public init(id: String, name: String, contactCount: Int, isReadOnly: Bool = false) {
-        self.id = id
-        self.name = name
-        self.contactCount = contactCount
-        self.isReadOnly = isReadOnly
-    }
-}
+// `ContactLabelledValue` and `ContactAccount` moved to `ElephruitCore` when `SystemContact` came to
+// need them. They are pure value types with no framework dependency, and Core is where the domain
+// vocabulary lives; leaving them here would have made Core depend on Integrations, which is the wrong
+// way round the dependency graph.
 
 /// A contact, as the app understands it. Contacts remains authoritative for what it holds; this is a
 /// read-only projection used to offer links.
@@ -207,6 +181,83 @@ public protocol ContactsProviding: Sendable {
 
     /// One contact, for refreshing a stored link. `nil` means the record is gone.
     func contact(withIdentifier identifier: String) async -> ContactSummary?
+
+    // MARK: Import
+
+    /// Every contact available, as **unified** records.
+    ///
+    /// Unified is the whole point: macOS already knows that the iCloud Maya and the Google Maya are
+    /// one person, and asking for the unified view means the CRM inherits that rather than
+    /// re-deriving it and disagreeing. Passing container identifiers narrows the scan; passing none
+    /// takes everything.
+    ///
+    /// Streamed in batches through `onBatch` rather than returned whole, so a library of several
+    /// thousand never exists twice in memory and the interface can show progress. Returns the total
+    /// seen.
+    func enumerateContacts(
+        inContainers containerIdentifiers: [String],
+        onBatch: @Sendable ([SystemContact]) async -> Void
+    ) async -> Int
+
+    /// One unified contact, in full. `nil` means the record no longer resolves.
+    func systemContact(withIdentifier identifier: String) async -> SystemContact?
+
+    /// The contact whose signature matches, for re-finding a record whose identifier changed.
+    ///
+    /// Deliberately narrow: it matches on email and phone, never on name alone.
+    func systemContact(matching signature: ContactIdentitySignature) async -> SystemContact?
+
+    /// A thumbnail for one contact, fetched only when a person is actually on screen.
+    ///
+    /// Separate from the snapshot because image data is by far the largest thing Contacts holds, and
+    /// fetching it for a whole library to draw a list is how an import becomes a beachball.
+    func thumbnail(forIdentifier identifier: String) async -> Data?
+
+    // MARK: Change tracking
+
+    /// An opaque token marking the current state of the store, for incremental refreshes later.
+    ///
+    /// `nil` when the platform cannot supply one, which is a supported state: the sync layer falls
+    /// back to full reconciliation rather than failing.
+    func currentHistoryToken() async -> Data?
+
+    /// What changed since `token`.
+    ///
+    /// Returns `nil` when the token is missing, expired, or unreadable — the caller's cue to
+    /// reconcile fully. That is a normal outcome after a long gap, not an error.
+    func changes(since token: Data) async -> ContactChangeSet?
+
+    /// Fires when the Contacts database changes.
+    ///
+    /// An `AsyncStream` rather than a notification name, so a consumer neither imports Contacts nor
+    /// has to remember to remove an observer — the same arrangement `CalendarProviding` uses.
+    var changes: AsyncStream<Void> { get }
+}
+
+/// What changed in the Contacts store since a token was taken.
+public struct ContactChangeSet: Sendable, Hashable {
+    /// Identifiers of contacts added or updated.
+    public var changedIdentifiers: Set<String>
+
+    /// Identifiers of contacts deleted.
+    public var deletedIdentifiers: Set<String>
+
+    /// The token to store for next time.
+    public var newToken: Data?
+
+    public init(
+        changedIdentifiers: Set<String> = [],
+        deletedIdentifiers: Set<String> = [],
+        newToken: Data? = nil
+    ) {
+        self.changedIdentifiers = changedIdentifiers
+        self.deletedIdentifiers = deletedIdentifiers
+        self.newToken = newToken
+    }
+
+    public var isEmpty: Bool {
+        changedIdentifiers.isEmpty && deletedIdentifiers.isEmpty
+    }
 }
 
 /// The default, and what the app uses until the user turns Contacts on.
@@ -227,6 +278,20 @@ public struct NoContactsProvider: ContactsProviding {
     public func accounts() async -> [ContactAccount] { [] }
     public func contacts(matching query: String) async -> [ContactSummary] { [] }
     public func contact(withIdentifier identifier: String) async -> ContactSummary? { nil }
+
+    public func enumerateContacts(
+        inContainers containerIdentifiers: [String],
+        onBatch: @Sendable ([SystemContact]) async -> Void
+    ) async -> Int { 0 }
+
+    public func systemContact(withIdentifier identifier: String) async -> SystemContact? { nil }
+    public func systemContact(matching signature: ContactIdentitySignature) async -> SystemContact? { nil }
+    public func thumbnail(forIdentifier identifier: String) async -> Data? { nil }
+    public func currentHistoryToken() async -> Data? { nil }
+    public func changes(since token: Data) async -> ContactChangeSet? { nil }
+
+    /// A stream that never yields and never finishes — the honest shape when nothing will change.
+    public var changes: AsyncStream<Void> { AsyncStream { _ in } }
 }
 
 // MARK: - Notifications
