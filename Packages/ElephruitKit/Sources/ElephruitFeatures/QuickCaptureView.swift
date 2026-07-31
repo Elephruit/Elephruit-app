@@ -68,7 +68,7 @@ public struct QuickCaptureView: View {
 
     private var header: some View {
         HStack {
-            Label("Quick Capture", systemImage: "square.and.pencil")
+            Label("Quick Jot", systemImage: "square.and.pencil")
                 .font(.system(.headline, design: .default, weight: .medium))
             Spacer()
             KeyHint("⌘", "↩")
@@ -213,7 +213,7 @@ public struct QuickCaptureView: View {
     }
 }
 
-#Preview("Quick Capture") {
+#Preview("Quick Jot") {
     QuickCaptureView()
         .appServices(AppServices.inMemory())
 }

@@ -92,7 +92,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .newItem: "New Item"
         case .newTask: "New Task"
         case .newProject: "New Project"
-        case .quickCapture: "Quick Capture"
+        case .quickCapture: "Quick Jot"
         case .newWindow: "New Window"
         case .toggleInspector: "Show Inspector"
         case .exportLibrary: "Export Library…"
@@ -129,7 +129,12 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .newItem: KeyBinding("n")
         case .newTask: KeyBinding("n", [.command, .option])
         case .newProject: KeyBinding("n", [.command, .shift, .option])
-        case .quickCapture: KeyBinding("n", [.command, .shift])
+        // ⌘⇧J for Jot. It used to be ⌘⇧N, which put it in the middle of the four New-something
+        // bindings — ⌘N, ⌥⌘N, ⌥⇧⌘N, ⌃⌘N — where the only thing distinguishing the one global,
+        // works-from-any-app shortcut from its neighbours was which modifiers you happened to be
+        // holding. The initial of its own name is both easier to remember and further from
+        // anything else, which is what a shortcut you press from inside another application needs.
+        case .quickCapture: KeyBinding("j", [.command, .shift])
         case .newWindow: KeyBinding("n", [.command, .control])
         case .toggleInspector: KeyBinding("i", [.command, .shift])
         case .exportLibrary: KeyBinding("e", [.command, .shift])

@@ -362,7 +362,7 @@ public struct RootView: View {
         }
 
         commands.append(contentsOf: [
-            PaletteCommand(id: "quick-capture", title: "Quick Capture", category: .create, symbolName: "square.and.pencil", command: .quickCapture, in: registry) {
+            PaletteCommand(id: "quick-capture", title: "Quick Jot", category: .create, symbolName: "square.and.pencil", command: .quickCapture, in: registry) {
                 navigation.isQuickCaptureVisible = true
             },
             PaletteCommand(id: "search", title: "Search Everything", category: .navigate, symbolName: "magnifyingglass", command: .search, in: registry) {
