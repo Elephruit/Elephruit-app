@@ -96,6 +96,7 @@ struct TaskBenchmarks {
     /// One library, four measurements, each reported and asserted separately. Nothing is lost: the
     /// views do not mutate, so measuring them in sequence measures the same thing four times as
     /// measuring them apart would.
+    ///
     /// ### What running this actually found, and what the budgets therefore mean
     /// At 5,000 open tasks: the bare fetch is **222 ms**, and all four views land between **320 and
     /// 337 ms** — within 5% of each other despite doing very different amounts of work afterwards.
