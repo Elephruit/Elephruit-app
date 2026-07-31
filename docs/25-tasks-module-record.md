@@ -136,6 +136,34 @@ no new entities. Additive throughout.
 The calendar is injected. A stored midnight is midnight *where the user is*, and reading a library in
 the wrong zone finds a time of day on every date in it.
 
+## Performance, and what the measurement actually showed
+
+`TaskViewService` does **one fetch and then Swift**, because none of the scheduling rules translate
+to SQL. That is the decision carrying the most risk in the module, so it was measured rather than
+argued about.
+
+At **5,000 open tasks** the bare fetch costs **222 ms**, and all four system views land between
+**320 and 337 ms** — within 5% of each other despite doing very different amounts of work afterwards.
+Today evaluates a scheduling rule per row; the smart list evaluates two trivial predicates; Anytime
+additionally walks up the tree per row to find its container. If the *rules* dominated, those three
+would differ by a lot. They do not.
+
+**Roughly two-thirds is materialising rows and one-third is rules** — about 20 µs a task for
+everything the scheduling model does, traversals included. The benchmark measures the bare fetch
+alongside the views and asserts the relationship, so the claim is checked rather than written down:
+if a view ever costs twice its own fetch, something has become quadratic or has started faulting in a
+relationship per row, and the test says so.
+
+A deeply nested chain — two hundred levels of subtask — costs 25 ms, which is the bound on
+`ancestors()` doing its job rather than merely existing.
+
+Budgets are set from the measurement with headroom, because a budget nobody has measured against is a
+number rather than a target — the first version of the benchmark carried 120 ms, invented before
+anything had been run, and it was wrong by a factor of three. And **5,000 open tasks is not a
+realistic library**: it is a situation no task manager fixes. At a few hundred, which
+is a heavy real user, the same path is tens of milliseconds. The escalation path if that stops being
+true is the derived index in ADR 0004, not a bigger predicate.
+
 ## Major files
 
 | Layer | Files |

@@ -148,15 +148,22 @@ public final class TaskEntryComposer {
     ///
     /// Matching is on the folded title, so case and accents do not matter — the same normalisation
     /// `[[wiki links]]` already use, and for the same reason.
+    ///
+    /// ### On the cost of this
+    /// `plan(_:)` runs on every keystroke, so both fetches here are guarded: nothing is read unless
+    /// the text actually named a destination or a person. The container list is read **once** and
+    /// walked, rather than once per path segment — which is what it was, and which made `/Work/Acme`
+    /// two fetches per character typed.
     private func resolveDestination(_ path: [String], into plan: inout TaskEntryPlan) {
         guard !path.isEmpty else { return }
 
+        let candidates = containers()
         var parentID: UUID?
         var missing: [String] = []
 
         for segment in path {
             let key = TextNormalizer.foldedForMatching(segment)
-            let match = containers().first { candidate in
+            let match = candidates.first { candidate in
                 candidate.titleMatchKey == key && candidate.parent?.id == parentID
             }
 
@@ -180,6 +187,9 @@ public final class TaskEntryComposer {
     }
 
     private func resolvePeople(_ draft: TaskEntryDraft, into plan: inout TaskEntryPlan) {
+        // Nothing named, nothing to read. Most keystrokes mention nobody.
+        guard !draft.personHints.isEmpty || draft.waitingForHint != nil else { return }
+
         var query = ItemQuery()
         query.kinds = [.person]
         let people = (try? items.items(matching: query)) ?? []
