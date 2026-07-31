@@ -369,8 +369,28 @@ struct PersonRow: View {
     }
 
     private var tooltip: String {
-        guard let subtitle, !subtitle.isEmpty else { return person.displayTitle }
-        return "\(person.displayTitle)\n\(subtitle)"
+        ([person.displayTitle] + supportingLines).joined(separator: "\n")
+    }
+
+    /// Everything under the name, in the order the row draws it.
+    ///
+    /// One definition rather than three, so the tooltip, the row, and the accessibility label cannot
+    /// describe the same person differently — which they did while the row still carried a single
+    /// `subtitle` and the other two had moved on to identity and contact lines.
+    private var supportingLines: [String] {
+        var lines: [String] = []
+        if let identityLine { lines.append(identityLine) }
+
+        if rowDetails.isEmpty {
+            if let relationshipLine { lines.append(relationshipLine) }
+        } else {
+            lines.append(
+                contentsOf: rowDetails.map {
+                    "\($0.displayLabel) \($0.kind.displayName.lowercased()), \($0.value)"
+                }
+            )
+        }
+        return lines
     }
 
     /// Whether this person's details come from the address book, and whether that still works.
@@ -403,18 +423,7 @@ struct PersonRow: View {
     }
 
     private var accessibilityDescription: String {
-        var parts = [person.displayTitle]
-        if let identityLine { parts.append(identityLine) }
-        if rowDetails.isEmpty {
-            if let relationshipLine { parts.append(relationshipLine) }
-        } else {
-            parts.append(
-                contentsOf: rowDetails.map {
-                    "\($0.displayLabel) \($0.kind.displayName.lowercased()), \($0.value)"
-                }
-            )
-        }
-        return parts.joined(separator: ", ")
+        ([person.displayTitle] + supportingLines).joined(separator: ", ")
     }
 }
 
