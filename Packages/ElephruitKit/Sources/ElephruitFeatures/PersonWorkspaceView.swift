@@ -89,6 +89,11 @@ struct PersonWorkspaceView: View {
         .accessibilityIdentifier(AccessibilityID.People.workspace)
         .task(id: person.id) { reload() }
         .onChange(of: person.updatedAt) { _, _ in reload() }
+        // Most of this page is *other* items pointing at this person, and writing one of those
+        // leaves the person's own row untouched — so `updatedAt` above cannot see it. A task added
+        // from the quick actions, from the command bar, or from a capture belongs in the timeline
+        // the moment it exists, not the next time somebody navigates back here.
+        .onChange(of: services?.changeToken) { _, _ in reload() }
         .sheet(isPresented: $isRecordingInteraction) {
             RecordInteractionSheet(
                 personName: person.displayTitle,

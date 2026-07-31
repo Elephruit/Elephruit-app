@@ -37,6 +37,24 @@ public enum PeopleScope: Hashable, Sendable, Codable {
         }
     }
 
+    /// The tooltip on the sidebar row, shown once the pointer has rested there.
+    ///
+    /// Each of these is a *rule*, not a restatement of the title: what "Needs follow-up" counts as
+    /// overdue, and how far ahead "Celebrations" looks, are the two things somebody cannot work out
+    /// from the row and the two they ask about first.
+    public var hint: String {
+        switch self {
+        case .all: "Everybody you have a record for."
+        case .recentlyViewed: "People you opened this session. Cleared when you quit."
+        case .favorites: "The people you starred."
+        case .celebrations: "Birthdays and anniversaries in the next month."
+        case .needsFollowUp: "People you have not spoken to in a while. Off until you turn suggestions on."
+        case .group: "Everybody in this group."
+        case .duplicates: "Records that may be the same person, waiting to be reconciled."
+        case .fromContacts: "People whose standard details come from your address book."
+        }
+    }
+
     public var symbolName: String {
         switch self {
         case .all: "person.2"
@@ -126,7 +144,11 @@ struct PeopleListView: View {
     private var list: some View {
         List(selection: $selection) {
             ForEach(people, id: \.id) { person in
-                PersonRow(person: person, dateProvider: services?.dateProvider ?? SystemDateProvider())
+                PersonRow(
+                    person: person,
+                    dateProvider: services?.dateProvider ?? SystemDateProvider(),
+                    isSelected: selection.contains(person.id)
+                )
                     .tag(person.id)
                     .contextMenu {
                         Button("Open") { navigation.selectItem(person.id) }
@@ -268,6 +290,9 @@ struct PersonRow: View {
     let person: Item
     let dateProvider: any DateProvider
 
+    /// Suppresses the hover fill on a row that already carries the selection fill.
+    var isSelected: Bool = false
+
     var body: some View {
         HStack(spacing: Theme.Spacing.small) {
             PersonAvatar(name: person.displayTitle, colorName: person.colorName, size: 28)
@@ -300,8 +325,18 @@ struct PersonRow: View {
             Spacer(minLength: 0)
         }
         .frame(minHeight: Theme.Size.rowHeightExpanded)
+        .hoverHighlight(isEnabled: !isSelected, extending: Theme.Spacing.small)
+        // Name *and* the line beneath it. The subtitle is truncated to one line in the row, and it
+        // is the half that says where the relationship stands — worth being able to read in full
+        // without opening somebody.
+        .help(tooltip)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(subtitle.map { "\(person.displayTitle), \($0)" } ?? person.displayTitle)
+    }
+
+    private var tooltip: String {
+        guard let subtitle, !subtitle.isEmpty else { return person.displayTitle }
+        return "\(person.displayTitle)\n\(subtitle)"
     }
 
     /// Whether this person's details come from the address book, and whether that still works.
