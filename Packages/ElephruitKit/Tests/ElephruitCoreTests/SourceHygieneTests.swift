@@ -9,101 +9,20 @@ import Testing
 /// but it is honest about what it can and cannot see, and it fails loudly.
 @Suite("Source hygiene")
 struct SourceHygieneTests {
-    /// The package's `Sources` directory, located by walking up from this file.
+    /// Scanning is shared with `ProcessAccessTests` — see ``SourceScan``.
     ///
-    /// `#filePath` rather than a bundle resource, so the scan needs no build-phase configuration and
-    /// works from `swift test` and from Xcode alike.
-    private static var sourcesDirectory: URL? {
-        var directory = URL(filePath: #filePath).deletingLastPathComponent()
+    /// Two suites reading the same tree with two copies of the walk is two chances for one of them
+    /// to quietly stop finding a directory.
+    private static func swiftFiles() -> [URL] { SourceScan.swiftFiles() }
 
-        for _ in 0..<8 {
-            let candidate = directory.appending(path: "Sources", directoryHint: .isDirectory)
-            if FileManager.default.fileExists(atPath: candidate.path(percentEncoded: false)) {
-                return candidate
-            }
-            directory = directory.deletingLastPathComponent()
-        }
-        return nil
-    }
-
-    private static func swiftFiles() -> [URL] {
-        guard let sourcesDirectory,
-              let enumerator = FileManager.default.enumerator(
-                  at: sourcesDirectory,
-                  includingPropertiesForKeys: nil
-              )
-        else { return [] }
-
-        return enumerator
-            .compactMap { $0 as? URL }
-            .filter { $0.pathExtension == "swift" }
-    }
-
-    /// Lines of code, with comments and string literals removed.
-    ///
-    /// Without this, every doc comment mentioning `try!` would fail its own test.
     private static func codeLines(of url: URL) -> [(number: Int, text: String)] {
-        guard let contents = try? String(contentsOf: url, encoding: .utf8) else { return [] }
-
-        var result: [(Int, String)] = []
-        var insideBlockComment = false
-
-        for (index, rawLine) in contents.components(separatedBy: .newlines).enumerated() {
-            var line = rawLine
-
-            if insideBlockComment {
-                guard let end = line.range(of: "*/") else { continue }
-                line = String(line[end.upperBound...])
-                insideBlockComment = false
-            }
-
-            while let start = line.range(of: "/*") {
-                if let end = line.range(of: "*/", range: start.upperBound..<line.endIndex) {
-                    line = String(line[line.startIndex..<start.lowerBound]) + String(line[end.upperBound...])
-                } else {
-                    line = String(line[line.startIndex..<start.lowerBound])
-                    insideBlockComment = true
-                    break
-                }
-            }
-
-            if let comment = line.range(of: "//") {
-                line = String(line[line.startIndex..<comment.lowerBound])
-            }
-
-            // Strip string literals, so a literal containing "!" cannot trip the scan.
-            line = stripStringLiterals(from: line)
-
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { continue }
-            result.append((index + 1, trimmed))
-        }
-
-        return result
-    }
-
-    private static func stripStringLiterals(from line: String) -> String {
-        var result = ""
-        var insideString = false
-        var previous: Character?
-
-        for character in line {
-            if character == "\"", previous != "\\" {
-                insideString.toggle()
-                result.append(" ")
-            } else if !insideString {
-                result.append(character)
-            }
-            previous = character
-        }
-
-        return result
+        SourceScan.codeLines(of: url)
     }
 
     @Test("The scan can find the source tree")
     func scanIsWiredUp() {
         // Guards against the whole suite silently passing because it found no files to check.
-        #expect(Self.sourcesDirectory != nil)
+        #expect(SourceScan.sourcesDirectory != nil)
         #expect(Self.swiftFiles().count > 15, "Expected the module sources to be discoverable")
     }
 
