@@ -53,11 +53,13 @@ public struct TasksSidebarSection: View {
                     .help("Someday, Flagged, Waiting, and the log of what you have finished")
             }
 
-            containersDisclosure
-            smartListsDisclosure
-        } header: {
-            Text("Tasks")
         }
+
+        // Sections rather than disclosure groups nested inside one, now that Tasks has the sidebar
+        // to itself. A section header is the native way to divide a sidebar, and it keeps the
+        // container tree at the same indent as the views above it rather than one step in.
+        containersSection
+        smartListsSection
     }
 
     // MARK: - Rows
@@ -100,56 +102,24 @@ public struct TasksSidebarSection: View {
     /// belong" is answered by the shape of the tree and not by a flat list of every container the
     /// user has ever made.
     @ViewBuilder
-    private var containersDisclosure: some View {
+    private var containersSection: some View {
         let rows = containerRows()
         if !rows.isEmpty {
-            DisclosureGroup(isExpanded: $isListsExpanded) {
+            Section("Areas & Projects", isExpanded: $isListsExpanded) {
                 ForEach(rows) { row in
-                    containerRow(row)
+                    ContainerSidebarRow(
+                        row: row,
+                        isSelected: navigation.selection == .item(id: row.id),
+                        rowHeight: rowHeight
+                    )
                 }
-            } label: {
-                Label("Areas & Projects", systemImage: "square.grid.2x2")
-                    .frame(minHeight: rowHeight)
-                    .help("Your own organisation: standing responsibilities, work with an end, and plain lists")
             }
         }
-    }
-
-    private func containerRow(_ row: ContainerRow) -> some View {
-        HStack(spacing: SidebarMetrics.iconGap) {
-            Image(systemName: row.symbolName)
-                .frame(width: SidebarMetrics.iconColumn)
-                .rowTint(row.colorName == nil ? Theme.Colors.secondaryText : Theme.Palette.color(named: row.colorName))
-                .accessibilityHidden(true)
-
-            Text(row.title)
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            Spacer(minLength: 0)
-
-            // Progress, and only where it means something. A list never finishes, so a figure
-            // against one would be a number with no destination.
-            if let progress = row.progress {
-                ProjectProgressDot(progress: progress)
-            }
-        }
-        .frame(minHeight: rowHeight)
-        .padding(.leading, CGFloat(row.depth) * Theme.Spacing.medium)
-        .hoverHighlight(
-            isEnabled: navigation.selection != .item(id: row.id),
-            cornerRadius: SidebarMetrics.selectionRadius,
-            extending: SidebarMetrics.selectionInset
-        )
-        .tag(SidebarSelection.item(id: row.id))
-        .help(row.title)
-        .accessibilityIdentifier("sidebar.container.\(row.id.uuidString)")
-        .accessibilityLabel(row.title)
     }
 
     @ViewBuilder
-    private var smartListsDisclosure: some View {
-        DisclosureGroup(isExpanded: $isSmartExpanded) {
+    private var smartListsSection: some View {
+        Section("Smart Lists", isExpanded: $isSmartExpanded) {
             ForEach(BuiltInSmartList.all) { list in
                 smartRow(
                     title: list.title,
@@ -167,10 +137,6 @@ public struct TasksSidebarSection: View {
                     selection: .smartList(id: saved.id)
                 )
             }
-        } label: {
-            Label("Smart Lists", systemImage: "line.3.horizontal.decrease.circle")
-                .frame(minHeight: rowHeight)
-                .help("Lists whose contents are worked out rather than filed. Nothing here owns a task.")
         }
     }
 
@@ -215,13 +181,20 @@ public struct TasksSidebarSection: View {
         /// `nil` where progress would be meaningless — an area, or a list.
         public var progress: Double?
 
+        /// What the container actually is.
+        ///
+        /// Carried so the Projects and Areas modules can draw the half of this tree that belongs to
+        /// them without inferring it from the symbol, which the user is free to change.
+        public var kind: ItemKind
+
         public init(
             id: UUID,
             title: String,
             symbolName: String,
             colorName: String? = nil,
             depth: Int = 0,
-            progress: Double? = nil
+            progress: Double? = nil,
+            kind: ItemKind = .project
         ) {
             self.id = id
             self.title = title
@@ -229,6 +202,7 @@ public struct TasksSidebarSection: View {
             self.colorName = colorName
             self.depth = depth
             self.progress = progress
+            self.kind = kind
         }
     }
 

@@ -263,28 +263,37 @@ struct ElephruitCommands: Commands {
         CommandGroup(after: .sidebar) {
             Divider()
 
-            // Each command carries the shortcut named after it. Four of these were previously
-            // crossed — Notes held `goUpcoming`, Tasks held `goNotes`, Areas held `goPeople` — so
-            // the menu showed a key that selected something else. A binding whose name and effect
-            // disagree is worse than no binding: `ShortcutRegistry` exists precisely so a shortcut
-            // has one owner, and the menu is where that ownership is visible.
-            Button("Today") { navigation?.select(.taskView(.today)) }
+            // The four destinations that belong to no module, in sidebar order. `⌘1`–`⌘4` and the
+            // named shortcuts both land here, and both mean the same thing they say — a binding
+            // whose name and effect disagree is worse than no binding, which is why
+            // `ShortcutRegistry` gives every shortcut exactly one owner.
+            Button("Home") { navigation?.select(.home) }
+                .keyboardShortcut(KeyEquivalent("1"), modifiers: .command)
+            Button("Today") { navigation?.select(.today) }
                 .shortcut(.goToday, in: shortcuts)
-            Button("Inbox") { navigation?.select(.taskView(.inbox)) }
-                .shortcut(.goInbox, in: shortcuts)
-            Button("Upcoming") { navigation?.select(.taskView(.upcoming)) }
+            Button("Upcoming") { navigation?.select(.upcoming) }
                 .shortcut(.goUpcoming, in: shortcuts)
-            Button("Notes") { navigation?.select(.kind(.note)) }
-                .shortcut(.goNotes, in: shortcuts)
-            Button("Projects") { navigation?.select(.kind(.project)) }
-                .shortcut(.goProjects, in: shortcuts)
-            Button("People") { navigation?.select(.people(.all)) }
-                .shortcut(.goPeople, in: shortcuts)
-            Button("Anytime") { navigation?.select(.taskView(.anytime)) }
-                .shortcut(.goTasks, in: shortcuts)
+            Button("Inbox") { navigation?.select(.inbox) }
+                .shortcut(.goInbox, in: shortcuts)
 
-            Button("Calendar") { navigation?.select(.calendar) }
-                .shortcut(.goCalendar, in: shortcuts)
+            Divider()
+
+            // Every module, in the order the sidebar lists them. This is the keyboard route into a
+            // module: the module rows themselves are buttons rather than selectable list rows, so
+            // that arrowing through the sidebar cannot enter one by accident.
+            Menu("Module") {
+                ForEach(AppModule.displayOrder) { module in
+                    moduleButton(module)
+                }
+
+                Divider()
+
+                Button("Back to All Modules") { navigation?.leaveModule() }
+                    .keyboardShortcut(KeyEquivalent("["), modifiers: .command)
+                    .disabled(navigation?.activeModule == nil)
+            }
+
+            Divider()
 
             Button("Next Calendar Set") {
                 guard let calendar = services?.calendar else { return }
@@ -296,10 +305,13 @@ struct ElephruitCommands: Commands {
 
             Divider()
 
+            // Inside Tasks, where these are the module's own destinations rather than global ones.
+            Button("Task Inbox") { navigation?.select(.taskView(.inbox)) }
+            Button("Anytime") { navigation?.select(.taskView(.anytime)) }
+                .shortcut(.goTasks, in: shortcuts)
             Button("Someday") { navigation?.select(.taskView(.someday)) }
             Button("Waiting") { navigation?.select(.taskView(.waiting)) }
             Button("Logbook") { navigation?.select(.taskView(.completed)) }
-            Button("Trash") { navigation?.select(.trash) }
 
             Divider()
 
@@ -334,6 +346,30 @@ struct ElephruitCommands: Commands {
             )
             .disabled(true)  // Bundled documentation arrives with the App Store build.
         }
+    }
+
+    /// One module's menu item, carrying the named shortcut where the registry has one for it.
+    ///
+    /// Only four modules have a binding of their own, and inventing six more would be inventing six
+    /// claims on keys the user may already have spent. The rest are reachable by name here, in the
+    /// palette, and by clicking.
+    @ViewBuilder
+    private func moduleButton(_ module: AppModule) -> some View {
+        let command: ShortcutCommand? = switch module {
+        case .calendar: .goCalendar
+        case .notes: .goNotes
+        case .projects: .goProjects
+        case .people: .goPeople
+        default: nil
+        }
+
+        Button {
+            navigation?.enterModule(module)
+        } label: {
+            Label(module.title, systemImage: module.symbolName)
+        }
+        .shortcut(command, in: shortcuts)
+        .disabled(navigation == nil)
     }
 
     private func create(_ kind: ItemKind) {

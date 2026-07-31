@@ -32,4 +32,18 @@ extension View {
             self
         }
     }
+
+    /// The same, for a command that may not exist.
+    ///
+    /// Only some modules have a binding of their own, and a call site forced to invent one to say
+    /// "this one has no shortcut" is a call site that will eventually claim a key somebody was
+    /// already using.
+    @ViewBuilder
+    public func shortcut(_ command: ShortcutCommand?, in registry: ShortcutRegistry) -> some View {
+        if let command {
+            self.shortcut(command, in: registry)
+        } else {
+            self
+        }
+    }
 }

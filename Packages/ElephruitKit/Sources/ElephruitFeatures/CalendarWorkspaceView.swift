@@ -11,7 +11,6 @@ public struct CalendarWorkspaceView: View {
     @Environment(\.services) private var services
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var workspace: CalendarWorkspaceModel?
     @State private var editorRequest: EditorRequest?
     @State private var quickEntryStart: Date?
     @State private var pendingChange: ScopedChangeRequest?
@@ -28,6 +27,13 @@ public struct CalendarWorkspaceView: View {
         self.navigation = navigation
     }
 
+    /// The calendar's own state, which lives on the navigation model.
+    ///
+    /// Owned there rather than here because the Calendar module's sidebar sets the view kind, and
+    /// state private to this view is state a sidebar cannot reach. Everything else about it is
+    /// unchanged — it is still per-window, and two windows still show two different weeks.
+    private var workspace: CalendarWorkspaceModel? { navigation.calendarWorkspace }
+
     public var body: some View {
         Group {
             if let services, let workspace {
@@ -39,12 +45,12 @@ public struct CalendarWorkspaceView: View {
             }
         }
         .task {
-            guard workspace == nil, let services else { return }
+            guard navigation.calendarWorkspace == nil, let services else { return }
             let model = CalendarWorkspaceModel(
                 dateProvider: services.dateProvider,
                 calendar: services.calendar.displayCalendar
             )
-            workspace = model
+            navigation.calendarWorkspace = model
 
             // A day asked for before this view existed — which is the case when the app was
             // launched by the link rather than merely brought forward by it.
@@ -556,7 +562,17 @@ private struct ScopedChangeRequest: Identifiable {
 
 // MARK: - Toolbar
 
-/// Navigation, the view switcher, and the set switcher.
+/// Moving through time, and making something.
+///
+/// ### What is no longer here
+/// The view switcher, the calendar visibility menu and the set switcher moved into the Calendar
+/// module's sidebar, where each gets a full row instead of being a menu somebody has to open to find
+/// out what is switched off. What stays is what is about *navigating time* — back, Today, forward —
+/// which changes on every glance and belongs beside the thing it moves.
+///
+/// The switcher is still reachable when the sidebar is collapsed: `⌘1`–`⌘6` select a view, the
+/// overflow menu at the trailing edge lists them, and both go through the same
+/// ``CalendarWorkspaceModel/setViewKind(_:)``.
 struct CalendarToolbar: View {
     let workspace: CalendarWorkspaceModel
     let calendar: CalendarService
@@ -582,9 +598,7 @@ struct CalendarToolbar: View {
 
             Spacer(minLength: Theme.Spacing.small)
 
-            calendarVisibility
-            setSwitcher
-            viewSwitcher
+            overflowMenu
 
             Button(action: onCreate) {
                 Image(systemName: "plus")
@@ -595,6 +609,80 @@ struct CalendarToolbar: View {
         }
         .padding(.horizontal, Theme.Spacing.medium)
         .padding(.vertical, Theme.Spacing.small)
+    }
+
+    /// Everything the sidebar owns, still reachable when the sidebar is not on screen.
+    ///
+    /// A two-column layout and a collapsed sidebar are both ordinary states, and a control that
+    /// exists only in the sidebar would be a control that disappears when somebody widens their
+    /// editor. So it is duplicated here — deliberately, and as a menu rather than a second row of
+    /// controls, because this is the fallback rather than the place it is meant to be used.
+    private var overflowMenu: some View {
+        Menu {
+            Section("View") {
+                ForEach(CalendarViewKind.allCases) { kind in
+                    Button {
+                        workspace.setViewKind(kind)
+                    } label: {
+                        Label(
+                            kind.displayName,
+                            systemImage: workspace.viewKind == kind ? "checkmark" : kind.symbolName
+                        )
+                    }
+                }
+            }
+
+            Section("Calendars") {
+                ForEach(calendar.calendarsByAccount, id: \.account) { group in
+                    ForEach(group.calendars) { entry in
+                        Button {
+                            Task { await calendar.toggleVisibility(of: entry.id) }
+                        } label: {
+                            Label(
+                                entry.title,
+                                systemImage: calendar.isVisible(entry) ? "checkmark.circle.fill" : "circle"
+                            )
+                        }
+                        .disabled(!inActiveSet(entry))
+                    }
+                }
+
+                if !calendar.hiddenCalendarIdentifiers.isEmpty {
+                    Button("Show All Calendars") {
+                        Task { await calendar.showAllCalendars() }
+                    }
+                }
+            }
+
+            Section("Calendar Sets") {
+                Button {
+                    Task { await calendar.activate(setID: nil) }
+                } label: {
+                    Label("All Calendars", systemImage: calendar.activeSet == nil ? "checkmark" : "calendar")
+                }
+
+                ForEach(calendar.sets) { set in
+                    Button {
+                        Task { await calendar.activate(setID: set.id) }
+                    } label: {
+                        Label(
+                            set.name,
+                            systemImage: calendar.activeSet?.id == set.id ? "checkmark" : set.symbolName
+                        )
+                    }
+                    .accessibilityIdentifier(AccessibilityID.Calendar.setRow(id: set.id.uuidString))
+                }
+
+                Button("Edit Calendar Sets…", action: onEditSets)
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("View, calendars, and sets — the same choices the sidebar offers")
+        .accessibilityLabel("Calendar options")
+        .accessibilityIdentifier(AccessibilityID.Calendar.viewSwitcher)
     }
 
     private var navigationControls: some View {
@@ -624,107 +712,12 @@ struct CalendarToolbar: View {
         }
     }
 
-    private var viewSwitcher: some View {
-        Picker("View", selection: viewBinding) {
-            ForEach(CalendarViewKind.allCases) { kind in
-                Image(systemName: kind.symbolName)
-                    .help(kind.displayName)
-                    .tag(kind)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .fixedSize()
-        .accessibilityLabel("Calendar view")
-        .accessibilityIdentifier(AccessibilityID.Calendar.viewSwitcher)
-    }
-
-    /// Switching individual calendars off for now.
-    ///
-    /// Separate from the set switcher because they answer different questions: a set is a
-    /// configuration somebody composed, and this is the thing everybody does without thinking about
-    /// it. Ticking a calendar off here does not edit a saved set.
-    private var calendarVisibility: some View {
-        Menu {
-            ForEach(calendar.calendarsByAccount, id: \.account) { group in
-                Section(group.account) {
-                    ForEach(group.calendars) { entry in
-                        Button {
-                            Task { await calendar.toggleVisibility(of: entry.id) }
-                        } label: {
-                            Label(
-                                entry.title,
-                                systemImage: calendar.isVisible(entry) ? "checkmark.circle.fill" : "circle"
-                            )
-                        }
-                        .disabled(!inActiveSet(entry))
-                        .help(inActiveSet(entry)
-                            ? entry.title
-                            : "Not in the “\(calendar.activeSet?.name ?? "")” set")
-                    }
-                }
-            }
-
-            if !calendar.hiddenCalendarIdentifiers.isEmpty {
-                Divider()
-                Button("Show All Calendars") {
-                    Task { await calendar.showAllCalendars() }
-                }
-            }
-        } label: {
-            Image(systemName: calendar.hiddenCalendarIdentifiers.isEmpty
-                ? "line.3.horizontal.decrease.circle"
-                : "line.3.horizontal.decrease.circle.fill")
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .help("Which calendars are showing")
-        .accessibilityLabel("Calendar visibility")
-    }
-
     /// Whether a calendar is in the active set's scope at all.
     private func inActiveSet(_ entry: CalendarInfo) -> Bool {
         guard let scope = calendar.activeSet?.calendarIdentifiers(among: calendar.calendars) else {
             return true
         }
         return scope.contains(entry.id)
-    }
-
-    private var setSwitcher: some View {
-        Menu {
-            Button {
-                Task { await calendar.activate(setID: nil) }
-            } label: {
-                Label("All Calendars", systemImage: calendar.activeSet == nil ? "checkmark" : "calendar")
-            }
-
-            if !calendar.sets.isEmpty { Divider() }
-
-            ForEach(calendar.sets) { set in
-                Button {
-                    Task { await calendar.activate(setID: set.id) }
-                } label: {
-                    Label(
-                        set.name,
-                        systemImage: calendar.activeSet?.id == set.id ? "checkmark" : set.symbolName
-                    )
-                }
-                .accessibilityIdentifier(AccessibilityID.Calendar.setRow(id: set.id.uuidString))
-            }
-
-            Divider()
-            Button("Edit Calendar Sets…", action: onEditSets)
-        } label: {
-            HStack(spacing: Theme.Spacing.tight) {
-                Image(systemName: calendar.activeSet?.symbolName ?? "calendar")
-                Text(calendar.activeSet?.name ?? "All Calendars")
-                    .font(Theme.Text.metadata)
-            }
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .help("Switch which calendars are showing (⌥⌘S)")
-        .accessibilityIdentifier(AccessibilityID.Calendar.setSwitcher)
     }
 
     private var viewBinding: Binding<CalendarViewKind> {

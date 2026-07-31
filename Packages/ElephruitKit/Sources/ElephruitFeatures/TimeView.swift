@@ -14,8 +14,13 @@ public struct TimeView: View {
 
     private let navigation: NavigationModel
 
-    @State private var window: TimeWindow = .today
-    @State private var grouping: TimeGrouping = .item
+    /// The period and the grouping live on the navigation model.
+    ///
+    /// They are what the Time module's sidebar navigates by, and a sidebar cannot reach a `@State`
+    /// on the middle column. The pickers below still set them; they now set the same value the
+    /// sidebar shows a checkmark against, rather than a private copy that disagreed with it.
+    private var window: TimeWindow { navigation.timeWindow }
+    private var grouping: TimeGrouping { navigation.timeGrouping }
     @State private var entries: [TimeEntrySnapshot] = []
     @State private var recents: [TimeEntrySnapshot] = []
     @State private var isAddingManualEntry = false
@@ -57,7 +62,7 @@ public struct TimeView: View {
 
             entryList
         }
-        .navigationTitle("Time")
+        .navigationTitle(navigation.windowTitle)
         .navigationSubtitle(subtitle)
         .toolbar { toolbarContent }
         .task(id: reloadToken) { reload() }
@@ -142,7 +147,7 @@ public struct TimeView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem {
-            Picker("Period", selection: $window) {
+            Picker("Period", selection: windowBinding) {
                 ForEach(TimeWindow.allCases, id: \.self) { Text($0.displayName).tag($0) }
             }
             .pickerStyle(.menu)
@@ -150,7 +155,7 @@ public struct TimeView: View {
         }
 
         ToolbarItem {
-            Picker("Group By", selection: $grouping) {
+            Picker("Group By", selection: groupingBinding) {
                 ForEach(TimeGrouping.allCases, id: \.self) { Text($0.displayName).tag($0) }
             }
             .pickerStyle(.menu)
@@ -161,6 +166,14 @@ public struct TimeView: View {
             Button("Add Time", systemImage: "plus") { isAddingManualEntry = true }
                 .accessibilityIdentifier(AccessibilityID.Time.addEntryButton)
         }
+    }
+
+    private var windowBinding: Binding<TimeWindow> {
+        Binding(get: { navigation.timeWindow }, set: { navigation.timeWindow = $0 })
+    }
+
+    private var groupingBinding: Binding<TimeGrouping> {
+        Binding(get: { navigation.timeGrouping }, set: { navigation.timeGrouping = $0 })
     }
 
     private var subtitle: String {
@@ -179,7 +192,7 @@ public struct TimeView: View {
     /// Re-reads when the window changes, when a command runs, or when the timer starts or stops —
     /// the last of these because a running entry's row has to appear the moment it begins.
     private var reloadToken: String {
-        "\(window.rawValue)|\(reloadTick)|\(services?.timer.running?.id.uuidString ?? "-")"
+        "\(window.rawValue)|\(grouping.rawValue)|\(reloadTick)|\(services?.timer.running?.id.uuidString ?? "-")"
     }
 
     private func reload() {

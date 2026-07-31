@@ -17,6 +17,14 @@ public struct RootView: View {
     @Environment(\.services) private var services
 
     @State private var navigation = NavigationModel()
+
+    /// Where this window was, encoded.
+    ///
+    /// `@SceneStorage` rather than `@AppStorage`, because "where am I" is a property of a window and
+    /// two windows are entitled to disagree. Written on every change and read once, on the task that
+    /// runs when the window appears.
+    @SceneStorage("navigation.state") private var storedNavigationState = ""
+
     @State private var isExportPresented = false
     @State private var isImportPresented = false
     @State private var transferSummary: String?
@@ -108,7 +116,15 @@ public struct RootView: View {
         .onChange(of: pendingCalendarRequest) { _, request in
             handleCalendarRequest(request)
         }
+        .onChange(of: navigation.restorationState) { _, state in
+            guard let encoded = state.encoded else { return }
+            storedNavigationState = encoded
+        }
         .task {
+            // Before the calendar request, so a link that arrived at launch wins over the place the
+            // window was last left rather than being overwritten by it.
+            restoreNavigation()
+
             // On launch, when the request arrived before this window existed — which is the case
             // when a Shortcut or a link started the app rather than merely bringing it forward.
             handleCalendarRequest(pendingCalendarRequest)
@@ -244,6 +260,18 @@ public struct RootView: View {
         ))
     }
 
+    /// Puts the window back where it was, if there is a where.
+    ///
+    /// Failure is silent and lands on Today: a scene string written by an older build, or one that
+    /// names a module this build does not have, is not something to raise an alert about while
+    /// somebody is opening their library.
+    private func restoreNavigation() {
+        guard !storedNavigationState.isEmpty,
+              let state = NavigationModel.RestorationState(encoded: storedNavigationState)
+        else { return }
+        navigation.restore(state)
+    }
+
     /// Acts on a request from the menu bar, an intent, or a link.
     private func handleCalendarRequest(_ request: PendingCalendarRequest?) {
         guard let request else { return }
@@ -281,22 +309,28 @@ public struct RootView: View {
             PaletteCommand(id: "go-inbox", title: "Go to Inbox", category: .navigate, symbolName: "tray", command: .goInbox, in: registry) {
                 navigation.select(.inbox)
             },
-            PaletteCommand(id: "go-trash", title: "Go to Trash", category: .navigate, symbolName: "trash") {
-                navigation.select(.trash)
+            PaletteCommand(id: "go-home", title: "Go to Home", category: .navigate, symbolName: "house") {
+                navigation.select(.home)
             },
         ]
 
-        for kind in ItemKind.shippingInMilestoneOne where kind != .dailyEntry {
+        // One entry per module, in sidebar order, so every module is reachable from ⌘K by name.
+        // Entering rather than selecting: the palette should leave the window in the same state a
+        // click on the module row does, including the sidebar it puts up.
+        for module in AppModule.displayOrder {
             commands.append(
                 PaletteCommand(
-                    id: "go-\(kind.rawValue)",
-                    title: "Go to \(kind.pluralDisplayName)",
+                    id: "go-module-\(module.rawValue)",
+                    title: "Go to \(module.title)",
                     category: .navigate,
-                    symbolName: kind.symbolName
+                    symbolName: module.symbolName
                 ) {
-                    navigation.select(.kind(kind))
+                    navigation.enterModule(module)
                 }
             )
+        }
+
+        for kind in ItemKind.shippingInMilestoneOne where kind != .dailyEntry {
             commands.append(
                 PaletteCommand(
                     id: "new-\(kind.rawValue)",
@@ -322,12 +356,6 @@ public struct RootView: View {
             PaletteCommand(id: "stop-timer", title: "Stop Timer", category: .create, symbolName: "stop.circle") {
                 services?.timer.stop()
             },
-            PaletteCommand(id: "go-time", title: "Go to Time", category: .navigate, symbolName: "timer") {
-                navigation.select(.time)
-            },
-            PaletteCommand(id: "go-calendar", title: "Go to Calendar", category: .navigate, symbolName: "calendar.day.timeline.left") {
-                navigation.select(.calendar)
-            },
             PaletteCommand(id: "new-event", title: "New Event…", category: .create, symbolName: "calendar.badge.plus") {
                 navigation.select(.calendar)
                 navigation.isCalendarQuickEntryVisible = true
@@ -338,9 +366,6 @@ public struct RootView: View {
             },
             PaletteCommand(id: "people-bar", title: "People Command Bar", category: .navigate, symbolName: "person.text.rectangle") {
                 navigation.isPeopleCommandBarVisible = true
-            },
-            PaletteCommand(id: "go-people", title: "Go to People", category: .navigate, symbolName: "person.2") {
-                navigation.select(.people(.all))
             },
             PaletteCommand(id: "go-celebrations", title: "Go to Celebrations", category: .navigate, symbolName: "birthday.cake") {
                 navigation.select(.people(.celebrations))
