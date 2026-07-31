@@ -49,8 +49,12 @@ struct PersonPortraitSection: View {
             }
 
             if let cards = portrait?.cards, !cards.isEmpty {
-                VStack(spacing: 0) {
-                    ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 280, maximum: 420), spacing: Theme.Spacing.medium)],
+                    alignment: .leading,
+                    spacing: Theme.Spacing.medium
+                ) {
+                    ForEach(cards) { card in
                         PortraitCardView(
                             card: card,
                             onConfirm: onConfirm,
@@ -58,15 +62,9 @@ struct PersonPortraitSection: View {
                             onDelete: onDelete,
                             onOpenSource: onOpenSource
                         )
-                        if index != cards.indices.last { Divider().padding(.leading, 54) }
                     }
                 }
-                .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: 16))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Theme.Colors.separator.opacity(0.55))
-                }
-                .shadow(color: .black.opacity(0.025), radius: 10, y: 3)
+                .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 quickFactEmptyState
             }
@@ -162,21 +160,24 @@ struct PortraitCardView: View {
     private var category: QuickFactCategory { .category(for: card.attribute) }
 
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.medium) {
-            Image(systemName: card.attribute.symbolName)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(category.tint)
-                .frame(width: 34, height: 34)
-                .background(category.tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 10))
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            HStack(spacing: Theme.Spacing.small) {
+                Image(systemName: card.attribute.symbolName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(category.tint)
+                    .frame(width: 30, height: 30)
+                    .background(category.tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 9))
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                 Text(card.attribute.displayName)
                     .font(Theme.Text.sectionHeader)
                     .foregroundStyle(Theme.Colors.secondaryText)
+            }
 
+            VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                 ForEach(card.values) { value in
                     PortraitValueRow(
                         value: value,
+                        tint: category.tint,
                         onConfirm: { onConfirm(value) },
                         onCorrect: { onCorrect(value) },
                         onDelete: { onDelete(value) },
@@ -199,11 +200,15 @@ struct PortraitCardView: View {
                     }
                 }
             }
-
-            Spacer(minLength: 0)
         }
-        .padding(Theme.Spacing.large)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.Spacing.medium)
+        .frame(maxWidth: 420, alignment: .leading)
+        .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: 15))
+        .overlay {
+            RoundedRectangle(cornerRadius: 15)
+                .strokeBorder(category.tint.opacity(0.16))
+        }
+        .shadow(color: .black.opacity(0.025), radius: 8, y: 2)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(card.attribute.displayName)
     }
@@ -212,6 +217,7 @@ struct PortraitCardView: View {
 /// One value, with its provenance and the two things that can be done to it.
 struct PortraitValueRow: View {
     let value: PortraitValue
+    let tint: Color
     let onConfirm: () -> Void
     let onCorrect: () -> Void
     let onDelete: () -> Void
@@ -265,6 +271,9 @@ struct PortraitValueRow: View {
                 .foregroundStyle(Theme.Colors.link)
             }
         }
+        .padding(.horizontal, Theme.Spacing.small)
+        .padding(.vertical, Theme.Spacing.tight)
+        .background(tint.opacity(0.055), in: RoundedRectangle(cornerRadius: 9))
         .contentShape(.rect)
         .onHover { isHovering = $0 }
         .contextMenu {
