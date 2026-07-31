@@ -111,10 +111,10 @@ struct PersonWorkspaceView: View {
         // the moment it exists, not the next time somebody navigates back here.
         .onChange(of: services?.changeToken) { _, _ in reload() }
         .sheet(isPresented: $isRecordingInteraction) {
-            RecordInteractionSheet(
+            LogInteractionSheet(
                 personName: person.displayTitle,
-                onSave: { summary, notes, date in
-                    record(summary: summary, notes: notes, at: date)
+                onSave: { draft in
+                    record(draft)
                     isRecordingInteraction = false
                 },
                 onCancel: { isRecordingInteraction = false }
@@ -234,15 +234,19 @@ struct PersonWorkspaceView: View {
 
     // MARK: - Actions
 
-    private func record(summary: String, notes: String, at date: Date) {
+    private func record(_ draft: PersonInteractionDraft) {
         guard let services else { return }
         services.perform {
-            let interaction = try services.people.recordInteraction(
-                with: person, summary: summary, at: date, notes: notes
+            let created = try services.people.recordInteractionBundle(
+                with: person,
+                summary: draft.cleanedSummary,
+                kind: draft.kind,
+                at: draft.occurredAt,
+                discussion: draft.cleanedDiscussion,
+                followUps: draft.followUpItems,
+                commitments: draft.commitmentItems
             )
-            // Written down by hand, so it counts as contact — see `InteractionProvenance`.
-            try services.items.update(interaction) { $0.sourceIdentifier = InteractionProvenance.logged.rawValue }
-            services.noteChange(to: interaction)
+            for item in created { services.noteChange(to: item) }
         }
         reload()
     }

@@ -114,15 +114,58 @@ public final class PeopleService {
         with person: Item,
         summary: String,
         at date: Date? = nil,
-        notes: String = ""
+        notes: String = "",
+        tagSlugs: [String] = []
     ) throws(AppError) -> Item {
         var draft = ItemDraft(kind: .interaction, title: summary)
         draft.body = notes
         draft.startAt = date ?? dateProvider.now
+        draft.tagSlugs = tagSlugs
 
         let interaction = try items.create(draft)
         try items.link(interaction, to: person, kind: .mentions)
         return interaction
+    }
+
+    /// Records one interaction and every action the user captured alongside it.
+    ///
+    /// Follow-ups are ordinary open tasks; commitments are promises, marked both by their semantic
+    /// link and by the tag the existing People timeline uses to identify promises. Returning every
+    /// created item lets the feature announce each change to the index without duplicating this
+    /// persistence policy in multiple views.
+    public func recordInteractionBundle(
+        with person: Item,
+        summary: String,
+        kind: PersonInteractionKind,
+        at date: Date? = nil,
+        discussion: String = "",
+        followUps: [String] = [],
+        commitments: [String] = []
+    ) throws(AppError) -> [Item] {
+        let interaction = try recordInteraction(
+            with: person,
+            summary: summary,
+            at: date,
+            notes: discussion,
+            tagSlugs: [kind.tagSlug]
+        )
+        try items.update(interaction) { $0.sourceIdentifier = InteractionProvenance.logged.rawValue }
+
+        var created = [interaction]
+
+        for title in followUps {
+            let task = try items.create(ItemDraft(kind: .task, title: title))
+            try items.link(task, to: person, kind: .mentions)
+            created.append(task)
+        }
+
+        for title in commitments {
+            let task = try items.create(ItemDraft(kind: .task, title: title, tagSlugs: ["promise"]))
+            try items.link(task, to: person, kind: .promisedTo)
+            created.append(task)
+        }
+
+        return created
     }
 
     // MARK: - Daily entries

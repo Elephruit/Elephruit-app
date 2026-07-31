@@ -329,10 +329,10 @@ struct PersonDetailView: View {
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier(AccessibilityID.People.relationshipSummary)
             .sheet(isPresented: $isRecordingInteraction) {
-                RecordInteractionSheet(
+                LogInteractionSheet(
                     personName: item.displayTitle,
-                    onSave: { summary, notes, date in
-                        record(summary: summary, notes: notes, at: date)
+                    onSave: { draft in
+                        record(draft)
                         isRecordingInteraction = false
                     },
                     onCancel: { isRecordingInteraction = false }
@@ -345,16 +345,19 @@ struct PersonDetailView: View {
         services?.people.context(for: item)
     }
 
-    private func record(summary: String, notes: String, at date: Date) {
+    private func record(_ draft: PersonInteractionDraft) {
         guard let services else { return }
         services.perform {
-            let interaction = try services.people.recordInteraction(
+            let created = try services.people.recordInteractionBundle(
                 with: item,
-                summary: summary,
-                at: date,
-                notes: notes
+                summary: draft.cleanedSummary,
+                kind: draft.kind,
+                at: draft.occurredAt,
+                discussion: draft.cleanedDiscussion,
+                followUps: draft.followUpItems,
+                commitments: draft.commitmentItems
             )
-            services.noteChange(to: interaction)
+            for item in created { services.noteChange(to: item) }
         }
     }
 

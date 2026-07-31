@@ -1,4 +1,6 @@
+import ElephruitCore
 @testable import ElephruitFeatures
+import Foundation
 import Testing
 
 @Suite("Person capture sheets")
@@ -17,5 +19,36 @@ struct PersonCaptureSheetTests {
         #expect(PersonNoteDraft(category: .personal).tagSlugs == ["personal"])
         #expect(PersonNoteDraft(category: .work).tagSlugs == ["work"])
         #expect(PersonNoteDraft(category: .idea).tagSlugs == ["idea"])
+    }
+
+    @Test("Interaction action lists become individual records")
+    func interactionListsSplitOnLines() {
+        let draft = PersonInteractionDraft(
+            kind: .phone,
+            summary: "Project catch-up",
+            discussion: "Launch timing",
+            followUps: "Send the deck\n\nBook Tuesday",
+            commitments: "Introduce Maya to Sam\nShare the brief"
+        )
+
+        #expect(draft.followUpItems == ["Send the deck", "Book Tuesday"])
+        #expect(draft.commitmentItems == ["Introduce Maya to Sam", "Share the brief"])
+        #expect(draft.kind.tagSlug == "interaction/phone")
+    }
+
+    @Test("The chosen interaction kind reads back in the timeline")
+    func interactionKindRoundTripsIntoTimelineLanguage() {
+        let stored = PersonInteractionKind(tagSlugs: ["interaction/video"])
+        let entry = PersonTimelineEntry(
+            id: UUID(),
+            kind: .interaction,
+            title: "Project catch-up",
+            date: Date(),
+            provenance: .logged,
+            interactionKind: stored
+        )
+
+        #expect(stored == .video)
+        #expect(entry.provenanceLine == "video — logged")
     }
 }
