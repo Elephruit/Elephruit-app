@@ -353,9 +353,8 @@ struct PersonRow: View {
         .padding(.vertical, Theme.Spacing.tight)
         .frame(minHeight: Theme.Size.rowHeightExpanded)
         .hoverHighlight(isEnabled: !isSelected, extending: Theme.Spacing.small)
-        // Name *and* the line beneath it. The subtitle is truncated to one line in the row, and it
-        // is the half that says where the relationship stands — worth being able to read in full
-        // without opening somebody.
+        // Everything the row shows, at full length — a work address and a mobile number are exactly
+        // the things a narrow list column truncates, and exactly the things somebody hovers for.
         .help(tooltip)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
@@ -368,9 +367,19 @@ struct PersonRow: View {
         }
     }
 
+    /// The whole row, untruncated, one line each.
+    ///
+    /// The row truncates the identity line and fits the contact details to the column width; the
+    /// tooltip is where a long address or a role that ran out of room can be read in full.
     private var tooltip: String {
-        guard let subtitle, !subtitle.isEmpty else { return person.displayTitle }
-        return "\(person.displayTitle)\n\(subtitle)"
+        var lines = [person.displayTitle]
+        if let identityLine { lines.append(identityLine) }
+        if rowDetails.isEmpty {
+            if let relationshipLine { lines.append(relationshipLine) }
+        } else {
+            lines.append(contentsOf: rowDetails.map { "\($0.displayLabel): \($0.value)" })
+        }
+        return lines.joined(separator: "\n")
     }
 
     /// Whether this person's details come from the address book, and whether that still works.
