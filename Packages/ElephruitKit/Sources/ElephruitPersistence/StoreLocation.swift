@@ -38,6 +38,19 @@ public struct StoreLocation: Sendable, Hashable {
         root.appending(path: "SearchIndex.sqlite", directoryHint: .notDirectory)
     }
 
+    /// The calendar cache and its index.
+    ///
+    /// A second file rather than more tables in the first, because the two are invalidated by
+    /// entirely different things: the search index is rebuilt when the *library* changes shape, and
+    /// this one when EventKit does. Sharing a file would mean either rebuild throwing away the
+    /// other's work, and a calendar refresh is not a reason to reindex fifty thousand notes.
+    ///
+    /// Derived on the same terms and beside the store for the same reason. Deleting it costs a
+    /// refresh: EventKit is authoritative for every row in it.
+    public var calendarIndexURL: URL {
+        root.appending(path: "CalendarIndex.sqlite", directoryHint: .notDirectory)
+    }
+
     public init(root: URL, cachesRoot: URL) {
         self.root = root
         self.cachesRoot = cachesRoot
