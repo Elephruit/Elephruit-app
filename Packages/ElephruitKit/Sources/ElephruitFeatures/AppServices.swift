@@ -71,6 +71,12 @@ public final class AppServices {
     /// The system address book, read-only and off until the user turns it on.
     public let contacts: ContactsService
 
+    /// Turning the address book into the CRM's starting population.
+    public let contactImports: ContactImportService
+
+    /// Keeping linked contact details current, and saying so when it cannot.
+    public let contactSync: ContactSyncService
+
     /// Reads text off a scanned card. Inert until the scan flow is used.
     public let textRecognizer: any TextRecognizing
 
@@ -178,10 +184,19 @@ public final class AppServices {
     /// when needed without shipping a menu item that plants fake data in someone's library.
     public let isDevelopmentMode: Bool
 
+    /// - Parameters:
+    ///   - contactsProvider: How to build the address-book adapter. Defaults to the real one, built
+    ///     lazily and only once the user turns the integration on. A test passes a
+    ///     ``ElephruitIntegrations/FixtureContactsProvider`` here, which is what lets the whole
+    ///     import flow be exercised without `CNContactStore` ever being constructed.
+    ///   - defaults: Where per-device preferences live. A test passes a scratch suite so that
+    ///     enabling Contacts in one does not leave the flag set for the user or for the next test.
     public init(
         stack: PersistenceStack,
         dateProvider: any DateProvider = SystemDateProvider(),
-        isDevelopmentMode: Bool = false
+        isDevelopmentMode: Bool = false,
+        contactsProvider: (@Sendable () -> any ContactsProviding)? = nil,
+        defaults: UserDefaults = .standard
     ) {
         self.stack = stack
         self.dateProvider = dateProvider
@@ -255,8 +270,24 @@ public final class AppServices {
 
         // Built lazily and only when the feature is enabled, on the same terms as the calendar — so
         // an app that never turns Contacts on never constructs a `CNContactStore` and never prompts.
-        self.contacts = ContactsService(dateProvider: dateProvider) { SystemContactsProvider() }
+        self.contacts = ContactsService(
+            dateProvider: dateProvider,
+            defaults: defaults,
+            makeProvider: contactsProvider ?? { SystemContactsProvider() }
+        )
         self.textRecognizer = VisionTextRecognizer()
+
+        let contactImports = ContactImportService(
+            context: context,
+            people: persons,
+            items: items,
+            identity: self.personIdentity,
+            dateProvider: dateProvider
+        )
+        self.contactImports = contactImports
+        self.contactSync = ContactSyncService(
+            context: context, people: persons, imports: contactImports, dateProvider: dateProvider
+        )
 
         self.attachments = AttachmentStore(
             context: context,
@@ -286,7 +317,9 @@ public final class AppServices {
     /// An isolated in-memory instance, for previews and tests.
     public static func inMemory(
         dateProvider: any DateProvider = FixedDateProvider.reference,
-        populated: Bool = true
+        populated: Bool = true,
+        contactsProvider: (@Sendable () -> any ContactsProviding)? = nil,
+        defaults: UserDefaults = .standard
     ) -> AppServices {
         // Previews must never crash a canvas, and an in-memory store failing to open would mean
         // the schema itself is broken — which the persistence tests already cover. A minimal
@@ -295,7 +328,13 @@ public final class AppServices {
             return AppServices(stack: PersistenceStack.previewFallback(), dateProvider: dateProvider)
         }
 
-        let services = AppServices(stack: stack, dateProvider: dateProvider, isDevelopmentMode: true)
+        let services = AppServices(
+            stack: stack,
+            dateProvider: dateProvider,
+            isDevelopmentMode: true,
+            contactsProvider: contactsProvider,
+            defaults: defaults
+        )
         if populated {
             services.loadSampleData()
         }
