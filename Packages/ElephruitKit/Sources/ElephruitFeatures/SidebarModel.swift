@@ -31,6 +31,14 @@ public struct SidebarDestination: Identifiable, Hashable, Sendable {
     public var title: String
     public var symbolName: String
 
+    /// The tooltip, shown once the pointer has rested on the row.
+    ///
+    /// It says what the destination *holds*, never what it is called — a tooltip that repeats the
+    /// label already on screen is a delay followed by nothing. "Upcoming" is a word; "dated work,
+    /// ahead of today" is the rule that decides what appears there, and that rule is the part a
+    /// user cannot infer from the row.
+    public var hint: String
+
     /// Whether this destination shows a count. Only Today and Inbox do.
     public var showsCount: Bool
 
@@ -53,6 +61,7 @@ public struct SidebarDestination: Identifiable, Hashable, Sendable {
         band: Band,
         title: String,
         symbolName: String,
+        hint: String,
         showsCount: Bool = false,
         mayTruncate: Bool = false,
         isAvailable: Bool = true
@@ -62,6 +71,7 @@ public struct SidebarDestination: Identifiable, Hashable, Sendable {
         self.band = band
         self.title = title
         self.symbolName = symbolName
+        self.hint = hint
         self.showsCount = showsCount
         self.mayTruncate = mayTruncate
         self.isAvailable = isAvailable
@@ -80,7 +90,14 @@ public enum SidebarRegistry {
 
         // Available as of Phase E, and first, because it answers the question you have when you
         // open the app rather than one you go looking for.
-        SidebarDestination(id: "home", selection: .home, band: .primary, title: "Home", symbolName: "house"),
+        SidebarDestination(
+            id: "home",
+            selection: .home,
+            band: .primary,
+            title: "Home",
+            symbolName: "house",
+            hint: "Where the day starts: what is due, what is running, and what came in."
+        ),
 
         SidebarDestination(
             id: "today",
@@ -88,6 +105,7 @@ public enum SidebarRegistry {
             band: .primary,
             title: "Today",
             symbolName: "circle.circle",
+            hint: "Due today, plus anything already overdue.",
             showsCount: true
         ),
         SidebarDestination(
@@ -95,7 +113,8 @@ public enum SidebarRegistry {
             selection: .upcoming,
             band: .primary,
             title: "Upcoming",
-            symbolName: "calendar"
+            symbolName: "calendar",
+            hint: "Dated work, ahead of today."
         ),
         SidebarDestination(
             id: "inbox",
@@ -103,35 +122,101 @@ public enum SidebarRegistry {
             band: .primary,
             title: "Inbox",
             symbolName: "tray",
+            hint: "Captured and not yet filed. Empty is the goal.",
             showsCount: true
         ),
 
         // MARK: Library
 
-        SidebarDestination(id: "notes", selection: .kind(.note), band: .library, title: "Notes", symbolName: "note.text"),
-        SidebarDestination(id: "projects", selection: .kind(.project), band: .library, title: "Projects", symbolName: "square.stack.3d.up"),
-        SidebarDestination(id: "areas", selection: .kind(.area), band: .library, title: "Areas", symbolName: "square.grid.2x2"),
+        SidebarDestination(
+            id: "notes",
+            selection: .kind(.note),
+            band: .library,
+            title: "Notes",
+            symbolName: "note.text",
+            hint: "Every note in the library, newest first."
+        ),
+        SidebarDestination(
+            id: "projects",
+            selection: .kind(.project),
+            band: .library,
+            title: "Projects",
+            symbolName: "square.stack.3d.up",
+            hint: "Work with an outcome and an end."
+        ),
+        SidebarDestination(
+            id: "areas",
+            selection: .kind(.area),
+            band: .library,
+            title: "Areas",
+            symbolName: "square.grid.2x2",
+            hint: "Standing responsibilities, which never finish."
+        ),
         // Superseded by `PeopleSidebarSection`, which is a band of its own.
         //
         // Declared rather than deleted, on the same terms as every other unavailable destination: a
         // scene restored from a build that predates the People module still decodes, and the row is
         // never enumerated because the accessors filter on availability. A flat `.kind(.person)` list
         // answers "who do I know" and none of the questions people actually arrive with.
-        SidebarDestination(id: "people", selection: .kind(.person), band: .library, title: "People", symbolName: "person", isAvailable: false),
-        SidebarDestination(id: "bookmarks", selection: .kind(.bookmark), band: .library, title: "Bookmarks", symbolName: "bookmark"),
-        SidebarDestination(id: "archive", selection: .archive, band: .library, title: "Archive", symbolName: "archivebox"),
-        SidebarDestination(id: "trash", selection: .trash, band: .library, title: "Trash", symbolName: "trash"),
+        SidebarDestination(
+            id: "people",
+            selection: .kind(.person),
+            band: .library,
+            title: "People",
+            symbolName: "person",
+            hint: "Everybody in the library, as a flat list.",
+            isAvailable: false
+        ),
+        SidebarDestination(
+            id: "bookmarks",
+            selection: .kind(.bookmark),
+            band: .library,
+            title: "Bookmarks",
+            symbolName: "bookmark",
+            hint: "Links kept for later."
+        ),
+        SidebarDestination(
+            id: "archive",
+            selection: .archive,
+            band: .library,
+            title: "Archive",
+            symbolName: "archivebox",
+            hint: "Finished, kept, and out of the way of today."
+        ),
+        SidebarDestination(
+            id: "trash",
+            selection: .trash,
+            band: .library,
+            title: "Trash",
+            symbolName: "trash",
+            hint: "Deleted, and recoverable until you empty it."
+        ),
 
         // MARK: Declared, not yet available
         //
         // These exist so the phase that builds them changes one flag. Until then they are invisible:
         // no row, no customisation entry, no menu item.
 
-        SidebarDestination(id: "calendar", selection: .calendar, band: .library, title: "Calendar", symbolName: "calendar.day.timeline.left", isAvailable: false),
+        SidebarDestination(
+            id: "calendar",
+            selection: .calendar,
+            band: .library,
+            title: "Calendar",
+            symbolName: "calendar.day.timeline.left",
+            hint: "Your days, laid out.",
+            isAvailable: false
+        ),
 
         // Available as of Phase C. In the Library band rather than the top one, by decision: time is
         // something you look *back* at, and the top band is for what you are doing now.
-        SidebarDestination(id: "time", selection: .time, band: .library, title: "Time", symbolName: "timer"),
+        SidebarDestination(
+            id: "time",
+            selection: .time,
+            band: .library,
+            title: "Time",
+            symbolName: "timer",
+            hint: "Tracked time, and what it went on."
+        ),
     ]
 
     /// Available destinations in a band, in display order.

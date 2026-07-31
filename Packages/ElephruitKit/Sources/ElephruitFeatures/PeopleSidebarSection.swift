@@ -118,9 +118,18 @@ struct PeopleSidebarSection: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .hoverHighlight(
+            isEnabled: navigation.selection != selection,
+            cornerRadius: SidebarMetrics.selectionRadius,
+            extending: SidebarMetrics.selectionInset
+        )
         .tag(selection)
+        // A group carries its own name on the row, so the hint explains the *kind* of row it is;
+        // the fixed scopes each explain the rule that decides who appears in them.
+        .help(scope.hint)
         .accessibilityIdentifier(selection.accessibilityIdentifier)
         .accessibilityLabel(count.map { "\(title ?? scope.title), \($0)" } ?? (title ?? scope.title))
+        .accessibilityHint(scope.hint)
         .contextMenu {
             if case .group(let id) = scope {
                 Button("Delete group", role: .destructive) { deleteGroup(id) }
@@ -298,9 +307,14 @@ struct PersonContextSidebar: View {
             .padding(Theme.Spacing.medium)
         }
         .accessibilityIdentifier(AccessibilityID.People.contextSidebar)
-        .task(id: person.id) {
-            context = try? services?.personWorkspace.sidebar(for: person)
-        }
+        .task(id: person.id) { reload() }
+        // "Open" and "You promised" are lists of other items pointing here, so a new task about
+        // this person has to arrive without a navigation — see ``AppServices/changeToken``.
+        .onChange(of: services?.changeToken) { _, _ in reload() }
+    }
+
+    private func reload() {
+        context = try? services?.personWorkspace.sidebar(for: person)
     }
 
     @ViewBuilder
