@@ -212,11 +212,21 @@ public actor FixtureContactsProvider: ContactsProviding {
         }
 
         var updated = contacts[index]
+        updated.givenName = change.givenName
+        updated.middleName = change.middleName
+        updated.familyName = change.familyName
+        updated.namePrefix = change.namePrefix
+        updated.nameSuffix = change.nameSuffix
+        updated.nickname = change.nickname
         updated.jobTitle = change.jobTitle
+        updated.departmentName = change.departmentName
         updated.organizationName = change.organizationName
         updated.emailAddresses = change.emailAddresses
         updated.phoneNumbers = change.phoneNumbers
         updated.urlAddresses = change.urlAddresses
+        updated.birthday = change.birthday.map {
+            ContactLabelledDate(label: "birthday", year: $0.year, month: $0.month, day: $0.day)
+        }
 
         // Postal addresses are untouched because a write cannot carry them — the same guarantee the
         // real provider makes, asserted here by there being nothing to assign.

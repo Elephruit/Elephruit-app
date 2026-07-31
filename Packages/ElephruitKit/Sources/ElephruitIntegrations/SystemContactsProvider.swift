@@ -191,8 +191,14 @@ public actor SystemContactsProvider: ContactsProviding {
             CNContactIdentifierKey,
             CNContactGivenNameKey,
             CNContactFamilyNameKey,
+            // The remaining name parts and the department are fetched because they are writable:
+            // a value the app can clear and never reads is a value it deletes without meaning to.
+            CNContactMiddleNameKey,
+            CNContactNamePrefixKey,
+            CNContactNameSuffixKey,
             CNContactNicknameKey,
             CNContactOrganizationNameKey,
+            CNContactDepartmentNameKey,
             CNContactJobTitleKey,
             CNContactEmailAddressesKey,
             CNContactPhoneNumbersKey,
@@ -494,9 +500,13 @@ public actor SystemContactsProvider: ContactsProviding {
             id: contact.identifier,
             givenName: contact.givenName,
             familyName: contact.familyName,
+            middleName: contact.middleName,
+            namePrefix: contact.namePrefix,
+            nameSuffix: contact.nameSuffix,
             nickname: contact.nickname.isEmpty ? nil : contact.nickname,
             organizationName: contact.organizationName.isEmpty ? nil : contact.organizationName,
             jobTitle: contact.jobTitle.isEmpty ? nil : contact.jobTitle,
+            departmentName: contact.departmentName.isEmpty ? nil : contact.departmentName,
             emailAddresses: contact.emailAddresses.map {
                 ContactLabelledValue(label: Self.label($0.label), value: $0.value as String)
             },
@@ -591,12 +601,23 @@ public actor SystemContactsProvider: ContactsProviding {
             return .notPermitted
         }
 
+        // Exactly the keys a write can change. Fetching more would mean holding more of somebody's
+        // record in memory than the operation needs, and fetching fewer makes `mutableCopy()` throw
+        // the moment the save touches an unfetched property.
         let keys: [CNKeyDescriptor] = [
+            CNContactGivenNameKey as CNKeyDescriptor,
+            CNContactMiddleNameKey as CNKeyDescriptor,
+            CNContactFamilyNameKey as CNKeyDescriptor,
+            CNContactNamePrefixKey as CNKeyDescriptor,
+            CNContactNameSuffixKey as CNKeyDescriptor,
+            CNContactNicknameKey as CNKeyDescriptor,
             CNContactEmailAddressesKey as CNKeyDescriptor,
             CNContactPhoneNumbersKey as CNKeyDescriptor,
             CNContactUrlAddressesKey as CNKeyDescriptor,
             CNContactJobTitleKey as CNKeyDescriptor,
+            CNContactDepartmentNameKey as CNKeyDescriptor,
             CNContactOrganizationNameKey as CNKeyDescriptor,
+            CNContactBirthdayKey as CNKeyDescriptor,
         ]
 
         let existing: CNContact
@@ -614,8 +635,29 @@ public actor SystemContactsProvider: ContactsProviding {
             return .failed("the record could not be prepared for editing")
         }
 
+        mutable.givenName = change.givenName
+        mutable.middleName = change.middleName
+        mutable.familyName = change.familyName
+        mutable.namePrefix = change.namePrefix
+        mutable.nameSuffix = change.nameSuffix
+        mutable.nickname = change.nickname
+
         mutable.jobTitle = change.jobTitle
+        mutable.departmentName = change.departmentName
         mutable.organizationName = change.organizationName
+
+        // `DateComponents` with no year is what Contacts stores for a birthday entered without one,
+        // so an unknown year is written as an absence rather than as a year nobody supplied.
+        if let birthday = change.birthday {
+            var components = DateComponents()
+            components.year = birthday.year
+            components.month = birthday.month
+            components.day = birthday.day
+            mutable.birthday = components
+        } else {
+            mutable.birthday = nil
+        }
+
         mutable.emailAddresses = change.emailAddresses.map {
             CNLabeledValue(label: Self.writeLabel(for: $0.label), value: $0.value as NSString)
         }

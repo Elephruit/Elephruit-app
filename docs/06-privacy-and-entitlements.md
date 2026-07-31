@@ -55,8 +55,9 @@ what the app does with the access and that it is optional:
 - `NSContactsUsageDescription` — "Elephruit can link the people in your notes to
   your existing contacts, so you do not have to retype them. It changes a contact
   only when you edit that person in Elephruit and confirm the change, and only
-  their email addresses, phone numbers, websites, job title, and company. It never
-  creates or deletes contacts, and nothing is copied out of your Mac."
+  their name, nickname, birthday, email addresses, phone numbers, websites, job
+  title, department, and company. It never touches their photo, postal address, or
+  notes, and it never creates or deletes contacts."
 
   Contacts has a single access tier, so read access carries write access and the
   user cannot grant less. This string is therefore where the app states the limit

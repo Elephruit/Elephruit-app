@@ -100,9 +100,17 @@ public struct ContactSummary: Sendable, Hashable, Identifiable {
     public var id: String
     public var givenName: String
     public var familyName: String
+
+    /// Carried for the same reason the import carries them: these are writable, so a person linked
+    /// from a search must arrive knowing them rather than blanking them on the first edit.
+    public var middleName: String
+    public var namePrefix: String
+    public var nameSuffix: String
+
     public var nickname: String?
     public var organizationName: String?
     public var jobTitle: String?
+    public var departmentName: String?
     public var emailAddresses: [ContactLabelledValue]
     public var phoneNumbers: [ContactLabelledValue]
     public var postalAddresses: [ContactLabelledValue]
@@ -123,9 +131,13 @@ public struct ContactSummary: Sendable, Hashable, Identifiable {
         id: String,
         givenName: String,
         familyName: String,
+        middleName: String = "",
+        namePrefix: String = "",
+        nameSuffix: String = "",
         nickname: String? = nil,
         organizationName: String? = nil,
         jobTitle: String? = nil,
+        departmentName: String? = nil,
         emailAddresses: [ContactLabelledValue] = [],
         phoneNumbers: [ContactLabelledValue] = [],
         postalAddresses: [ContactLabelledValue] = [],
@@ -139,9 +151,13 @@ public struct ContactSummary: Sendable, Hashable, Identifiable {
         self.id = id
         self.givenName = givenName
         self.familyName = familyName
+        self.middleName = middleName
+        self.namePrefix = namePrefix
+        self.nameSuffix = nameSuffix
         self.nickname = nickname
         self.organizationName = organizationName
         self.jobTitle = jobTitle
+        self.departmentName = departmentName
         self.emailAddresses = emailAddresses
         self.phoneNumbers = phoneNumbers
         self.postalAddresses = postalAddresses
@@ -244,9 +260,9 @@ public protocol ContactsProviding: Sendable {
     /// requirement that system contacts change "only with explicit user intent" is now met by intent
     /// rather than by incapacity, and the fences are:
     ///
-    /// - Only emails, numbers, sites, the job title, and the organisation are writable. Names,
-    ///   birthdays, relations, photographs, and every other field are not expressible in a
-    ///   ``ContactWrite`` and so cannot be touched.
+    /// - Only what a ``ContactWrite`` can express is writable. Relations, photographs, notes, social
+    ///   profiles, instant-message handles, and previous family names have no field on it and so
+    ///   cannot be touched at all.
     /// - **Postal addresses are not writable, on purpose.** Contacts stores them structured — street,
     ///   city, postcode, country — and this app reads them through `CNPostalAddressFormatter` into a
     ///   single display line. That projection does not invert: parsing "12 Rosewood Lane, Austin"
@@ -272,27 +288,68 @@ public struct ContactWrite: Sendable, Hashable {
     /// The record to change. A write never creates a contact.
     public var identifier: String
 
+    // MARK: The name
+    //
+    // Kept in the same parts Contacts keeps it in. Sending one combined string would mean the
+    // receiving end splitting it, and a split is a guess — which is exactly why the caller does it
+    // once, visibly, and shows the user the result before this type is ever built.
+
+    public var givenName: String
+    public var middleName: String
+    public var familyName: String
+    public var namePrefix: String
+    public var nameSuffix: String
+    public var nickname: String
+
+    // MARK: Work
+
     public var jobTitle: String
+    public var departmentName: String
     public var organizationName: String
+
+    // MARK: Reachable at
 
     public var emailAddresses: [ContactLabelledValue]
     public var phoneNumbers: [ContactLabelledValue]
     public var urlAddresses: [ContactLabelledValue]
 
+    /// Day and month, and the year only when it is actually known.
+    ///
+    /// `nil` clears the birthday, which is the only way somebody removes one they entered by mistake.
+    /// `PartialDate` and `CNContact.birthday` agree that a missing year is information rather than a
+    /// gap, so this crosses without a placeholder year ever being invented.
+    public var birthday: PartialDate?
+
     public init(
         identifier: String,
+        givenName: String = "",
+        middleName: String = "",
+        familyName: String = "",
+        namePrefix: String = "",
+        nameSuffix: String = "",
+        nickname: String = "",
         jobTitle: String = "",
+        departmentName: String = "",
         organizationName: String = "",
         emailAddresses: [ContactLabelledValue] = [],
         phoneNumbers: [ContactLabelledValue] = [],
-        urlAddresses: [ContactLabelledValue] = []
+        urlAddresses: [ContactLabelledValue] = [],
+        birthday: PartialDate? = nil
     ) {
         self.identifier = identifier
+        self.givenName = givenName
+        self.middleName = middleName
+        self.familyName = familyName
+        self.namePrefix = namePrefix
+        self.nameSuffix = nameSuffix
+        self.nickname = nickname
         self.jobTitle = jobTitle
+        self.departmentName = departmentName
         self.organizationName = organizationName
         self.emailAddresses = emailAddresses
         self.phoneNumbers = phoneNumbers
         self.urlAddresses = urlAddresses
+        self.birthday = birthday
     }
 }
 
