@@ -113,6 +113,14 @@ let package = Package(
             ],
             swiftSettings: .strict
         ),
+        /// The system adapters. A target of its own rather than folded into `ElephruitCoreTests`,
+        /// because the write-safety checks need to *import* the adapters to exercise their inert
+        /// defaults — the calendar's equivalent only scans the source and so did not.
+        .testTarget(
+            name: "ElephruitIntegrationsTests",
+            dependencies: ["ElephruitIntegrations", "ElephruitCore"],
+            swiftSettings: .strict
+        ),
         .testTarget(
             name: "ElephruitTransferTests",
             dependencies: ["ElephruitTransfer", "ElephruitPersistence", "ElephruitModel", "ElephruitCore"],

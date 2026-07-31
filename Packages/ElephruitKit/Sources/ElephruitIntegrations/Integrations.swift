@@ -89,27 +89,94 @@ public final class NoCalendarProvider: CalendarProviding {
 
 // MARK: - Contacts
 
+/// A labelled value as Contacts holds it.
+public struct ContactLabelledValue: Sendable, Hashable {
+    public var label: String
+    public var value: String
+
+    public init(label: String, value: String) {
+        self.label = label
+        self.value = value
+    }
+}
+
+/// One of the accounts the operating system has configured — iCloud, Google, Exchange, On My Mac.
+///
+/// Surfaced so the user can see which account a linked record came from, and so a library that reads
+/// three accounts can say so rather than presenting one undifferentiated list.
+public struct ContactAccount: Sendable, Hashable, Identifiable {
+    public var id: String
+    public var name: String
+    public var contactCount: Int
+
+    /// Whether the account is read-only to this app — an Exchange directory usually is.
+    public var isReadOnly: Bool
+
+    public init(id: String, name: String, contactCount: Int, isReadOnly: Bool = false) {
+        self.id = id
+        self.name = name
+        self.contactCount = contactCount
+        self.isReadOnly = isReadOnly
+    }
+}
+
 /// A contact, as the app understands it. Contacts remains authoritative for what it holds; this is a
 /// read-only projection used to offer links.
 public struct ContactSummary: Sendable, Hashable, Identifiable {
     public var id: String
     public var givenName: String
     public var familyName: String
+    public var nickname: String?
     public var organizationName: String?
-    public var emailAddresses: [String]
+    public var jobTitle: String?
+    public var emailAddresses: [ContactLabelledValue]
+    public var phoneNumbers: [ContactLabelledValue]
+    public var postalAddresses: [ContactLabelledValue]
+    public var urlAddresses: [ContactLabelledValue]
+
+    /// Day and month, and the year only when Contacts actually holds one.
+    public var birthdayMonth: Int?
+    public var birthdayDay: Int?
+    public var birthdayYear: Int?
+
+    /// Which account holds this record.
+    public var accountName: String?
+
+    /// Whether the app may write back to it. Reported, never assumed.
+    public var isReadOnly: Bool
 
     public init(
         id: String,
         givenName: String,
         familyName: String,
+        nickname: String? = nil,
         organizationName: String? = nil,
-        emailAddresses: [String] = []
+        jobTitle: String? = nil,
+        emailAddresses: [ContactLabelledValue] = [],
+        phoneNumbers: [ContactLabelledValue] = [],
+        postalAddresses: [ContactLabelledValue] = [],
+        urlAddresses: [ContactLabelledValue] = [],
+        birthdayMonth: Int? = nil,
+        birthdayDay: Int? = nil,
+        birthdayYear: Int? = nil,
+        accountName: String? = nil,
+        isReadOnly: Bool = false
     ) {
         self.id = id
         self.givenName = givenName
         self.familyName = familyName
+        self.nickname = nickname
         self.organizationName = organizationName
+        self.jobTitle = jobTitle
         self.emailAddresses = emailAddresses
+        self.phoneNumbers = phoneNumbers
+        self.postalAddresses = postalAddresses
+        self.urlAddresses = urlAddresses
+        self.birthdayMonth = birthdayMonth
+        self.birthdayDay = birthdayDay
+        self.birthdayYear = birthdayYear
+        self.accountName = accountName
+        self.isReadOnly = isReadOnly
     }
 
     public var fullName: String {
@@ -117,12 +184,36 @@ public struct ContactSummary: Sendable, Hashable, Identifiable {
     }
 }
 
+/// Reading the system Contacts store.
+///
+/// ### Read-only by construction, on the same terms as the calendar
+/// There is **no write method here**, and no way to reach a `CNContactStore` through it. Creating or
+/// updating a system contact from Elephruit is a compile error rather than a rule somebody could
+/// forget — and the requirement that system contacts change "only with explicit user intent" is
+/// satisfied by the strongest available means, which is not offering the capability at all.
+///
+/// A user who wants Elephruit's richer profile in their address book exports a vCard, which is an
+/// act they perform in a save panel. See `docs/19-permissions-matrix.md`.
 public protocol ContactsProviding: Sendable {
     var authorization: IntegrationAuthorization { get async }
     func requestAccess() async -> IntegrationAuthorization
+
+    /// The accounts the system has configured.
+    func accounts() async -> [ContactAccount]
+
+    /// Contacts matching a name fragment. Empty when access has not been granted, which is a
+    /// legitimate state with nothing in it rather than an error.
     func contacts(matching query: String) async -> [ContactSummary]
+
+    /// One contact, for refreshing a stored link. `nil` means the record is gone.
+    func contact(withIdentifier identifier: String) async -> ContactSummary?
 }
 
+/// The default, and what the app uses until the user turns Contacts on.
+///
+/// Reports ``IntegrationAuthorization/notRequested`` and returns nothing, so every path through the
+/// interface runs against a real implementation from the first launch rather than a `nil` branch
+/// that only executes for users who grant permission.
 public struct NoContactsProvider: ContactsProviding {
     public init() {}
 
@@ -133,7 +224,9 @@ public struct NoContactsProvider: ContactsProviding {
         return .unavailable
     }
 
+    public func accounts() async -> [ContactAccount] { [] }
     public func contacts(matching query: String) async -> [ContactSummary] { [] }
+    public func contact(withIdentifier identifier: String) async -> ContactSummary? { nil }
 }
 
 // MARK: - Notifications
