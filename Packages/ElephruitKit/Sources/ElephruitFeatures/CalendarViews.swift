@@ -233,19 +233,20 @@ public struct CalendarSettingsSection: View {
         )
     }
 
-    /// Says what the permission actually covers, because macOS will ask for more than this app uses.
+    /// Says what the permission actually covers.
     ///
-    /// The prompt says "full access" whatever we write here — EventKit has no read-only request — so
-    /// the honest thing is to explain that discrepancy *before* the prompt appears rather than let
-    /// someone wonder why a read-only feature wants write permission.
+    /// It used to say the app never writes, which was true and is no longer: the calendar module
+    /// creates and edits events. What is still true, and what somebody deciding on this prompt
+    /// actually needs to know, is the other half — that their notes about a meeting stay in
+    /// Elephruit and are never put into an event other people can read.
     private var explanation: String {
         if let refusal = calendar.authorization.explanation, calendar.isEnabled {
             return refusal
         }
         return """
-            Events appear in Today and Upcoming, and you can make notes about them. Elephruit only \
-            ever reads your calendar — it never creates, changes, or deletes an event. macOS will \
-            ask for "full access" because it offers no read-only option.
+            Your events appear in Elephruit, and you can create and change them here. Anything you \
+            write *about* a meeting — linked people, your own notes, what you promised — stays in \
+            Elephruit and is never added to the calendar event.
             """
     }
 }

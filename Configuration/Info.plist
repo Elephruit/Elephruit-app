@@ -69,16 +69,20 @@
 		</dict>
 	</array>
 	<!--
-	  Shown in the macOS permission prompt. Says what is read and, as importantly, that nothing is
-	  written — because EventKit forces the request to be for full access even though this app only
-	  ever reads.
+	  Shown in the macOS permission prompt.
+
+	  It used to say the app never writes. That was true of Phase D and is no longer: the calendar
+	  module creates and edits events, which is the point of it. What replaces that promise is the
+	  one a person deciding on this prompt actually needs — that what they write *about* a meeting
+	  stays in Elephruit and is never put into an event other people can read. `EventDraft` is why
+	  that is structural rather than a claim; see `CalendarWriteSafetyTests`.
 
 	  `NSCalendarsFullAccessUsageDescription` is the key that pairs with
 	  `requestFullAccessToEvents()` on macOS 14 and later; the older `NSCalendarsUsageDescription`
 	  pairs with the deprecated request and is deliberately not used.
 	-->
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Elephruit shows your events alongside your tasks and notes. It only reads your calendar and never changes it.</string>
+	<string>Elephruit shows your calendar and lets you create and change events. Your own notes about a meeting stay in Elephruit and are never added to a calendar event.</string>
 
 	<!--
 	  Shown in the macOS permission prompt for the People module.

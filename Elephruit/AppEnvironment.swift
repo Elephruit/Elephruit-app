@@ -2,6 +2,7 @@ import ElephruitCore
 import ElephruitIntegrations
 import ElephruitFeatures
 import ElephruitPersistence
+import AppKit
 import Foundation
 import Observation
 
@@ -123,6 +124,56 @@ final class AppEnvironment {
     var services: AppServices? {
         if case .ready(let services) = state { return services }
         return nil
+    }
+
+    // MARK: - Reaching the calendar from outside a window
+
+    /// What the menu bar and the intents have asked the calendar to do.
+    ///
+    /// A published request rather than a direct call, because neither the menu bar nor an intent has
+    /// a window to act on: the window may not exist yet, and there may be several. The workspace
+    /// picks the request up when it next renders, which is also what makes it work when the app was
+    /// launched *by* the intent.
+    private(set) var pendingCalendarRequest: CalendarRequest?
+
+    enum CalendarRequest: Equatable {
+        case open
+        case quickEntry
+        case day(Date)
+    }
+
+    func openCalendar() {
+        pendingCalendarRequest = .open
+        NSApplication.shared.activate()
+    }
+
+    func openCalendarQuickEntry() {
+        pendingCalendarRequest = .quickEntry
+        NSApplication.shared.activate()
+    }
+
+    /// Opens the calendar on a particular day — the shape a deep link arrives in.
+    func openCalendar(on day: Date) {
+        pendingCalendarRequest = .day(day)
+        NSApplication.shared.activate()
+    }
+
+    /// Consumed by the window that acted on it, so a request cannot fire twice.
+    func consumeCalendarRequest() -> CalendarRequest? {
+        defer { pendingCalendarRequest = nil }
+        return pendingCalendarRequest
+    }
+
+    /// Picks up anything an intent left behind while the app was not frontmost.
+    func adoptIntentRouting() {
+        if CalendarIntentRouting.shouldOpenCalendar {
+            CalendarIntentRouting.shouldOpenCalendar = false
+            pendingCalendarRequest = .open
+        }
+        if let day = CalendarIntentRouting.requestedDay {
+            CalendarIntentRouting.requestedDay = nil
+            pendingCalendarRequest = .day(day)
+        }
     }
 
     /// Offers the global shortcuts to the system and records what it said.
