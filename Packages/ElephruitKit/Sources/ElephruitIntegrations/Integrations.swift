@@ -100,9 +100,17 @@ public struct ContactSummary: Sendable, Hashable, Identifiable {
     public var id: String
     public var givenName: String
     public var familyName: String
+
+    /// Carried for the same reason the import carries them: these are writable, so a person linked
+    /// from a search must arrive knowing them rather than blanking them on the first edit.
+    public var middleName: String
+    public var namePrefix: String
+    public var nameSuffix: String
+
     public var nickname: String?
     public var organizationName: String?
     public var jobTitle: String?
+    public var departmentName: String?
     public var emailAddresses: [ContactLabelledValue]
     public var phoneNumbers: [ContactLabelledValue]
     public var postalAddresses: [ContactLabelledValue]
@@ -123,9 +131,13 @@ public struct ContactSummary: Sendable, Hashable, Identifiable {
         id: String,
         givenName: String,
         familyName: String,
+        middleName: String = "",
+        namePrefix: String = "",
+        nameSuffix: String = "",
         nickname: String? = nil,
         organizationName: String? = nil,
         jobTitle: String? = nil,
+        departmentName: String? = nil,
         emailAddresses: [ContactLabelledValue] = [],
         phoneNumbers: [ContactLabelledValue] = [],
         postalAddresses: [ContactLabelledValue] = [],
@@ -139,9 +151,13 @@ public struct ContactSummary: Sendable, Hashable, Identifiable {
         self.id = id
         self.givenName = givenName
         self.familyName = familyName
+        self.middleName = middleName
+        self.namePrefix = namePrefix
+        self.nameSuffix = nameSuffix
         self.nickname = nickname
         self.organizationName = organizationName
         self.jobTitle = jobTitle
+        self.departmentName = departmentName
         self.emailAddresses = emailAddresses
         self.phoneNumbers = phoneNumbers
         self.postalAddresses = postalAddresses
@@ -232,6 +248,137 @@ public protocol ContactsProviding: Sendable {
     /// An `AsyncStream` rather than a notification name, so a consumer neither imports Contacts nor
     /// has to remember to remove an observer — the same arrangement `CalendarProviding` uses.
     var changes: AsyncStream<Void> { get }
+
+    // MARK: Writing
+
+    /// Writes an edit back into the system address book.
+    ///
+    /// ### The one write in the app, and what it is fenced with
+    /// This is the only method on any provider that changes a system contact, and it exists because
+    /// the alternative was worse: a linked person's details could not be corrected anywhere, since
+    /// editing them locally meant the next refresh discarding the correction without saying so. The
+    /// requirement that system contacts change "only with explicit user intent" is now met by intent
+    /// rather than by incapacity, and the fences are:
+    ///
+    /// - Only what a ``ContactWrite`` can express is writable. Relations, photographs, notes, social
+    ///   profiles, instant-message handles, and previous family names have no field on it and so
+    ///   cannot be touched at all.
+    /// - **Postal addresses are not writable, on purpose.** Contacts stores them structured — street,
+    ///   city, postcode, country — and this app reads them through `CNPostalAddressFormatter` into a
+    ///   single display line. That projection does not invert: parsing "12 Rosewood Lane, Austin"
+    ///   back into fields is guesswork, and guessing wrong writes a mangled address into somebody's
+    ///   address book. They stay editable on the Elephruit record, where the single line is the whole
+    ///   truth, and the sheet says so rather than quietly dropping the change.
+    /// - The caller must already hold a confirmation from the user — see `ContactWriteBackSheet`,
+    ///   which shows the before and after of every changed line and is the only caller.
+    /// - A read-only account refuses rather than failing silently, because "saved" about a change the
+    ///   address book discarded is the one outcome worse than an error.
+    ///
+    /// Returns what happened, rather than throwing: every outcome here is something the user needs
+    /// telling about in ordinary words, and none of them is exceptional.
+    func write(_ change: ContactWrite) async -> ContactWriteOutcome
+}
+
+/// An edit destined for a system contact.
+///
+/// Deliberately not a `SystemContact`: a write must be unable to express a change to a field this
+/// app has no business setting, and the way to guarantee that is for the type not to have one. What
+/// is absent here is as much the design as what is present.
+public struct ContactWrite: Sendable, Hashable {
+    /// The record to change. A write never creates a contact.
+    public var identifier: String
+
+    // MARK: The name
+    //
+    // Kept in the same parts Contacts keeps it in. Sending one combined string would mean the
+    // receiving end splitting it, and a split is a guess — which is exactly why the caller does it
+    // once, visibly, and shows the user the result before this type is ever built.
+
+    public var givenName: String
+    public var middleName: String
+    public var familyName: String
+    public var namePrefix: String
+    public var nameSuffix: String
+    public var nickname: String
+
+    // MARK: Work
+
+    public var jobTitle: String
+    public var departmentName: String
+    public var organizationName: String
+
+    // MARK: Reachable at
+
+    public var emailAddresses: [ContactLabelledValue]
+    public var phoneNumbers: [ContactLabelledValue]
+    public var urlAddresses: [ContactLabelledValue]
+
+    /// Day and month, and the year only when it is actually known.
+    ///
+    /// `nil` clears the birthday, which is the only way somebody removes one they entered by mistake.
+    /// `PartialDate` and `CNContact.birthday` agree that a missing year is information rather than a
+    /// gap, so this crosses without a placeholder year ever being invented.
+    public var birthday: PartialDate?
+
+    public init(
+        identifier: String,
+        givenName: String = "",
+        middleName: String = "",
+        familyName: String = "",
+        namePrefix: String = "",
+        nameSuffix: String = "",
+        nickname: String = "",
+        jobTitle: String = "",
+        departmentName: String = "",
+        organizationName: String = "",
+        emailAddresses: [ContactLabelledValue] = [],
+        phoneNumbers: [ContactLabelledValue] = [],
+        urlAddresses: [ContactLabelledValue] = [],
+        birthday: PartialDate? = nil
+    ) {
+        self.identifier = identifier
+        self.givenName = givenName
+        self.middleName = middleName
+        self.familyName = familyName
+        self.namePrefix = namePrefix
+        self.nameSuffix = nameSuffix
+        self.nickname = nickname
+        self.jobTitle = jobTitle
+        self.departmentName = departmentName
+        self.organizationName = organizationName
+        self.emailAddresses = emailAddresses
+        self.phoneNumbers = phoneNumbers
+        self.urlAddresses = urlAddresses
+        self.birthday = birthday
+    }
+}
+
+/// What became of a write.
+public enum ContactWriteOutcome: Sendable, Hashable {
+    case written
+
+    /// Contacts access has not been granted. Nothing was attempted.
+    case notPermitted
+
+    /// The record no longer resolves — deleted, or merged away since it was linked.
+    case recordMissing
+
+    /// The account holding the contact does not accept changes, such as a subscribed directory.
+    case accountIsReadOnly
+
+    /// Contacts refused the save, with whatever it said about why.
+    case failed(String)
+
+    /// What to tell the user. Written as a sentence because every one of these reaches a person.
+    public var explanation: String? {
+        switch self {
+        case .written: nil
+        case .notPermitted: "Elephruit does not have access to your contacts."
+        case .recordMissing: "That contact is no longer in your address book. The link has been cleared."
+        case .accountIsReadOnly: "That contact lives in an account that does not accept changes."
+        case .failed(let reason): "Your address book refused the change: \(reason)"
+        }
+    }
 }
 
 /// What changed in the Contacts store since a token was taken.
@@ -292,6 +439,10 @@ public struct NoContactsProvider: ContactsProviding {
 
     /// A stream that never yields and never finishes — the honest shape when nothing will change.
     public var changes: AsyncStream<Void> { AsyncStream { _ in } }
+
+    /// Nothing is configured, so nothing was written. Reported as the refusal it is rather than as a
+    /// success, because a caller told "written" would stop showing the user their unsaved change.
+    public func write(_ change: ContactWrite) async -> ContactWriteOutcome { .notPermitted }
 }
 
 // MARK: - Notifications

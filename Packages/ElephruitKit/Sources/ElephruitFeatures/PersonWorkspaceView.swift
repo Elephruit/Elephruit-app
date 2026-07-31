@@ -34,6 +34,8 @@ struct PersonWorkspaceView: View {
     @State private var chartKind: RelationshipChartKind?
     @State private var pendingAction: ContactActionRequest?
     @State private var correctionTarget: PortraitValue?
+    @State private var isEditingContactDetails = false
+    @State private var pendingWriteBack: ContactDetailsEdit?
     @State private var loadFailure: AppError?
 
     var body: some View {
@@ -66,7 +68,11 @@ struct PersonWorkspaceView: View {
                         onOpenSource: { navigation.selectItem($0) }
                     )
 
-                    PersonContactSection(person: person, onAction: { pendingAction = $0 })
+                    PersonContactSection(
+                        person: person,
+                        onAction: { pendingAction = $0 },
+                        onEdit: { isEditingContactDetails = true }
+                    )
 
                     PersonRelationshipsSection(
                         person: person,
@@ -124,6 +130,22 @@ struct PersonWorkspaceView: View {
                 chartKind = nil
                 navigation.selectItem(id)
             }
+        }
+        .sheet(isPresented: $isEditingContactDetails) {
+            EditContactDetailsSheet(
+                person: person,
+                onSave: { edit in
+                    isEditingContactDetails = false
+                    reload()
+                    // Saved here either way. The address book is a separate question, and only one
+                    // worth asking for somebody whose record came from there.
+                    if person.personProfile?.contactsIdentifier != nil { pendingWriteBack = edit }
+                },
+                onCancel: { isEditingContactDetails = false }
+            )
+        }
+        .sheet(item: $pendingWriteBack) { edit in
+            ContactWriteBackSheet(person: person, edit: edit) { pendingWriteBack = nil }
         }
         .sheet(item: $correctionTarget) { value in
             CorrectFactSheet(
@@ -377,21 +399,47 @@ struct PersonHeaderView: View {
 /// Contact photos are the largest thing Contacts holds and the app displays none of them, so the key
 /// is never fetched — see `ContactsWriteSafetyTests`. Initials are legible, cost nothing, and cannot
 /// leak.
+///
+/// ### Why it watches the row's prominence
+/// The palette tint is a pale wash with the same colour written over it, which is legible on the
+/// list's own background and nowhere near legible on the accent fill of a selected row — the circle
+/// all but vanishes and the initials go muddy. On a selected row the avatar drops the colour and
+/// borrows the system's own selected-row styles, which resolve against whatever accent the user
+/// chose. This is the ``SwiftUICore/View/rowForeground(_:)`` rule applied to a shape: the colour is
+/// worth less than being readable, and it comes straight back the moment the row is deselected.
 struct PersonAvatar: View {
+    @Environment(\.backgroundProminence) private var prominence
+
     let name: String
     let colorName: String?
     var size: CGFloat = 32
 
     var body: some View {
         Circle()
-            .fill(Theme.Palette.color(named: colorName).opacity(0.18))
+            .fill(fill)
             .overlay {
                 Text(initials)
                     .font(.system(size: size * 0.38, weight: .medium, design: .rounded))
-                    .foregroundStyle(Theme.Palette.color(named: colorName))
+                    .foregroundStyle(foreground)
             }
             .frame(width: size, height: size)
             .accessibilityHidden(true)
+    }
+
+    /// True only while the row is selected *and* the window is focused — the same condition under
+    /// which the row is painted with the accent colour rather than an inert grey.
+    private var isOnSelectedRow: Bool { prominence == .increased }
+
+    private var fill: AnyShapeStyle {
+        isOnSelectedRow
+            ? AnyShapeStyle(.quaternary)
+            : AnyShapeStyle(Theme.Palette.color(named: colorName).opacity(0.18))
+    }
+
+    private var foreground: AnyShapeStyle {
+        isOnSelectedRow
+            ? AnyShapeStyle(.primary)
+            : AnyShapeStyle(Theme.Palette.color(named: colorName))
     }
 
     private var initials: String {
