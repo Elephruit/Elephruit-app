@@ -332,18 +332,6 @@ struct ModuleLayoutTests {
         #expect(!first)
     }
 
-    /// The shell resets the detector when it applies a module's policy, so the snap that follows is
-    /// not recorded as a preference — which would make the policy permanent and unchangeable.
-    @Test("A reset detector treats the next sample as a starting point")
-    func resetSuppressesTheNextSample() {
-        var detector = PaneDragDetector()
-        _ = detector.isUserDrag(columnWidth: 500, windowWidth: 1600)
-        detector.reset()
-
-        let afterReset = detector.isUserDrag(columnWidth: 900, windowWidth: 1600)
-        #expect(!afterReset)
-    }
-
     @Test("A sub-point difference between layout passes is not a drag")
     func roundingIsNotADrag() {
         var detector = PaneDragDetector()
@@ -351,6 +339,128 @@ struct ModuleLayoutTests {
 
         let jitter = detector.isUserDrag(columnWidth: 500.4, windowWidth: 1600)
         #expect(!jitter)
+    }
+}
+
+/// What reaches the store, and — the point of the type — what does not.
+///
+/// The detector above can only compare two samples. Everything about *which* two it is shown lives
+/// in the recorder, and that is where both faults were: a stream of widths acted on one frame at a
+/// time, and a sidebar collapse recorded as if somebody had dragged the divider.
+@MainActor
+@Suite("Pane width recorder")
+struct PaneWidthRecorderTests {
+    /// The one that was making the window sluggish. Every frame of an animation used to reach the
+    /// store, and every write invalidated the shell that produced the next frame.
+    @Test("A stream of widths produces at most one answer")
+    func samplesAreCoalesced() {
+        let recorder = PaneWidthRecorder()
+        var recorded: [(ModuleShellLayout.Column, CGFloat)] = []
+        recorder.onDrag = { column, width, _ in recorded.append((column, width)) }
+
+        // A baseline, then a drag through eight intermediate widths.
+        recorder.sample(500, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+
+        for width in stride(from: CGFloat(510), through: 580, by: 10) {
+            recorder.sample(width, of: .primary, windowWidth: 1600)
+        }
+        recorder.settleNow()
+
+        #expect(recorded.count == 1, "A drag is one preference, not one per frame")
+        #expect(recorded.first?.1 == 580, "The width that matters is the one it came to rest at")
+    }
+
+    /// Hiding the sidebar widens the pane beside it without the window changing size, which is
+    /// exactly what the drag test cannot tell apart on its own. Left unsaid, collapsing the sidebar
+    /// silently rewrote the module's stored width to whatever the animation happened to pass through.
+    @Test("A width the shell caused is not stored")
+    func shellMovesAreNotDrags() {
+        let recorder = PaneWidthRecorder()
+        var recorded: [CGFloat] = []
+        recorder.onDrag = { _, width, _ in recorded.append(width) }
+
+        recorder.sample(500, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+
+        recorder.expectShellMove(of: [.primary])
+        recorder.sample(720, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+
+        #expect(recorded.isEmpty)
+    }
+
+    /// One warning covers one settle. Collapsing the sidebar must not stop the recorder listening
+    /// for the rest of the session.
+    @Test("A drag after the shell has settled is still a drag")
+    func expectationDoesNotOutliveTheSettle() {
+        let recorder = PaneWidthRecorder()
+        var recorded: [CGFloat] = []
+        recorder.onDrag = { _, width, _ in recorded.append(width) }
+
+        recorder.sample(500, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+        recorder.expectShellMove(of: [.primary])
+        recorder.sample(720, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+
+        recorder.sample(760, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+
+        #expect(recorded == [760])
+    }
+
+    /// The case that decides why an expectation expires at the settle rather than at the next
+    /// sample: two modules whose policies agree move nothing, so no sample ever arrives, and an
+    /// expectation left lying about would swallow the user's next drag instead.
+    @Test("A shell move that moves nothing does not consume the next drag")
+    func unmovedShellMoveIsForgotten() {
+        let recorder = PaneWidthRecorder()
+        var recorded: [CGFloat] = []
+        recorder.onDrag = { _, width, _ in recorded.append(width) }
+
+        recorder.sample(500, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+
+        recorder.expectShellMove(of: [.primary])
+        recorder.settleNow() // Nothing moved, so nothing was sampled.
+
+        recorder.sample(560, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+
+        #expect(recorded == [560])
+    }
+
+    @Test("A column the window resized is not a drag")
+    func windowResizeIsNotADrag() {
+        let recorder = PaneWidthRecorder()
+        var recorded: [CGFloat] = []
+        recorder.onDrag = { _, width, _ in recorded.append(width) }
+
+        recorder.sample(500, of: .primary, windowWidth: 1600)
+        recorder.settleNow()
+        recorder.sample(560, of: .primary, windowWidth: 1720)
+        recorder.settleNow()
+
+        #expect(recorded.isEmpty)
+    }
+
+    @Test("Each column is judged on its own")
+    func columnsAreIndependent() {
+        let recorder = PaneWidthRecorder()
+        var recorded: [ModuleShellLayout.Column] = []
+        recorder.onDrag = { column, _, _ in recorded.append(column) }
+
+        recorder.sample(500, of: .primary, windowWidth: 1600)
+        recorder.sample(700, of: .detail, windowWidth: 1600)
+        recorder.settleNow()
+
+        recorder.expectShellMove(of: [.detail])
+        recorder.sample(560, of: .primary, windowWidth: 1600)
+        recorder.sample(760, of: .detail, windowWidth: 1600)
+        recorder.settleNow()
+
+        #expect(recorded == [.primary], "An expectation about one column must not cover the other")
     }
 }
 
