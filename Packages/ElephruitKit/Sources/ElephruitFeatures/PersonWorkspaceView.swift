@@ -66,6 +66,8 @@ struct PersonWorkspaceView: View {
                         onOpenSource: { navigation.selectItem($0) }
                     )
 
+                    PersonContactSection(person: person, onAction: { pendingAction = $0 })
+
                     PersonRelationshipsSection(
                         person: person,
                         onOpenChart: { chartKind = $0 },

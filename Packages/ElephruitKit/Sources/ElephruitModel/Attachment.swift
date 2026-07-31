@@ -278,6 +278,21 @@ extension PersonProfile {
         return PartialDate(year: birthdayHasYear ? components.year : nil, month: month, day: day)
     }
 
+    /// Every stored contact detail, in the order a card should read.
+    ///
+    /// The same four lists as ``destinations()``, projected for *display* rather than for dialling:
+    /// a detail keeps its label so the card can say which of two numbers is the work one, and drops
+    /// the preferred-destination bookkeeping, which is a question about actions and not about
+    /// reading.
+    public func contactDetails() -> [ContactDetail] {
+        ContactCard.details(
+            emails: emails.map { (label: $0.label, value: $0.value) },
+            phones: phones.map { (label: $0.label, value: $0.value) },
+            addresses: addresses.map { (label: $0.label, value: $0.value) },
+            websites: websites.map { (label: $0.label, value: $0.value) }
+        )
+    }
+
     /// Everything that could be dialled, written to, or opened for this person.
     public func destinations() -> [ContactDestination] {
         var result: [ContactDestination] = []

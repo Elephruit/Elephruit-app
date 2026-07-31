@@ -170,6 +170,18 @@ extension Theme {
         /// Amber rather than red: an unreadable fragment of a search query is not a failure, it is
         /// a part of the request that was skipped. Red would overstate it.
         public static let warning = Color(nsColor: .systemOrange)
+
+        /// A detail that belongs to somebody's private life — a home address, a personal email.
+        ///
+        /// Teal rather than green, which already means *completed*, and rather than blue, which is
+        /// the default accent and so would be indistinguishable from selection on half the screen.
+        public static let personalDetail = Color(nsColor: .systemTeal)
+
+        /// A detail that belongs to somebody's working life.
+        ///
+        /// Never the only signal that something is work: every place this appears also carries the
+        /// word and a symbol, because roughly one man in twelve cannot use the colour.
+        public static let workDetail = Color(nsColor: .systemIndigo)
     }
 
     /// The palette a user may pick from for projects, areas, tags, and collections.
@@ -206,6 +218,108 @@ extension Theme {
         public static func color(named name: String?) -> Color {
             guard let name, let entry = Palette(rawValue: name) else { return Color.accentColor }
             return entry.color
+        }
+    }
+}
+
+// MARK: - Selection
+
+extension Theme {
+    /// How much a piece of text in a row matters, relative to the rest of that row.
+    ///
+    /// ### Why a row cannot simply name its colour
+    /// A `List` row that is selected and focused paints the accent colour behind itself and sets the
+    /// foreground style to the *selected content* colour — white — so that unstyled text stays
+    /// legible. Naming a colour outright opts out of that: `Color.primary` is `labelColor`, which is
+    /// near-black in light mode and stays near-black on top of the blue fill. That is the dark-on-blue
+    /// row this type exists to prevent.
+    ///
+    /// The hierarchical styles — `.primary`, `.secondary`, `.tertiary` — are defined *relative to*
+    /// whatever foreground style is in force, so they follow the selection automatically. They are
+    /// also slightly less precise than the semantic label colours when nothing is selected, which is
+    /// why both are kept and the choice is made per render.
+    public enum Emphasis: Sendable, Hashable, CaseIterable {
+        /// The row's own title.
+        case primary
+        /// A subtitle or a piece of metadata.
+        case secondary
+        /// Present but not currently relevant.
+        case tertiary
+        /// A title the user has not written yet.
+        case placeholder
+
+        /// The fixed colour to use, or `nil` when the system's own selected-content colour must win.
+        ///
+        /// Pure, so ``Emphasis`` can be asserted in a test rather than reviewed in a screenshot —
+        /// which matters here more than usual, because the failure is invisible until somebody
+        /// selects a row with the window focused.
+        public func color(prominence: BackgroundProminence) -> Color? {
+            guard prominence != .increased else { return nil }
+
+            switch self {
+            case .primary: return Theme.Colors.primaryText
+            case .secondary: return Theme.Colors.secondaryText
+            case .tertiary: return Theme.Colors.tertiaryText
+            case .placeholder: return Theme.Colors.placeholderText
+            }
+        }
+
+        /// The relative style used on a selected row, where the colour above would be wrong.
+        fileprivate var hierarchicalStyle: AnyShapeStyle {
+            switch self {
+            case .primary: AnyShapeStyle(.primary)
+            case .secondary: AnyShapeStyle(.secondary)
+            case .tertiary, .placeholder: AnyShapeStyle(.tertiary)
+            }
+        }
+    }
+}
+
+extension View {
+    /// Colours text inside a list row so that selecting the row keeps it readable.
+    ///
+    /// Use this instead of `.foregroundStyle(Theme.Colors.…)` for anything that can appear inside a
+    /// `List` row. Everywhere else — headers, detail panes, sheets — the tokens are correct as they
+    /// are, because nothing paints an accent colour behind them.
+    public func rowForeground(_ emphasis: Theme.Emphasis) -> some View {
+        modifier(RowForegroundModifier(emphasis: emphasis))
+    }
+
+    /// Colours something whose colour carries meaning — an overdue date, a project's tint — and lets
+    /// that meaning yield on a selected row.
+    ///
+    /// The colour is dropped rather than darkened when the row is selected, because red-on-blue is
+    /// unreadable and a selected row is a transient state the user is looking straight at. What the
+    /// colour *meant* is still carried by the symbol and the words beside it.
+    public func rowTint(_ color: Color) -> some View {
+        modifier(RowTintModifier(color: color))
+    }
+}
+
+private struct RowForegroundModifier: ViewModifier {
+    @Environment(\.backgroundProminence) private var prominence
+
+    let emphasis: Theme.Emphasis
+
+    func body(content: Content) -> some View {
+        if let color = emphasis.color(prominence: prominence) {
+            content.foregroundStyle(color)
+        } else {
+            content.foregroundStyle(emphasis.hierarchicalStyle)
+        }
+    }
+}
+
+private struct RowTintModifier: ViewModifier {
+    @Environment(\.backgroundProminence) private var prominence
+
+    let color: Color
+
+    func body(content: Content) -> some View {
+        if prominence == .increased {
+            content.foregroundStyle(.primary)
+        } else {
+            content.foregroundStyle(color)
         }
     }
 }

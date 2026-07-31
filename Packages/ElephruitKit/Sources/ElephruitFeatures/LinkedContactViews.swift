@@ -339,7 +339,7 @@ struct ContactSourceBadge: View {
     var body: some View {
         Image(systemName: state == .linked ? "person.crop.rectangle.stack" : state.symbolName)
             .font(.system(size: 9))
-            .foregroundStyle(state == .linked ? Theme.Colors.tertiaryText : Theme.Colors.warning)
+            .rowTint(state == .linked ? Theme.Colors.tertiaryText : Theme.Colors.warning)
             .help(state == .linked ? "Details come from your address book" : state.displayName)
             .accessibilityLabel(state == .linked ? "Linked to Contacts" : state.displayName)
     }
