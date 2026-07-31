@@ -219,6 +219,7 @@ struct CalendarIndexTests {
                 event("Declined thing", daysFromNow: 2, declined: true),
             ],
             inWindow: window,
+            calendarIdentifiers: nil,
             links: [
                 "lunch-with-maya": IndexedEventLinks(
                     identityKey: "lunch-with-maya",
@@ -325,7 +326,7 @@ struct CalendarIndexTests {
         // A narrow window covering only the next week.
         let narrow = Self.now..<Self.now.addingTimeInterval(7 * 86_400)
         await engine.absorb([Self.event("Standup", daysFromNow: 1, hours: 0.25, recurring: true)],
-                            inWindow: narrow, links: [:])
+                            inWindow: narrow, calendarIdentifiers: nil, links: [:])
 
         let all = await engine.cachedEvents(in: Self.window, calendarIdentifiers: nil)
         let titles = Set(all.map(\.title))
@@ -347,11 +348,12 @@ struct CalendarIndexTests {
         await engine.prepare()
 
         let window = Self.now..<Self.now.addingTimeInterval(7 * 86_400)
-        await engine.absorb([Self.event("Moving", daysFromNow: 1)], inWindow: window, links: [:])
+        await engine.absorb([Self.event("Moving", daysFromNow: 1)], inWindow: window,
+                            calendarIdentifiers: nil, links: [:])
         #expect(await engine.cachedEvents(in: window, calendarIdentifiers: nil).count == 1)
 
         // The same window, now empty: the meeting was dragged into next month.
-        await engine.absorb([], inWindow: window, links: [:])
+        await engine.absorb([], inWindow: window, calendarIdentifiers: nil, links: [:])
         #expect(await engine.cachedEvents(in: window, calendarIdentifiers: nil).isEmpty)
     }
 
@@ -433,5 +435,29 @@ struct CalendarIndexTests {
 
         let stats = await engine.statistics()
         #expect(stats.events == 0)
+    }
+
+    @Test("A narrowed refresh leaves the calendars it never asked about alone")
+    func narrowedRefreshKeepsOtherCalendars() async {
+        let engine = await Self.populated()
+        let window = Self.now.addingTimeInterval(-400 * 86_400)..<Self.now.addingTimeInterval(400 * 86_400)
+
+        // What happens when somebody ticks "Personal" off: the fetch narrows to the Work calendar,
+        // and this window is replaced from a result set that never mentioned Personal.
+        await engine.absorb(
+            [Self.event("Standup", daysFromNow: 1, hours: 0.25, recurring: true)],
+            inWindow: window,
+            calendarIdentifiers: ["work"],
+            links: [:]
+        )
+
+        let dentist = await engine.search("dentist", now: Self.now, calendar: Self.calendar, limit: 20)
+        #expect(dentist.events.count == 1, """
+            Ticking a calendar off must not make its past unsearchable. The fetch never asked about \
+            it, so its absence from the results says nothing at all.
+            """)
+
+        let work = await engine.search("lunch", now: Self.now, calendar: Self.calendar, limit: 20)
+        #expect(work.events.isEmpty, "…while the calendar that *was* asked about is replaced as usual")
     }
 }

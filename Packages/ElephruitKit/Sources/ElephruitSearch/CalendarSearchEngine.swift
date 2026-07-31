@@ -11,9 +11,13 @@ public protocol CalendarSearching: Sendable {
     func prepare() async
 
     /// Replaces the cache for a window with what the calendar currently holds.
+    ///
+    /// - Parameter calendarIdentifiers: Which calendars the events speak for, so a narrowed fetch
+    ///   does not discard rows it never asked about.
     func absorb(
         _ events: [CalendarEventSummary],
         inWindow window: Range<Date>,
+        calendarIdentifiers: [String]?,
         links: [String: IndexedEventLinks]
     ) async
 
@@ -72,11 +76,18 @@ public final class FTSCalendarSearchEngine: CalendarSearching {
     public func absorb(
         _ events: [CalendarEventSummary],
         inWindow window: Range<Date>,
+        calendarIdentifiers: [String]?,
         links: [String: IndexedEventLinks]
     ) async {
         do {
             try await store.open()
-            try await store.replace(events, inWindow: window, links: links, at: Date())
+            try await store.replace(
+                events,
+                inWindow: window,
+                calendarIdentifiers: calendarIdentifiers,
+                links: links,
+                at: Date()
+            )
         } catch {
             // A cache that could not be written is a slower app, not a broken one: the calendar
             // itself is unaffected and the next window refresh tries again.

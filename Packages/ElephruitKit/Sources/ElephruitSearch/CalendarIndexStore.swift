@@ -310,21 +310,38 @@ actor CalendarIndexStore {
     /// it costs one indexed range delete.
     ///
     /// Rows outside the window are untouched, so refreshing this week does not discard last month.
+    ///
+    /// - Parameter calendarIdentifiers: Which calendars this replacement speaks for. `nil` means all
+    ///   of them. When a Calendar Set or a hidden calendar narrowed the fetch, the rows for
+    ///   calendars *outside* that scope are left alone — because the fetch never asked about them,
+    ///   so their absence from `events` says nothing. Without this, ticking a calendar off would
+    ///   quietly make its past unsearchable, which is not what ticking a box means.
     func replace(
         _ events: [CalendarEventSummary],
         inWindow window: Range<Date>,
+        calendarIdentifiers: [String]?,
         links: [String: IndexedEventLinks],
         at now: Date
     ) throws(AppError) {
         let connection = try requireConnection()
 
         try connection.transaction {
-            let delete = try connection.prepared(
-                "DELETE FROM events WHERE start_at < ?1 AND end_at > ?2;"
-            )
-            delete.bind(window.upperBound, at: 1)
-            delete.bind(window.lowerBound, at: 2)
-            try delete.run()
+            var sql = "DELETE FROM events WHERE start_at < ?1 AND end_at > ?2"
+            if let calendarIdentifiers {
+                let placeholders = calendarIdentifiers.indices.map { "?\($0 + 3)" }.joined(separator: ", ")
+                sql += calendarIdentifiers.isEmpty
+                    ? " AND 0"
+                    : " AND calendar_id IN (\(placeholders))"
+            }
+            sql += ";"
+
+            let delete = try connection.makeTransient(sql)
+            delete.statement.bind(window.upperBound, at: 1)
+            delete.statement.bind(window.lowerBound, at: 2)
+            for (offset, identifier) in (calendarIdentifiers ?? []).enumerated() {
+                delete.statement.bind(identifier, at: Int32(offset + 3))
+            }
+            try delete.statement.run()
 
             // FTS5 has no foreign keys, so its rows are swept by the same bounds.
             try pruneDocuments(connection)

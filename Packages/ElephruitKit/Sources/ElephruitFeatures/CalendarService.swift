@@ -345,7 +345,7 @@ public final class CalendarService {
         events = applyingSetRules(to: fetched)
         isShowingCachedEvents = false
 
-        await absorbIntoIndex(fetched, window: range)
+        await absorbIntoIndex(fetched, window: range, calendarIdentifiers: identifiers)
     }
 
     /// Falls back to what was last read.
@@ -566,10 +566,16 @@ public final class CalendarService {
 
     // MARK: - The index
 
-    private func absorbIntoIndex(_ events: [CalendarEventSummary], window: Range<Date>) async {
+    private func absorbIntoIndex(
+        _ events: [CalendarEventSummary],
+        window: Range<Date>,
+        calendarIdentifiers: [String]?
+    ) async {
         guard let index else { return }
         let links = linkSnapshot(for: events)
-        await index.absorb(events, inWindow: window, links: links)
+        await index.absorb(
+            events, inWindow: window, calendarIdentifiers: calendarIdentifiers, links: links
+        )
     }
 
     private func absorbSingle(_ event: CalendarEventSummary) async {
