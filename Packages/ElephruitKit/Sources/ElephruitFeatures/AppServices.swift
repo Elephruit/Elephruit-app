@@ -225,6 +225,11 @@ public final class AppServices {
     ///     lazily and only once the user turns the integration on. A test passes a
     ///     ``ElephruitIntegrations/FixtureContactsProvider`` here, which is what lets the whole
     ///     import flow be exercised without `CNContactStore` ever being constructed.
+    ///   - calendarProvider: How to build the calendar adapter, on the same terms. A test — or a
+    ///     reviewer in development mode — passes a
+    ///     ``ElephruitIntegrations/FixtureCalendarProvider`` here, which is what lets the whole
+    ///     module be exercised without `EKEventStore` ever being constructed or anybody's real
+    ///     calendar being written to.
     ///   - defaults: Where per-device preferences live. A test passes a scratch suite so that
     ///     enabling Contacts in one does not leave the flag set for the user or for the next test.
     public init(
@@ -232,6 +237,7 @@ public final class AppServices {
         dateProvider: any DateProvider = SystemDateProvider(),
         isDevelopmentMode: Bool = false,
         contactsProvider: (@Sendable () -> any ContactsProviding)? = nil,
+        calendarProvider: (@Sendable () -> any CalendarProviding)? = nil,
         defaults: UserDefaults = .standard
     ) {
         self.stack = stack
@@ -309,8 +315,9 @@ public final class AppServices {
             defaults: defaults,
             index: calendarSearch,
             sets: calendarSets,
-            annotations: eventLinks
-        ) { EventKitCalendarProvider() }
+            annotations: eventLinks,
+            makeProvider: calendarProvider ?? { EventKitCalendarProvider() }
+        )
         self.people = PeopleService(items: items, dateProvider: dateProvider)
 
         let persons = SwiftDataPersonRepository(context: context, items: items, dateProvider: dateProvider)
