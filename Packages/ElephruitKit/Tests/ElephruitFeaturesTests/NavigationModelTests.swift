@@ -75,6 +75,7 @@ struct SearchModeTests {
         #expect(navigation.searchFocusRequest == firstRequest + 1)
         #expect(navigation.isSearchActive)
         #expect(navigation.searchQuery == "people in Austin", "refocusing must not replace the live query")
+        #expect(navigation.shouldSelectSearchQuery, "repeating Command-F should select the live query")
     }
 
     @Test("Leaving search restores the selection it began with")

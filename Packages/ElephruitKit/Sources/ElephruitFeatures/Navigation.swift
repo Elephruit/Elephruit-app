@@ -553,6 +553,10 @@ public final class NavigationModel {
             isSearchActive = true
             searchQuery = clearingQuery ? "" : lastSearchQuery
             shouldSelectSearchQuery = !searchQuery.isEmpty
+        } else {
+            // Repeating ⌘F means “take me to search so I can replace this,” matching Finder and
+            // Safari. Focus alone strands the insertion point inside the old query.
+            shouldSelectSearchQuery = !searchQuery.isEmpty
         }
 
         focusedPane = .list
