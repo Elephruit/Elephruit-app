@@ -433,7 +433,7 @@ struct AddFactSheet: View {
                     onSave(
                         ObservationDraft(
                             attribute: category.attribute,
-                            value: value.trimmingCharacters(in: .whitespacesAndNewlines)
+                            value: normalizedValue
                         ),
                         confidence,
                         sensitivity,
@@ -456,6 +456,23 @@ struct AddFactSheet: View {
             observedOn = services?.dateProvider.now ?? Date()
             isValueFocused = true
         }
+    }
+
+    /// Estimators need a clean numeric age or grade, while ambiguous wording must remain exactly
+    /// as entered so the interface never turns “2nd or 3rd” into a confident “2nd.”
+    private var normalizedValue: String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let numbers = trimmed.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+
+        if category == .age, let age = numbers.first {
+            return "\(age)"
+        }
+
+        if category == .school, numbers.count == 1, !trimmed.localizedCaseInsensitiveContains(" or ") {
+            return "\(numbers[0])"
+        }
+
+        return trimmed
     }
 }
 

@@ -402,6 +402,7 @@ struct PersonRelationshipsSection: View {
     @State private var isAddingRelationship = false
     @State private var relationshipKind: RelationshipKind = .friend
     @State private var editingRelationship: PersonRelationship?
+    @State private var childFactTarget: Item?
     @State private var relationships: [PersonRelationship] = []
     @State private var childPortraits: [UUID: PersonPortrait] = [:]
 
@@ -465,6 +466,7 @@ struct PersonRelationshipsSection: View {
                                     child: child,
                                     portrait: childPortraits[child.id],
                                     onOpen: { onOpenPerson(child.id) },
+                                    onAddDetail: { childFactTarget = child },
                                     onEdit: { editingRelationship = relationship }
                                 )
                             }
@@ -508,6 +510,16 @@ struct PersonRelationshipsSection: View {
                 reload()
             }
         }
+        .sheet(item: $childFactTarget) { child in
+            AddFactSheet(
+                personName: child.displayTitle,
+                onSave: { draft, confidence, sensitivity, observedOn in
+                    addFact(draft, to: child, confidence: confidence, sensitivity: sensitivity, observedOn: observedOn)
+                    childFactTarget = nil
+                },
+                onCancel: { childFactTarget = nil }
+            )
+        }
     }
 
     private var children: [PersonRelationship] {
@@ -528,43 +540,97 @@ struct PersonRelationshipsSection: View {
             return (child.id, portrait)
         })
     }
+
+    private func addFact(
+        _ draft: ObservationDraft,
+        to child: Item,
+        confidence: FactConfidence,
+        sensitivity: FactSensitivity,
+        observedOn: Date
+    ) {
+        guard let services else { return }
+        services.perform {
+            try services.persons.record(
+                draft,
+                about: child,
+                observedOn: observedOn,
+                confidence: confidence,
+                sensitivity: sensitivity,
+                source: nil
+            )
+            services.noteChange(to: child)
+        }
+        reload()
+    }
 }
 
 private struct ChildProfileCard: View {
     let child: Item
     let portrait: PersonPortrait?
     let onOpen: () -> Void
+    let onAddDetail: () -> Void
     let onEdit: () -> Void
 
     var body: some View {
-        Button(action: onOpen) {
-            HStack(spacing: Theme.Spacing.small) {
-                PersonAvatar(name: child.displayTitle, colorName: child.colorName, size: 34)
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            Button(action: onOpen) {
+                HStack(spacing: Theme.Spacing.small) {
+                    PersonAvatar(name: child.displayTitle, colorName: child.colorName, size: 34)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(child.displayTitle)
-                        .font(.system(.callout, weight: .semibold))
-                        .foregroundStyle(Theme.Colors.primaryText)
-                        .lineLimit(1)
-                    Text(detail)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(child.displayTitle)
+                            .font(.system(.callout, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.primaryText)
+                            .lineLimit(1)
+                        Text(detail)
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: Theme.Spacing.tight)
+                    Image(systemName: "chevron.right")
                         .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.secondaryText)
-                        .lineLimit(2)
+                        .foregroundStyle(Theme.Colors.tertiaryText)
                 }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
 
-                Spacer(minLength: Theme.Spacing.tight)
-                Image(systemName: "chevron.right")
+            ForEach(summaryFacts) { fact in
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.tight) {
+                    Image(systemName: fact.symbol)
+                        .foregroundStyle(Color.pink)
+                        .frame(width: 14)
+                    Text(fact.text)
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.primaryText)
+                        .lineLimit(2)
+                    if fact.isUncertain {
+                        Text("Unconfirmed")
+                            .font(Theme.Text.chip)
+                            .foregroundStyle(Theme.Colors.warning)
+                    }
+                }
+            }
+
+            HStack {
+                Label(storageLabel, systemImage: storageSymbol)
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.tertiaryText)
+
+                Spacer()
+
+                Button("Add detail", systemImage: "plus.circle", action: onAddDetail)
+                    .buttonStyle(.borderless)
+                    .font(Theme.Text.metadata)
             }
-            .padding(Theme.Spacing.small)
-            .background(Color.pink.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12).strokeBorder(Color.pink.opacity(0.15))
-            }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .padding(Theme.Spacing.small)
+        .background(Color.pink.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12).strokeBorder(Color.pink.opacity(0.15))
+        }
         .help("Open \(child.displayTitle) to add age, school, interests, and notes")
         .contextMenu {
             Button("Edit Relationship…", systemImage: "pencil", action: onEdit)
@@ -576,6 +642,39 @@ private struct ChildProfileCard: View {
         if child.personProfile?.isPlaceholder == true { return "Sketch · add age, school, and interests" }
         return "Add age, school, and interests"
     }
+
+    private var storageLabel: String {
+        child.personProfile?.contactsIdentifier == nil ? "Elephruit only" : "Linked to Contacts"
+    }
+
+    private var storageSymbol: String {
+        child.personProfile?.contactsIdentifier == nil ? "lock.shield" : "person.crop.rectangle.stack"
+    }
+
+    private var summaryFacts: [ChildSummaryFact] {
+        guard let portrait else { return [] }
+        return portrait.cards
+            .filter { $0.attribute != .observedAge && $0.attribute != .schoolGrade }
+            .flatMap { card in
+                card.values.map {
+                    ChildSummaryFact(
+                        id: $0.id,
+                        text: $0.text,
+                        symbol: card.attribute.symbolName,
+                        isUncertain: $0.confidence.needsLabel
+                    )
+                }
+            }
+            .prefix(4)
+            .map { $0 }
+    }
+}
+
+private struct ChildSummaryFact: Identifiable {
+    let id: UUID
+    let text: String
+    let symbol: String
+    let isUncertain: Bool
 }
 
 struct RelatedPersonChip: View {
