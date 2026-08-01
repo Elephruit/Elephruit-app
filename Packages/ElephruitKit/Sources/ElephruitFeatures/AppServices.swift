@@ -667,6 +667,27 @@ public final class AppServices {
         return item
     }
 
+    /// Captures an already-composed draft, for the doors that collect one rather than a line of text.
+    ///
+    /// Quick Jot assembles a ``QuickJotDraft`` from chips, menus and whatever is still in its two
+    /// fields, and hands the merged result here. Everything else — App Intents, the Services menu,
+    /// the hot key from another application — still arrives as text and goes through
+    /// ``captureText(_:)``. Both end at the same `CaptureService`.
+    ///
+    /// ### Why the emptiness check is here and not left to the service
+    /// `CaptureService.capture(text:)` refuses an empty capture; `CaptureService.capture(_ draft:)`
+    /// does not, because a caller holding a draft has usually already decided there is something in
+    /// it. Wiring a composer straight through would therefore turn "press Save on a blank panel" into
+    /// a row in the library, which is precisely what the text path spent effort avoiding. Checking it
+    /// on the way past keeps the two doors answering the same way.
+    @discardableResult
+    public func captureDraft(_ draft: CaptureDraft) throws(AppError) -> Item? {
+        guard !draft.isEmpty else { return nil }
+        let item = try capture.capture(draft)
+        noteChange(to: item)
+        return item
+    }
+
     public func noteRemoval(of id: UUID) {
         let engine = search
         Task { await engine.removeFromIndex(id: id) }

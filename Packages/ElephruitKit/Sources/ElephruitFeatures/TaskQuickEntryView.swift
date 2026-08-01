@@ -12,11 +12,21 @@ import SwiftUI
 ///
 /// That is not a stylistic preference. A field that edits itself as you type destroys marked text
 /// mid-composition, breaks undo, loses the insertion point, drops what dictation is still assembling,
-/// and mangles a paste. There is no way to have a self-rewriting field *and* a field that behaves
-/// like a text field, and the second is worth more.
+/// and mangles a paste — five specific failures, each with a specific cause.
 ///
 /// So the tokens are shown *underneath*: "Starts tomorrow", "Reminder at 10:00", "→ Acme". They can
 /// be dismissed individually, which edits the interpretation and still leaves the text alone.
+///
+/// ### Why Quick Jot does the opposite
+/// It lifts a settled token out of the field entirely — see ``CaptureLift``, which names a guard for
+/// each of the five failures above and holds the part of this argument that generalises: *never
+/// rewrite the token the user is still typing*.
+///
+/// What does not generalise is the conclusion. Here the text is the record: "Call Sam about the roof
+/// Thursday" is the user's own sentence, and dismissing the Thursday chip deliberately leaves the
+/// word behind, because they wrote it and will want to read it back. In Quick Jot the sigils are
+/// instructions rather than prose — `due:friday` is a thing you say to the app, not part of a
+/// sentence — and leaving one in the title after it has been obeyed shows the same fact twice.
 struct TaskQuickEntryView: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
@@ -233,61 +243,6 @@ struct TaskQuickEntryView: View {
             plan = TaskEntryPlan()
             dismissedTokens = []
             isFieldFocused = true
-        }
-    }
-}
-
-/// Lays chips out in rows, wrapping when they run out of width.
-///
-/// A `Layout` rather than nested stacks because the number of tokens is unknown and changes on every
-/// keystroke: an `HStack` would push the last one off the edge, and a `ViewThatFits` would need every
-/// arrangement enumerated in advance.
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 4
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? .infinity
-        var rows = 1
-        var x: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var total: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > 0, x + size.width > width {
-                total += rowHeight + spacing
-                rows += 1
-                x = 0
-                rowHeight = 0
-            }
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
-
-        _ = rows
-        return CGSize(width: width == .infinity ? x : width, height: total + rowHeight)
-    }
-
-    func placeSubviews(
-        in bounds: CGRect,
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout ()
-    ) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var rowHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > bounds.minX, x + size.width > bounds.maxX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
         }
     }
 }

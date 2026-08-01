@@ -59,10 +59,20 @@ public enum AccessibilityID {
 
     public enum QuickCapture {
         public static let root = "quickCapture"
+        /// The title. Still `textField` rather than `titleField`, so that everything already reaching
+        /// for the one field a Quick Jot used to have finds the one it meant.
         public static let textField = "quickCapture.textField"
+        public static let notesField = "quickCapture.notesField"
+        public static let kindToggle = "quickCapture.kindToggle"
         public static let saveButton = "quickCapture.save"
         public static let cancelButton = "quickCapture.cancel"
+        /// The row of chips — what the interpretation line used to say in prose.
         public static let interpretation = "quickCapture.interpretation"
+        public static let destinationButton = "quickCapture.destination"
+        public static let whenButton = "quickCapture.when"
+        public static let tagButton = "quickCapture.tag"
+        public static let personButton = "quickCapture.person"
+        public static let deadlineButton = "quickCapture.deadline"
     }
 
     public enum CommandPalette {

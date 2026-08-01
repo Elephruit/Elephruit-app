@@ -13,13 +13,28 @@ import SwiftUI
 ///
 /// That is not a stylistic preference. Every one of those failures is what happens when a field
 /// "helpfully" rewrites what somebody is typing: a Japanese or Chinese user loses their composition
-/// mid-word, a paste is re-tokenised and reordered, and undo has to be pressed twice. The only
-/// reliable fix is a one-way flow, and the only way to keep it one-way is for the write-back path
-/// not to exist.
+/// mid-word, a paste is re-tokenised and reordered, and undo has to be pressed twice.
 ///
 /// Corrections made in the chips are held here as **overrides**, applied *after* each parse. So
 /// typing more text re-parses everything and keeps the correction, and clearing a correction returns
 /// to what the text says.
+///
+/// ### Where this rule stops
+/// Quick Jot does write back — see ``CaptureLift``, which takes a settled `due:friday` out of the
+/// sentence and turns it into a chip. That is not a disagreement with the paragraphs above; the two
+/// surfaces are doing different jobs with what somebody typed.
+///
+/// Here the parse is **advisory**. The text is the record — "Lunch with Sam Thursday 1pm" is what the
+/// user wrote and what they will recognise — and the interpretation is a reading of it. Dismissing a
+/// chip leaves the words alone on purpose, because nobody asked for their sentence to be edited.
+///
+/// In Quick Jot the parse is **constitutive**. The sigils are instructions and the title is what
+/// remains once they have been obeyed; `due:friday` is not part of anybody's sentence. Leaving it in
+/// the title of an item that now has a deadline shows the same fact twice and makes the duplicate the
+/// user's to clean up.
+///
+/// The distinction is which of the two the user will later want to read back. It is not a licence to
+/// rewrite a field in general, and the guards there are the ones described above, kept in full.
 @Observable
 @MainActor
 public final class EventQuickEntryModel {

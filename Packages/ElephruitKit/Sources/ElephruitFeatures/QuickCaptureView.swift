@@ -18,7 +18,7 @@ public struct QuickCaptureView: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
 
-    @State private var text = ""
+    @State private var composition = QuickJotComposition()
     @State private var isSaving = false
 
     /// Called with the new item's identifier, so the caller can select what was just captured.
@@ -29,17 +29,12 @@ public struct QuickCaptureView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-            CaptureComposerHeader()
-
-            CaptureComposer(
-                text: $text,
-                isSaving: isSaving,
-                onSave: { save() },
-                onCancel: { dismiss() }
-            )
-        }
-        .padding(Theme.Spacing.large)
+        CaptureComposer(
+            composition: $composition,
+            isSaving: isSaving,
+            onSave: { save() },
+            onCancel: { dismiss() }
+        )
         .frame(width: 560)
         .background(.regularMaterial)
         .accessibilityIdentifier(AccessibilityID.QuickCapture.root)
@@ -47,23 +42,26 @@ public struct QuickCaptureView: View {
 
     // MARK: - Saving
 
-    /// Hands the text to ``CaptureService``.
+    /// Hands what was composed to ``CaptureService``.
     ///
-    /// The panel deliberately owns none of this. The same call has to work from an App Intent, the
-    /// Services menu, and a global hotkey — none of which can construct a view — so the path from
-    /// typed text to stored item lives outside the UI entirely.
+    /// The sheet deliberately owns none of the writing. The same path has to work from an App Intent,
+    /// the Services menu, and a global hotkey — none of which can construct a view — so turning a
+    /// capture into an item lives outside the UI entirely.
     ///
-    /// The text rather than a draft parsed here: reading `>Q3 Launch` as one name needs to know
-    /// which projects exist, and a view that parsed its own copy would be a second opinion about
-    /// that — the kind that agrees for a year and then quietly does not.
+    /// The vocabulary is fetched here and used for *both* the flush and the merge, so the two cannot
+    /// disagree about where a name ends. Two lookups would be two opinions — the kind that agree for
+    /// a year and then quietly do not.
     private func save() {
         guard let services, !isSaving else { return }
         isSaving = true
         defer { isSaving = false }
 
+        let vocabulary = (try? services.capture.vocabulary()) ?? .empty
+        composition.flush(knowing: vocabulary)
+
         var captured: UUID?
         let failed = !services.perform {
-            captured = try services.captureText(text)?.id
+            captured = try services.captureDraft(composition.captured(knowing: vocabulary))?.id
         }
 
         // Nothing captured is not a failure — an empty field simply has nothing to save, and
@@ -71,7 +69,7 @@ public struct QuickCaptureView: View {
         guard !failed, let captured else { return }
 
         onCapture(captured)
-        text = ""
+        composition = QuickJotComposition()
         dismiss()
     }
 }
