@@ -8,7 +8,9 @@ import SwiftUI
 ///
 /// One screen rather than three. Toggl's lesson is that tracking, reviewing and correcting are the
 /// same activity — you look at yesterday *because* you are about to fix it — and splitting them
-/// across tabs means every correction starts with navigation.
+/// across tabs means every correction starts with navigation. The same lesson is why there is no
+/// longer a sheet for adding time by hand: the bar at the top does both, because reaching for a
+/// different surface is the same interruption in miniature.
 public struct TimeView: View {
     @Environment(\.services) private var services
 
@@ -21,10 +23,21 @@ public struct TimeView: View {
     /// sidebar shows a checkmark against, rather than a private copy that disagreed with it.
     private var window: TimeWindow { navigation.timeWindow }
     private var grouping: TimeGrouping { navigation.timeGrouping }
+
+    /// Whether alike entries collapse into one row.
+    ///
+    /// On by default and remembered, exactly as Toggl has it. Off is for the rarer job of
+    /// reconstructing an exact sequence, where every start and stop matters and a collapsed row
+    /// hides the thing being looked for.
+    @AppStorage("time.groupsSimilarEntries") private var groupsSimilarEntries = true
+
+    /// Remembered across launches, because which mode you are in is a fact about how you work —
+    /// somebody who logs yesterday's hours every morning should not switch modes every morning.
+    @AppStorage("time.entryMode") private var storedMode = TimeEntryMode.timer.rawValue
+
     @State private var entries: [TimeEntrySnapshot] = []
-    @State private var recents: [TimeEntrySnapshot] = []
-    @State private var isAddingManualEntry = false
-    @State private var editingEntryID: UUID?
+    @State private var expandedGroups: Set<String> = []
+    @State private var editingRowID: String?
     @State private var reloadTick = 0
 
     public init(navigation: NavigationModel) {
@@ -44,13 +57,24 @@ public struct TimeView: View {
                 )
             }
 
+            if let idle = services?.timer.pendingIdle {
+                IdleTimeBanner(
+                    idle: idle,
+                    onChoose: { choice in
+                        services?.timer.resolveIdle(choice)
+                        bump()
+                    },
+                    onDefer: { services?.timer.deferIdle() }
+                )
+            }
+
             if let count = services?.timer.reconciledTimerCount, count > 0 {
                 ReconciliationNote(count: count) { services?.timer.acknowledgeReconciliation() }
             }
 
-            TimerBar(
-                onStart: { startBlankTimer() },
-                onStop: { stopTimer() },
+            TimeEntryBar(
+                mode: modeBinding,
+                onChange: { bump() },
                 onOpenSubject: { id in navigation.selectItem(id) }
             )
 
@@ -60,21 +84,12 @@ public struct TimeView: View {
 
             Divider()
 
-            entryList
+            log
         }
         .navigationTitle(navigation.windowTitle)
         .navigationSubtitle(subtitle)
         .toolbar { toolbarContent }
         .task(id: reloadToken) { reload() }
-        .sheet(isPresented: $isAddingManualEntry) {
-            ManualTimeEntrySheet(
-                onSave: { draft in
-                    addManual(draft)
-                    isAddingManualEntry = false
-                },
-                onCancel: { isAddingManualEntry = false }
-            )
-        }
         .accessibilityIdentifier(AccessibilityID.Time.root)
     }
 
@@ -101,44 +116,96 @@ public struct TimeView: View {
         )
     }
 
-    // MARK: - Entries
+    // MARK: - The log
+
+    /// Day by day, newest first, exactly as the entries were made.
+    ///
+    /// Rebuilt on every pass rather than cached: a period holds a few hundred entries and the whole
+    /// grouping is a dictionary walk over them, which is cheaper than the bookkeeping a cache would
+    /// need to stay honest while a timer ticks.
+    private var sections: [TimeDaySection] {
+        guard let services else { return [] }
+        return TimeLog.sections(
+            entries: entries,
+            groupSimilar: groupsSimilarEntries,
+            calendar: services.dateProvider.calendar,
+            now: services.dateProvider.now
+        )
+    }
 
     @ViewBuilder
-    private var entryList: some View {
+    private var log: some View {
         if entries.isEmpty {
             EmptyStateView(
                 symbolName: "timer",
                 headline: "No time tracked \(window.displayName.lowercased())",
-                message: recents.isEmpty
-                    ? "Press ⌃⌘T to start a timer, or add time you have already spent."
-                    : "Start one of your recent entries below, or add time by hand.",
+                message: "Say what you are doing in the bar above and press play, "
+                    + "or switch it to Manual to record time you have already spent.",
                 actionTitle: "Add Time…",
-                action: { isAddingManualEntry = true }
+                action: { mode = .manual }
             )
         } else {
             List {
-                Section {
-                    ForEach(entries) { entry in
-                        TimeEntryRow(
-                            entry: entry,
-                            isEditing: editingEntryID == entry.id,
-                            onResume: { resume(entry) },
-                            onOpen: { entry.itemID.map { navigation.selectItem($0) } },
-                            onEdit: { editingEntryID = entry.id },
-                            onCommit: { change in
-                                apply(change, to: entry)
-                                editingEntryID = nil
-                            },
-                            onCancelEdit: { editingEntryID = nil },
-                            onDelete: { delete(entry) }
-                        )
+                ForEach(sections) { section in
+                    Section {
+                        ForEach(section.groups) { group in
+                            groupRow(group)
+
+                            if expandedGroups.contains(group.id), !group.isSingle {
+                                ForEach(group.entries) { entry in
+                                    entryRow(entry)
+                                }
+                            }
+                        }
+                    } header: {
+                        TimeDayHeader(section: section)
                     }
-                } header: {
-                    SectionHeader(window.displayName, count: entries.count)
                 }
             }
             .listStyle(.inset)
             .alternatingRowBackgrounds(.disabled)
+        }
+    }
+
+    private func groupRow(_ group: TimeEntryGroup) -> some View {
+        TimeEntryGroupRow(
+            group: group,
+            isExpanded: expandedGroups.contains(group.id),
+            isEditing: editingRowID == group.id,
+            onToggleExpanded: { toggleExpanded(group) },
+            onResume: { group.lead.map(resume) },
+            onOpen: { group.lead?.itemID.map { navigation.selectItem($0) } },
+            onEdit: { editingRowID = group.id },
+            onCommit: { edit in
+                apply(edit, to: group.entries.map(\.id))
+                editingRowID = nil
+            },
+            onCancelEdit: { editingRowID = nil },
+            onDuplicate: { group.lead.map(duplicate) },
+            onDelete: { delete(group.entries.map(\.id)) }
+        )
+    }
+
+    private func entryRow(_ entry: TimeEntrySnapshot) -> some View {
+        TimeEntryRow(
+            entry: entry,
+            isEditing: editingRowID == entry.id.uuidString,
+            onEdit: { editingRowID = entry.id.uuidString },
+            onCommit: { edit in
+                apply(edit, to: [entry.id])
+                editingRowID = nil
+            },
+            onCancelEdit: { editingRowID = nil },
+            onDuplicate: { duplicate(entry) },
+            onDelete: { delete([entry.id]) }
+        )
+    }
+
+    private func toggleExpanded(_ group: TimeEntryGroup) {
+        if expandedGroups.contains(group.id) {
+            expandedGroups.remove(group.id)
+        } else {
+            expandedGroups.insert(group.id)
         }
     }
 
@@ -163,9 +230,30 @@ public struct TimeView: View {
         }
 
         ToolbarItem {
-            Button("Add Time", systemImage: "plus") { isAddingManualEntry = true }
+            Toggle(isOn: $groupsSimilarEntries) {
+                Label("Group Similar", systemImage: "rectangle.stack")
+            }
+            .help("Collapse entries that share a description, subject and tags")
+            .accessibilityIdentifier(AccessibilityID.Time.groupingToggle)
+        }
+
+        ToolbarItem {
+            Button("Add Time", systemImage: "plus") { mode = .manual }
+                .help("Record time you have already spent")
                 .accessibilityIdentifier(AccessibilityID.Time.addEntryButton)
         }
+    }
+
+    private var modeBinding: Binding<TimeEntryMode> {
+        Binding(
+            get: { TimeEntryMode(rawValue: storedMode) ?? .timer },
+            set: { storedMode = $0.rawValue }
+        )
+    }
+
+    private var mode: TimeEntryMode {
+        get { modeBinding.wrappedValue }
+        nonmutating set { modeBinding.wrappedValue = newValue }
     }
 
     private var windowBinding: Binding<TimeWindow> {
@@ -198,11 +286,9 @@ public struct TimeView: View {
     private func reload() {
         guard let services else { return }
         let range = window.range(using: services.dateProvider)
-        let now = services.dateProvider.now
 
         services.perform {
             entries = try services.timeEntries.snapshots(in: range, limit: nil)
-            recents = try services.timeEntries.recentEntries(limit: 8).map { $0.snapshot(at: now) }
         }
     }
 
@@ -212,54 +298,62 @@ public struct TimeView: View {
 
     // MARK: - Commands
 
-    private func startBlankTimer() {
-        services?.timer.switchTo(item: nil)
-        bump()
-    }
-
-    private func stopTimer() {
-        services?.timer.stop()
-        bump()
-    }
-
     private func resume(_ snapshot: TimeEntrySnapshot) {
         guard let services, let entry = try? services.timeEntries.entry(id: snapshot.id) else { return }
         services.timer.resume(entry)
         bump()
     }
 
-    private func delete(_ snapshot: TimeEntrySnapshot) {
+    private func duplicate(_ snapshot: TimeEntrySnapshot) {
         guard let services, let entry = try? services.timeEntries.entry(id: snapshot.id) else { return }
-        services.perform { try services.timeEntries.delete(entry) }
-        services.timer.refresh()
+        services.perform { try services.timeEntries.duplicate(entry) }
         bump()
     }
 
-    private func apply(_ change: TimeEntryEdit, to snapshot: TimeEntrySnapshot) {
-        guard let services, let entry = try? services.timeEntries.entry(id: snapshot.id) else { return }
+    private func delete(_ ids: [UUID]) {
+        guard let services else { return }
         services.perform {
-            try services.timeEntries.update(entry) { subject in
-                subject.entryDescription = change.description
-                subject.startedAt = change.startedAt
-                if let endedAt = change.endedAt { subject.endedAt = endedAt }
-                subject.isBillable = change.isBillable
+            for id in ids {
+                guard let entry = try services.timeEntries.entry(id: id) else { continue }
+                try services.timeEntries.delete(entry)
             }
         }
         services.timer.refresh()
         bump()
     }
 
-    private func addManual(_ draft: ManualTimeEntryDraft) {
+    /// Applies one edit to every entry it was made against.
+    ///
+    /// The span is applied only when there is one entry, which is what makes editing a collapsed
+    /// row safe: the shared fields land on all eight stretches and their eight different pairs of
+    /// clock times are left alone. See ``TimeEntryEdit``.
+    private func apply(_ edit: TimeEntryEdit, to ids: [UUID]) {
         guard let services else { return }
-        services.perform {
-            try services.timeEntries.addManual(
-                item: draft.itemID.flatMap { try? services.items.item(id: $0) },
-                description: draft.description,
-                startedAt: draft.startedAt,
-                endedAt: draft.endedAt,
-                tagSlugs: draft.tagSlugs
-            )
+
+        let subject = edit.composition.subject.flatMap { reference in
+            (try? services.items.item(id: reference.id)) ?? nil
         }
+
+        services.perform {
+            for id in ids {
+                guard let entry = try services.timeEntries.entry(id: id) else { continue }
+
+                try services.timeEntries.update(entry) { subjectEntry in
+                    subjectEntry.entryDescription = edit.composition.description
+                    subjectEntry.item = subject
+                    subjectEntry.isBillable = edit.composition.isBillable
+
+                    if let span = edit.span, ids.count == 1 {
+                        subjectEntry.startedAt = span.startedAt
+                        if let endedAt = span.endedAt { subjectEntry.endedAt = endedAt }
+                    }
+                }
+
+                try services.timeEntries.setTags(edit.composition.tagSlugs, on: entry)
+            }
+        }
+
+        services.timer.refresh()
         bump()
     }
 }
@@ -415,6 +509,74 @@ struct TimerRecoveryBanner: View {
 
     private var stopTimeDescription: String {
         recovery.lastHeartbeatAt.formatted(date: .omitted, time: .shortened)
+    }
+}
+
+// MARK: - Idle
+
+/// The four-way choice about time that passed with nobody at the machine.
+///
+/// A banner rather than an alert, for the same reason recovery is one: this is a question about the
+/// past, and an alert that blocks the window makes whichever answer closes it fastest the one
+/// people give. It is also why *Keep* is offered as plainly as *Discard* — a timer left running
+/// through a two-hour meeting away from the desk recorded two hours of real work, and a banner that
+/// nudged towards discarding would quietly delete it.
+struct IdleTimeBanner: View {
+    let idle: IdleObservation
+    let onChoose: (IdleChoice) -> Void
+    let onDefer: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            HStack(spacing: Theme.Spacing.small) {
+                Image(systemName: "moon.zzz")
+                    .foregroundStyle(Theme.Colors.warning)
+                Text(message)
+                    .font(Theme.Text.rowSubtitle)
+                Spacer(minLength: Theme.Spacing.small)
+                Button("Not Now", action: onDefer)
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+            }
+
+            HStack(spacing: Theme.Spacing.small) {
+                Button("Discard and Continue") { onChoose(.discardAndContinue) }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .help(IdleChoice.discardAndContinue.hint)
+                    .accessibilityIdentifier(AccessibilityID.Time.idleDiscardAndContinue)
+
+                Button("Discard") { onChoose(.discard) }
+                    .controlSize(.small)
+                    .help(IdleChoice.discard.hint)
+                    .accessibilityIdentifier(AccessibilityID.Time.idleDiscard)
+
+                Button("Keep") { onChoose(.keep) }
+                    .controlSize(.small)
+                    .help(IdleChoice.keep.hint)
+                    .accessibilityIdentifier(AccessibilityID.Time.idleKeep)
+
+                Button("Keep Separately") { onChoose(.keepAsSeparateEntry) }
+                    .controlSize(.small)
+                    .help(IdleChoice.keepAsSeparateEntry.hint)
+                    .accessibilityIdentifier(AccessibilityID.Time.idleSeparate)
+
+                Spacer()
+            }
+        }
+        .padding(Theme.Spacing.medium)
+        .background(Theme.Colors.warning.opacity(0.08))
+        .overlay(alignment: .bottom) { Divider() }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(AccessibilityID.Time.idleBanner)
+    }
+
+    /// States the facts and nothing else — how long, and since when.
+    private var message: String {
+        let gap = TimeFormatting.spelled(idle.duration)
+        let since = idle.idleSince.formatted(date: .omitted, time: .shortened)
+        return "The timer for “\(idle.displayTitle)” kept running, but nothing has been typed since "
+            + "\(since) — \(gap) ago."
     }
 }
 

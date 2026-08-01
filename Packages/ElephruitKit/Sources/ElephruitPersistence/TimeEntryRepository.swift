@@ -20,18 +20,36 @@ public protocol TimeEntryRepository: AnyObject {
     /// Starts a timer.
     ///
     /// - Throws: ``AppError/timerAlreadyRunning(description:)`` if one is already running. Use
-    ///   ``switchTo(item:description:tagSlugs:)`` to stop the current one and start another in a
-    ///   single step.
+    ///   ``switchTo(item:description:tagSlugs:isBillable:)`` to stop the current one and start
+    ///   another in a single step.
     @discardableResult
-    func start(item: Item?, description: String, tagSlugs: [String]) throws(AppError) -> TimeEntry
+    func start(
+        item: Item?,
+        description: String,
+        tagSlugs: [String],
+        isBillable: Bool
+    ) throws(AppError) -> TimeEntry
 
     /// Stops the running timer, if any. Returns what it stopped.
     @discardableResult
     func stopRunning(at date: Date?) throws(AppError) -> TimeEntry?
 
+    /// Throws away the running timer without recording it.
+    ///
+    /// Distinct from stopping, and the distinction is the point: stopping keeps the time, and this
+    /// says the timer should never have been running at all. Soft, like every other deletion here,
+    /// so "discard" does not mean "unrecoverable".
+    @discardableResult
+    func discardRunning() throws(AppError) -> TimeEntry?
+
     /// Stops whatever is running and starts a new timer, as one action.
     @discardableResult
-    func switchTo(item: Item?, description: String, tagSlugs: [String]) throws(AppError) -> TimeEntry
+    func switchTo(
+        item: Item?,
+        description: String,
+        tagSlugs: [String],
+        isBillable: Bool
+    ) throws(AppError) -> TimeEntry
 
     /// Records time that was never timed.
     @discardableResult
@@ -40,14 +58,30 @@ public protocol TimeEntryRepository: AnyObject {
         description: String,
         startedAt: Date,
         endedAt: Date,
-        tagSlugs: [String]
+        tagSlugs: [String],
+        isBillable: Bool
     ) throws(AppError) -> TimeEntry
 
     /// Starts a new timer with the same subject as an existing entry.
     @discardableResult
     func resume(_ entry: TimeEntry) throws(AppError) -> TimeEntry
 
+    /// Copies an entry, in place, over the same stretch of the clock.
+    @discardableResult
+    func duplicate(_ entry: TimeEntry) throws(AppError) -> TimeEntry
+
     func update(_ entry: TimeEntry, _ mutate: (TimeEntry) -> Void) throws(AppError)
+
+    /// Replaces an entry's tags, creating any that do not exist yet.
+    ///
+    /// Here rather than in a ``update(_:_:)`` closure because turning slugs into `Tag`s needs the
+    /// tag repository, which this object already holds and a view has no business reaching for.
+    func setTags(_ slugs: [String], on entry: TimeEntry) throws(AppError)
+
+    /// Makes an entry exactly this long.
+    ///
+    /// Which end moves depends on whether the entry is finished — see the implementation.
+    func setDuration(_ duration: TimeInterval, for entry: TimeEntry) throws(AppError)
 
     func delete(_ entry: TimeEntry) throws(AppError)
 
@@ -72,6 +106,9 @@ public protocol TimeEntryRepository: AnyObject {
 
     /// Applies the user's decision about a recovered timer.
     func resolveRecovery(_ choice: TimerRecoveryChoice, for entry: TimeEntry) throws(AppError)
+
+    /// Applies the user's decision about a stretch nobody was at the machine for.
+    func resolveIdle(_ choice: IdleChoice, for observation: IdleObservation) throws(AppError)
 
     /// Repairs the invariant if more than one entry is somehow running.
     @discardableResult
@@ -128,7 +165,12 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
     }
 
     @discardableResult
-    public func start(item: Item?, description: String, tagSlugs: [String]) throws(AppError) -> TimeEntry {
+    public func start(
+        item: Item?,
+        description: String,
+        tagSlugs: [String],
+        isBillable: Bool = false
+    ) throws(AppError) -> TimeEntry {
         if let running = try runningEntry() {
             throw .timerAlreadyRunning(description: running.item?.displayTitle ?? running.entryDescription)
         }
@@ -138,6 +180,7 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
             startedAt: dateProvider.now,
             endedAt: nil,
             tagSlugs: tagSlugs,
+            isBillable: isBillable,
             source: .timer
         )
     }
@@ -159,7 +202,28 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
     }
 
     @discardableResult
-    public func switchTo(item: Item?, description: String, tagSlugs: [String]) throws(AppError) -> TimeEntry {
+    public func discardRunning() throws(AppError) -> TimeEntry? {
+        guard let running = try runningEntry() else { return nil }
+
+        let now = dateProvider.now
+        // Closed as well as deleted. A soft-deleted entry with no end is still `endedAt == nil`, and
+        // restoring it from the trash would resurrect a second running timer — the same trap
+        // `restore(_:)` guards, closed here at source instead.
+        running.endedAt = max(running.startedAt, now)
+        running.lastHeartbeatAt = nil
+        running.deletedAt = now
+        running.updatedAt = now
+        try save()
+        return running
+    }
+
+    @discardableResult
+    public func switchTo(
+        item: Item?,
+        description: String,
+        tagSlugs: [String],
+        isBillable: Bool = false
+    ) throws(AppError) -> TimeEntry {
         // One save, so a crash between the two cannot leave nothing running *and* nothing stopped.
         let now = dateProvider.now
 
@@ -175,6 +239,7 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
             startedAt: now,
             endedAt: nil,
             tagSlugs: tagSlugs,
+            isBillable: isBillable,
             source: .timer
         )
     }
@@ -187,7 +252,8 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
         description: String,
         startedAt: Date,
         endedAt: Date,
-        tagSlugs: [String]
+        tagSlugs: [String],
+        isBillable: Bool = false
     ) throws(AppError) -> TimeEntry {
         guard endedAt > startedAt else {
             throw .invalidQuery(reason: "A time entry has to end after it starts.")
@@ -198,6 +264,7 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
             startedAt: startedAt,
             endedAt: endedAt,
             tagSlugs: tagSlugs,
+            isBillable: isBillable,
             source: .manual
         )
     }
@@ -206,15 +273,47 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
     public func resume(_ entry: TimeEntry) throws(AppError) -> TimeEntry {
         // Switch rather than start: continuing something is a thing you do *instead* of what you
         // were doing, and refusing because a timer is running would be pedantry.
-        try switchTo(item: entry.item, description: entry.entryDescription, tagSlugs: entry.tagSlugs)
+        //
+        // Billability comes along. Whether work is billable is a fact about the work, not about the
+        // stretch of clock, so continuing something billable and getting an unbillable entry is a
+        // silent revenue leak nobody notices until the invoice.
+        try switchTo(
+            item: entry.item,
+            description: entry.entryDescription,
+            tagSlugs: entry.tagSlugs,
+            isBillable: entry.isBillable
+        )
     }
 
+    @discardableResult
+    public func duplicate(_ entry: TimeEntry) throws(AppError) -> TimeEntry {
+        // A copy over the same clock, not a new timer: this is for the second identical meeting you
+        // forgot to track, and it lands where the original did so the correction is one edit away.
+        // Marked `.manual`, because the copy was typed into existence and nothing watched it happen
+        // — which is also what stops crash recovery from ever offering it.
+        guard let endedAt = entry.endedAt else {
+            throw .invalidQuery(reason: "A running timer cannot be duplicated. Stop it first.")
+        }
+
+        return try insertEntry(
+            item: entry.item,
+            description: entry.entryDescription,
+            startedAt: entry.startedAt,
+            endedAt: endedAt,
+            tagSlugs: entry.tagSlugs,
+            isBillable: entry.isBillable,
+            source: .manual
+        )
+    }
+
+    @discardableResult
     private func insertEntry(
         item: Item?,
         description: String,
         startedAt: Date,
         endedAt: Date?,
         tagSlugs: [String],
+        isBillable: Bool,
         source: TimeEntrySource
     ) throws(AppError) -> TimeEntry {
         let now = dateProvider.now
@@ -222,6 +321,7 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
             startedAt: startedAt,
             endedAt: endedAt,
             entryDescription: description.trimmingCharacters(in: .whitespacesAndNewlines),
+            isBillable: isBillable,
             source: source,
             lastHeartbeatAt: endedAt == nil ? now : nil,
             createdAt: now
@@ -242,6 +342,41 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
         // Guard the one thing an edit can break that a report cannot recover from.
         if let endedAt = entry.endedAt, endedAt < entry.startedAt {
             entry.endedAt = entry.startedAt
+        }
+
+        entry.updatedAt = dateProvider.now
+        try save()
+    }
+
+    public func setTags(_ slugs: [String], on entry: TimeEntry) throws(AppError) {
+        entry.tags = try tags.ensureTags(named: slugs)
+        entry.updatedAt = dateProvider.now
+        try save()
+    }
+
+    /// Makes an entry exactly `duration` long.
+    ///
+    /// ### Which end moves
+    /// A finished entry keeps its start and moves its end. That is what somebody typing `1:30` into
+    /// a row of yesterday's log means: the work began when it began, and the guess about when it
+    /// stopped is the part being corrected.
+    ///
+    /// A **running** entry moves its *start* instead, because it has no end to move — its end is
+    /// the present moment and will still be the present moment a second later. Typing `1:30` into a
+    /// running timer therefore back-dates it to have begun ninety minutes ago, which is exactly the
+    /// "I started this at two" correction the field exists for.
+    ///
+    /// A negative duration is refused rather than clamped: `DurationParser` cannot produce one, so
+    /// anything that gets here with one is a caller bug and should say so.
+    public func setDuration(_ duration: TimeInterval, for entry: TimeEntry) throws(AppError) {
+        guard duration >= 0 else {
+            throw .invalidQuery(reason: "A time entry cannot be a negative length.")
+        }
+
+        if entry.endedAt == nil {
+            entry.startedAt = dateProvider.now.addingTimeInterval(-duration)
+        } else {
+            entry.endedAt = entry.startedAt.addingTimeInterval(duration)
         }
 
         entry.updatedAt = dateProvider.now
@@ -404,6 +539,74 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
 
         entry.updatedAt = now
         try save()
+    }
+
+    /// Applies the user's decision about an idle stretch.
+    ///
+    /// ### Why three of the four choices end the entry at `idleSince`
+    /// Because that is the last moment anything is known to have happened. Everything after it is
+    /// the disputed part, and the three answers differ only in what becomes of the dispute: thrown
+    /// away, thrown away and resumed, or kept as its own row. Only `.keep` says the gap was work,
+    /// and only `.keep` leaves the entry alone.
+    ///
+    /// The split-out entry from `.keepAsSeparateEntry` is deliberately **not** billable and is
+    /// deliberately described differently from the work around it. Not billable, because defaulting
+    /// to charging for time the machine saw nobody for is the one direction of this that cannot be
+    /// undone by noticing later. Described differently, because the log collapses matching rows, and
+    /// an idle stretch that matched would fold straight back into the work it was just split out of.
+    public func resolveIdle(_ choice: IdleChoice, for observation: IdleObservation) throws(AppError) {
+        guard let entry = try entry(id: observation.id) else { return }
+        guard choice != .keep else { return }
+
+        let now = dateProvider.now
+        let stopAt = max(entry.startedAt, observation.idleSince)
+
+        entry.endedAt = stopAt
+        entry.lastHeartbeatAt = nil
+        entry.updatedAt = now
+        try save()
+
+        switch choice {
+        case .keep, .discard:
+            break
+
+        case .discardAndContinue:
+            try insertEntry(
+                item: entry.item,
+                description: entry.entryDescription,
+                startedAt: now,
+                endedAt: nil,
+                tagSlugs: entry.tagSlugs,
+                isBillable: entry.isBillable,
+                source: .timer
+            )
+
+        case .keepAsSeparateEntry:
+            let awayEnd = max(stopAt, observation.idleUntil)
+            if awayEnd > stopAt {
+                try insertEntry(
+                    item: entry.item,
+                    description: idleEntryDescription,
+                    startedAt: stopAt,
+                    endedAt: awayEnd,
+                    tagSlugs: entry.tagSlugs,
+                    isBillable: false,
+                    source: .manual
+                )
+            }
+
+            // The work carries on from where the gap ended, so the user is left timing the same
+            // thing they were timing before they walked away.
+            try insertEntry(
+                item: entry.item,
+                description: entry.entryDescription,
+                startedAt: max(awayEnd, now),
+                endedAt: nil,
+                tagSlugs: entry.tagSlugs,
+                isBillable: entry.isBillable,
+                source: .timer
+            )
+        }
     }
 
     // MARK: Invariant repair
