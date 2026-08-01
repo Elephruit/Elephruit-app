@@ -171,6 +171,15 @@ final class AppEnvironment {
             // development mode inside the service itself as well as here.
             if DesignReviewLaunch.loadsSampleData {
                 services.loadSampleDataIfEmpty()
+
+                // What the app knows about a few of the synthetic calendar's meetings — notes
+                // written beforehand, something still to prepare, a linked person. Seeded here and
+                // only with that calendar, because these records name events by identity: without
+                // the fixture they would be rows about meetings nobody can open. See
+                // `MeetingSampleData`.
+                if useFixtureCalendar {
+                    services.loadMeetingSampleData()
+                }
             }
             if let peopleCount = DesignReviewLaunch.peopleCount {
                 services.seedPeople(upTo: peopleCount)

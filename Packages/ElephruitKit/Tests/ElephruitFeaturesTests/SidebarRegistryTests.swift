@@ -74,12 +74,12 @@ struct SidebarRegistryTests {
         #expect(SidebarRegistry.destinations(in: .calendar).contains { $0.id == "calendar" })
     }
 
-    @Test("The primary band is exactly the four global destinations, in reading order")
+    @Test("The primary band is exactly the global destinations, in reading order")
     func primaryBandIsGlobalOnly() {
         // The whole redesign in one assertion. Anything else at the top level is a feature's
         // navigation leaking back out of its module, which is what made the old sidebar an index.
         let ids = SidebarRegistry.destinations(in: .primary).map(\.id)
-        #expect(ids == ["home", "today", "upcoming", "inbox"])
+        #expect(ids == ["today", "inbox"])
 
         for destination in SidebarRegistry.destinations(in: .primary) {
             #expect(destination.module == nil, "\(destination.title) claims a module")
@@ -94,15 +94,26 @@ struct SidebarRegistryTests {
         }
     }
 
-    @Test("Home became available in Phase E, first in the primary band")
-    func homeIsAvailable() {
-        let home = SidebarRegistry.allDeclared.first { $0.id == "home" }
-        #expect(home?.isAvailable == true)
-        #expect(home?.band == .primary)
-
+    @Test("Today is first in the primary band, and Home and Upcoming are declared but never drawn")
+    func todayIsFirstAndItsPredecessorsAreRetired() {
         // First, because it answers the question you have on opening the app rather than one you go
         // looking for.
-        #expect(SidebarRegistry.destinations(in: .primary).first?.id == "home")
+        #expect(SidebarRegistry.destinations(in: .primary).first?.id == "today")
+
+        let today = SidebarRegistry.allDeclared.first { $0.id == "today" }
+        #expect(today?.isAvailable == true)
+        #expect(today?.band == .primary)
+
+        // Declared rather than deleted, so a scene restored from a build that had them still
+        // decodes — and filtered on availability, so neither is ever enumerated in a sidebar, a
+        // shortcut order, or a width calculation.
+        for retired in ["home", "upcoming"] {
+            let destination = SidebarRegistry.allDeclared.first { $0.id == retired }
+            #expect(destination != nil, "\(retired) was deleted rather than retired")
+            #expect(destination?.isAvailable == false)
+            #expect(!SidebarRegistry.available.contains { $0.id == retired })
+            #expect(!SidebarRegistry.nonTruncatingTitles.contains(destination?.title ?? ""))
+        }
     }
 
     @Test("Time is inside its own module")
