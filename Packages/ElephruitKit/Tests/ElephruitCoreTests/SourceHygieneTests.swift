@@ -190,6 +190,27 @@ struct SourceHygieneTests {
             "NSColor(deviceRed:",
         ]
 
+        // SwiftUI's *named* colours, which this test did not look for and which had accumulated to
+        // twenty-four uses across six files while the README recorded that "no view names a literal
+        // colour" and rested a dark-mode guarantee on it.
+        //
+        // Most of them adapt, so most were not bugs — they were the palette being bypassed, which is
+        // the same nine-decisions-instead-of-one problem `Theme.Palette` exists to prevent.
+        // `Color.white` is the one that is simply wrong: it does not adapt at all, and it was being
+        // used for text on a fill that is pale under Increase Contrast and at the low end of an
+        // intensity scale, where white on near-white is invisible. `Theme.Colors.onAccent` is the
+        // token for that question.
+        //
+        // Matched with a trailing delimiter so `Color.white` is caught and a hypothetical
+        // `Color.whiteboardTint` is not.
+        let namedColours = [
+            "pink", "red", "blue", "green", "orange", "yellow", "purple",
+            "gray", "grey", "brown", "teal", "cyan", "indigo", "mint", "black", "white",
+        ]
+        let namedLiterals = namedColours.flatMap { name in
+            [".", "(", " ", ")", ",", "\n"].map { "Color.\(name)\($0)" }
+        }
+
         for file in Self.swiftFiles() {
             // The tokens file is where the palette is *defined*; everywhere else consumes it.
             guard file.lastPathComponent != "Tokens.swift" else { continue }
@@ -201,6 +222,10 @@ struct SourceHygieneTests {
 
                 for literal in literals where line.contains(literal) {
                     offenders.append("\(file.lastPathComponent):\(index + 1) — \(literal)")
+                }
+
+                for literal in namedLiterals where line.contains(literal) {
+                    offenders.append("\(file.lastPathComponent):\(index + 1) — \(literal.dropLast())")
                 }
             }
         }

@@ -374,7 +374,7 @@ public struct TagChip: View {
     /// more than which colour the user gave it.
     private var foreground: AnyShapeStyle {
         if prominence == .increased { return AnyShapeStyle(.primary) }
-        return AnyShapeStyle(isSelected ? Color.white : tint)
+        return AnyShapeStyle(isSelected ? Theme.Colors.onAccent : tint)
     }
 
     private var background: AnyShapeStyle {
