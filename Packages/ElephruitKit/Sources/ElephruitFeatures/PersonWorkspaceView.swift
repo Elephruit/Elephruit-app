@@ -417,6 +417,7 @@ struct PersonHeaderView: View {
                         TextField("Name", text: $title)
                             .textFieldStyle(.plain)
                             .font(Theme.Text.title)
+                            .tracking(Theme.Text.Tracking.title)
                             .disabled(person.isInTrash)
                             .accessibilityLabel("Name")
 
@@ -806,7 +807,7 @@ struct PersonQuickActions: View {
 /// So: `.bordered`, with exactly one `.borderedProminent` for the action a person came here to do.
 /// One accent, which is the user's own, and it now means *this is the primary action* rather than
 /// *this is email*. The icons carry the channel, as they always did.
-private struct PersonDockButton: View {
+struct PersonDockButton: View {
     let entry: PersonActionAvailability
     let showsTitle: Bool
     let isProminent: Bool
@@ -833,13 +834,60 @@ private struct PersonDockButton: View {
         }
     }
 
+    /// The colour of the glyph, and only the glyph.
+    ///
+    /// ### Why the hue came back, and why only here
+    /// Removing the per-channel colour fixed the right problem the wrong way. Three saturated pills
+    /// side by side were not a hierarchy — but a row of identical grey buttons is not one either, and
+    /// it lost the one thing the colour was genuinely doing: letting you find *Log Interaction*
+    /// without reading three labels.
+    ///
+    /// So the two jobs are separated. The **button** says how important this action is: one filled
+    /// with the accent, the rest bordered and quiet, which is a hierarchy with two levels rather than
+    /// six. The **glyph** says which action it is, and colour is very good at that — it is
+    /// pre-attentive, so the eye lands on the orange pencil before it has read anything.
+    ///
+    /// Nothing is filled with a hue any more, which is what made the old row shout. A tinted 16-point
+    /// symbol on a neutral control is an accent; a tinted rectangle behind a word is a button
+    /// pretending to be a category.
+    private var glyphColor: Color? {
+        // On the accent-filled button the glyph must stay legible against the fill, so it inherits
+        // `onAccent` rather than taking a hue that would sit blue-on-blue.
+        guard !isProminent else { return nil }
+
+        guard case .contact(let channel) = entry.kind else {
+            // The two actions that are about the record rather than about reaching somebody.
+            switch entry.kind {
+            case .logInteraction: return Theme.Palette.purple.color
+            case .addNote: return Theme.Palette.orange.color
+            default: return nil
+            }
+        }
+
+        switch channel {
+        case .call: return Theme.Palette.green.color
+        case .message: return Theme.Palette.blue.color
+        case .email: return Theme.Palette.indigo.color
+        case .facetimeVideo, .facetimeAudio: return Theme.Palette.cyan.color
+        case .maps: return Theme.Palette.orange.color
+        case .web: return Theme.Palette.purple.color
+        }
+    }
+
+    /// Composed rather than a plain `Label`, because a `Label` colours its glyph and its title
+    /// together and the whole point here is that they differ.
     @ViewBuilder
     private var label: some View {
-        if showsTitle {
-            Label(entry.title, systemImage: entry.symbolName)
-        } else {
-            Label(entry.title, systemImage: entry.symbolName)
-                .labelStyle(.iconOnly)
+        HStack(spacing: Theme.Spacing.tight) {
+            Image(systemName: entry.symbolName)
+                .foregroundStyle(glyphColor ?? Theme.Colors.onAccent)
+
+            if showsTitle {
+                Text(entry.title)
+            }
         }
+        // The glyph's colour is decoration over a label VoiceOver already reads, and a disabled
+        // control must not keep a saturated icon that says it is still available.
+        .opacity(entry.isAvailable ? 1 : 0.5)
     }
 }
