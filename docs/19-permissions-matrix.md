@@ -55,7 +55,7 @@ The deprecated `NSCalendarsUsageDescription` is deliberately not used, and the f
 |---|---|---|---|---|---|---|
 | **Calendar read** | `personal-information.calendars` | `NSCalendarsFullAccessUsageDescription` | **Off** | Settings toggle, `calendar.isEnabled` | Explained state with "Open System Settings"; Today and Upcoming still work | `CalendarWriteSafetyTests` bans 11 write symbols in source; `.writeOnly` maps to `.denied` |
 | **Calendar write** | — | — | — | — | — | **Never.** The protocol has no write method and `EKEventStore` never escapes the actor |
-| **Global hotkey** | **none** | **none** | Proposed ⌘⇧J, unbound on collision | Settings | Command left unbound, reason shown | Registration failure is surfaced, not swallowed. ADR 0008 |
+| **Global hotkey** | **none** | **none** | Proposed ⌘⇧J, ⌘⇧L and ⌘⇧E; each unbound on collision | Settings | Command left unbound, reason shown | Registration failure is surfaced, not swallowed. ADR 0008 |
 | **App Intent capture** | none | none | On | — | — | `openAppWhenRun = false` — never steals focus |
 | **Attachments** | `files.user-selected.read-write`, `files.bookmarks.app-scope` | none | On | User picks the file | Lost reference is a state with "Locate…" | `removingReferenceKeepsTheFile` |
 | **Contacts read** | `personal-information.addressbook` | `NSContactsUsageDescription` | **Off** | Settings toggle, `contacts.isEnabled` | People remain fully usable — internal `Person` is the durable identity | `ContactsWriteSafetyTests` bans create/delete symbols and caps the fetched key list |

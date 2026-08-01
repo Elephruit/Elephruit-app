@@ -75,6 +75,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
     case focusMode
     case clearSelection
     case toggleTimer
+    case quickLog
     case peopleCommandBar
     case quickTaskEntry
     case goTasks
@@ -112,6 +113,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .focusMode: "Focus Mode"
         case .clearSelection: "Clear Selection"
         case .toggleTimer: "Start or Stop Timer"
+        case .quickLog: "Quick Log"
         case .peopleCommandBar: "People Command Bar"
         case .goCalendar: "Go to Calendar"
         case .newEvent: "New Event"
@@ -169,6 +171,16 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .focusMode: KeyBinding("f", [.command, .option])
         case .clearSelection: KeyBinding("l", .command)
         case .toggleTimer: KeyBinding("t", [.command, .control])
+        // ⌘⇧L for Log, on exactly the reasoning that moved Quick Jot to ⌘⇧J: a shortcut pressed from
+        // inside another application has to be remembered without the app in front of you, and the
+        // initial of its own name is the only mnemonic that survives that. It sits beside ⌘⇧J
+        // deliberately — the two are the same gesture aimed at the two things this app is for, a
+        // thought and an hour — and it is nowhere near ⌃⌘T, which starts a timer against whatever is
+        // selected *inside* the app and is a different question with a different answer.
+        //
+        // ⌘L on its own belongs to Focus Sidebar, and shift is what separates them. Nothing else in
+        // the registry wants these keys; `ShortcutRegistryTests` fails if that ever stops being true.
+        case .quickLog: KeyBinding("l", [.command, .shift])
         // ⌘⇧K, beside ⌘K for the general palette: the two are siblings, and the shift says "the one
         // about people". Every binding still has exactly one owner — `ShortcutRegistryTests` proves
         // it over `allCases`, so a collision introduced here fails a test rather than silently
