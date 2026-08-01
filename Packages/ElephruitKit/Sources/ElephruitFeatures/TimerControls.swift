@@ -82,10 +82,10 @@ public struct TimerMenuBarContent: View {
 
                 Divider()
 
-                ForEach(recentSubjects, id: \.id) { subject in
-                    Button("Start “\(subject.title)”") {
-                        guard let item = try? services.items.item(id: subject.id) else { return }
-                        services.timer.switchTo(item: item)
+                ForEach(recentEntries, id: \.id) { recent in
+                    Button("Continue “\(recent.title)”") {
+                        guard let entry = try? services.timeEntries.entry(id: recent.id) else { return }
+                        services.timer.resume(entry)
                     }
                 }
 
@@ -109,17 +109,35 @@ public struct TimerMenuBarContent: View {
     }
 
     /// A few things worth continuing, so the common case is one click from anywhere.
-    private var recentSubjects: [(id: UUID, title: String)] {
+    ///
+    /// ### Why these are entries rather than items
+    /// This used to offer the *subjects* of recent entries and start a bare timer against them,
+    /// which threw away the description, the tags and the billable flag every time. Continuing an
+    /// entry keeps all of it, and it is the same `resume` the log's play button calls — so the menu
+    /// bar and the list can no longer disagree about what "continue" means.
+    ///
+    /// Deduplicated by what a continued timer would actually be, not by item: two entries against
+    /// one task with different descriptions are two different things to carry on with, and showing
+    /// only the newer of them hides the other from the one surface that is visible while working in
+    /// another app. Entries with no subject and no description are skipped — there is nothing to
+    /// name them by, and a menu of three identical "Continue" lines helps nobody.
+    private var recentEntries: [(id: UUID, title: String)] {
         guard let recent = try? services.timeEntries.recentEntries(limit: 12) else { return [] }
 
-        var seen = Set<UUID>()
-        var subjects: [(id: UUID, title: String)] = []
+        var seen = Set<String>()
+        var continuations: [(id: UUID, title: String)] = []
+
         for entry in recent {
-            guard let item = entry.item, seen.insert(item.id).inserted else { continue }
-            subjects.append((item.id, item.displayTitle))
-            if subjects.count == 3 { break }
+            let title = entry.item?.displayTitle ?? entry.entryDescription
+            guard !title.isEmpty else { continue }
+
+            let key = "\(entry.item?.id.uuidString ?? "")\u{1f}\(entry.entryDescription)"
+            guard seen.insert(key).inserted else { continue }
+
+            continuations.append((entry.id, title))
+            if continuations.count == 3 { break }
         }
-        return subjects
+        return continuations
     }
 }
 

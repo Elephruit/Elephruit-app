@@ -66,6 +66,12 @@ struct TimeEntryBar: View {
     @State private var durationText = ""
     @State private var manualStart = Date()
     @State private var manualEnd = Date()
+
+    /// A length typed into the duration field before the timer was started.
+    ///
+    /// Applied the moment it starts, so the timer opens already reading that long. Without this the
+    /// field is a dead control in timer mode, which is worse than either allowing it or removing it.
+    @State private var pendingBackdate: TimeInterval?
     @FocusState private var isDescriptionFocused: Bool
     @FocusState private var isDurationFocused: Bool
 
@@ -320,6 +326,14 @@ struct TimeEntryBar: View {
                 isBillable: draft.isBillable
             )
 
+            // A duration typed before pressing play starts the timer already that long — the "I have
+            // been at this twenty minutes and forgot to start it" case, which otherwise means
+            // starting a timer and immediately correcting it.
+            if let backdate = pendingBackdate {
+                services.timer.setElapsed(backdate)
+                pendingBackdate = nil
+            }
+
         case .manual:
             guard manualEnd > manualStart else { return }
             let subject = resolvedSubject()
@@ -359,6 +373,8 @@ struct TimeEntryBar: View {
             commitChange()
         } else if mode == .manual {
             manualEnd = manualStart.addingTimeInterval(parsed)
+        } else {
+            pendingBackdate = parsed > 0 ? parsed : nil
         }
 
         syncDurationDisplay()
@@ -392,8 +408,10 @@ struct TimeEntryBar: View {
                 tagSlugs: running.tagSlugs,
                 isBillable: running.isBillable
             )
+            pendingBackdate = nil
         } else {
             draft = TimeEntryComposition()
+            pendingBackdate = nil
             prepareManualSpan()
         }
         syncDurationDisplay()
@@ -416,7 +434,7 @@ struct TimeEntryBar: View {
         } else if mode == .manual {
             durationText = TimeFormatting.clock(max(0, manualEnd.timeIntervalSince(manualStart)))
         } else {
-            durationText = TimeFormatting.clock(0)
+            durationText = TimeFormatting.clock(pendingBackdate ?? 0)
         }
     }
 }
