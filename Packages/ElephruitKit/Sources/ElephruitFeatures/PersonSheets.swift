@@ -163,7 +163,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .askAbout: "bubble.left.and.questionmark.bubble.right"
+        case .askAbout: "questionmark.bubble"
         case .foodAndDrink: "fork.knife"
         case .family: "figure.2.and.child.holdinghands"
         case .age: "birthday.cake"
@@ -179,17 +179,17 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
 
     var tint: Color {
         switch self {
-        case .askAbout: .blue
-        case .foodAndDrink: .green
-        case .family: .pink
-        case .age: .orange
-        case .school: .indigo
-        case .interests: .purple
-        case .likes: .cyan
-        case .avoid: .orange
-        case .life: .indigo
+        case .askAbout: Theme.Palette.blue.color
+        case .foodAndDrink: Theme.Palette.green.color
+        case .family: Theme.Palette.pink.color
+        case .age: Theme.Palette.orange.color
+        case .school: Theme.Palette.indigo.color
+        case .interests: Theme.Palette.purple.color
+        case .likes: Theme.Palette.cyan.color
+        case .avoid: Theme.Palette.orange.color
+        case .life: Theme.Palette.indigo.color
         case .work: Theme.Colors.workDetail
-        case .goodToKnow: .yellow
+        case .goodToKnow: Theme.Palette.yellow.color
         }
     }
 

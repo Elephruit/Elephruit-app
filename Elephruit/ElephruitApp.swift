@@ -116,6 +116,13 @@ private struct RootWindow: View {
             }
             // Anything an intent left behind while the app was not running, or not frontmost.
             environment.adoptIntentRouting()
+
+            // Development-only review overrides. Both are no-ops unless the matching argument was
+            // passed alongside `-ElephruitDevelopmentMode`; see ``DesignReviewLaunch``.
+            DesignReviewLaunch.applyAppearance()
+            DesignReviewLaunch.applyWindowSize(
+                to: NSApplication.shared.windows.first { $0.canBecomeMain && $0.isVisible }
+            )
         }
     }
 
@@ -220,7 +227,7 @@ struct ElephruitCommands: Commands {
             Divider()
 
             Button("Import Files…") { transfer?.importFiles() }
-                .shortcut(.toggleInspector, in: shortcuts)
+                .shortcut(.importFiles, in: shortcuts)
                 .disabled(transfer == nil)
 
             Button("Export Library…") { transfer?.export() }
@@ -277,12 +284,14 @@ struct ElephruitCommands: Commands {
 
             Divider()
 
-            // The four destinations that belong to no module, in sidebar order. `⌘1`–`⌘4` and the
-            // named shortcuts both land here, and both mean the same thing they say — a binding
-            // whose name and effect disagree is worse than no binding, which is why
-            // `ShortcutRegistry` gives every shortcut exactly one owner.
+            // The four destinations that belong to no module, in sidebar order. Every one of them
+            // now goes through the registry — Home was the exception, binding ⌘1 as a literal while
+            // the registry gave ⌘1 to Inbox, so two menu items claimed the same keys and Inbox's
+            // did nothing. A binding whose name and effect disagree is worse than no binding, which
+            // is why `ShortcutRegistry` gives every shortcut exactly one owner, and why nothing here
+            // is allowed to bind keys behind its back.
             Button("Home") { navigation?.select(.home) }
-                .keyboardShortcut(KeyEquivalent("1"), modifiers: .command)
+                .shortcut(.goHome, in: shortcuts)
             Button("Today") { navigation?.select(.today) }
                 .shortcut(.goToday, in: shortcuts)
             Button("Upcoming") { navigation?.select(.upcoming) }
@@ -572,8 +581,8 @@ struct SettingsView: View {
     }
 
     private func refreshStatistics() async {
-        guard let engine = environment.services?.search as? DefaultSearchEngine else { return }
-        indexStatistics = await engine.indexStatistics()
+        guard let search = environment.services?.search else { return }
+        indexStatistics = await search.indexStatistics()
     }
 
     private func revealLibrary() {

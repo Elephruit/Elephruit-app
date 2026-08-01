@@ -417,6 +417,7 @@ struct PersonHeaderView: View {
                         TextField("Name", text: $title)
                             .textFieldStyle(.plain)
                             .font(Theme.Text.title)
+                            .tracking(Theme.Text.Tracking.title)
                             .disabled(person.isInTrash)
                             .accessibilityLabel("Name")
 
@@ -454,6 +455,12 @@ struct PersonHeaderView: View {
                         Text(relationship)
                             .font(Theme.Text.rowSubtitle)
                             .foregroundStyle(Theme.Colors.secondaryText)
+                    }
+
+                    if let historyLine {
+                        Text(historyLine)
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
                     }
                 }
 
@@ -502,12 +509,24 @@ struct PersonHeaderView: View {
             facts.append(portrait?.ageAndGradeIsEstimate == true ? line : line)
         }
 
-        if let context = services?.people.context(for: person),
-           let provider = services?.dateProvider {
-            facts.append(context.summary(using: provider))
-        }
-
         return facts
+    }
+
+    /// Your history with this person, as its own line.
+    ///
+    /// It used to be appended to ``contextFacts`` and joined with the rest by a middle dot, which
+    /// produced "Structural engineer · Austin · Nothing recorded yet" — one run-on line mixing two
+    /// unrelated kinds of fact. The first two say *who this person is*; the third says *what has
+    /// passed between you and them*, and reading them as a single series invites the eye to take
+    /// "nothing recorded yet" as another attribute of Sam rather than a statement about the record.
+    ///
+    /// Separated, each line has one subject, and the quieter type says which of the two is
+    /// background.
+    private var historyLine: String? {
+        guard let context = services?.people.context(for: person),
+              let provider = services?.dateProvider
+        else { return nil }
+        return context.summary(using: provider)
     }
 
     private var relationshipLine: String? {
@@ -627,25 +646,26 @@ struct PersonQuickActions: View {
 
     private func actionDock(showsContactTitles: Bool) -> some View {
         HStack(spacing: Theme.Spacing.small) {
-            ForEach(primaryContactActions) { entry in
+            // Exactly one prominent button, and it is the first way of reaching this person —
+            // whichever channel their record actually supports. A row in which everything is
+            // emphasised has no emphasis in it.
+            ForEach(Array(primaryContactActions.enumerated()), id: \.element.id) { index, entry in
                 PersonDockButton(
                     entry: entry,
-                    tint: tint(for: entry),
                     showsTitle: showsContactTitles,
-                    isProminent: false
+                    isProminent: index == 0
                 ) { perform(entry) }
             }
 
             if !primaryContactActions.isEmpty {
                 Divider()
-                    .frame(height: 24)
+                    .frame(height: 20)
                     .padding(.horizontal, 2)
             }
 
             if let interactionAction {
                 PersonDockButton(
                     entry: interactionAction,
-                    tint: .purple,
                     showsTitle: true,
                     isProminent: false
                 ) { perform(interactionAction) }
@@ -654,7 +674,6 @@ struct PersonQuickActions: View {
             if let noteAction {
                 PersonDockButton(
                     entry: noteAction,
-                    tint: .orange,
                     showsTitle: showsContactTitles,
                     isProminent: false
                 ) { perform(noteAction) }
@@ -674,23 +693,23 @@ struct PersonQuickActions: View {
                 } label: {
                     Label("More", systemImage: "ellipsis")
                         .labelStyle(.iconOnly)
-                        .font(.system(size: 15, weight: .semibold))
-                        .frame(width: 36, height: 36)
-                        .background(Theme.Colors.subtleFill, in: Circle())
                 }
                 .menuIndicator(.hidden)
-                .buttonStyle(.plain)
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .fixedSize()
                 .help("More actions")
                 .accessibilityLabel("More actions")
             }
         }
-        .padding(7)
-        .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: 15))
-        .overlay {
-            RoundedRectangle(cornerRadius: 15)
-                .strokeBorder(Theme.Colors.separator.opacity(0.55))
-        }
-        .shadow(color: .black.opacity(0.055), radius: 12, y: 4)
+        // ### Why the row is no longer a card
+        // It was one: a filled rounded rectangle, a hairline border *and* a drop shadow, floating on
+        // the header. Three surface treatments stacked on one element is the thing
+        // `SourceHygieneTests.noViewStacksShadowsMaterialsOrGlass` exists to prevent, and the result
+        // read as a web toolbar pasted into the window rather than as part of it.
+        //
+        // Ordinary buttons on the header need no container. What separated the row from the content
+        // below was never the card; it is the divider that was already there.
         .fixedSize(horizontal: true, vertical: false)
     }
 
@@ -725,18 +744,6 @@ struct PersonQuickActions: View {
     private var relationships: [PersonRelationship] {
         guard let services else { return [] }
         return (try? services.persons.relationships(of: person)) ?? []
-    }
-
-    private func tint(for entry: PersonActionAvailability) -> Color {
-        guard case .contact(let channel) = entry.kind else { return Theme.Colors.selection }
-        switch channel {
-        case .call: return Color.green
-        case .message: return Color.blue
-        case .email: return Color.indigo
-        case .facetimeVideo, .facetimeAudio: return Color.cyan
-        case .maps: return Color.orange
-        case .web: return Color.purple
-        }
     }
 
     private func perform(_ entry: PersonActionAvailability) {
@@ -782,43 +789,105 @@ struct PersonQuickActions: View {
     }
 }
 
-private struct PersonDockButton: View {
+/// One action on a person's profile.
+///
+/// ### Why this is an ordinary button now
+/// It used to be a hand-drawn one: a rounded rectangle filled with the action's own colour at 11%,
+/// a border of the same colour at 16%, semibold text in that colour, and — when prominent — a
+/// gradient and a coloured drop shadow. Each contact channel had a different hue, so the row read
+/// Email in indigo, Log Interaction in magenta and Add Note in orange, three saturated pills side by
+/// side above a person's name.
+///
+/// Three things were wrong with that. It is not a Mac control — nothing else on the system looks
+/// like it, so it reads as a web toolbar embedded in the window. Six hues across one row is not a
+/// hierarchy; when everything is coloured, nothing is emphasised, and the eye has no idea which of
+/// the three it is meant to reach for. And a colour per channel spends the app's whole palette on a
+/// distinction the icon already makes — an envelope is an envelope whatever colour it is.
+///
+/// So: `.bordered`, with exactly one `.borderedProminent` for the action a person came here to do.
+/// One accent, which is the user's own, and it now means *this is the primary action* rather than
+/// *this is email*. The icons carry the channel, as they always did.
+struct PersonDockButton: View {
     let entry: PersonActionAvailability
-    let tint: Color
     let showsTitle: Bool
     let isProminent: Bool
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            Group {
-                if showsTitle {
-                    Label(entry.title, systemImage: entry.symbolName)
-                } else {
-                    Label(entry.title, systemImage: entry.symbolName)
-                        .labelStyle(.iconOnly)
-                }
-            }
-            .font(.system(.callout, weight: .semibold))
-            .foregroundStyle(isProminent ? Color.white : tint)
-            .padding(.horizontal, showsTitle ? Theme.Spacing.medium : 0)
-            .frame(width: showsTitle ? nil : 36, height: 36)
-            .background(
-                isProminent ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(tint.opacity(0.11)),
-                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(isProminent ? Color.white.opacity(0.16) : tint.opacity(0.16))
-            }
-            .shadow(color: isProminent ? tint.opacity(0.25) : .clear, radius: 7, y: 3)
-            .contentShape(Rectangle())
+        button
+            .controlSize(.large)
+            .disabled(!entry.isAvailable)
+            .help(entry.unavailabilityReason ?? entry.detail ?? entry.title)
+            .accessibilityLabel(entry.title)
+            .accessibilityHint(entry.unavailabilityReason ?? entry.detail ?? "")
+            .accessibilityIdentifier("action.\(entry.id)")
+    }
+
+    /// The style is chosen rather than modified, because `buttonStyle` takes a concrete type and the
+    /// two cannot be selected between with a ternary.
+    @ViewBuilder
+    private var button: some View {
+        if isProminent {
+            Button(action: action) { label }.buttonStyle(.borderedProminent)
+        } else {
+            Button(action: action) { label }.buttonStyle(.bordered)
         }
-        .buttonStyle(.plain)
-        .disabled(!entry.isAvailable)
-        .help(entry.unavailabilityReason ?? entry.detail ?? entry.title)
-        .accessibilityLabel(entry.title)
-        .accessibilityHint(entry.unavailabilityReason ?? entry.detail ?? "")
-        .accessibilityIdentifier("action.\(entry.id)")
+    }
+
+    /// The colour of the glyph, and only the glyph.
+    ///
+    /// ### Why the hue came back, and why only here
+    /// Removing the per-channel colour fixed the right problem the wrong way. Three saturated pills
+    /// side by side were not a hierarchy — but a row of identical grey buttons is not one either, and
+    /// it lost the one thing the colour was genuinely doing: letting you find *Log Interaction*
+    /// without reading three labels.
+    ///
+    /// So the two jobs are separated. The **button** says how important this action is: one filled
+    /// with the accent, the rest bordered and quiet, which is a hierarchy with two levels rather than
+    /// six. The **glyph** says which action it is, and colour is very good at that — it is
+    /// pre-attentive, so the eye lands on the orange pencil before it has read anything.
+    ///
+    /// Nothing is filled with a hue any more, which is what made the old row shout. A tinted 16-point
+    /// symbol on a neutral control is an accent; a tinted rectangle behind a word is a button
+    /// pretending to be a category.
+    private var glyphColor: Color? {
+        // On the accent-filled button the glyph must stay legible against the fill, so it inherits
+        // `onAccent` rather than taking a hue that would sit blue-on-blue.
+        guard !isProminent else { return nil }
+
+        guard case .contact(let channel) = entry.kind else {
+            // The two actions that are about the record rather than about reaching somebody.
+            switch entry.kind {
+            case .logInteraction: return Theme.Palette.purple.color
+            case .addNote: return Theme.Palette.orange.color
+            default: return nil
+            }
+        }
+
+        switch channel {
+        case .call: return Theme.Palette.green.color
+        case .message: return Theme.Palette.blue.color
+        case .email: return Theme.Palette.indigo.color
+        case .facetimeVideo, .facetimeAudio: return Theme.Palette.cyan.color
+        case .maps: return Theme.Palette.orange.color
+        case .web: return Theme.Palette.purple.color
+        }
+    }
+
+    /// Composed rather than a plain `Label`, because a `Label` colours its glyph and its title
+    /// together and the whole point here is that they differ.
+    @ViewBuilder
+    private var label: some View {
+        HStack(spacing: Theme.Spacing.tight) {
+            Image(systemName: entry.symbolName)
+                .foregroundStyle(glyphColor ?? Theme.Colors.onAccent)
+
+            if showsTitle {
+                Text(entry.title)
+            }
+        }
+        // The glyph's colour is decoration over a label VoiceOver already reads, and a disabled
+        // control must not keep a saturated icon that says it is still available.
+        .opacity(entry.isAvailable ? 1 : 0.5)
     }
 }

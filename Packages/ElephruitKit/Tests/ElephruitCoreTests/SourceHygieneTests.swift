@@ -190,6 +190,42 @@ struct SourceHygieneTests {
             "NSColor(deviceRed:",
         ]
 
+        // SwiftUI's *named* colours, which this test did not look for and which had accumulated to
+        // twenty-four uses across six files while the README recorded that "no view names a literal
+        // colour" and rested a dark-mode guarantee on it.
+        //
+        // Most of them adapt, so most were not bugs — they were the palette being bypassed, which is
+        // the same nine-decisions-instead-of-one problem `Theme.Palette` exists to prevent.
+        // `Color.white` is the one that is simply wrong: it does not adapt at all, and it was being
+        // used for text on a fill that is pale under Increase Contrast and at the low end of an
+        // intensity scale, where white on near-white is invisible. `Theme.Colors.onAccent` is the
+        // token for that question.
+        //
+        // Matched with a trailing delimiter so `Color.white` is caught and a hypothetical
+        // `Color.whiteboardTint` is not.
+        // Written out in full: `Color.white`, `Color.purple`. A literal rather than a regex built
+        // from the list at runtime, so it is checked at compile time and needs no `try`.
+        let explicitColour =
+            /\bColor\.(pink|red|blue|green|orange|yellow|purple|gray|grey|brown|teal|cyan|indigo|mint|black|white)\b/
+
+        // And the *implicit* form, which the first version of this missed entirely. Swift infers the
+        // base type in an argument or a return, so `tint: .purple` and `.shadow(color: .black…)` are
+        // the same literal with `Color` left off — and the person profile was passing two of them
+        // into a view that took a `Color`, right beside the ones written out in full that this test
+        // did catch. Half a rule is worse than none: it made the file look audited.
+        //
+        // Two boundaries are doing real work here, and the version without them reported two hundred
+        // offenders that were nothing of the kind:
+        //
+        // - **Nothing identifier-like before the dot.** That is what separates `tint: .purple` from
+        //   `Theme.Palette.red.color`, which is code reaching the palette — the thing this test wants
+        //   people to do.
+        // - **A word boundary after the name.** Without it `.white` matches `CharacterSet.whitespaces`
+        //   and `.red` matches `.reduce`, which is most of this codebase.
+        // A leading group rather than a look-behind, which Swift Regex does not support.
+        let implicitColour =
+            /(^|[^A-Za-z0-9_])\.(pink|red|blue|green|orange|yellow|purple|gray|grey|brown|teal|cyan|indigo|mint|black|white)\b/
+
         for file in Self.swiftFiles() {
             // The tokens file is where the palette is *defined*; everywhere else consumes it.
             guard file.lastPathComponent != "Tokens.swift" else { continue }
@@ -201,6 +237,13 @@ struct SourceHygieneTests {
 
                 for literal in literals where line.contains(literal) {
                     offenders.append("\(file.lastPathComponent):\(index + 1) — \(literal)")
+                }
+
+                for match in line.matches(of: explicitColour) {
+                    offenders.append("\(file.lastPathComponent):\(index + 1) — \(match.0)")
+                }
+                for match in line.matches(of: implicitColour) {
+                    offenders.append("\(file.lastPathComponent):\(index + 1) — \(match.0)")
                 }
             }
         }

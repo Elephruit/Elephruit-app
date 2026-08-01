@@ -761,7 +761,7 @@ private struct DayColumnHeader: View {
 
             Text(dayNumber)
                 .font(.system(.title3, design: .default, weight: isToday ? .semibold : .regular))
-                .foregroundStyle(isToday ? Color.white : Theme.Colors.primaryText)
+                .foregroundStyle(isToday ? Theme.Colors.onAccent : Theme.Colors.primaryText)
                 .frame(width: 26, height: 26)
                 .background {
                     if isToday {

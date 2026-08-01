@@ -27,12 +27,10 @@ struct PersonPortraitSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    SectionHeader("Quick Facts", count: factCount)
-                    Text("The useful things to remember")
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.tertiaryText)
-                }
+                // No explanatory subtitle. NOTES and CONTACT beside it have none, and a heading that
+                // needs a gloss is a heading that is not doing its job — "Quick Facts" is already the
+                // useful things to remember.
+                SectionHeader("Quick Facts", count: factCount)
                 Spacer()
                 Button {
                     onAddFact(nil)
@@ -83,54 +81,43 @@ struct PersonPortraitSection: View {
         return count == 0 ? nil : count
     }
 
+    /// What the Quick Facts section says before anything has been recorded.
+    ///
+    /// ### Why the card went
+    /// It was a sparkle glyph in a tinted rounded square, a headline — "Build a better mental
+    /// picture" — a line of encouragement, and four filled pastel chips, all inside a bordered card.
+    /// That is the generic assistant-dashboard idiom, and this app is not that: the rest of it is
+    /// quiet, and one screen adopting a different voice reads as a component borrowed from somewhere
+    /// else.
+    ///
+    /// The worse problem was the chips. Recorded facts render as filled tinted chips too, so four
+    /// suggestions — "Vegetarian", "Likes wine" — sat under a real person's name looking exactly
+    /// like things somebody had actually written down about them. Nothing distinguished an offer
+    /// from a record. On a screen whose entire purpose is holding true things about people, that is
+    /// the one confusion worth spending layout on avoiding.
+    ///
+    /// A leading `plus` on each one, and a real bordered control rather than a chip, says *this adds
+    /// something* instead of *this is so*. The heading above already says "Quick Facts", so the
+    /// section needs a sentence, not a pep talk.
     private var quickFactEmptyState: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-            HStack(spacing: Theme.Spacing.medium) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Theme.Colors.selection)
-                    .frame(width: 42, height: 42)
-                    .background(Theme.Colors.selection.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+            Text("Nothing recorded yet. Add what you would want to remember before seeing \(person.displayTitle) again.")
+                .font(Theme.Text.rowSubtitle)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Build a better mental picture")
-                        .font(.system(.headline, weight: .semibold))
-                    Text("Remember what makes time with \(person.displayTitle) thoughtful and easy.")
-                        .font(Theme.Text.rowSubtitle)
-                        .foregroundStyle(Theme.Colors.secondaryText)
-                }
-            }
-
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 145), spacing: Theme.Spacing.small)],
-                spacing: Theme.Spacing.small
-            ) {
+            ElephruitDesign.FlowLayout(spacing: Theme.Spacing.small, lineSpacing: Theme.Spacing.small) {
                 ForEach(Self.starters, id: \.value) { seed in
                     Button {
                         onAddFact(seed)
                     } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: seed.category.symbol)
-                                .foregroundStyle(seed.category.tint)
-                            Text(seed.value)
-                                .font(Theme.Text.chip)
-                                .foregroundStyle(Theme.Colors.primaryText)
-                                .lineLimit(1)
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.horizontal, Theme.Spacing.small)
-                        .frame(height: 32)
-                        .background(seed.category.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
-                        .contentShape(Rectangle())
+                        Label(seed.value, systemImage: "plus")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .accessibilityLabel("Add fact: \(seed.value)")
                 }
             }
-        }
-        .padding(Theme.Spacing.large)
-        .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: 16))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.Colors.separator.opacity(0.55))
         }
     }
 
@@ -599,19 +586,23 @@ private struct ChildProfileCard: View {
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
 
-                Button(action: onEdit) {
-                    Image(systemName: "ellipsis.circle")
-                        .foregroundStyle(Theme.Colors.secondaryText)
-                }
-                .buttonStyle(.borderless)
-                .help("Edit or delete relationship")
-                .accessibilityLabel("Edit relationship with \(child.displayTitle)")
+                // A word rather than a glyph, for the reason set out on ``RelatedPersonChip``: an
+                // unlabelled `…` is the one route to changing or removing this relationship, and it
+                // reads as decoration. "Relationship" says which of the several things on this card
+                // the button acts on, which "Edit" on its own would not.
+                Button("Relationship", systemImage: "pencil", action: onEdit)
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .font(Theme.Text.metadata)
+                    .help("Change or remove this relationship")
+                    .accessibilityLabel("Relationship with \(child.displayTitle)")
+                    .accessibilityHint("Change or remove this relationship")
             }
 
             ForEach(summaryFacts) { fact in
                 HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.tight) {
                     Image(systemName: fact.symbol)
-                        .foregroundStyle(Color.pink)
+                        .foregroundStyle(Theme.Colors.familyAccent)
                         .frame(width: 14)
                     Text(fact.text)
                         .font(Theme.Text.metadata)
@@ -638,9 +629,9 @@ private struct ChildProfileCard: View {
             }
         }
         .padding(Theme.Spacing.small)
-        .background(Color.pink.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+        .background(Theme.Colors.familyAccent.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
         .overlay {
-            RoundedRectangle(cornerRadius: 12).strokeBorder(Color.pink.opacity(0.15))
+            RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.Colors.familyAccent.opacity(0.15))
         }
         .help("Open \(child.displayTitle) to add age, school, interests, and notes")
         .contextMenu {
@@ -706,10 +697,13 @@ struct RelatedPersonChip: View {
                         Text(name)
                             .font(Theme.Text.rowSubtitle)
                             .lineLimit(1)
-                        Text(isPlaceholder ? "\(label) · sketch" : label)
-                            .font(Theme.Text.metadata)
-                            .foregroundStyle(Theme.Colors.tertiaryText)
-                            .lineLimit(1)
+
+                        if isPlaceholder {
+                            Text("sketch")
+                                .font(Theme.Text.metadata)
+                                .foregroundStyle(Theme.Colors.tertiaryText)
+                                .lineLimit(1)
+                        }
                     }
                 }
                 .padding(.leading, Theme.Spacing.small)
@@ -718,22 +712,42 @@ struct RelatedPersonChip: View {
             }
             .buttonStyle(.plain)
 
+            // ### Why the relationship type *is* the control
+            // Editing and deleting a relationship both worked and both had a confirmation. The only
+            // way in was a bare `…` with a tooltip, beside the relationship type drawn as static
+            // text — so the one thing on the chip a person would want to change looked like a label,
+            // and the thing that changed it looked like nothing in particular.
+            //
+            // Making the type itself the button says both facts in one control: this is the
+            // relationship, and this is what you press to change it. The chevron is what makes it
+            // read as editable rather than as a caption, and the whole word is the hit target rather
+            // than a 24-point circle.
+            //
+            // The context menu stays, as a second route rather than the only one.
             Button(action: onEdit) {
-                Image(systemName: "ellipsis")
-                    .font(Theme.Text.metadata)
-                    .frame(width: 24, height: 24)
-                    .contentShape(Circle())
+                HStack(spacing: Theme.Spacing.hairline) {
+                    Text(label)
+                        .font(Theme.Text.metadata)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(Theme.Text.keyHint)
+                }
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .padding(.horizontal, Theme.Spacing.small)
+                .padding(.vertical, Theme.Spacing.tight)
+                .background(Theme.Colors.subtleFill, in: Capsule())
+                .contentShape(Capsule())
             }
-            .buttonStyle(.borderless)
-            .help("Edit or delete relationship")
-            .accessibilityLabel("Edit relationship with \(name)")
+            .buttonStyle(.plain)
+            .help("Change or remove this relationship")
+            .accessibilityLabel("Relationship with \(name): \(label)")
+            .accessibilityHint("Change or remove this relationship")
         }
         .padding(.trailing, Theme.Spacing.tight)
         .background(Theme.Colors.subtleFill, in: Capsule())
         .help(isPlaceholder ? "\(name) — a lightweight record with no details yet" : name)
-        .accessibilityLabel("\(name), \(label)")
         .contextMenu {
-            Button("Edit Relationship…", systemImage: "pencil", action: onEdit)
+            Button("Change Relationship…", systemImage: "pencil", action: onEdit)
         }
     }
 }

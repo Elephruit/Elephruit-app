@@ -92,6 +92,24 @@ final class AppEnvironment {
         let useFixtureReminders = isDevelopmentMode
             && ProcessInfo.processInfo.arguments.contains("-ElephruitUseFixtureReminders")
 
+        // Whether the synthetic providers should start already granted.
+        //
+        // All three fixtures begin at `.notRequested`, which is right for exercising the permission
+        // path and wrong for everything after it: the *working* state of the calendar, the address
+        // book and Reminders is unreachable without a person clicking "Allow" in a dialog. That has
+        // had a cost — the README records that the calendar module has never been reviewed on
+        // screen in either appearance — and it makes an automated design review impossible on a
+        // machine whose screen is locked.
+        //
+        // Gated on development mode with the rest, so no release build can start authorized against
+        // fiction. It grants only the *fixtures*: with this flag and no `-ElephruitUseFixture…`
+        // beside it, nothing changes, and no real store is ever constructed.
+        let fixturesStartAuthorized = isDevelopmentMode
+            && ProcessInfo.processInfo.arguments.contains("-ElephruitFixturesAuthorized")
+        let fixtureAuthorization: IntegrationAuthorization = fixturesStartAuthorized
+            ? .authorized
+            : .notRequested
+
         do {
             let location = useTemporaryStore
                 ? StoreLocation.temporary(name: "UITests")
@@ -104,18 +122,18 @@ final class AppEnvironment {
                 FixtureContactsProvider(
                     contacts: ContactFixtures.library,
                     containers: ContactFixtures.containers,
-                    authorization: .notRequested
+                    authorization: fixtureAuthorization
                 )
             }
             let contactsProvider = useFixtureContacts ? makeFixtureContacts : nil
 
             let makeFixtureCalendar: @Sendable () -> any CalendarProviding = {
-                FixtureCalendarProvider()
+                FixtureCalendarProvider(authorization: fixtureAuthorization)
             }
             let calendarProvider = useFixtureCalendar ? makeFixtureCalendar : nil
 
             let makeFixtureReminders: @Sendable () -> any RemindersProviding = {
-                FixtureRemindersProvider(authorization: .notRequested)
+                FixtureRemindersProvider(authorization: fixtureAuthorization)
             }
             let remindersProvider = useFixtureReminders ? makeFixtureReminders : nil
 
@@ -147,6 +165,16 @@ final class AppEnvironment {
             let quickJot = QuickJotController(services: services)
             self.quickJot = quickJot
             registerGlobalShortcuts(for: services)
+
+            // Development-only seeding, before the window renders, so a review never photographs a
+            // half-populated list. Both are no-ops without their argument, and both refuse outside
+            // development mode inside the service itself as well as here.
+            if DesignReviewLaunch.loadsSampleData {
+                services.loadSampleDataIfEmpty()
+            }
+            if let peopleCount = DesignReviewLaunch.peopleCount {
+                services.seedPeople(upTo: peopleCount)
+            }
 
             state = .ready(services)
 

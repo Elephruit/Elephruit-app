@@ -193,7 +193,7 @@ struct SwipeActionButton: View {
                         .lineLimit(1)
                 }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(Theme.Colors.onAccent)
             .frame(width: width)
             .frame(maxHeight: .infinity)
             .background(action.tint)
