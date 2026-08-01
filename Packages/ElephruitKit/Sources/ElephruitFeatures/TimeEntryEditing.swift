@@ -26,6 +26,58 @@ struct TimeEntrySpan: Equatable {
     var endedAt: Date?
 }
 
+// MARK: - Live durations
+
+/// A duration that keeps moving while something under it is still running.
+///
+/// ### Why the log needs this at all
+/// Because it did not have it, and the result was a card reading `0:25` directly above a row
+/// reading `0:00` for the same stretch of work. The log is rebuilt from a snapshot taken when the
+/// view last reloaded, which is right for ninety-nine rows out of a hundred and wrong for the one
+/// that has not finished yet.
+///
+/// `since` is the moment the running stretch began, and `nil` for everything settled — which is
+/// almost every row, and those pay nothing: no timeline, no redraw, just the number they were
+/// given. Only a day that contains a running entry costs a redraw a second, and only for as long
+/// as it does.
+struct LiveDuration: View {
+    /// What the duration is when nothing is running: the settled total.
+    let base: TimeInterval
+
+    /// When the still-running stretch started, or `nil` if none is.
+    let since: Date?
+
+    let font: Font
+
+    /// Whether to count in seconds rather than in hours and minutes.
+    ///
+    /// ### Why this is not simply "is it running"
+    /// Because it depends on what the number is *of*. A single stretch that is still going is the
+    /// same stretch the tracker is showing at the top of the screen, and the two must agree — the
+    /// version that did not was genuinely alarming to read: a card saying `0:56` above a row saying
+    /// `0:01` looks like the log has lost fifty-five seconds, when in fact one was counting seconds
+    /// and the other minutes. A *day's* total is a different quantity that nobody reads to the
+    /// second, and `4:25:13` in a section header is noise pretending to be precision.
+    var countsSeconds = false
+
+    var body: some View {
+        if let since {
+            TimelineView(.periodic(from: since, by: 1)) { context in
+                text(base + max(0, context.date.timeIntervalSince(since)))
+                    .contentTransition(.numericText())
+            }
+        } else {
+            text(base)
+        }
+    }
+
+    private func text(_ interval: TimeInterval) -> some View {
+        Text(countsSeconds ? TimeFormatting.stopwatch(interval) : TimeFormatting.short(interval))
+            .font(font)
+            .monospacedDigit()
+    }
+}
+
 // MARK: - Measure
 
 extension View {
@@ -67,9 +119,11 @@ struct TimeDayHeader: View {
                     .rowForeground(.tertiary)
             }
 
-            Text(TimeFormatting.short(section.total))
-                .font(Theme.Text.sectionHeader)
-                .monospacedDigit()
+            LiveDuration(
+                base: section.settledTotal,
+                since: section.runningSince,
+                font: Theme.Text.sectionHeader
+            )
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(section.title), \(TimeFormatting.spelled(section.total)) tracked")
@@ -185,12 +239,15 @@ struct TimeEntryGroupRow: View {
                     .accessibilityLabel("Billable")
             }
 
-            Text(TimeFormatting.short(group.total))
-                .font(Theme.Text.rowTitle)
-                .monospacedDigit()
-                // Fixed, so the durations form a column: a list of times that starts at a different
-                // x on every row cannot be added up by eye, which is the only reason to read one.
-                .frame(width: 52, alignment: .trailing)
+            // Fixed width, so the durations form a column: a list of times starting at a different
+            // x on every row cannot be added up by eye, which is the only reason to read one.
+            LiveDuration(
+                base: group.settledTotal,
+                since: group.runningSince,
+                font: Theme.Text.rowTitle,
+                countsSeconds: group.isRunning
+            )
+            .frame(width: 64, alignment: .trailing)
 
             // ### Why editing is a visible button and not only a double-click
             // Because a double-click is not an affordance. Every entry in this log can be corrected
@@ -367,10 +424,13 @@ struct TimeEntryRow: View {
 
             Spacer(minLength: Theme.Spacing.small)
 
-            Text(TimeFormatting.short(entry.duration(at: services?.dateProvider.now ?? Date())))
-                .font(Theme.Text.rowSubtitle)
-                .monospacedDigit()
-                .rowForeground(.secondary)
+            LiveDuration(
+                base: entry.isRunning ? 0 : entry.duration(),
+                since: entry.isRunning ? entry.startedAt : nil,
+                font: Theme.Text.rowSubtitle,
+                countsSeconds: entry.isRunning
+            )
+            .rowForeground(.secondary)
         }
         .padding(.leading, Theme.Spacing.section)
         .frame(minHeight: Theme.Size.rowHeight)

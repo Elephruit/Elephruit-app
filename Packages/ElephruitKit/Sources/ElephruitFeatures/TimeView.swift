@@ -221,8 +221,8 @@ public struct TimeView: View {
             EmptyStateView(
                 symbolName: "timer",
                 headline: "No time tracked \(window.displayName.lowercased())",
-                message: "Say what you are doing in the bar above and press play, "
-                    + "or switch it to Manual to record time you have already spent.",
+                message: "Press Start above the moment you begin something. "
+                    + "You can name it, file it, and tag it while the clock is running.",
                 actionTitle: "Add Time by Hand…",
                 action: { isAddingManually = true }
             )
