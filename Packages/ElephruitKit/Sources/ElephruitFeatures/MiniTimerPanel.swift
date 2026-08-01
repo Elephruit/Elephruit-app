@@ -115,10 +115,20 @@ struct MiniTimerPlacement: Hashable {
     /// The size the panel may actually be, given the room there is between that floor and the edges.
     ///
     /// Bounded so that a long description cannot produce a panel with a side nobody can reach.
+    ///
+    /// ### Why it rounds up, and why a third of a point matters
+    /// Because what is being sized is a *window*, and a window is whole points on the screen whatever
+    /// it is asked for. What is being fitted into it is text, whose line heights are fractional
+    /// almost always — a row wanting 40.33 points in a window that ends up 40 is a third of a point
+    /// short, and the thing living in that third of a point is the card's one-point border.
+    ///
+    /// So the bottom edge of the pill simply was not drawn: not missing, not mis-coloured, *cut off*,
+    /// which is a much stranger thing to look at than a window obviously too small. Rounding up is
+    /// the whole fix, and it costs at most one point of window nobody can see.
     func size(fitting wanted: CGSize) -> CGSize {
         CGSize(
-            width: min(max(wanted.width, Self.minimumSize.width), area.width - 2 * Self.minimumInset),
-            height: min(max(wanted.height, Self.minimumSize.height), area.maxY - Self.minimumInset - floor)
+            width: min(max(wanted.width.rounded(.up), Self.minimumSize.width), area.width - 2 * Self.minimumInset),
+            height: min(max(wanted.height.rounded(.up), Self.minimumSize.height), area.maxY - Self.minimumInset - floor)
         )
     }
 

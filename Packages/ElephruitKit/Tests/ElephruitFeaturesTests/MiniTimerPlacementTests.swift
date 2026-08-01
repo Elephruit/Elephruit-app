@@ -82,6 +82,19 @@ struct MiniTimerPlacementTests {
         }
     }
 
+    /// Text has fractional line heights; windows have whole points. A row wanting 56.33 in a window
+    /// that ends up 56 is a third of a point short, and what lives in that third of a point is the
+    /// card's one-point border — so the bottom edge of the pill was not drawn at all. Not missing,
+    /// not the wrong colour: cut off, which is a far stranger thing to look at than a window that is
+    /// obviously too small.
+    @Test("A fractional measurement rounds up rather than away")
+    func fractionsRoundUp() {
+        let size = placement.size(fitting: CGSize(width: 420.2, height: 56.33))
+
+        #expect(size.width == 421)
+        #expect(size.height == 57)
+    }
+
     /// A measurement of nothing is a real state — a hosting view that has not been laid out reports
     /// zero — and a window sized to it is one nobody can see or click their way out of.
     @Test("Nothing measures to something you can still see")
