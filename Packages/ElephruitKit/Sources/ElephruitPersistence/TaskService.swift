@@ -604,6 +604,66 @@ public final class TaskService {
         return subtask
     }
 
+    /// Turns a task that grew into the project it turned out to be.
+    ///
+    /// ### Why this is a conversion rather than "make a project and move things"
+    /// Because the thing being kept is the task's *identity*. Everything pointing at it — a link from
+    /// a meeting note, a person's timeline, a mention in somebody's body text, a search result
+    /// somebody has open — points at this row, and the manual route (make a project, drag the
+    /// subtasks over, delete the task) breaks all of it silently. Changing the kind keeps every one.
+    ///
+    /// ### What has to happen in order, and why
+    /// 1. **Steps become subtasks first.** A project has no checklist, so `ItemValidator.conform`
+    ///    would drop them on the floor — and a conversion that silently discards six steps is not one
+    ///    anybody would have agreed to. A step is a small action; inside a project a small action is a
+    ///    task, which is what it becomes.
+    /// 2. **Detach, convert, re-home** — in that order, when the current parent cannot hold a
+    ///    project. A project may live under an area or a goal; a task may live under a heading or
+    ///    another task. Neither half of the move is legal on its own: moving the task to the area
+    ///    first is a *task* under an area, which containment forbids, and changing the kind first is
+    ///    a *project* inside a heading, which it also forbids. Going via the top level is the one
+    ///    path where every intermediate state is valid, and an unparented task and an unparented
+    ///    project are both ordinary things.
+    /// 3. **The kind change** clears the fields a project does not have — a reminder, a recurrence —
+    ///    and returns their names so the caller can say what went.
+    ///
+    /// Existing subtasks need no move at all: they are already children, and a project accepts
+    /// exactly the children a task does.
+    ///
+    /// - Returns: the names of the fields that could not come across.
+    @discardableResult
+    public func convertToProject(_ task: Item) throws(AppError) -> [String] {
+        guard task.kind == .task else { return [] }
+
+        for step in task.checklist.items {
+            _ = try promoteChecklistItem(step.id, of: task)
+        }
+
+        let parent = task.parent
+        let mustMove = parent.map { !$0.kind.canContain(.project) } ?? false
+        let home = mustMove ? parent.flatMap { Self.nearestHome(for: .project, above: $0) } : nil
+
+        if mustMove { try items.setParent(task, to: nil) }
+        let cleared = try items.setKind(task, to: .project)
+        if mustMove, let home { try items.setParent(task, to: home) }
+
+        return cleared
+    }
+
+    /// The closest ancestor that may hold `kind`, or `nil` for the top level.
+    ///
+    /// `nil` is a real answer rather than a failure: an unfiled project is an ordinary thing, and it
+    /// is a better outcome than refusing the conversion because the task happened to sit under a
+    /// heading.
+    private static func nearestHome(for kind: ItemKind, above item: Item) -> Item? {
+        var cursor: Item? = item
+        while let candidate = cursor {
+            if candidate.kind.canContain(kind) { return candidate }
+            cursor = candidate.parent
+        }
+        return nil
+    }
+
     /// Turns a subtask back into a step of its parent.
     ///
     /// The reverse door, because the first conversion is often a mistake and the alternative is a

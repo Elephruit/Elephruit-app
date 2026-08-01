@@ -94,7 +94,7 @@ struct TaskWorkspaceView: View {
         }
         .listStyle(.inset)
         .alternatingRowBackgrounds(.disabled)
-        .safeAreaInset(edge: .bottom, spacing: 0) { batchBar }
+        .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
         // Return on the selection, which is the way through the list without the mouse. A focused
         // field inside the open card consumes Return before this sees it, so the guard is belt and
         // braces rather than the mechanism.
@@ -425,6 +425,11 @@ struct TaskWorkspaceView: View {
 
     // MARK: - Toolbar
 
+    /// What is left in the window toolbar once the actions moved to the foot of the list.
+    ///
+    /// Plan Today stays, and only Plan Today. It is not an action on a task or on a selection — it is
+    /// a mode for the whole view, which is what a window toolbar is for. Everything else went to the
+    /// foot of the list, where it can depend on whether a card is open.
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         if navigation.selection == .taskView(.today) {
@@ -433,18 +438,6 @@ struct TaskWorkspaceView: View {
                     .help("Review what is overdue and pull a manageable amount from Anytime")
                     .accessibilityIdentifier("tasks.planToday")
             }
-        }
-
-        ToolbarItem {
-            Button {
-                openDraft(in: sections.first)
-            } label: {
-                Label("New Task", systemImage: "plus")
-            }
-            .keyboardShortcut("n")
-            .disabled(!allowsCreation)
-            .help(allowsCreation ? "Add a task here" : "This list is worked out rather than filed, so nothing can be added to it")
-            .accessibilityIdentifier("tasks.newTask")
         }
     }
 
@@ -465,17 +458,43 @@ struct TaskWorkspaceView: View {
         return count == 1 ? "1 task" : "\(count) tasks"
     }
 
-    // MARK: - Batch actions
+    // MARK: - The bottom bar
 
-    @ViewBuilder
-    private var batchBar: some View {
-        if navigation.hasMultipleSelection {
-            TaskBatchBar(
-                navigation: navigation,
-                tasks: flatTasks.filter { navigation.selectedItemIDs.contains($0.id) },
-                onChange: reload
-            )
+    /// One bar, in the slot the multi-selection bar used to have to itself.
+    ///
+    /// Multiple selection is not a different surface; it is a third thing this bar can be about,
+    /// alongside "the list" and "the open task". Two bars stacked at the foot of a list, one of them
+    /// empty most of the time, is what the alternative looked like.
+    private var bottomBar: some View {
+        TaskBottomBar(
+            navigation: navigation,
+            editingTask: editingTaskID.flatMap { tasksByID[$0] },
+            selectedTasks: flatTasks.filter { navigation.selectedItemIDs.contains($0.id) },
+            allowsCreation: allowsCreation,
+            allowsHeadings: allowsHeadings,
+            onNewTask: { openDraft(in: sections.first) },
+            onNewHeading: { createHeading() },
+            onChange: reload
+        )
+    }
+
+    /// A heading divides a project or a list, so it is offered inside one and nowhere else.
+    private var allowsHeadings: Bool {
+        guard case .item(let id) = navigation.selection,
+              let container = services.flatMap({ (try? $0.items.item(id: id)) ?? nil })
+        else { return false }
+        return container.kind.canContain(.heading)
+    }
+
+    private func createHeading() {
+        guard let services, case .item(let id) = navigation.selection else { return }
+        services.perform {
+            var draft = ItemDraft(kind: .heading, title: "New Heading")
+            draft.parentID = id
+            let created = try services.items.create(draft)
+            services.noteChange(to: created)
         }
+        reload()
     }
 
     // MARK: - Data
