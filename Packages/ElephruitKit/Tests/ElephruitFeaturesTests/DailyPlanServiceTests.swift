@@ -452,6 +452,94 @@ struct DailyPlanServiceTests {
         )
     }
 
+    // MARK: - What it costs
+
+    /// The regression that shipped once and must not again.
+    ///
+    /// Drawing five days ran a full scan of the meeting table **twice per day** — once for the
+    /// annotations and once for the preparation — and walked every open task once per day on top,
+    /// because none of the scheduling rules translate to a predicate. With a real calendar attached
+    /// that was several seconds to open the page and several more to toggle a filter.
+    ///
+    /// This asserts the shape rather than a duration: adding four days must not multiply the work.
+    /// A stopwatch would give a different answer on a different machine and would have passed on a
+    /// fast one, which is the whole argument behind `FetchAudit`.
+    @Test("Drawing five days costs barely more than drawing one")
+    func assemblyDoesNotScaleWithTheNumberOfDays() async throws {
+        let audit = FetchAudit()
+        let defaults = UserDefaults(suiteName: "today.tests.\(UUID().uuidString)") ?? .standard
+
+        // Built before the provider closure, which is `@Sendable` and cannot reach back onto the
+        // main actor to make them.
+        let events = (0..<5).map { day in
+            Self.event(
+                "Review \(day)", id: "review-\(day)",
+                from: Self.at(10, dayOffset: day), minutes: 60,
+                attendees: [EventAttendee(name: "Maya Chen", emailAddress: "maya@northwind.example")]
+            )
+        }
+
+        let services = AppServices.inMemory(
+            dateProvider: Self.clock,
+            populated: false,
+            calendarProvider: { FixtureCalendarProvider(events: events, authorization: .authorized) },
+            defaults: defaults,
+            audit: audit
+        )
+        _ = await services.calendar.enable()
+
+        _ = try services.persons.createPerson(
+            PersonDraft(
+                fullName: "Maya Chen",
+                emails: [LabelledValue(label: "work", value: "maya@northwind.example")]
+            )
+        )
+        for index in 0..<20 {
+            let task = try services.items.create(ItemDraft(kind: .task, title: "Task \(index)"))
+            try services.tasks.commit(task, to: Self.clock.startOfDay(daysFromToday: index % 5))
+        }
+
+        await services.dailyPlan.loadCalendar(
+            from: Self.clock.startOfToday, through: Self.clock.startOfDay(daysFromToday: 4)
+        )
+
+        services.dailyPlan.invalidateCaches()
+        let one = audit.measure { try? services.dailyPlan.window(from: Self.clock.startOfToday, count: 1) }
+
+        services.dailyPlan.invalidateCaches()
+        let five = audit.measure { try? services.dailyPlan.window(from: Self.clock.startOfToday, count: 5) }
+
+        // The only thing that legitimately grows with the day count is the day's own note, which is
+        // one indexed lookup per day. Four extra days may therefore cost four extra fetches and no
+        // more; before this was fixed they cost roughly fifteen.
+        let growth = five.tally.total - one.tally.total
+        #expect(
+            growth <= 4,
+            "five days cost \(five.tally.description) against one day's \(one.tally.description)"
+        )
+    }
+
+    @Test("Rebuilding the days never asks the calendar again")
+    func assemblyDoesNotReachTheCalendar() async throws {
+        // The other half of the loop. `assemble()` reads what is already in memory; if it ever
+        // loaded, the page would be asking the calendar a question in response to the calendar
+        // having answered one.
+        let services = await Self.fixture(events: [
+            Self.event("Review", id: "review", from: Self.at(10), minutes: 60,
+                       attendees: [EventAttendee(name: "Maya Chen")])
+        ])
+
+        await services.dailyPlan.loadCalendar(from: Self.clock.startOfToday, through: Self.clock.startOfToday)
+        let settled = services.calendar.revision
+
+        for _ in 0..<5 {
+            services.dailyPlan.invalidateCaches()
+            _ = try services.dailyPlan.window(from: Self.clock.startOfToday, count: 5)
+        }
+
+        #expect(services.calendar.revision == settled, "assembling asked the calendar something")
+    }
+
     // MARK: - Days other than today
 
     @Test("A future day carries no follow-up suggestions and no week of birthdays")

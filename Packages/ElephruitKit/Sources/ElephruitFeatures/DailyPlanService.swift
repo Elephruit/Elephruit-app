@@ -72,10 +72,27 @@ public final class DailyPlanService {
         var openTasks: [Item] = []
         var resolvedTasks: [Item] = []
         var celebrations: [Celebration] = []
+
+        /// What is prepared for, and who is linked to, every meeting in the window — keyed by the
+        /// event's storage key.
+        ///
+        /// Read once for the whole window rather than once per day. Both halves come from a scan of
+        /// every meeting item, and a page showing five days was running that scan ten times to draw
+        /// one screen.
+        var meetings: [String: MeetingContext] = [:]
+
+        /// People by identifier, so a roster built from four directions reads each record once.
+        var people: [UUID: Item] = [:]
     }
 
     private func sources(filters: TodayFilters) throws(AppError) -> LibrarySources {
         var sources = LibrarySources()
+
+        if filters.showsMeetings, services.calendar.isEnabled {
+            // The events already in memory for the loaded window — see `loadCalendar(from:through:)`.
+            let identities = services.calendar.events.map(\.identity)
+            sources.meetings = try services.eventLinks.meetingContext(for: identities)
+        }
 
         if filters.showsTasks {
             var open = ItemQuery()
@@ -111,7 +128,7 @@ public final class DailyPlanService {
         let isToday = calendar.isDate(day, inSameDayAs: now)
         let isPast = day < calendar.startOfDay(for: now)
 
-        let events = filters.showsMeetings ? dayEvents(on: day, filters: filters) : []
+        let events = filters.showsMeetings ? dayEvents(on: day, filters: filters, sources: sources) : []
         let meetingTaskIDs = meetingPrepIndex(for: events)
 
         let taskContext = filters.showsTasks
@@ -168,20 +185,85 @@ public final class DailyPlanService {
     /// A future strip draws five days; assembling each independently would run the scheduling rules
     /// over every open task five times.
     public func plans(from first: Date, count: Int, filters: TodayFilters = .standard) throws(AppError) -> [DayPlan] {
+        try window(from: first, count: count, filters: filters).days
+    }
+
+    /// A run of days, and every record needed to draw them.
+    ///
+    /// ### Why the records travel with the days
+    /// A `DayPlan` names tasks and people by identifier, because the rules that produced it are pure
+    /// values over a clock. The rows that draw them need the `Item`. The page used to look each one
+    /// up, which is a fetch per visible row — forty of them across five days, on every reload, and
+    /// a fetch during a render is the thing `FetchAudit` fails a build over.
+    ///
+    /// The assembler has already read every one of these. Handing them back costs nothing and
+    /// removes the lookup entirely.
+    public struct DayWindow {
+        public var days: [DayPlan] = []
+
+        /// Every task the days name, open and finished.
+        public var tasks: [UUID: Item] = [:]
+
+        /// Every person the days name, for the ones the library knows.
+        public var people: [UUID: Item] = [:]
+
+        /// The projects and lists the days draw work from, for the filter menu.
+        public var containers: [Item] = []
+    }
+
+    public func window(
+        from first: Date,
+        count: Int,
+        filters: TodayFilters = .standard
+    ) throws(AppError) -> DayWindow {
         let sources = try sources(filters: filters)
-        var plans: [DayPlan] = []
+
+        var window = DayWindow()
         var cursor = calendar.startOfDay(for: first)
         for _ in 0..<max(0, count) {
-            plans.append(try plan(for: cursor, filters: filters, sources: sources))
+            window.days.append(try plan(for: cursor, filters: filters, sources: sources))
             guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
             cursor = next
         }
-        return plans
+
+        // Everything the days named, out of what was already in hand.
+        var named = Set<UUID>()
+        for day in window.days {
+            named.formUnion(day.tasks.map(\.taskID))
+            named.formUnion(day.completedTaskIDs)
+            for event in day.events { named.formUnion(event.preparation.openPreparationTaskIDs) }
+        }
+
+        var containers: [UUID: Item] = [:]
+        for task in sources.openTasks + sources.resolvedTasks where named.contains(task.id) {
+            window.tasks[task.id] = task
+            let enclosing = task.enclosingContainers()
+            if let container = enclosing.project ?? enclosing.list { containers[container.id] = container }
+        }
+
+        // A preparation task lives on a meeting rather than on the day, so it may not be in either
+        // list above. Read individually, which is a handful of rows at most.
+        for id in named where window.tasks[id] == nil {
+            if let task = try? services.items.item(id: id) { window.tasks[id] = task }
+        }
+
+        window.people = personItems
+
+        // Anything already hidden stays offerable whether or not it contributed this time — a switch
+        // you cannot find again is a switch that has trapped you.
+        for id in filters.hiddenContainerIDs where containers[id] == nil {
+            if let container = try? services.items.item(id: id) { containers[id] = container }
+        }
+        window.containers = containers.values.sorted {
+            $0.displayTitle.localizedCaseInsensitiveCompare($1.displayTitle) == .orderedAscending
+        }
+
+        return window
     }
 
     // MARK: - Events
 
-    private func dayEvents(on day: Date, filters: TodayFilters) -> [DayEvent] {
+    private func dayEvents(on day: Date, filters: TodayFilters, sources: LibrarySources) -> [DayEvent] {
         guard services.calendar.isEnabled else { return [] }
 
         let raw = services.calendar.events(on: day).filter { event in
@@ -192,24 +274,19 @@ public final class DailyPlanService {
         guard !raw.isEmpty else { return [] }
 
         let clashes = DayEventRules.conflicts(among: raw, calendar: calendar)
-        let identities = raw.map(\.identity)
-        let preparation = (try? services.eventLinks.preparation(for: identities)) ?? [:]
-        let annotations = (try? services.eventLinks.annotations(for: identities)) ?? [:]
 
         return raw
             .map { event in
                 let kind = DayEventRules.kind(of: event)
+                let context = sources.meetings[event.identity.storageKey] ?? MeetingContext()
                 return DayEvent(
                     event: event,
                     kind: kind,
                     conflictingEventIDs: clashes[event.id] ?? [],
                     participants: kind.hasAttendees
-                        ? participants(
-                            of: event,
-                            linkedPersonIDs: annotations[event.identity.storageKey]?.personIDs ?? []
-                        )
+                        ? participants(of: event, linkedPersonIDs: context.linkedPersonIDs)
                         : [],
-                    preparation: preparation[event.identity.storageKey] ?? MeetingPreparation()
+                    preparation: context.preparation
                 )
             }
             .sorted { left, right in
@@ -509,6 +586,10 @@ public final class DailyPlanService {
 
     private var personDetailCache: [UUID: PersonDetail] = [:]
 
+    /// The person records this assembly touched, handed back with the days so the page draws them
+    /// without a fetch of its own.
+    private var personItems: [UUID: Item] = [:]
+
     private struct PersonDetail {
         var colorName: String?
         var roleLine: String?
@@ -524,6 +605,7 @@ public final class DailyPlanService {
         guard let personID else { return nil }
         if let cached = personDetailCache[personID] { return cached }
         guard let person = try? services.items.item(id: personID) else { return nil }
+        personItems[personID] = person
 
         let profile = person.personProfile
         var role: [String] = []
@@ -627,6 +709,7 @@ public final class DailyPlanService {
     /// appearing.
     public func invalidateCaches() {
         personDetailCache = [:]
+        personItems = [:]
         cachedPersonIndex = nil
     }
 

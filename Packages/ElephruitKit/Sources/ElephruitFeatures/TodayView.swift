@@ -41,6 +41,13 @@ public struct TodayView: View {
 
     @State private var isDatePickerPresented = false
 
+    /// The page's own width, which decides whether a day is one column or two.
+    ///
+    /// Measured rather than inferred from a size class: this is a column inside a resizable window,
+    /// and what decides whether two columns fit is how wide the column is, not how wide the display
+    /// is.
+    @State private var availableWidth: CGFloat = Theme.Size.assumedWindowWidth
+
     public init(navigation: NavigationModel) {
         self.navigation = navigation
     }
@@ -84,8 +91,11 @@ public struct TodayView: View {
         }
         .navigationTitle(title(model))
         .navigationSubtitle(subtitle(model))
-        // Every input the day depends on, in one comparison — see `TodayModel.ReloadToken`.
-        .task(id: model.reloadToken) { await model.reload() }
+        // Moving the window is the only thing that reads the calendar. Everything else rebuilds the
+        // days from what is already in memory — which is what stops the page asking the calendar a
+        // question in response to the calendar having answered one. See `TodayModel.WindowToken`.
+        .task(id: model.windowToken) { await model.reload() }
+        .onChange(of: model.sourceToken) { _, _ in model.assemble() }
     }
 
     @ViewBuilder
@@ -124,7 +134,8 @@ public struct TodayView: View {
                         navigation: navigation,
                         draftDay: $draftDay,
                         draftTitle: $draftTitle,
-                        isDraftFocused: $isDraftFocused
+                        isDraftFocused: $isDraftFocused,
+                        isWide: isWide
                     )
                     .padding(.vertical, Theme.Spacing.large)
                 }
@@ -143,6 +154,14 @@ public struct TodayView: View {
             .padding(.horizontal, Theme.Spacing.large)
             .padding(.bottom, Theme.Spacing.generous)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            guard width > 0 else { return }
+            availableWidth = width
+        }
+    }
+
+    private var isWide: Bool {
+        min(availableWidth, Theme.Size.todayContentWidth) >= Theme.Size.todayTwoColumnMinimum
     }
 
     @ViewBuilder
@@ -155,7 +174,8 @@ public struct TodayView: View {
                 plan: plan,
                 model: model,
                 navigation: navigation,
-                isPast: isPast
+                isPast: isPast,
+                isWide: isWide
             )
             .padding(.vertical, Theme.Spacing.medium)
         }

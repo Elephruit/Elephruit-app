@@ -16,6 +16,9 @@ struct TodayPeopleGrid: View {
     let model: TodayModel
     let actions: TodayActions
 
+    /// Whether the cards are in a narrow trailing column, one per row, or flowing under the day.
+    var isStacked = false
+
     /// How many cards before the rest fold away.
     ///
     /// A busy Tuesday can involve twenty people, and twenty cards is a second page below the day
@@ -27,9 +30,19 @@ struct TodayPeopleGrid: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            ElephruitDesign.FlowLayout(spacing: Theme.Spacing.small, lineSpacing: Theme.Spacing.small) {
-                ForEach(visiblePeople) { person in
-                    TodayPersonCard(person: person, plan: plan, model: model, actions: actions)
+            if isStacked {
+                VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                    ForEach(visiblePeople) { person in
+                        TodayPersonCard(
+                            person: person, plan: plan, model: model, actions: actions, fillsWidth: true
+                        )
+                    }
+                }
+            } else {
+                ElephruitDesign.FlowLayout(spacing: Theme.Spacing.small, lineSpacing: Theme.Spacing.small) {
+                    ForEach(visiblePeople) { person in
+                        TodayPersonCard(person: person, plan: plan, model: model, actions: actions)
+                    }
                 }
             }
 
@@ -68,6 +81,9 @@ struct TodayPersonCard: View {
     let model: TodayModel
     let actions: TodayActions
 
+    /// Whether the card takes the column it is in, or its own fixed measure in a flow.
+    var fillsWidth = false
+
     @State private var isHovering = false
     @FocusState private var isFocused: Bool
 
@@ -78,7 +94,8 @@ struct TodayPersonCard: View {
             footer
         }
         .padding(Theme.Spacing.medium)
-        .frame(width: 260, alignment: .leading)
+        .frame(maxWidth: fillsWidth ? .infinity : 260, alignment: .leading)
+        .frame(width: fillsWidth ? nil : 260)
         .background {
             RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                 .fill(Theme.Colors.subtleFill)
