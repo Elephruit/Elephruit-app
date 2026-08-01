@@ -87,6 +87,14 @@ public final class TimerService {
     /// Time view, in the menu bar, and asserted in a test.
     public private(set) var finishedPhase: PomodoroPhase?
 
+    /// A stretch stopped with the intention of carrying on. See ``ElephruitCore/PausedTimer``.
+    ///
+    /// Not persisted, on the same terms as a focus cycle: an intention to carry on is a fact about
+    /// the next few minutes, and restoring one a day later would offer to resume work nobody
+    /// remembers pausing. The *time* is safe either way, because pausing stops the entry — which is
+    /// the whole reason pause is modelled this way.
+    public private(set) var paused: PausedTimer?
+
     /// Told whenever an entry stops being the running one.
     ///
     /// ### Why a callback rather than the service doing the work
@@ -284,6 +292,11 @@ public final class TimerService {
         let previous = running?.id
         defer { previous.map { onEntryFinished?($0) } }
 
+        // A new piece of work is a new sitting. Carrying the old accumulation over would show the
+        // morning's total on the clock of the thing just started.
+        paused = nil
+        accumulatedBeforeCurrent = 0
+
         return perform {
             try entries.switchTo(
                 item: item,
@@ -304,10 +317,96 @@ public final class TimerService {
     @discardableResult
     public func stop() -> Bool {
         pomodoro = nil
+        // Stopping while paused ends the sitting. The entry was already closed when it was paused,
+        // so there is nothing to write — only the intention to continue, which is what is dropped.
+        paused = nil
         let stopping = running?.id
         let outcome = perform { try entries.stopRunning(at: nil) }
         stopping.map { onEntryFinished?($0) }
         return outcome
+    }
+
+    // MARK: Pausing
+
+    /// Stops the entry and remembers what to carry on with.
+    ///
+    /// The gap is genuinely not tracked — that is what a pause is — and the entry it closes is a
+    /// real, finished stretch. Resuming opens another. See ``ElephruitCore/PausedTimer`` for why
+    /// that is the honest shape rather than one entry with a hole in it.
+    @discardableResult
+    public func pause() -> Bool {
+        guard let running else { return false }
+
+        let worked = (paused?.accumulated ?? 0) + running.elapsed(at: dateProvider.now)
+        let title = running.displayTitle
+        let identifier = running.id
+
+        // The cycle stops too. A pomodoro counting down over work that is not happening is a bell
+        // that will ring for a block nobody worked.
+        pomodoro = nil
+
+        guard perform({ try entries.stopRunning(at: nil) }) else { return false }
+        onEntryFinished?(identifier)
+
+        paused = PausedTimer(id: identifier, displayTitle: title, accumulated: worked)
+        return true
+    }
+
+    /// Carries on from a pause, with everything the paused entry was filed under.
+    @discardableResult
+    public func resumeFromPause() -> Bool {
+        guard let paused else { return false }
+
+        let carried = paused.accumulated
+        let outcome = perform {
+            guard let entry = try entries.entry(id: paused.id) else { return nil }
+            return try entries.resume(entry)
+        }
+
+        // Cleared whether or not the entry could be found: one deleted while paused is not something
+        // anybody can carry on with, and leaving the widget offering to would be a button that does
+        // nothing forever.
+        self.paused = nil
+
+        // Carried, so the clock reads the whole sitting rather than restarting at zero.
+        accumulatedBeforeCurrent = outcome ? carried : 0
+        return outcome
+    }
+
+    /// Starts the current work again from zero, keeping what has been recorded so far.
+    ///
+    /// ### Why this does not simply reset the clock
+    /// Because resetting it would throw away the time already worked, and a button that silently
+    /// deletes an hour sits one pixel from Pause. This closes the current stretch — that time is
+    /// kept, and the log collapses it in with the rest — and opens a fresh one on the same work. The
+    /// clock returns to zero, which is what was asked for, and nothing is lost to get there.
+    @discardableResult
+    public func restart() -> Bool {
+        guard let running else { return false }
+
+        let identifier = running.id
+        let outcome = perform {
+            guard let entry = try entries.entry(id: identifier) else { return nil }
+            return try entries.resume(entry)
+        }
+        onEntryFinished?(identifier)
+
+        // A restart is a fresh sitting: the clock reads this stretch and no earlier one.
+        accumulatedBeforeCurrent = 0
+        paused = nil
+        return outcome
+    }
+
+    /// What earlier stretches of this sitting came to, so a resumed clock does not restart at zero.
+    ///
+    /// Reset whenever a genuinely new piece of work starts. Presentation only — no report and no
+    /// entry ever reads it.
+    public private(set) var accumulatedBeforeCurrent: TimeInterval = 0
+
+    /// What the floating timer shows: this stretch plus every earlier one in the same sitting.
+    public func sittingElapsed(at now: Date) -> TimeInterval {
+        if let running { return accumulatedBeforeCurrent + running.elapsed(at: now) }
+        return paused?.accumulated ?? 0
     }
 
     /// Throws the running timer away rather than recording it.
@@ -317,6 +416,8 @@ public final class TimerService {
     @discardableResult
     public func discard() -> Bool {
         pomodoro = nil
+        paused = nil
+        accumulatedBeforeCurrent = 0
         let discarding = running?.id
         let outcome = perform { try entries.discardRunning() }
         // Announced like any other ending, because a discarded entry may have a copy elsewhere that

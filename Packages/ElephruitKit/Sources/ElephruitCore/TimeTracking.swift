@@ -109,6 +109,35 @@ public struct RunningTimer: Sendable, Hashable, Identifiable {
     }
 }
 
+/// A stretch somebody stopped meaning to carry on with.
+///
+/// ### Why pausing is not a third state of the timer
+/// Because a time entry is a *span* — a start and an end — and a paused span is not one span with a
+/// hole in it. It is two spans with a gap between them. Modelling pause any other way means either
+/// storing an entry whose recorded length disagrees with its own clock times, or subtracting the gap
+/// afterwards from a number nobody can check.
+///
+/// So pausing stops the entry and keeps this: what it was, and how much has been worked so far.
+/// Resuming starts a fresh entry with the same filing. Two rows, which the log then collapses back
+/// into one — the grouping that already exists for exactly this shape of day, eight goes at one
+/// task. The clock in the floating timer keeps counting from ``accumulated`` so the *person* sees
+/// one continuous stretch, while the store keeps the two honest halves it actually observed.
+public struct PausedTimer: Sendable, Hashable, Identifiable {
+    /// The entry that was stopped, so it can be continued with everything it was filed under.
+    public var id: UUID
+
+    public var displayTitle: String
+
+    /// How much has been worked across every stretch of this sitting, before the current pause.
+    public var accumulated: TimeInterval
+
+    public init(id: UUID, displayTitle: String, accumulated: TimeInterval) {
+        self.id = id
+        self.displayTitle = displayTitle
+        self.accumulated = accumulated
+    }
+}
+
 /// A stretch of tracked time, as a value.
 public struct TimeEntrySnapshot: Sendable, Hashable, Identifiable {
     public var id: UUID

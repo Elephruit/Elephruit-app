@@ -112,6 +112,12 @@ public enum AccessibilityID {
         public static let manualSheet = "time.manualSheet"
         public static let manualAddButton = "time.manualSheet.add"
         public static let editRowButton = "time.editRow"
+
+        // The floating timer, over every screen in the window.
+        public static let floatingTimer = "time.floating"
+        public static let floatingPause = "time.floating.pause"
+        public static let floatingRestart = "time.floating.restart"
+        public static let floatingStop = "time.floating.stop"
         public static let projectPicker = "time.project"
         public static let peoplePicker = "time.people"
 
