@@ -53,11 +53,24 @@ extension View {
         // column that may grow to the window's width is a column that can take the space the pane
         // beside it needed, which is what left an editor at 118 points.
         let ceiling = max(resolved, bounds.minimum)
+        let floor = fixedAt ?? bounds.minimum
 
-        return navigationSplitViewColumnWidth(
-            min: fixedAt ?? bounds.minimum,
-            ideal: fixedAt ?? resolved,
-            max: fixedAt ?? ceiling
-        )
+        // ### Why the minimum is also stated as a frame
+        // `navigationSplitViewColumnWidth` is a request, and on the middle column of a three-column
+        // split view AppKit does not always grant it: a freshly-created window laid the list out at
+        // 198 points against a declared minimum of 260, and a restored one at 808 against a maximum
+        // of 520. A minimum expressed as the *content's* own frame is not a request — the split view
+        // cannot draw a pane narrower than the thing inside it — so the two together hold where
+        // either alone did not.
+        //
+        // Only the minimum is enforced this way. A maximum expressed as a frame would cap the
+        // content and leave the pane's remainder empty, which is a worse failure than a wide column:
+        // it looks like a rendering bug rather than a layout preference.
+        return frame(minWidth: floor)
+            .navigationSplitViewColumnWidth(
+                min: floor,
+                ideal: fixedAt ?? resolved,
+                max: fixedAt ?? ceiling
+            )
     }
 }
