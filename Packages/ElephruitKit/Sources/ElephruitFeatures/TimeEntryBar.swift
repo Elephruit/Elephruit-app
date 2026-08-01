@@ -81,6 +81,9 @@ struct TimeTrackerCard: View {
     @FocusState private var isDescriptionFocused: Bool
     @FocusState private var isDurationFocused: Bool
 
+    /// Whether the clock has been clicked and is a field for the moment.
+    @State private var isEditingDuration = false
+
     private var running: RunningTimer? { services?.timer.running }
     private var isRunning: Bool { running != nil }
 
@@ -103,12 +106,25 @@ struct TimeTrackerCard: View {
                 manualSpanFields
             }
         }
-        .padding(.horizontal, Theme.Spacing.large)
+        .padding(.horizontal, Theme.Spacing.medium)
         .padding(.vertical, Theme.Spacing.medium)
-        .background(Theme.Colors.contentBackground)
+        // ### Why this is a card and not the top of the window
+        // It was a full-bleed slab pinned across the whole width, which is the shape of a *toolbar*
+        // — something that belongs to the window rather than to the work. This belongs to the work:
+        // it is one entry being composed, and on a wide screen a single entry stretched to seventeen
+        // hundred points reads as a banner, not a thing you are filling in. An inset card with a
+        // border says where it ends.
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
+                .fill(Theme.Colors.contentBackground)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
+                .strokeBorder(isRunning ? Theme.Colors.destructive.opacity(0.35) : Theme.Colors.separator)
+        }
+        .calmAnimation(value: isRunning)
         .onAppear(perform: syncFromRunning)
         .onChange(of: running?.id) { _, _ in syncFromRunning() }
-        .onChange(of: services?.timer.elapsed) { _, _ in syncDurationDisplay() }
         .onChange(of: mode) { _, _ in
             prepareManualSpan()
             syncDurationDisplay()
@@ -184,6 +200,7 @@ struct TimeTrackerCard: View {
     private var filingChips: some View {
         ElephruitDesign.FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
             TimeSubjectPicker(
+                placeholder: "Item",
                 subject: draft.subject,
                 onPick: { subject in
                     draft.subject = subject
@@ -194,21 +211,21 @@ struct TimeTrackerCard: View {
                 onOpen: onOpenSubject
             )
 
-            TimeProjectPicker(project: draft.project) { project in
+            TimeProjectPicker(placeholder: "Project", project: draft.project) { project in
                 draft.project = project
                 guard isRunning else { return }
                 services?.timer.setProject(resolve(draft.project))
                 commitChange()
             }
 
-            TimePeoplePicker(people: draft.people) { people in
+            TimePeoplePicker(placeholder: "People", people: draft.people) { people in
                 draft.people = people
                 guard isRunning else { return }
                 services?.timer.setPeople(resolveAll(draft.people))
                 commitChange()
             }
 
-            TimeTagPicker(slugs: draft.tagSlugs) { slugs in
+            TimeTagPicker(placeholder: "Tags", slugs: draft.tagSlugs) { slugs in
                 draft.tagSlugs = slugs
                 guard isRunning else { return }
                 services?.timer.setTags(slugs)
@@ -229,7 +246,7 @@ struct TimeTrackerCard: View {
         } label: {
             TimeChipLabel(
                 symbolName: draft.isBillable ? "dollarsign.circle.fill" : "dollarsign.circle",
-                title: draft.isBillable ? "Billable" : nil,
+                title: "Billable",
                 isFilled: draft.isBillable
             )
         }
@@ -273,25 +290,7 @@ struct TimeTrackerCard: View {
 
     private var clockAndControls: some View {
         HStack(spacing: Theme.Spacing.small) {
-            TextField("0:00:00", text: $durationText)
-                .textFieldStyle(.plain)
-                .font(.system(.title, design: .rounded, weight: .medium))
-                .monospacedDigit()
-                .multilineTextAlignment(.trailing)
-                .frame(width: 116)
-                .foregroundStyle(isRunning ? Theme.Colors.primaryText : Theme.Colors.secondaryText)
-                .contentTransition(.numericText())
-                .focused($isDurationFocused)
-                .onSubmit(commitDuration)
-                .onChange(of: isDurationFocused) { _, focused in
-                    // Nothing to type over in manual mode with no span yet, and in timer mode the
-                    // live text would be overwritten a second later by the tick.
-                    guard !focused else { return }
-                    commitDuration()
-                }
-                .help("Type a length — 1:30, 1.5, or 90m")
-                .accessibilityLabel("Duration")
-                .accessibilityIdentifier(AccessibilityID.Time.durationField)
+            clock
 
             focusButton
 
@@ -301,6 +300,72 @@ struct TimeTrackerCard: View {
                 discardButton
             }
         }
+    }
+
+    /// The elapsed time, and the field it becomes when you click it.
+    ///
+    /// ### Why the running clock is not the text field
+    /// It was, and it did not move. A `TextField` bound to `@State` can only advance when something
+    /// writes to that state, which made the clock a downstream consequence of the service's tick
+    /// arriving *and* of the view being invalidated by it. Both are true most of the time and
+    /// neither is guaranteed: the observed result was a clock that sat at zero for fifteen seconds,
+    /// jumped, then sat still until a minute and a half had gone.
+    ///
+    /// A running clock is not state. It is a pure function of one stored date and the current
+    /// moment, so it is drawn as one: `TimelineView` asks SwiftUI to redraw on a cadence it owns,
+    /// and each redraw computes the elapsed time from `startedAt`. There is nothing left to fall out
+    /// of step with, and it stays right across a sleep, a missed tick, and a clock change.
+    ///
+    /// It becomes a field on click, because typing a length into it is the correction this whole
+    /// module is built around — see ``ElephruitCore/DurationParser``.
+    @ViewBuilder
+    private var clock: some View {
+        if isEditingDuration || mode == .manual || !isRunning {
+            TextField("0:00:00", text: $durationText)
+                .textFieldStyle(.plain)
+                .font(clockFont)
+                .monospacedDigit()
+                .multilineTextAlignment(.trailing)
+                .frame(width: 116)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .focused($isDurationFocused)
+                .onSubmit(finishEditingDuration)
+                .onChange(of: isDurationFocused) { _, focused in
+                    guard !focused else { return }
+                    finishEditingDuration()
+                }
+                .help("Type a length — 1:30, 1.5, or 90m")
+                .accessibilityLabel("Duration")
+                .accessibilityIdentifier(AccessibilityID.Time.durationField)
+        } else if let running {
+            TimelineView(.periodic(from: running.startedAt, by: 1)) { context in
+                Text(TimeFormatting.stopwatch(running.elapsed(at: context.date)))
+                    .font(clockFont)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+            }
+            .frame(width: 116, alignment: .trailing)
+            .contentShape(.rect)
+            .onTapGesture { beginEditingDuration() }
+            .help("Click to correct how long this has been running")
+            .accessibilityLabel("Elapsed")
+            .accessibilityIdentifier(AccessibilityID.Time.durationField)
+        }
+    }
+
+    private var clockFont: Font {
+        .system(.title, design: .rounded, weight: .medium)
+    }
+
+    private func beginEditingDuration() {
+        syncDurationDisplay()
+        isEditingDuration = true
+        isDurationFocused = true
+    }
+
+    private func finishEditingDuration() {
+        commitDuration()
+        isEditingDuration = false
     }
 
     // MARK: - Actions
@@ -330,9 +395,16 @@ struct TimeTrackerCard: View {
 
     /// Starts a focus cycle over whatever is being tracked.
     ///
-    /// Beside Start rather than buried in a menu, and only in timer mode: a pomodoro is a way of
-    /// working through the next half hour, which is not a thing you can decide about an afternoon
-    /// you are typing in from memory.
+    /// ### Why this is a labelled pill and not an icon
+    /// It was a bare `brain.head.profile` glyph between the clock and the Stop button, at the same
+    /// weight as the discard cross — and the first person to use it could not find the pomodoro at
+    /// all. An unlabelled icon among other unlabelled icons is not a feature anybody discovers; it
+    /// is a feature they have to be told about. The word costs forty points and removes the need to
+    /// be told.
+    ///
+    /// Beside Start rather than in a menu, and only in timer mode: a pomodoro is a way of working
+    /// through the next half hour, which is not something you can decide about an afternoon you are
+    /// typing in from memory.
     @ViewBuilder
     private var focusButton: some View {
         if mode == .timer, services?.timer.isFocusing != true {
@@ -347,17 +419,32 @@ struct TimeTrackerCard: View {
                 )
                 commitChange()
             } label: {
-                Image(systemName: "brain.head.profile")
-                    .font(.body)
-                    .frame(width: 28, height: 28)
-                    .contentShape(.circle)
+                HStack(spacing: Theme.Spacing.tight) {
+                    Image(systemName: "brain.head.profile")
+                    Text("Focus")
+                }
+                .font(Theme.Text.rowSubtitle)
+                .padding(.horizontal, Theme.Spacing.small)
+                .frame(height: 28)
+                .contentShape(.capsule)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Theme.Colors.secondaryText)
-            .help("Work in focus blocks — starts the timer if it is not already running")
+            .foregroundStyle(Theme.Colors.selection)
+            .background(Capsule().fill(Theme.Colors.selection.opacity(0.12)))
+            .help(focusHint)
             .accessibilityLabel("Start a focus block")
             .accessibilityIdentifier(AccessibilityID.Time.focusButton)
         }
+    }
+
+    /// Says what pressing Focus will actually do, in the lengths this person has set.
+    private var focusHint: String {
+        let plan = services?.timer.pomodoroPlan ?? .standard
+        let focus = Int((plan.focus / 60).rounded())
+        let rest = Int((plan.shortBreak / 60).rounded())
+        return isRunning
+            ? "Work in \(focus)-minute blocks with \(rest)-minute breaks, starting now"
+            : "Start the timer and work in \(focus)-minute blocks with \(rest)-minute breaks"
     }
 
     private var discardButton: some View {
@@ -535,8 +622,11 @@ struct TimeTrackerCard: View {
     private func syncDurationDisplay() {
         guard !isDurationFocused else { return }
 
-        if let elapsed = services?.timer.elapsed, isRunning {
-            durationText = TimeFormatting.clock(elapsed)
+        if isRunning, let running {
+            // Read straight off the start date rather than from the service's `elapsed`, so what
+            // lands in the field when it is clicked is the same number the clock beside it was
+            // showing — not whatever the last tick happened to leave behind.
+            durationText = TimeFormatting.clock(running.elapsed(at: Date()))
         } else if mode == .manual {
             durationText = TimeFormatting.clock(max(0, manualEnd.timeIntervalSince(manualStart)))
         } else {

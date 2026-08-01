@@ -54,17 +54,28 @@ public struct TimeView: View {
         VStack(spacing: 0) {
             banners
 
-            TimeTrackerCard(
-                mode: modeBinding,
-                onChange: { bump() },
-                onOpenSubject: { id in navigation.selectItem(id) }
-            )
+            // ### Why everything below is measured rather than stretched
+            // On a wide window a full-bleed layout puts the description at the far left and the
+            // total at the far right with two feet of nothing between them, and the eye has to
+            // travel the whole way to join one row up. A measure caps that. It is generous — wide
+            // enough that nothing wraps at a normal window size — and it only bites on the screens
+            // where stretching was doing damage.
+            VStack(spacing: Theme.Spacing.small) {
+                TimeTrackerCard(
+                    mode: modeBinding,
+                    onChange: { bump() },
+                    onOpenSubject: { id in navigation.selectItem(id) }
+                )
 
-            if let session = services?.timer.pomodoro {
-                FocusStrip(session: session)
-            } else {
-                Divider()
+                if let session = services?.timer.pomodoro {
+                    FocusStrip(session: session)
+                }
             }
+            .frame(maxWidth: Self.measure)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, Theme.Spacing.large)
+            .padding(.top, Theme.Spacing.medium)
+            .padding(.bottom, Theme.Spacing.small)
 
             // ### Why the summary disappears rather than reading zero
             // A period with nothing in it used to say so three times on one screen: "Nothing
@@ -76,8 +87,11 @@ public struct TimeView: View {
             // it. A headline zero and a sentence restating it are a summary of nothing, and they
             // push the useful part down the screen. When there is time to report, the summary is
             // the best thing on the page and it comes back.
-            if !report.isEmpty {
+            if showsSummary {
                 summary
+                    .frame(maxWidth: Self.measure)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, Theme.Spacing.large)
 
                 Divider()
             }
@@ -140,6 +154,24 @@ public struct TimeView: View {
 
     // MARK: - Summary
 
+    /// The widest the tracker, the summary, and the log are allowed to get.
+    ///
+    /// A measure, in the typographic sense. Long lines are hard to read and long *rows* are hard to
+    /// join up, and the fix is the same for both.
+    static let measure: CGFloat = 1_100
+
+    /// Whether the breakdown above the log earns its space.
+    ///
+    /// ### Why one row is not a summary
+    /// A single bar drawn at a hundred percent of a peak it is also setting says nothing that the
+    /// number above it did not — and full width, it reads as a stray progress indicator rather than
+    /// a chart. That is exactly what a day of untracked-against work produced: one row, "No item",
+    /// a bar right across the window. The headline facts stay; the chart waits until there is
+    /// something to compare.
+    private var showsSummary: Bool {
+        report.rows.count > 1
+    }
+
     private var summary: some View {
         TimeSummaryView(
             report: report,
@@ -148,7 +180,6 @@ public struct TimeView: View {
             isSingleDay: window == .today || window == .yesterday,
             onOpen: { id in navigation.selectItem(id) }
         )
-        .padding(.horizontal, Theme.Spacing.large)
         .padding(.vertical, Theme.Spacing.medium)
     }
 
@@ -198,15 +229,18 @@ public struct TimeView: View {
                     Section {
                         ForEach(section.groups) { group in
                             groupRow(group)
+                                .measuredRow()
 
                             if expandedGroups.contains(group.id), !group.isSingle {
                                 ForEach(group.entries) { entry in
                                     entryRow(entry)
+                                        .measuredRow()
                                 }
                             }
                         }
                     } header: {
                         TimeDayHeader(section: section)
+                            .measuredRow()
                     }
                 }
             }
@@ -280,11 +314,15 @@ public struct TimeView: View {
         }
 
         ToolbarItem {
-            Toggle(isOn: $groupsSimilarEntries) {
-                Label("Group Similar", systemImage: "rectangle.stack")
+            // A menu rather than a bare `Toggle`, which rendered as an unlabelled filled circle —
+            // a control whose only clue to what it does is whether it looks pressed.
+            Menu {
+                Toggle("Collapse Alike Entries", isOn: $groupsSimilarEntries)
+                    .accessibilityIdentifier(AccessibilityID.Time.groupingToggle)
+            } label: {
+                Label("Display", systemImage: "slider.horizontal.3")
             }
-            .help("Collapse entries that share a description, subject and tags")
-            .accessibilityIdentifier(AccessibilityID.Time.groupingToggle)
+            .help("How the log is shown")
         }
 
         ToolbarItem {

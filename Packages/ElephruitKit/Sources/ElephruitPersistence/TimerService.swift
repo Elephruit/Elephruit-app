@@ -113,6 +113,28 @@ public final class TimerService {
     private var sleepObserver: (any NSObjectProtocol)?
     private var wakeObserver: (any NSObjectProtocol)?
 
+    /// Held while a timer runs, so the system does not throttle the thing being measured.
+    ///
+    /// ### Why this exists
+    /// App Nap. A Mac aggressively de-prioritises an application whose windows are not visible —
+    /// coalescing its timers, stretching its wakeups, and in the limit letting a one-second loop go
+    /// minutes between iterations. For nearly every kind of background work that is correct and
+    /// invisible. For a *stopwatch* it is the whole product failing: the reported behaviour was a
+    /// clock that did not move for fifteen seconds, moved once, and then sat still until a minute
+    /// and a half had gone — which is precisely the shape of a throttled process.
+    ///
+    /// And a timer is running exactly when the app is *not* frontmost. That is the point of it.
+    ///
+    /// `.userInitiatedAllowingIdleSystemSleep` is the narrowest option that does the job: it says
+    /// this work was asked for by a person and must not be coalesced away, while explicitly leaving
+    /// the Mac free to sleep when it is idle. Holding the machine awake would be a different and
+    /// much larger promise, and the sleep path is already handled deliberately — see
+    /// ``observeSleep()``, which writes a heartbeat on the way down and offers the gap on the way
+    /// back up.
+    ///
+    /// Released the moment nothing is running, so an app sitting idle asks nothing of the system.
+    private var activityAssertion: (any NSObjectProtocol)?
+
     /// The last heartbeat this process wrote, so ticking does not write on every second.
     private var lastHeartbeatWrite: Date?
 
@@ -155,6 +177,11 @@ public final class TimerService {
         tickTask?.cancel()
         tickTask = nil
 
+        if let assertion = activityAssertion {
+            ProcessInfo.processInfo.endActivity(assertion)
+            activityAssertion = nil
+        }
+
         let center = NSWorkspace.shared.notificationCenter
         if let sleepObserver { center.removeObserver(sleepObserver) }
         if let wakeObserver { center.removeObserver(wakeObserver) }
@@ -195,6 +222,20 @@ public final class TimerService {
             lastError = error
             running = nil
             elapsed = 0
+        }
+        updateActivityAssertion()
+    }
+
+    /// Takes the assertion when something starts running, and gives it back when nothing is.
+    private func updateActivityAssertion() {
+        if running != nil, activityAssertion == nil {
+            activityAssertion = ProcessInfo.processInfo.beginActivity(
+                options: .userInitiatedAllowingIdleSystemSleep,
+                reason: "A time entry is running"
+            )
+        } else if running == nil, let assertion = activityAssertion {
+            ProcessInfo.processInfo.endActivity(assertion)
+            activityAssertion = nil
         }
     }
 
@@ -664,11 +705,27 @@ public final class TimerService {
 
     // MARK: - Ticking and heartbeat
 
+    /// The clock that drives the heartbeat, idle detection, and the focus cycle.
+    ///
+    /// ### Why the tolerance is spelled out
+    /// `Task.sleep(for:)` carries a **default tolerance the system is free to use**, and on a Mac it
+    /// uses it: wakeups are coalesced with whatever else is waiting so the CPU can stay asleep
+    /// longer. For most work that is exactly right and invisible. For this it was neither — the
+    /// observed behaviour was a timer that sat still for fifteen seconds, jumped, then sat still
+    /// until a minute and a half had passed.
+    ///
+    /// `.zero` asks for the second to actually be a second. It costs one wakeup per second while a
+    /// timer runs, which is the thing being paid for, and nothing at all when none is.
+    ///
+    /// The *displayed* clock no longer depends on this at all — see `TimeTrackerCard`, which derives
+    /// what it draws from the entry's start date on SwiftUI's own cadence. Two independent
+    /// mechanisms, because a clock that stops moving is the one bug in a time tracker that makes
+    /// every other feature untrustworthy.
     private func startTicking() {
         tickTask?.cancel()
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: .seconds(1), tolerance: .zero)
                 guard let self, !Task.isCancelled else { return }
                 tick()
             }
