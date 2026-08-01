@@ -117,7 +117,8 @@ public struct ContactDestination: Sendable, Hashable, Identifiable {
 
     /// "mobile · 512-555-0192".
     public var displayText: String {
-        label.isEmpty ? value : "\(label) · \(value)"
+        let shown = source == .phone ? PhoneNumberFormatting.display(value) : value
+        return label.isEmpty ? shown : "\(label) · \(shown)"
     }
 }
 
