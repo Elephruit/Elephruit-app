@@ -96,6 +96,8 @@ struct NotesSidebarSection: View {
 /// navigation model now, so choosing a window here *is* choosing what the report covers — the same
 /// arrangement the calendar's view switcher uses.
 struct TimeSidebarSection: View {
+    @Environment(\.services) private var services
+
     let navigation: NavigationModel
 
     @ScaledMetric(relativeTo: .body) private var rowHeight = SidebarMetrics.baseRowHeight
@@ -108,6 +110,13 @@ struct TimeSidebarSection: View {
                     isSelected: navigation.selection == destination.selection,
                     rowHeight: rowHeight
                 )
+            }
+
+            if let running = services?.timer.running {
+                RunningTimerRow(running: running, rowHeight: rowHeight) {
+                    navigation.select(.time)
+                    navigation.timeSurface = .log
+                }
             }
         }
 
@@ -400,5 +409,53 @@ struct ModeRow: View {
         .accessibilityLabel(title)
         .accessibilityHint(hint)
         .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+
+/// The running timer, in the sidebar, wherever you are in the app.
+///
+/// ### Why the sidebar and not only the tracker
+/// Because the tracker is on one screen and a timer runs while you are on the others. Elephruit
+/// already puts the elapsed time in the menu bar, which covers being in a different *app*; this
+/// covers being in a different part of this one. the design spec keeps a live clock in its own sidebar for
+/// the same reason, and it is the difference between a timer you trust is going and one you keep
+/// navigating back to check.
+///
+/// Clicking it goes to the log rather than stopping anything. A stop control here would be a
+/// destructive action one pixel from a navigation row.
+struct RunningTimerRow: View {
+    let running: RunningTimer
+    let rowHeight: CGFloat
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(spacing: SidebarMetrics.iconGap) {
+                Image(systemName: "record.circle")
+                    .frame(width: SidebarMetrics.iconColumn)
+                    .foregroundStyle(Theme.Colors.destructive)
+                    .symbolEffect(.pulse, options: .repeating)
+
+                Text(running.displayTitle)
+                    .lineLimit(1)
+
+                Spacer(minLength: Theme.Spacing.tight)
+
+                TimelineView(.periodic(from: running.startedAt, by: 1)) { context in
+                    Text(TimeFormatting.stopwatch(running.elapsed(at: context.date)))
+                        .font(Theme.Text.metadata)
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .foregroundStyle(Theme.Colors.destructive)
+                }
+            }
+            .frame(minHeight: rowHeight)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .help("Timing “\(running.displayTitle)” since \(running.startedAt.formatted(date: .omitted, time: .shortened))")
+        .accessibilityLabel("Timer running: \(running.displayTitle)")
+        .accessibilityIdentifier("sidebar.time.running")
     }
 }

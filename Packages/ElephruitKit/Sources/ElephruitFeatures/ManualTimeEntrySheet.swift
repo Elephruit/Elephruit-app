@@ -49,17 +49,17 @@ struct ManualTimeEntrySheet: View {
                 span
 
                 ElephruitDesign.FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
-                    TimeSubjectPicker(placeholder: "Item", subject: draft.subject) { draft.subject = $0 }
-                    TimeProjectPicker(placeholder: "Project", project: draft.project) { draft.project = $0 }
-                    TimePeoplePicker(placeholder: "People", people: draft.people) { draft.people = $0 }
-                    TimeTagPicker(placeholder: "Tags", slugs: draft.tagSlugs) { draft.tagSlugs = $0 }
+                    TimeSubjectPicker(subject: draft.subject) { draft.subject = $0 }
+                    TimeProjectPicker(project: draft.project) { draft.project = $0 }
+                    TimePeoplePicker(people: draft.people) { draft.people = $0 }
+                    TimeTagPicker(slugs: draft.tagSlugs) { draft.tagSlugs = $0 }
 
                     Button {
                         draft.isBillable.toggle()
                     } label: {
                         TimeChipLabel(
-                            symbolName: draft.isBillable ? "dollarsign.circle.fill" : "dollarsign.circle",
-                            title: "Billable",
+                            symbolName: "dollarsign.circle",
+                            title: nil,
                             isFilled: draft.isBillable
                         )
                     }
