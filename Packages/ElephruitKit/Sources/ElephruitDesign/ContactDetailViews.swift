@@ -54,24 +54,9 @@ public struct ContactDetailLabel: View {
     }
 }
 
-/// The heading above a group of details on a person's card — `⌂ Personal`.
-public struct ContactAffinityChip: View {
-    private let affinity: ContactAffinity
-
-    public init(_ affinity: ContactAffinity) {
-        self.affinity = affinity
-    }
-
-    public var body: some View {
-        Label(affinity.displayName, systemImage: affinity.symbolName)
-            .font(Theme.Text.chip)
-            .labelStyle(.titleAndIcon)
-            .foregroundStyle(affinity.color)
-            .padding(.horizontal, Theme.Spacing.small)
-            .padding(.vertical, 1)
-            .background(
-                Capsule().fill(affinity.color.opacity(0.14))
-            )
-            .accessibilityLabel("\(affinity.displayName) details")
-    }
-}
+// The heading above a group of details on a person's card used to be a tinted capsule here —
+// `ContactAffinityChip`. It is a plain section heading now, and it lives in `PersonContactViews`
+// beside the grid it is a row of, because that is the only place it can be aligned with the labels
+// underneath it. See the note on `ContactAffinityHeading` for why a pill was the wrong shape: it was
+// the only one in a pane that has none, it read at the weight of the values it was introducing, and
+// sitting outside the grid it lined up with nothing.

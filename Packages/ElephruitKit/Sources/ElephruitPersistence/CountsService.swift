@@ -67,13 +67,10 @@ actor CountsWorker {
 
         let unparented = try modelContext.fetch(descriptor)
 
-        return unparented.count { item in
-            // Must match `ItemQuery.inbox()` exactly, or the badge and the list disagree — and a
-            // badge that says 3 over a list of 2 reads as a bug in the app, not in the query.
-            item.kind.appearsInInbox
-                && item.tags.isEmpty
-                && item.filedUnderContainers().isEmpty
-        }
+        // The same question `ItemQuery.inbox()` asks, asked of the same object. It used to be the
+        // same three clauses written out again under a comment promising to keep them in step, and a
+        // badge that says 3 over a list of 2 reads as a bug in the app rather than in the query.
+        return unparented.count(where: \.isUnprocessedCapture)
     }
 }
 

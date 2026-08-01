@@ -66,6 +66,69 @@ public enum TimeReporting {
         )
     }
 
+    /// The report, cut both ways at once: how much of each day went to each row.
+    ///
+    /// ### Why this is here and not in the view that draws it
+    /// Because it is the same question the table below the chart answers, asked per day, and this
+    /// file's standing promise is that there is no second set of rules about what counts. A view
+    /// that walked the entries itself would be a second implementation of what a day is, what a
+    /// midnight-crossing session is worth, and where an entry with no project goes — and the first
+    /// time one of those drifted, the chart and the table under it would disagree about the same
+    /// week. Built from the same ``slices(for:grouping:clippedTo:calendar:now:)`` both already use,
+    /// so they cannot.
+    ///
+    /// ### What the cells sum to
+    /// A day's cells sum to that day's total **only when the grouping's rows cannot overlap** — see
+    /// ``ElephruitCore/TimeGrouping/rowsCanOverlap``. Under `.tag` or `.person` an hour counts in
+    /// full under each tag and each person, exactly as it does in the table, so the cells of one day
+    /// can sum to more than the day held. That is the right answer to "how much of Tuesday carried
+    /// this tag" and the wrong thing to stack into a bar, which is why the caller checks before it
+    /// stacks rather than this function quietly halving anything.
+    ///
+    /// Unrounded, deliberately. Rounding is a rule about the line on an invoice — see the note on
+    /// ``report(entries:grouping:range:calendar:now:rounding:)`` — and applying it to a cell would
+    /// round the same minute once per day it touched. A caller that needs the bar to match a rounded
+    /// total scales the cells to it; the shares are what this returns.
+    public static func dailyBreakdown(
+        entries: [TimeEntrySnapshot],
+        grouping: TimeGrouping,
+        range: Range<Date>,
+        calendar: Calendar,
+        now: Date
+    ) -> [TimeDayCell] {
+        guard !entries.isEmpty, grouping != .day else { return [] }
+
+        var cells: [String: TimeDayCell] = [:]
+
+        for entry in entries {
+            let days = daySlices(for: entry, clippedTo: range, calendar: calendar, now: now)
+            guard !days.isEmpty else { continue }
+
+            let rows = slices(for: entry, grouping: grouping, clippedTo: range, calendar: calendar, now: now)
+            guard !rows.isEmpty else { continue }
+
+            // The day slices say *when* this entry happened and the row slices say *what* it was.
+            // Each day's portion is attributed to each row the entry belongs to — which is one row
+            // for a project and may be several for a tag, on the same terms as the table.
+            for day in days {
+                for row in rows {
+                    let id = "\(day.key)\u{1f}\(row.key)"
+                    cells[id, default: TimeDayCell(
+                        dayKey: day.key,
+                        rowKey: row.key,
+                        title: row.title,
+                        total: 0,
+                        itemID: row.itemID
+                    )].total += day.duration
+                }
+            }
+        }
+
+        return cells.values.sorted {
+            $0.dayKey == $1.dayKey ? $0.total > $1.total : $0.dayKey < $1.dayKey
+        }
+    }
+
     /// How much of an entry falls inside the window.
     ///
     /// A report for Tuesday should show the two hours of a session that began on Monday night, not
@@ -402,5 +465,14 @@ public enum TimePeriod: Sendable, Hashable {
     public var isCustom: Bool {
         if case .custom = self { return true }
         return false
+    }
+
+    /// The named window this period is, or `nil` when it is a custom range.
+    ///
+    /// What a rail of window chips needs in order to know which one to fill: `isCustom` says a
+    /// custom range is in force but not which chip is current when one is not.
+    public var window: TimeWindow? {
+        if case .window(let window) = self { return window }
+        return nil
     }
 }

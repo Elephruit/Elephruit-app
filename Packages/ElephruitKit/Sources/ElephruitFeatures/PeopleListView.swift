@@ -196,18 +196,35 @@ struct PeopleListView: View {
 
     private var list: some View {
         ScrollViewReader { proxy in
-            ZStack(alignment: .topTrailing) {
+            // ### Why an HStack and not a ZStack
+            // It was a `ZStack(alignment: .topTrailing)`, which is to say the rail was drawn *on
+            // top of* the list. Every row was laid out as though the rail were not there, so names
+            // ran under the letters and — much worse — so did the separators and the selection
+            // fill: choosing somebody painted the accent colour straight through the alphabet, and
+            // the rail read as the table's last column rather than as a control beside it.
+            //
+            // Side by side, the list simply ends where the rail begins. Nothing of the list's can
+            // reach the rail because there is no overlap to reach across, and the rail keeps its
+            // width whether or not it can be used — see `isEnabled` below — so nothing shifts
+            // sideways when a search starts.
+            HStack(spacing: 0) {
                 sectionedList
 
                 // Beside the scrollbar rather than instead of it: clicking the scrollbar track and
                 // dragging its knob are still how somebody moves *through* the list, and this is how
                 // they move *to* a letter. Two different questions, two controls.
-                if !model.isSearching {
-                    SectionIndexBar(titles: model.sectionTitles) { title in
-                        jump(to: title, using: proxy)
-                    }
-                    .padding(.trailing, Theme.Spacing.medium)
-                    .padding(.vertical, Theme.Spacing.small)
+                SectionIndexBar(
+                    titles: model.sectionTitles,
+                    activeTitle: activeSectionTitle,
+                    // Search results are ranked by how well they match, not alphabetised, so there
+                    // are no sections to jump to. Dimmed and inert rather than gone, because a rail
+                    // that vanishes as somebody types takes its width with it and moves every row
+                    // they were reading.
+                    isEnabled: !model.isSearching,
+                    label: model.sort.jumpLabel,
+                    unavailableReason: "Search results are ranked by relevance, so there is nothing to jump to."
+                ) { title in
+                    jump(to: title, using: proxy)
                 }
             }
             .overlay {
@@ -343,6 +360,18 @@ struct PeopleListView: View {
     }
 
     // MARK: - Jumping and typing
+
+    /// Which section the rail should mark as the one you are in.
+    ///
+    /// The selected person's section, or the letter last scrubbed to. Derived rather than tracked
+    /// from the scroll position: the question the mark answers is "where am I in this list", and in
+    /// a list you navigate by selecting somebody, that is the selection — not whatever happens to be
+    /// under the top edge after an inertial flick.
+    private var activeSectionTitle: String? {
+        if let scrubbedTitle { return scrubbedTitle }
+        guard let id = selection.first else { return nil }
+        return model.sectionTitle(containing: id)
+    }
 
     private func jump(to title: String, using proxy: ScrollViewProxy) {
         guard let landing = model.section(nearest: title) else { return }

@@ -16,6 +16,55 @@ struct RelationshipTests {
         }
     }
 
+    // MARK: - Grouping
+
+    /// The headings were "Children" and "Everybody else", which said that one relationship is the
+    /// interesting one and the rest are a remainder — a partner, a mother and an oldest friend all
+    /// filed under a heading whose only meaning is *not children*.
+    @Test("Every relationship belongs to a group that describes it")
+    func everyKindIsGrouped() {
+        // No group is defined by what it is not, so every kind has to land in one that names
+        // something. `.other` is for the relationships that genuinely have no shared context —
+        // a friend, an introduction — rather than for the leftovers of a rule about children.
+        for kind in RelationshipKind.allCases {
+            _ = kind.group
+        }
+
+        #expect(RelationshipKind.partner.group == .family)
+        #expect(RelationshipKind.child.group == .family)
+        #expect(RelationshipKind.parent.group == .family)
+        #expect(RelationshipKind.sibling.group == .family)
+
+        #expect(RelationshipKind.householdMember.group == .household)
+        #expect(RelationshipKind.pet.group == .household)
+
+        #expect(RelationshipKind.manager.group == .work)
+        #expect(RelationshipKind.directReport.group == .work)
+        #expect(RelationshipKind.colleague.group == .work)
+
+        #expect(RelationshipKind.friend.group == .other)
+    }
+
+    /// A child and a partner sit under the same heading and are drawn the same way. The section used
+    /// to give children their own group *and* their own card shape, which stated in card area that
+    /// one relationship matters more than another.
+    @Test("A partner is not filed apart from a child")
+    func familyIsOneGroup() {
+        #expect(RelationshipKind.child.group == RelationshipKind.partner.group)
+        #expect(RelationshipKind.child.group == RelationshipKind.parent.group)
+    }
+
+    @Test("Groups read closest first, and every one has a name of its own")
+    func groupsAreOrdered() {
+        let ordered = RelationshipGroup.allCases.sorted { $0.sortOrder < $1.sortOrder }
+        #expect(ordered == [.family, .household, .work, .other])
+
+        for group in RelationshipGroup.allCases {
+            #expect(!group.title.isEmpty)
+            #expect(!group.title.lowercased().contains("else"), "\(group.title) names a remainder")
+        }
+    }
+
     @Test("Parent and child are each other's inverse")
     func parentChildReciprocal() {
         #expect(RelationshipKind.parent.inverse == .child)

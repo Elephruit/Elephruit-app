@@ -236,6 +236,21 @@ public final class Item {
     /// was, and this is how it says so without touching the value.
     public var dateReviewRaw: String?
 
+    /// When the user deliberately put a synchronised item into the Inbox.
+    ///
+    /// ### Why a stored date and not an absence
+    /// Because the Inbox is defined by an *absence* — nothing filed, nothing tagged, no container —
+    /// and a reminder that arrived from somebody's Reminders database has all three absences by
+    /// construction. Its home is the list it came from, which is why ``hasHome`` counts that as a
+    /// home. But "I want to triage this one here" is a real thing to want, and it cannot be said in
+    /// a vocabulary made only of absences: removing the home would mean breaking the link.
+    ///
+    /// So it is one nullable column that means exactly what it says, and nothing else consults it.
+    /// A date rather than a flag, because "when did this arrive in my Inbox" is the question the
+    /// sort already asks, and a Boolean would answer it with the item's creation date — which for an
+    /// imported reminder is when it was imported, not when the user chose to look at it.
+    public var inboxedAt: Date?
+
     // MARK: Presentation
 
     /// User's SF Symbol override. `nil` falls back to the kind's symbol.

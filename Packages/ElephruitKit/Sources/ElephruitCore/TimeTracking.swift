@@ -315,6 +315,43 @@ public struct TimeSummaryRow: Sendable, Hashable, Identifiable {
     }
 }
 
+/// One cell of a report cut both ways: how much of one day went to one row.
+///
+/// The value ``ElephruitCore/TimeReporting/dailyBreakdown(entries:grouping:range:calendar:now:)``
+/// returns. Its own type rather than a `TimeSummaryRow` with a date bolted on, because a cell is not
+/// a row: it has no billable figure and no entry count of its own — an entry crossing midnight is
+/// one entry contributing to two cells, and counting it in both would make the column add up to more
+/// entries than there are.
+public struct TimeDayCell: Sendable, Hashable, Identifiable {
+    /// The day, as a ``DayKey`` string.
+    public var dayKey: String
+
+    /// The breakdown row this belongs to — a project, a tag, a person.
+    public var rowKey: String
+
+    public var title: String
+    public var total: TimeInterval
+
+    /// The item behind the row, when it has one, so a segment can carry that item's own colour.
+    public var itemID: UUID?
+
+    public var id: String { "\(dayKey)\u{1f}\(rowKey)" }
+
+    public init(
+        dayKey: String,
+        rowKey: String,
+        title: String,
+        total: TimeInterval,
+        itemID: UUID? = nil
+    ) {
+        self.dayKey = dayKey
+        self.rowKey = rowKey
+        self.title = title
+        self.total = total
+        self.itemID = itemID
+    }
+}
+
 /// A whole report: the rows, and what they add up to.
 public struct TimeReport: Sendable, Hashable {
     public var rows: [TimeSummaryRow]

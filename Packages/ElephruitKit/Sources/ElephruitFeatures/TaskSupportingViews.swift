@@ -407,6 +407,23 @@ struct TaskContextMenu: View {
             }
         }
 
+        // Only for a task that came from Reminders and is still linked to it. Everything else is
+        // either already in the Inbox or has been filed somewhere real, and neither is a thing this
+        // command could sensibly do — see `TaskService.setInInbox(_:on:)`.
+        if task.isKeptInStepWithAnExternalList {
+            Button(
+                task.inboxedAt == nil ? "Put in Inbox" : "Take Out of Inbox",
+                systemImage: "tray"
+            ) {
+                act { try $0.tasks.setInInbox(task.inboxedAt == nil, on: task) }
+            }
+            .help(
+                task.inboxedAt == nil
+                    ? "Show this in the Inbox for triage. It keeps syncing with Reminders."
+                    : "Leave it filed under its Reminders list."
+            )
+        }
+
         Divider()
 
         // ### Why a linked task gets two items rather than one plus a warning

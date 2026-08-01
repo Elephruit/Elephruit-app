@@ -42,12 +42,31 @@ struct TimeChipLabel: View {
             }
 
             if isFilled, let title, !title.isEmpty {
+                // ### Why there is no `fixedSize` here any more
+                // There was one, and it is what pushed the text out of its own capsule.
+                //
+                // `fixedSize(horizontal: true)` means *lay out at my ideal width whatever you are
+                // offered*, which is the exact opposite of what the two modifiers above it ask for.
+                // A `lineLimit` and a `truncationMode` only do anything to a view that has accepted
+                // a width narrower than it wanted, and this one had been told never to.
+                //
+                // What that produced is visible the moment the row is tight — a running timer with
+                // a description, four chips and a clock in it, which is the normal state of this
+                // card. The enclosing `frame(minWidth:)` accepted the smaller width it was offered
+                // and so did the capsule drawn behind it, while the text carried on at its ideal
+                // size and spilled out past the end of the fill. "Elephruit App" in a pill that
+                // stops after "Elephruit Ap".
+                //
+                // Without it the text takes what it is given, truncates with an ellipsis when that
+                // is less than it wanted, and the capsule is always exactly as wide as its contents.
+                // The `maxWidth` is still the bound that stops one long project name pushing the
+                // clock off the row; it is now the *only* thing deciding the width, rather than one
+                // of two modifiers disagreeing.
                 Text(title)
                     .font(Theme.Text.rowSubtitle)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: maximumWidth, alignment: .leading)
-                    .fixedSize(horizontal: true, vertical: false)
             }
         }
         .frame(minWidth: 26, minHeight: 26)

@@ -48,6 +48,24 @@ struct ModuleSidebar: View {
             }
         }
         .listStyle(.sidebar)
+        // ### Why the list is held clear of the header's divider
+        // The module header sits above this list with a `Divider` between them, and a `List` starts
+        // its first row flush against its own bounds. A selected first row therefore drew its
+        // rounded accent fill hard against that divider — no gap, the fill's rounded corner meeting
+        // a hairline — which reads as the selection escaping the navigation region rather than
+        // sitting in it.
+        //
+        // ### And why this is padding rather than a content margin
+        // Because a content margin was the first attempt and it did nothing. `contentMargins(_:_:for:
+        // .scrollContent)` is honoured by a `ScrollView`; a `List` under `.sidebar` style on macOS
+        // is an `NSTableView` in a scroll view AppKit owns, and it kept its own insets. The
+        // selection carried on touching the line.
+        //
+        // Padding moves the list's *bounds*, which nothing downstream can decline: every fill the
+        // list draws — selected, hovering, a disclosure's — is clipped to those bounds, so none of
+        // them can reach the divider however far the list is scrolled. The gap shows the same
+        // sidebar material the list is drawn on, so there is no seam to see.
+        .padding(.top, Theme.Spacing.small)
         .accessibilityIdentifier("sidebar.module.\(module.rawValue).list")
     }
 
@@ -76,7 +94,7 @@ struct NotesSidebarSection: View {
 
     var body: some View {
         Section {
-            ForEach(SidebarRegistry.destinations(in: .notes)) { destination in
+            ForEach(SidebarRegistry.sidebarRows(in: .notes)) { destination in
                 SidebarDestinationRow(
                     destination: destination,
                     isSelected: navigation.selection == destination.selection,
@@ -89,12 +107,28 @@ struct NotesSidebarSection: View {
 
 // MARK: - Time
 
-/// Time, and the window it is being read over.
+/// Time, and which of its two surfaces is on screen.
 ///
-/// The window used to be state inside `TimeView`, which meant the only way to change it was a
-/// control in the middle column and the sidebar had one row that did nothing. It lives on the
-/// navigation model now, so choosing a window here *is* choosing what the report covers — the same
-/// arrangement the calendar's view switcher uses.
+/// ### Why the period and the grouping left this sidebar
+/// They were here, as two sections of checkmark rows, *and* in the log's toolbar as two menus — and
+/// once Reports grew a filter rail in the view, in a third place. Three copies of one control.
+///
+/// The rail won because of what these controls are. A period is not a destination: choosing *Last
+/// Week* does not take you somewhere, it changes what the thing you are already looking at is a
+/// picture of. A sidebar is for *where am I*, and filling it with rows that answer *what am I
+/// filtering by* is what made the previous version of this whole sidebar an index. The rail sits
+/// with the content it governs, shows every option without being opened, and is one component both
+/// surfaces draw — see ``TimeFilterBar``.
+///
+/// What is left is navigation: which surface, and the running timer as a way back to it. That is
+/// genuinely all Time has to navigate.
+///
+/// ### Why there is no "Tracked Time" row
+/// The same reason Calendar has no "Calendar" row: the module header already names the module, and a
+/// front-door destination row underneath it is a second name for where you already are. It is drawn
+/// only by the modules that have no navigation of their own — see ``SingleDestinationSection`` — and
+/// Time has two surfaces and two settings, which is navigation. `.time` remains the module's
+/// ``AppModule/defaultSelection`` and what the numeric shortcut selects; it is simply not restated.
 struct TimeSidebarSection: View {
     @Environment(\.services) private var services
 
@@ -103,16 +137,8 @@ struct TimeSidebarSection: View {
     @ScaledMetric(relativeTo: .body) private var rowHeight = SidebarMetrics.baseRowHeight
 
     var body: some View {
-        Section {
-            ForEach(SidebarRegistry.destinations(in: .time)) { destination in
-                SidebarDestinationRow(
-                    destination: destination,
-                    isSelected: navigation.selection == destination.selection,
-                    rowHeight: rowHeight
-                )
-            }
-
-            if let running = services?.timer.running {
+        if let running = services?.timer.running {
+            Section {
                 RunningTimerRow(running: running, rowHeight: rowHeight) {
                     navigation.select(.time)
                     navigation.timeSurface = .log
@@ -135,44 +161,6 @@ struct TimeSidebarSection: View {
                 }
             }
         }
-
-        // Both of these belong to the log. Reports carry their own period and grouping, because the
-        // period a report covers is usually a month somebody is invoicing and the period the log
-        // shows is usually today — and one setting serving both means changing it in one place to
-        // answer a question in the other.
-        if navigation.timeSurface == .log {
-            Section("Period") {
-                ForEach(TimeWindow.logWindows, id: \.self) { window in
-                    ModeRow(
-                        title: window.displayName,
-                        symbolName: window.symbolName,
-                        hint: window.hint,
-                        isOn: navigation.timeWindow == window,
-                        identifier: "sidebar.time.window.\(window.rawValue)",
-                        rowHeight: rowHeight
-                    ) {
-                        navigation.select(.time)
-                        navigation.timeWindow = window
-                    }
-                }
-            }
-
-            Section("Grouped By") {
-                ForEach(TimeGrouping.allCases, id: \.self) { grouping in
-                    ModeRow(
-                        title: grouping.displayName,
-                        symbolName: grouping.symbolName,
-                        hint: grouping.hint,
-                        isOn: navigation.timeGrouping == grouping,
-                        identifier: "sidebar.time.grouping.\(grouping.rawValue)",
-                        rowHeight: rowHeight
-                    ) {
-                        navigation.select(.time)
-                        navigation.timeGrouping = grouping
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -192,7 +180,7 @@ struct ProjectsSidebarSection: View {
 
     var body: some View {
         Section {
-            ForEach(SidebarRegistry.destinations(in: .projects)) { destination in
+            ForEach(SidebarRegistry.sidebarRows(in: .projects)) { destination in
                 SidebarDestinationRow(
                     destination: destination,
                     isSelected: navigation.selection == destination.selection,
@@ -230,7 +218,7 @@ struct AreasSidebarSection: View {
 
     var body: some View {
         Section {
-            ForEach(SidebarRegistry.destinations(in: .areas)) { destination in
+            ForEach(SidebarRegistry.sidebarRows(in: .areas)) { destination in
                 SidebarDestinationRow(
                     destination: destination,
                     isSelected: navigation.selection == destination.selection,
@@ -261,6 +249,14 @@ struct AreasSidebarSection: View {
 
 /// Bookmarks, Archive and Trash, each of which genuinely is one list.
 ///
+/// ### The rule about front-door rows
+/// A module draws its own destination row **only when it has no other navigation**. Bookmarks really
+/// is one list, and a sidebar with nothing in it would be worse than one row; Calendar and Time have
+/// views, calendars, sets, periods and groupings, and a row naming the module on top of a header
+/// naming the module is the duplication this rule exists to prevent. Modules whose front door has a
+/// name of its own — *All Notes*, *All Projects* — keep it, because "All Notes" and "Notes" are not
+/// the same claim: one is a destination among four, the other is the module.
+///
 /// The Trash carries the one action that belongs beside it rather than in a menu three levels away,
 /// and it is the one action in this app that cannot be undone — so it asks first, and says why.
 struct SingleDestinationSection: View {
@@ -275,7 +271,7 @@ struct SingleDestinationSection: View {
 
     var body: some View {
         Section {
-            ForEach(SidebarRegistry.destinations(in: module)) { destination in
+            ForEach(SidebarRegistry.sidebarRows(in: module)) { destination in
                 SidebarDestinationRow(
                     destination: destination,
                     isSelected: navigation.selection == destination.selection,
@@ -364,9 +360,22 @@ struct ContainerSidebarRow: View {
 
 /// A row that turns a mode on rather than selecting a destination.
 ///
-/// Calendar views, time windows and groupings are all this shape: the destination does not change,
-/// the way it is drawn does. A checkmark rather than the list's selection fill, because the list's
-/// selection already means something else on the rows above.
+/// Calendar views, time surfaces, windows and groupings are all this shape: the destination does not
+/// change, the way it is drawn does.
+///
+/// ### Why the checkmark became a fill
+/// It was a checkmark at the far trailing edge, and in a module whose *only* navigation is rows of
+/// this shape that is not a selected state — it is a tick sitting twelve characters away from the
+/// word it refers to, in a sidebar where every other current thing is marked by a fill. Two ways of
+/// saying "this is the one you are looking at" in one column is one too many, and the quieter of the
+/// two was carrying the whole calendar.
+///
+/// So the fill is drawn here, on the same geometry ``SwiftUICore/View/hoverHighlight(isEnabled:cornerRadius:extending:)``
+/// uses — the same radius, the same outward extension, inside the row's own bounds. It is the accent
+/// at low opacity rather than the system's solid selected fill, because these rows sit in the same
+/// list as genuine destinations and a mode must not be indistinguishable from a place. Hover is
+/// suppressed while a row is on, for the reason the hover modifier already gives: a row cannot
+/// usefully be both what you are looking at and what you might click next.
 struct ModeRow: View {
     let title: String
     let symbolName: String
@@ -385,25 +394,27 @@ struct ModeRow: View {
                     .accessibilityHidden(true)
 
                 Text(title)
+                    .font(isOn ? Theme.Text.rowTitleEmphasised : Theme.Text.rowTitle)
                     .lineLimit(1)
 
                 Spacer(minLength: 0)
-
-                if isOn {
-                    Image(systemName: "checkmark")
-                        .font(Theme.Text.metadata.weight(.semibold))
-                        .foregroundStyle(Theme.Colors.selection)
-                        .accessibilityHidden(true)
-                }
             }
             .frame(minHeight: rowHeight)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .background {
+            RoundedRectangle(cornerRadius: SidebarMetrics.selectionRadius, style: .continuous)
+                .fill(Theme.Colors.selection.opacity(0.16))
+                .padding(.horizontal, -SidebarMetrics.selectionInset)
+                .opacity(isOn ? 1 : 0)
+        }
         .hoverHighlight(
+            isEnabled: !isOn,
             cornerRadius: SidebarMetrics.selectionRadius,
             extending: SidebarMetrics.selectionInset
         )
+        .calmAnimation(Theme.Motion.appearance, value: isOn)
         .help(hint)
         .accessibilityIdentifier(identifier)
         .accessibilityLabel(title)
