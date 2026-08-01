@@ -278,6 +278,10 @@ public enum AccessibilityID {
         public static let generalTab = "settings.general"
         public static let editorTab = "settings.editor"
         public static let advancedTab = "settings.advanced"
+        public static let timeTab = "settings.time"
+        public static let calendarTab = "settings.calendar"
+        public static let shortcutsTab = "settings.shortcuts"
+        public static let privacyTab = "settings.privacy"
         public static let rebuildIndexButton = "settings.rebuildIndex"
     }
 }

@@ -399,38 +399,105 @@ struct ElephruitCommands: Commands {
 ///
 /// Only genuine preferences live here. Anything that is user *content* belongs in the library, and
 /// anything derived belongs in a cache — see `docs/03-storage-matrix.md`.
+///
+/// ### Why this is a source list rather than five tabs across the top
+/// Because it stopped being five. A row of tabs is the right shape while every one of them fits on
+/// one line and each holds a handful of switches; past that the labels shorten until they stop
+/// saying what is behind them, and a setting somebody is hunting for is behind whichever one they
+/// have not tried yet. A list down the side names all nine at their full length, holds any number
+/// more, and is what every settings window on this system has looked like since Ventura.
+///
+/// The reorganisation is not only cosmetic. Keyboard shortcuts were a section *inside* General's
+/// Calendar group, which is not somewhere anybody would think to look for them; they now have their
+/// own place. Everything time tracking can be told is in one place rather than scattered between a
+/// toolbar, a menu, and nowhere.
 struct SettingsView: View {
     let environment: AppEnvironment
 
-    @AppStorage("prefersMonospacedEditor") private var prefersMonospacedEditor = false
     @AppStorage("confirmBeforeEmptyingTrash") private var confirmBeforeEmptyingTrash = true
+    @AppStorage("people.showsFollowUps") private var showsFollowUpSuggestions = false
+    @AppStorage("people.followUpThresholdDays") private var followUpThresholdDays = 0
 
     @State private var indexStatistics: (items: Int, terms: Int, isWarm: Bool)?
 
     var body: some View {
         TabView {
-            general
-                .tabItem { Label("General", systemImage: "gearshape") }
-                .accessibilityIdentifier(AccessibilityID.Settings.generalTab)
+            Tab("General", systemImage: "gearshape") {
+                general.accessibilityIdentifier(AccessibilityID.Settings.generalTab)
+            }
 
-            editor
-                .tabItem { Label("Editor", systemImage: "textformat") }
-                .accessibilityIdentifier(AccessibilityID.Settings.editorTab)
+            Tab("Appearance", systemImage: "paintpalette") {
+                Form { AppearanceSettingsSection() }
+                    .formStyle(.grouped)
+                    .accessibilityIdentifier(AccessibilityID.Settings.editorTab)
+            }
 
-            people
-                .tabItem { Label("People", systemImage: "person.2") }
-                .accessibilityIdentifier(AccessibilityID.People.contactsSettings)
+            Tab("Time", systemImage: "timer") {
+                whenReady { services in
+                    TimeSettingsSection().appServices(services)
+                }
+                .accessibilityIdentifier(AccessibilityID.Settings.timeTab)
+            }
 
-            tasks
-                .tabItem { Label("Tasks", systemImage: "checkmark.circle") }
+            Tab("Tasks", systemImage: "checkmark.circle") {
+                whenReady { services in
+                    RemindersSettingsSection().appServices(services)
+                }
                 .accessibilityIdentifier("settings.tasks")
+            }
 
-            advanced
-                .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
-                .accessibilityIdentifier(AccessibilityID.Settings.advancedTab)
+            Tab("Calendar", systemImage: "calendar") {
+                whenReady { services in
+                    CalendarPreferencesSection(services: services)
+                }
+                .accessibilityIdentifier(AccessibilityID.Settings.calendarTab)
+            }
+
+            Tab("People", systemImage: "person.2") {
+                people.accessibilityIdentifier(AccessibilityID.People.contactsSettings)
+            }
+
+            Tab("Shortcuts", systemImage: "keyboard") {
+                whenReady { services in
+                    ShortcutSettingsSection(
+                        registry: services.shortcuts,
+                        globalResults: environment.hotKeyResults
+                    )
+                }
+                .accessibilityIdentifier(AccessibilityID.Settings.shortcutsTab)
+            }
+
+            Tab("Privacy", systemImage: "lock.shield") {
+                privacy.accessibilityIdentifier(AccessibilityID.Settings.privacyTab)
+            }
+
+            Tab("Advanced", systemImage: "wrench.and.screwdriver") {
+                advanced.accessibilityIdentifier(AccessibilityID.Settings.advancedTab)
+            }
         }
-        .frame(width: 500, height: 380)
+        .tabViewStyle(.sidebarAdaptable)
+        .frame(width: 720, height: 520)
         .accessibilityIdentifier(AccessibilityID.Settings.root)
+    }
+
+    /// A form whose contents need the library, and which says so plainly when it is not open yet.
+    ///
+    /// One helper rather than the same `if case .ready` at six call sites — which is where a tab
+    /// added later quietly crashes a window opened during a migration.
+    @ViewBuilder
+    private func whenReady<Content: View>(
+        @ViewBuilder _ content: @escaping (AppServices) -> Content
+    ) -> some View {
+        Form {
+            if case .ready(let services) = environment.state {
+                content(services)
+            } else {
+                Text("Available once your library is open.")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+        }
+        .formStyle(.grouped)
     }
 
     /// Managing the address book connection.
@@ -444,6 +511,26 @@ struct SettingsView: View {
             if case .ready(let services) = environment.state {
                 ContactsSettingsSection()
                     .appServices(services)
+
+                Section {
+                    Toggle("Suggest people to follow up with", isOn: $showsFollowUpSuggestions)
+
+                    if showsFollowUpSuggestions {
+                        Stepper(
+                            "After \(effectiveFollowUpDays) days without contact",
+                            value: followUpThresholdBinding,
+                            in: 7...365,
+                            step: 7
+                        )
+                    }
+                } header: {
+                    Text("Follow-ups")
+                } footer: {
+                    Text("Off by default. An app that starts telling you who you have neglected, unprompted, is a different and worse product than one that answers when asked.")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             } else {
                 Text("Available once your library is open.")
                     .font(Theme.Text.metadata)
@@ -453,21 +540,12 @@ struct SettingsView: View {
         .formStyle(.grouped)
     }
 
-    /// The Reminders connection, on its own tab for the reason the People one is: it has an ongoing
-    /// state — which lists take part, when it last reconciled, what is waiting for a decision — and
-    /// that state is what somebody goes looking for when a reminder has stopped arriving.
-    private var tasks: some View {
-        Form {
-            if case .ready(let services) = environment.state {
-                RemindersSettingsSection()
-                    .appServices(services)
-            } else {
-                Text("Available once your library is open.")
-                    .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.secondaryText)
-            }
-        }
-        .formStyle(.grouped)
+    private var effectiveFollowUpDays: Int {
+        followUpThresholdDays > 0 ? followUpThresholdDays : FollowUpPolicy.defaultThresholdDays
+    }
+
+    private var followUpThresholdBinding: Binding<Int> {
+        Binding(get: { effectiveFollowUpDays }, set: { followUpThresholdDays = $0 })
     }
 
     private var general: some View {
@@ -479,41 +557,42 @@ struct SettingsView: View {
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.secondaryText)
             }
-
-            Section("Calendar") {
-                if case .ready(let services) = environment.state {
-                    CalendarPreferencesSection(services: services)
-                    ShortcutSettingsSection(
-                        registry: services.shortcuts,
-                        globalResults: environment.hotKeyResults
-                    )
-                } else {
-                    Text("Available once your library is open.")
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.secondaryText)
-                }
-            }
-
-            Section("Privacy") {
-                Label("This app makes no network requests.", systemImage: "lock.shield")
-                Text("Your library is stored only on this Mac. There is no analytics, no telemetry, and no crash reporting. iCloud sync is not enabled in this version. If you turn on Calendar, Elephruit reads your events and never writes to them. If you turn on Contacts, it reads your address book and never writes to it — and your notes, reflections, and relationship history are never put into a contact.")
-                    .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .formStyle(.grouped)
     }
 
-    private var editor: some View {
+    /// What the app does and does not do with anything it can reach.
+    ///
+    /// Its own tab rather than a paragraph at the bottom of General. It is the claim this whole app
+    /// is built around, it is the thing somebody checks before trusting it with a decade of notes,
+    /// and a promise buried under a Trash preference reads like one somebody hoped nobody would find.
+    private var privacy: some View {
         Form {
-            Toggle("Use a monospaced font", isOn: $prefersMonospacedEditor)
-
             Section {
-                Text("Note bodies are stored as plain, Markdown-compatible text. Formatting is never written into your notes, so they remain readable in any text editor.")
+                Label("This app makes no network requests.", systemImage: "lock.shield")
+
+                Text("Your library is stored only on this Mac. There is no analytics, no telemetry, and no crash reporting. iCloud sync is not enabled in this version.")
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section("What each integration may do") {
+                PrivacyRow(
+                    symbolName: "person.2",
+                    title: "Contacts",
+                    detail: "Read only. Your notes, reflections, and relationship history are never put into a contact."
+                )
+                PrivacyRow(
+                    symbolName: "calendar",
+                    title: "Calendar",
+                    detail: "Reads your events, and writes only the events you ask it to — including tracked time, if you turn that on. What you record *about* a meeting stays here."
+                )
+                PrivacyRow(
+                    symbolName: "checklist",
+                    title: "Reminders",
+                    detail: "Reads and writes the lists you tick. Areas, projects, Today, waiting-for, linked people, and provenance never cross."
+                )
             }
         }
         .formStyle(.grouped)
@@ -579,5 +658,35 @@ struct SettingsView: View {
     private func revealLibrary() {
         guard let location = try? StoreLocation.application() else { return }
         NSWorkspace.shared.activateFileViewerSelecting([location.root])
+    }
+}
+
+/// One integration, and the shape of what it may do.
+///
+/// A row rather than a paragraph, because the question people arrive with is *which* of these
+/// touches my data and in which direction — and three sentences of prose answers that only for
+/// somebody who reads all three.
+private struct PrivacyRow: View {
+    let symbolName: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
+            Image(systemName: symbolName)
+                .frame(width: Theme.Size.rowGlyph)
+                .foregroundStyle(Theme.Colors.secondaryText)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(Theme.Text.rowTitleEmphasised)
+
+                Text(detail)
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
