@@ -94,6 +94,21 @@ extension Theme {
         /// A note or item title in the detail view.
         public static let title: Font = .system(.title2, design: .default, weight: .semibold)
 
+        /// Letter spacing, for the two places it earns its keep.
+        ///
+        /// The system font is spaced for reading at body size. Large text set at that spacing looks
+        /// slightly loose — tightening it is most of the difference between a title that looks set
+        /// and one that looks typed. Small uppercase text has the opposite problem: capitals jam
+        /// together and need opening up, which is why ``SectionHeader`` already kerns.
+        ///
+        /// Two values, not a scale. Anything more is a knob nobody can use consistently.
+        public enum Tracking {
+            /// Titles, set tighter.
+            public static let title: CGFloat = -0.3
+            /// Small uppercase labels, set looser.
+            public static let caps: CGFloat = 0.4
+        }
+
         /// A section header in a sidebar or inspector.
         public static let sectionHeader: Font = .system(.caption, design: .default, weight: .semibold)
 
@@ -104,7 +119,16 @@ extension Theme {
         public static let rowTitleEmphasised: Font = .system(.body, design: .default, weight: .medium)
 
         /// A list row's secondary line.
-        public static let rowSubtitle: Font = .system(.callout)
+        ///
+        /// `.subheadline`, not `.callout`. On macOS the text-style scale is compressed — body is 13
+        /// points and callout is 12 — so a row's title and its subtitle were one point apart, and a
+        /// difference of one point is not a hierarchy, it is a rounding error. A list of them reads
+        /// as an undifferentiated block of grey text, which is most of why this app looked flat
+        /// however carefully the rows were laid out.
+        ///
+        /// Subheadline is 11, which puts two points and a weight change between the two lines. Still
+        /// a `Font.TextStyle` rather than a fixed size, so Dynamic Type keeps working.
+        public static let rowSubtitle: Font = .system(.subheadline)
 
         /// Metadata: dates, counts, provenance.
         public static let metadata: Font = .system(.caption)
