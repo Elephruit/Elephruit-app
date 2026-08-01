@@ -140,6 +140,34 @@ public enum DesignReviewLaunch {
         return CGSize(width: width, height: height)
     }
 
+    /// Whether the sample library should be planted at launch, into an empty library.
+    ///
+    /// The fixture store persists between runs, so a library seeded by some earlier session is the
+    /// normal state — and it carries whatever the *build of that session* wrote. That is not a
+    /// theoretical hazard: this audit initially recorded a `promise` tag as a live defect, when the
+    /// source had already been changed to write `follow-up` and the tag was simply left over in a
+    /// store planted before the change. A review that cannot re-plant the library from the build in
+    /// front of it is a review that reports the last build's bugs.
+    public static var loadsSampleData: Bool {
+        isDevelopmentMode
+            && ProcessInfo.processInfo.arguments.contains("-ElephruitLoadSampleData")
+    }
+
+    /// How many people the library should hold, for a performance review.
+    public static var peopleCount: Int? {
+        guard isDevelopmentMode else { return nil }
+        return peopleCount(in: ProcessInfo.processInfo.arguments)
+    }
+
+    static func peopleCount(in arguments: [String]) -> Int? {
+        guard let raw = value(for: "-ElephruitPeopleCount", in: arguments) else { return nil }
+        guard let count = Int(raw), count > 0 else {
+            Diagnostics.shell.error("Unreadable -ElephruitPeopleCount \(raw, privacy: .public)")
+            return nil
+        }
+        return count
+    }
+
     /// Applies the appearance override, if one was asked for.
     ///
     /// Called once, as early as there is an `NSApplication` to set it on. Setting

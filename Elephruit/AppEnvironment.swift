@@ -166,6 +166,16 @@ final class AppEnvironment {
             self.quickJot = quickJot
             registerGlobalShortcuts(for: services)
 
+            // Development-only seeding, before the window renders, so a review never photographs a
+            // half-populated list. Both are no-ops without their argument, and both refuse outside
+            // development mode inside the service itself as well as here.
+            if DesignReviewLaunch.loadsSampleData {
+                services.loadSampleDataIfEmpty()
+            }
+            if let peopleCount = DesignReviewLaunch.peopleCount {
+                services.seedPeople(upTo: peopleCount)
+            }
+
             state = .ready(services)
 
             Diagnostics.shell.info(
