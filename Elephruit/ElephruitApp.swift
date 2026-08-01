@@ -210,6 +210,14 @@ struct ElephruitCommands: Commands {
             Button("Quick Task…") { navigation?.isTaskEntryVisible = true }
                 .shortcut(.quickTaskEntry, in: shortcuts)
 
+            // The same panel the global shortcut opens, rather than a second in-window route to the
+            // same act. Quick Jot has two doors because a sheet is genuinely better than a floating
+            // panel when the app is already in front of you; a timer has no such asymmetry — it is
+            // one window, one clock, and the Time module already holds the full version of it.
+            Button("Quick Log…") { services?.quickLog.show() }
+                .shortcut(.quickLog, in: shortcuts)
+                .disabled(services == nil)
+
             Divider()
 
             // A new window is genuinely useful in this app — two projects side by side — so it is a

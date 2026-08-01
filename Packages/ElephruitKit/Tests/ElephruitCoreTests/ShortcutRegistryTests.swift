@@ -41,6 +41,18 @@ struct ShortcutRegistryTests {
         #expect(ShortcutCommand.quickCapture.title == "Quick Jot")
     }
 
+    /// Pinned for the same reason Quick Jot is, and against the shortcut it is most likely to be
+    /// confused with: ⌘L on its own focuses the sidebar, and a Quick Log that drifted onto it would
+    /// start a timer every time somebody reached for the sidebar.
+    @Test("Quick Log is ⌘⇧L, and does not stand on ⌘L")
+    func quickLogKeepsItsKeys() {
+        let registry = ShortcutRegistry()
+
+        #expect(registry.binding(for: .quickLog) == KeyBinding("l", [.command, .shift]))
+        #expect(registry.binding(for: .clearSelection) == KeyBinding("l", .command))
+        #expect(ShortcutCommand.quickLog.title == "Quick Log")
+    }
+
     @Test("New Event is Command-Shift-E")
     func newEventKeepsItsKeys() {
         let registry = ShortcutRegistry()

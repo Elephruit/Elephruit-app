@@ -75,6 +75,11 @@ public struct TimerMenuBarContent: View {
 
                 Divider()
 
+                // The panel over what is already running, which is how an entry started in a hurry
+                // gets its name and its project without going back to the app for them.
+                Button("Name This Timer…") { services.quickLog.show() }
+                    .shortcut(.quickLog, in: services.shortcuts)
+
                 Button("Stop Timer") { services.timer.stop() }
                     .shortcut(.toggleTimer, in: services.shortcuts)
             } else {
@@ -88,6 +93,12 @@ public struct TimerMenuBarContent: View {
                         services.timer.resume(entry)
                     }
                 }
+
+                // Above the bare one, because starting *and saying what it is* is what somebody
+                // almost always means, and the untitled version is the fallback rather than the
+                // headline. Both are one keystroke; only one of them produces a log worth reading.
+                Button("Start and Name a Timer…") { services.quickLog.show() }
+                    .shortcut(.quickLog, in: services.shortcuts)
 
                 Button("Start Untitled Timer") { services.timer.switchTo(item: nil) }
                     .shortcut(.toggleTimer, in: services.shortcuts)
