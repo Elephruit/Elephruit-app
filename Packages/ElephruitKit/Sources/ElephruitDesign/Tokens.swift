@@ -156,6 +156,13 @@ extension Theme {
         /// Selection. Follows the user's accent colour.
         public static let selection = Color.accentColor
 
+        /// What is legible *on top of* ``selection`` — a filled button, a selected pill.
+        ///
+        /// Not white. White is right under a blue accent and poor under a yellow one, and this is
+        /// the AppKit token that already knows which: it is the colour the system paints on its own
+        /// prominent controls, and it tracks the accent, the appearance, and Increase Contrast.
+        public static let onAccent = Color(nsColor: .alternateSelectedControlTextColor)
+
         /// The fill under whatever the pointer is over.
         ///
         /// Deliberately *not* ``selection``. Hover answers "what would I hit if I clicked here";

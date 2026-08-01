@@ -52,12 +52,20 @@ struct PersonContactSection: View {
                     .foregroundStyle(Theme.Colors.tertiaryText)
             }
 
+            // ### Why a grid and not a stack of rows
+            // Because a label column that is *nearly* aligned is worse than one that is not aligned
+            // at all. Each row used to set its own 120-point frame, so the values lined up only
+            // while every label happened to be shorter than that — and the moment one was not, the
+            // whole column stepped sideways for one row. A `Grid` measures the widest label once and
+            // gives every row the same answer, at any text size and in any language.
             ForEach(groups) { group in
                 VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
                     ContactAffinityChip(group.affinity)
 
-                    ForEach(group.details) { detail in
-                        ContactDetailRow(detail: detail) { act(on: detail) }
+                    Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: Theme.Spacing.medium, verticalSpacing: Theme.Spacing.small) {
+                        ForEach(group.details) { detail in
+                            ContactDetailRow(detail: detail) { act(on: detail) }
+                        }
                     }
                 }
             }
@@ -108,32 +116,47 @@ private struct ContactDetailRow: View {
     let detail: ContactDetail
     let onUse: () -> Void
 
+    @State private var isHovering = false
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
+        GridRow {
             Label(detail.displayLabel, systemImage: detail.kind.symbolName)
                 .font(Theme.Text.metadata)
                 .labelStyle(.titleAndIcon)
                 .foregroundStyle(detail.affinity.color)
-                .frame(width: 120, alignment: .leading)
+                .gridColumnAlignment(.leading)
 
-            Text(detail.displayValue)
-                .font(Theme.Text.rowSubtitle)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+            // The value and its one action, together. Beside the value rather than at the pane's
+            // trailing edge: a wide detail pane would otherwise strand the button half a screen from
+            // the thing it acts on, which is both a longer mouse journey and a weaker claim about
+            // what it does.
+            //
+            // Revealed on hover, because a row of small glyphs down the right of every value is
+            // chrome the eye has to step over to read the numbers — which is what the section is
+            // for. It stays in the layout while hidden, so nothing shifts when the pointer arrives,
+            // and it is always present for VoiceOver and for the keyboard.
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
+                Text(detail.displayValue)
+                    .font(Theme.Text.rowSubtitle)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
 
-            // Beside the value rather than at the pane's trailing edge. A wide detail pane would
-            // otherwise strand the button half a screen from the thing it acts on, which is both a
-            // longer mouse journey and a weaker claim about what it does.
-            Button(action: onUse) {
-                Image(systemName: useSymbol)
-                    .font(Theme.Text.metadata)
+                Button(action: onUse) {
+                    Image(systemName: useSymbol)
+                        .font(Theme.Text.metadata)
+                }
+                .buttonStyle(.borderless)
+                .opacity(isHovering ? 1 : 0)
+                .help(useDescription)
+                .accessibilityLabel(useDescription)
+
+                Spacer(minLength: 0)
             }
-            .buttonStyle(.borderless)
-            .help(useDescription)
-            .accessibilityLabel(useDescription)
-
-            Spacer(minLength: 0)
+            .gridColumnAlignment(.leading)
         }
+        .contentShape(.rect)
+        .onHover { isHovering = $0 }
+        .calmAnimation(value: isHovering)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(
             "\(detail.affinity.displayName) \(detail.kind.displayName.lowercased()), "
