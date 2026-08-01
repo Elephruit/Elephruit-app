@@ -31,15 +31,14 @@ public struct TimeView: View {
     /// hides the thing being looked for.
     @AppStorage("time.groupsSimilarEntries") private var groupsSimilarEntries = true
 
-    /// Remembered across launches, because which mode you are in is a fact about how you work —
-    /// somebody who logs yesterday's hours every morning should not switch modes every morning.
-    @AppStorage("time.entryMode") private var storedMode = TimeEntryMode.timer.rawValue
-
     /// How totals are rounded. Set in Settings ▸ Time, never applied to a stored entry.
     @AppStorage("time.rounding") private var storedRounding = TimeRounding.exact.rawValue
 
     /// How long a working day is meant to be, in hours. Zero turns the progress bar off entirely.
     @AppStorage("time.dayTargetHours") private var dayTargetHours = 0.0
+
+    /// Whether the sheet for time already spent is up.
+    @State private var isAddingManually = false
 
     @State private var entries: [TimeEntrySnapshot] = []
     @State private var expandedGroups: Set<String> = []
@@ -62,9 +61,9 @@ public struct TimeView: View {
             // where stretching was doing damage.
             VStack(spacing: Theme.Spacing.small) {
                 TimeTrackerCard(
-                    mode: modeBinding,
                     onChange: { bump() },
-                    onOpenSubject: { id in navigation.selectItem(id) }
+                    onOpenSubject: { id in navigation.selectItem(id) },
+                    onAddManually: { isAddingManually = true }
                 )
 
                 if let session = services?.timer.pomodoro {
@@ -102,6 +101,10 @@ public struct TimeView: View {
         .navigationSubtitle(subtitle)
         .toolbar { toolbarContent }
         .task(id: reloadToken) { reload() }
+        .sheet(isPresented: $isAddingManually) {
+            ManualTimeEntrySheet(onChange: { bump() })
+                .appServicesIfAvailable(services)
+        }
         .accessibilityIdentifier(AccessibilityID.Time.root)
     }
 
@@ -220,8 +223,8 @@ public struct TimeView: View {
                 headline: "No time tracked \(window.displayName.lowercased())",
                 message: "Say what you are doing in the bar above and press play, "
                     + "or switch it to Manual to record time you have already spent.",
-                actionTitle: "Add Time…",
-                action: { mode = .manual }
+                actionTitle: "Add Time by Hand…",
+                action: { isAddingManually = true }
             )
         } else {
             List {
@@ -326,7 +329,7 @@ public struct TimeView: View {
         }
 
         ToolbarItem {
-            Button("Add Time", systemImage: "plus") { mode = .manual }
+            Button("Add Time", systemImage: "plus") { isAddingManually = true }
                 .help("Record time you have already spent")
                 .accessibilityIdentifier(AccessibilityID.Time.addEntryButton)
         }
@@ -337,18 +340,6 @@ public struct TimeView: View {
             }
             .help("Totals over any period, ready to export")
         }
-    }
-
-    private var modeBinding: Binding<TimeEntryMode> {
-        Binding(
-            get: { TimeEntryMode(rawValue: storedMode) ?? .timer },
-            set: { storedMode = $0.rawValue }
-        )
-    }
-
-    private var mode: TimeEntryMode {
-        get { modeBinding.wrappedValue }
-        nonmutating set { modeBinding.wrappedValue = newValue }
     }
 
     private var windowBinding: Binding<TimeWindow> {

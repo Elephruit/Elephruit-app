@@ -91,6 +91,8 @@ struct TimeDayHeader: View {
 struct TimeEntryGroupRow: View {
     @Environment(\.services) private var services
 
+    @State private var isHovering = false
+
     let group: TimeEntryGroup
     let isExpanded: Bool
     let isEditing: Bool
@@ -190,6 +192,22 @@ struct TimeEntryGroupRow: View {
                 // x on every row cannot be added up by eye, which is the only reason to read one.
                 .frame(width: 52, alignment: .trailing)
 
+            // ### Why editing is a visible button and not only a double-click
+            // Because a double-click is not an affordance. Every entry in this log can be corrected
+            // in place — the subject, the people, the tags, the clock times — and none of that is
+            // worth having if the only way to reach it is a gesture nobody is told about. A pencil
+            // on hover costs nothing when the pointer is elsewhere and answers the question the
+            // moment it arrives. The double-click still works, and so does the context menu.
+            Button(action: onEdit) {
+                Image(systemName: "pencil")
+            }
+            .buttonStyle(.plain)
+            .rowForeground(.secondary)
+            .opacity(isHovering ? 1 : 0)
+            .help("Edit this entry")
+            .accessibilityLabel("Edit")
+            .accessibilityIdentifier(AccessibilityID.Time.editRowButton)
+
             Button(action: onResume) {
                 Image(systemName: "play.circle")
             }
@@ -200,6 +218,8 @@ struct TimeEntryGroupRow: View {
         }
         .frame(minHeight: Theme.Size.rowHeightExpanded)
         .contentShape(.rect)
+        .onHover { isHovering = $0 }
+        .calmAnimation(value: isHovering)
         .onTapGesture(count: 2, perform: onEdit)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityDescription)
