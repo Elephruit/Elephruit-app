@@ -146,18 +146,15 @@ public enum PersonListOrganiser {
             }
 
         case .firstName, .lastName, .organization:
-            return entries.sorted { left, right in
-                let leftKey = sortKey(for: left, sort: sort)
-                let rightKey = sortKey(for: right, sort: sort)
-
-                switch compare(leftKey, rightKey, locale: locale) {
+            let keyed = entries.map { (entry: $0, key: sortKey(for: $0, sort: sort)) }
+            let sortedKeyed = keyed.sorted { left, right in
+                switch compare(left.key, right.key, locale: locale) {
                 case .orderedAscending: return true
                 case .orderedDescending: return false
-                // Two people with the same name is normal and the order between them must still be
-                // fixed, or the list reshuffles itself on every reload.
-                case .orderedSame: return left.id.uuidString < right.id.uuidString
+                case .orderedSame: return left.entry.id.uuidString < right.entry.id.uuidString
                 }
             }
+            return sortedKeyed.map(\.entry)
         }
     }
 

@@ -74,14 +74,6 @@ public struct TasksSidebarSection: View {
                 .lineLimit(1)
 
             Spacer(minLength: 0)
-
-            if view.showsCount, let count = badge(for: view), count > 0 {
-                Text("\(count)")
-                    .font(Theme.Text.metadata)
-                    .monospacedDigit()
-                    .rowForeground(.tertiary)
-                    .accessibilityHidden(true)
-            }
         }
         .frame(minHeight: rowHeight)
         .hoverHighlight(

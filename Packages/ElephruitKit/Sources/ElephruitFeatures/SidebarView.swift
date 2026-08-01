@@ -91,7 +91,6 @@ public struct SidebarView: View {
             ForEach(SidebarRegistry.destinations(in: .primary)) { destination in
                 SidebarDestinationRow(
                     destination: destination,
-                    count: count(for: destination),
                     isSelected: navigation.selection == destination.selection,
                     rowHeight: rowHeight
                 )
@@ -366,10 +365,6 @@ struct SidebarDestinationRow: View {
                 .lineLimit(1)
 
             Spacer(minLength: 0)
-
-            if destination.showsCount, let count, count > 0 {
-                SidebarCountLabel(count: count)
-            }
         }
         .frame(minHeight: rowHeight)
         .hoverHighlight(
@@ -382,13 +377,8 @@ struct SidebarDestinationRow: View {
         // row, and a tooltip that repeats it is a pause that teaches nothing.
         .help(destination.hint)
         .accessibilityIdentifier(destination.selection.accessibilityIdentifier)
-        .accessibilityLabel(accessibilityLabel)
+        .accessibilityLabel(destination.title)
         .accessibilityHint(destination.hint)
-    }
-
-    private var accessibilityLabel: String {
-        guard destination.showsCount, let count, count > 0 else { return destination.title }
-        return "\(destination.title), \(count) items"
     }
 }
 
@@ -413,10 +403,6 @@ struct ModuleRow: View {
                     .lineLimit(1)
 
                 Spacer(minLength: 0)
-
-                if let count = badge, count > 0 {
-                    SidebarCountLabel(count: count)
-                }
 
                 Image(systemName: "chevron.forward")
                     .font(Theme.Text.metadata)
@@ -474,10 +460,6 @@ struct SidebarDerivedRowView: View {
                 .truncationMode(.tail)
 
             Spacer(minLength: 0)
-
-            if let count = row.count, count > 0 {
-                SidebarCountLabel(count: count)
-            }
         }
         .frame(minHeight: rowHeight)
         .padding(.leading, CGFloat(row.depth) * Theme.Spacing.medium)

@@ -25,6 +25,8 @@ public final class ContactImportService {
     private let identity: PersonIdentityService
     private let dateProvider: any DateProvider
 
+    private var linkCache: [UUID: SystemContactLink]?
+
     public init(
         context: ModelContext,
         people: any PersonRepository,
@@ -270,7 +272,9 @@ public final class ContactImportService {
     // MARK: - Links
 
     public func allLinks() throws(AppError) -> [SystemContactLink] {
-        try fetch(FetchDescriptor<SystemContactLink>())
+        var descriptor = FetchDescriptor<SystemContactLink>()
+        descriptor.relationshipKeyPathsForPrefetching = [\.person]
+        return try fetch(descriptor)
     }
 
     public func link(forContactIdentifier identifier: String) throws(AppError) -> SystemContactLink? {
@@ -281,11 +285,19 @@ public final class ContactImportService {
     }
 
     public func link(for person: Item) throws(AppError) -> SystemContactLink? {
-        let personID = person.id
-        let descriptor = FetchDescriptor<SystemContactLink>(
-            predicate: #Predicate { $0.person?.id == personID }
-        )
-        return try fetch(descriptor).first
+        guard person.personProfile?.contactsIdentifier != nil else { return nil }
+        if let cache = linkCache {
+            return cache[person.id]
+        }
+        let links = try allLinks()
+        var cache: [UUID: SystemContactLink] = [:]
+        for link in links {
+            if let pid = link.person?.id {
+                cache[pid] = link
+            }
+        }
+        self.linkCache = cache
+        return cache[person.id]
     }
 
     public func linkedCount() throws(AppError) -> Int {
@@ -344,6 +356,7 @@ public final class ContactImportService {
     }
 
     private func save() throws(AppError) {
+        linkCache = nil
         guard context.hasChanges else { return }
         do {
             try context.save()

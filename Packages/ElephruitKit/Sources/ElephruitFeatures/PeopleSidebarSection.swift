@@ -22,6 +22,7 @@ struct PeopleSidebarSection: View {
     @State private var groups: [PersonGroupSummary] = []
     @State private var duplicateCount = 0
     @State private var linkedCount = 0
+    @State private var scopeCounts: [PeopleScope: Int] = [:]
     @State private var isExpanded = true
     @State private var isShowingContactImport = false
 
@@ -42,6 +43,7 @@ struct PeopleSidebarSection: View {
             }
         }
         .task { reload() }
+        .onChange(of: services?.changeToken) { _, _ in reload() }
         .sheet(isPresented: $isShowingContactImport) {
             ContactOnboardingView(navigation: navigation)
         }
@@ -121,13 +123,6 @@ struct PeopleSidebarSection: View {
                     .lineLimit(1)
 
                 Spacer(minLength: Theme.Spacing.tight)
-
-                if let count, count > 0 {
-                    Text("\(count)")
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.tertiaryText)
-                        .monospacedDigit()
-                }
             }
             .contentShape(.rect)
         }
@@ -152,33 +147,7 @@ struct PeopleSidebarSection: View {
     }
 
     private func count(for scope: PeopleScope) -> Int? {
-        guard let services else { return nil }
-
-        switch scope {
-        case .all:
-            return (try? services.persons.allPeople(includingPlaceholders: false).count)
-
-        case .favorites:
-            return (try? services.persons.allPeople(includingPlaceholders: true).count(where: \.isFavorite))
-
-        case .celebrations:
-            let all = (try? services.persons.allCelebrations()) ?? []
-            return CelebrationCalendar.upcoming(
-                from: all, within: 30, asOf: services.dateProvider.now, calendar: services.dateProvider.calendar
-            ).count
-
-        case .needsFollowUp:
-            // Nothing is counted unless the user asked for suggestions. A badge that appears
-            // unbidden is the app starting a conversation about who has been neglected.
-            guard services.showsFollowUpSuggestions else { return nil }
-            return (try? services.people.followUpSuggestions(thresholdDays: services.followUpThresholdDays).count)
-
-        case .fromContacts:
-            return (try? services.contactImports.linkedCount())
-
-        case .recentlyViewed, .group, .duplicates:
-            return nil
-        }
+        scopeCounts[scope]
     }
 
     private func reload() {
@@ -186,6 +155,23 @@ struct PeopleSidebarSection: View {
         groups = (try? services.personGroups.allGroupSummaries()) ?? []
         duplicateCount = ((try? services.personIdentity.duplicates()) ?? []).count
         linkedCount = (try? services.contactImports.linkedCount()) ?? 0
+
+        var counts: [PeopleScope: Int] = [:]
+        counts[.all] = try? services.persons.allPeople(includingPlaceholders: false).count
+        counts[.favorites] = try? services.persons.allPeople(includingPlaceholders: true).count(where: \.isFavorite)
+        if let celebrations = try? services.persons.allCelebrations() {
+            counts[.celebrations] = CelebrationCalendar.upcoming(
+                from: celebrations,
+                within: 30,
+                asOf: services.dateProvider.now,
+                calendar: services.dateProvider.calendar
+            ).count
+        }
+        if services.showsFollowUpSuggestions {
+            counts[.needsFollowUp] = try? services.people.followUpSuggestions(thresholdDays: services.followUpThresholdDays).count
+        }
+        counts[.fromContacts] = linkedCount
+        scopeCounts = counts
     }
 
     private func deleteGroup(_ id: UUID) {
