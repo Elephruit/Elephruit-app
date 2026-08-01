@@ -147,12 +147,14 @@ struct TimeTrackerCard: View {
 
     /// The clock leads, then what you are doing, then what it is filed under.
     private func runningState(_ running: RunningTimer) -> some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.large) {
+        // One row, vertically centred. Stacking the clock over its buttons left a band of empty
+        // card under the chips — the right column was taller than the left, and the card grew to
+        // fit it. A card with a hole in it does not read as considered.
+        HStack(alignment: .center, spacing: Theme.Spacing.large) {
             Image(systemName: "record.circle")
                 .font(.title2)
                 .foregroundStyle(Theme.Colors.destructive)
                 .symbolEffect(.pulse, options: .repeating)
-                .padding(.top, 3)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: Theme.Spacing.small) {
@@ -174,17 +176,13 @@ struct TimeTrackerCard: View {
                 filingChips
             }
 
-            Spacer(minLength: Theme.Spacing.small)
+            Spacer(minLength: Theme.Spacing.medium)
 
-            VStack(alignment: .trailing, spacing: Theme.Spacing.small) {
-                clock(running)
+            clock(running)
 
-                HStack(spacing: Theme.Spacing.small) {
-                    focusButton
-                    stopButton
-                    discardButton
-                }
-            }
+            focusButton
+            stopButton
+            discardButton
         }
     }
 
