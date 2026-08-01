@@ -115,7 +115,8 @@ public struct ContactDestination: Sendable, Hashable, Identifiable {
         self.isPreferred = isPreferred
     }
 
-    /// "mobile · 512-555-0192".
+    /// "mobile · (512) 555-0192". A phone number is shown the way somebody would write it down;
+    /// the stored value, which is what dials, is untouched.
     public var displayText: String {
         let shown = source == .phone ? PhoneNumberFormatting.display(value) : value
         return label.isEmpty ? shown : "\(label) · \(shown)"
@@ -299,7 +300,7 @@ public struct ContactActionPreview: Sendable, Hashable {
         self.url = url
     }
 
-    /// "Call Maya Chen at mobile · 512-555-0192".
+    /// "Call Maya Chen at mobile · (512) 555-0192".
     public var sentence: String {
         "\(channel.verbPhrase) \(personName) at \(destination.displayText)"
     }
