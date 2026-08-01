@@ -100,87 +100,25 @@ struct TimeReportView: View {
 
     // MARK: - Controls
 
-    /// The two questions a report is asked: over what, and cut how.
+    /// The period and grouping rail, shared with the Log — see ``TimeFilterBar``.
     ///
-    /// ### Why these stopped being menus
-    /// Because a menu hides its options until you open it, and these are the controls somebody flips
-    /// through — you look at this week, then last week, then the month, comparing as you go. Every
-    /// one of those was two clicks and a read, and between the two menus sat six hundred points of
-    /// nothing.
-    ///
-    /// Nine windows is too many for a segmented control and exactly right for a rail of chips: they
-    /// wrap to the width they are given, every option is legible without opening anything, and
-    /// switching is one click. The grouping stays a segmented control because six options fit in one
-    /// and a segmented control is what macOS uses for a small closed set.
-    ///
-    /// The chips are quiet until chosen — no fill, secondary text — so a rail of ten reads as a row
-    /// of choices rather than ten things demanding attention. Exactly one is filled, and it is the
-    /// answer to "what am I looking at".
+    /// Reports offers every window and a custom range; the Log offers the short ones and none. That
+    /// difference is a parameter rather than a second component.
     private var controls: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
-                Text("PERIOD")
-                    .font(Theme.Text.sectionHeader)
-                    .kerning(Theme.Text.Tracking.caps)
-                    .foregroundStyle(Theme.Colors.tertiaryText)
-
-                Spacer(minLength: Theme.Spacing.medium)
-
-                Picker("Grouped by", selection: groupingBinding) {
-                    ForEach(TimeGrouping.allCases, id: \.self) { grouping in
-                        Text(grouping.displayName).tag(grouping)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .fixedSize()
-                .labelsHidden()
-                .help("What the breakdown below, and the colours in the chart, are cut by")
-                .accessibilityLabel("Grouped by")
-            }
-
-            ElephruitDesign.FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
-                ForEach(TimeWindow.allCases, id: \.self) { window in
-                    ReportFilterChip(
-                        title: window.displayName,
-                        hint: window.hint,
-                        isOn: period == .window(window)
-                    ) {
-                        period = .window(window)
-                    }
-                }
-
-                ReportFilterChip(
-                    title: "Custom…",
-                    hint: "Any two dates, for the invoice that does not follow the calendar.",
-                    isOn: period.isCustom
-                ) {
-                    syncCustomPeriod()
-                }
-                .accessibilityIdentifier(AccessibilityID.Time.reportPeriodPicker)
-            }
-
-            if period.isCustom {
-                HStack(spacing: Theme.Spacing.small) {
-                    DatePicker("From", selection: $customFrom, displayedComponents: .date)
-                        .datePickerStyle(.compact)
-                        .labelsHidden()
-                        .onChange(of: customFrom) { _, _ in syncCustomPeriod() }
-
-                    Text("to")
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.secondaryText)
-
-                    DatePicker("To", selection: $customThrough, displayedComponents: .date)
-                        .datePickerStyle(.compact)
-                        .labelsHidden()
-                        .onChange(of: customThrough) { _, _ in syncCustomPeriod() }
-
-                    Spacer(minLength: 0)
-                }
-            }
-        }
-        .padding(.horizontal, Theme.Spacing.large)
-        .padding(.vertical, Theme.Spacing.small)
+        TimeFilterBar(
+            windows: TimeWindow.allCases,
+            selectedWindow: period.window,
+            onSelectWindow: { period = .window($0) },
+            custom: TimeFilterBar.CustomRange(
+                isActive: period.isCustom,
+                from: Binding(get: { customFrom }, set: { customFrom = $0; syncCustomPeriod() }),
+                through: Binding(get: { customThrough }, set: { customThrough = $0; syncCustomPeriod() }),
+                onActivate: syncCustomPeriod
+            ),
+            groupings: TimeGrouping.allCases,
+            grouping: grouping,
+            onSelectGrouping: { storedGrouping = $0.rawValue }
+        )
     }
 
     @ToolbarContentBuilder
@@ -810,50 +748,6 @@ struct TimeReportView: View {
 }
 
 // MARK: - Pieces
-
-/// One choice in the report's period rail.
-///
-/// A chip rather than a row of the app's ordinary buttons, because ten bordered controls in a row is
-/// a toolbar and this is a *set of alternatives* — exactly one of which is true at a time, which is
-/// the thing the filled state says. Quiet until chosen, for the reason this app is sparing with
-/// tinted backgrounds everywhere else: ten filled capsules would be ten things shouting, and the one
-/// that matters is the one you picked.
-struct ReportFilterChip: View {
-    let title: String
-    let hint: String
-    let isOn: Bool
-    let action: () -> Void
-
-    @State private var isHovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(Theme.Text.chip)
-                .foregroundStyle(isOn ? Theme.Colors.onAccent : Theme.Colors.primaryText)
-                .padding(.horizontal, Theme.Spacing.medium)
-                .padding(.vertical, Theme.Spacing.tight)
-                .background {
-                    if isOn {
-                        Capsule().fill(Theme.Colors.selection)
-                    } else {
-                        // Hover fills rather than outlines, so the rail has no permanent borders in
-                        // it — ten outlined capsules read as a grid of empty fields.
-                        Capsule().fill(isHovering ? Theme.Colors.hoverFill : Color.clear)
-                    }
-                }
-                .contentShape(.capsule)
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovering = $0 }
-        .calmAnimation(Theme.Motion.appearance, value: isOn)
-        .calmAnimation(Theme.Motion.appearance, value: isHovering)
-        .help(hint)
-        .accessibilityLabel(title)
-        .accessibilityHint(hint)
-        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
-    }
-}
 
 /// One day of the period, whether or not anything was tracked on it.
 struct DailyBar: Identifiable, Hashable {

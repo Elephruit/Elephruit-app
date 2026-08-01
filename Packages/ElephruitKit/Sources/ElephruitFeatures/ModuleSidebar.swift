@@ -107,12 +107,21 @@ struct NotesSidebarSection: View {
 
 // MARK: - Time
 
-/// Time, and the window it is being read over.
+/// Time, and which of its two surfaces is on screen.
 ///
-/// The window used to be state inside `TimeView`, which meant the only way to change it was a
-/// control in the middle column and the sidebar had one row that did nothing. It lives on the
-/// navigation model now, so choosing a window here *is* choosing what the report covers — the same
-/// arrangement the calendar's view switcher uses.
+/// ### Why the period and the grouping left this sidebar
+/// They were here, as two sections of checkmark rows, *and* in the log's toolbar as two menus — and
+/// once Reports grew a filter rail in the view, in a third place. Three copies of one control.
+///
+/// The rail won because of what these controls are. A period is not a destination: choosing *Last
+/// Week* does not take you somewhere, it changes what the thing you are already looking at is a
+/// picture of. A sidebar is for *where am I*, and filling it with rows that answer *what am I
+/// filtering by* is what made the previous version of this whole sidebar an index. The rail sits
+/// with the content it governs, shows every option without being opened, and is one component both
+/// surfaces draw — see ``TimeFilterBar``.
+///
+/// What is left is navigation: which surface, and the running timer as a way back to it. That is
+/// genuinely all Time has to navigate.
 ///
 /// ### Why there is no "Tracked Time" row
 /// The same reason Calendar has no "Calendar" row: the module header already names the module, and a
@@ -149,44 +158,6 @@ struct TimeSidebarSection: View {
                 ) {
                     navigation.select(.time)
                     navigation.timeSurface = surface
-                }
-            }
-        }
-
-        // Both of these belong to the log. Reports carry their own period and grouping, because the
-        // period a report covers is usually a month somebody is invoicing and the period the log
-        // shows is usually today — and one setting serving both means changing it in one place to
-        // answer a question in the other.
-        if navigation.timeSurface == .log {
-            Section("Period") {
-                ForEach(TimeWindow.logWindows, id: \.self) { window in
-                    ModeRow(
-                        title: window.displayName,
-                        symbolName: window.symbolName,
-                        hint: window.hint,
-                        isOn: navigation.timeWindow == window,
-                        identifier: "sidebar.time.window.\(window.rawValue)",
-                        rowHeight: rowHeight
-                    ) {
-                        navigation.select(.time)
-                        navigation.timeWindow = window
-                    }
-                }
-            }
-
-            Section("Grouped By") {
-                ForEach(TimeGrouping.allCases, id: \.self) { grouping in
-                    ModeRow(
-                        title: grouping.displayName,
-                        symbolName: grouping.symbolName,
-                        hint: grouping.hint,
-                        isOn: navigation.timeGrouping == grouping,
-                        identifier: "sidebar.time.grouping.\(grouping.rawValue)",
-                        rowHeight: rowHeight
-                    ) {
-                        navigation.select(.time)
-                        navigation.timeGrouping = grouping
-                    }
                 }
             }
         }
