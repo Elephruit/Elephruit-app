@@ -74,20 +74,6 @@ public struct DetailEmptyState: Sendable, Hashable {
                 message: "Choose a capture to file it, or press ⌘N to add one."
             )
 
-        case .today:
-            DetailEmptyState(
-                symbolName: "sun.max",
-                headline: "Nothing selected",
-                message: "Choose something from today, or press ⌘N to add to it."
-            )
-
-        case .upcoming:
-            DetailEmptyState(
-                symbolName: "calendar",
-                headline: "Nothing selected",
-                message: "Choose something ahead of you, or press ⌘N to add to it."
-            )
-
         // The Tasks module's own destinations, which share a vocabulary with each other and not with
         // the library's kinds.
         case .taskView, .smartList, .builtInSmartList:
@@ -114,9 +100,10 @@ public struct DetailEmptyState: Sendable, Hashable {
                 message: "Choose something filed under this tag to read it."
             )
 
-        // The three destinations that own their whole pane. Nothing reaches this state in them, and
-        // a sentence is better than a crash if something ever does.
-        case .home, .calendar, .time:
+        // The destinations that own their whole pane. Nothing reaches this state in them, and a
+        // sentence is better than a crash if something ever does. Today is here rather than beside
+        // Inbox for exactly that reason: it stopped being a list the moment it became the day.
+        case .today, .home, .upcoming, .calendar, .time:
             .generic
 
         case .item:

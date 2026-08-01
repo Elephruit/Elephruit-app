@@ -36,11 +36,21 @@ struct DetailEmptyStateTests {
     /// with nothing chosen is exactly where somebody wants to be told how to start one.
     static let mustOfferNewItem: [SidebarSelection] = [
         .inbox,
-        .today,
-        .upcoming,
         .kind(.note),
         .kind(.task),
     ]
+
+    /// Destinations that own their whole pane and therefore never reach an empty state at all.
+    ///
+    /// Listed so that the sentence they fall back to is still checked for being a sentence — the
+    /// generic copy is what a bug would land somebody on, and it should read as English rather than
+    /// as a placeholder.
+    static let ownTheirPane: [SidebarSelection] = [.today, .home, .upcoming, .calendar, .time]
+
+    @Test("A destination that owns its pane falls back to the generic sentence", arguments: ownTheirPane)
+    func canvasDestinationsFallBackGracefully(selection: SidebarSelection) {
+        #expect(DetailEmptyState.forSelection(selection) == .generic)
+    }
 
     @Test("Where making something new is the obvious next move, it is offered", arguments: mustOfferNewItem)
     func offersNewItemWhereItHelps(selection: SidebarSelection) {

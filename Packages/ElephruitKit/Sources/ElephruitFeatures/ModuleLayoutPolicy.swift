@@ -193,10 +193,48 @@ extension AppModule {
     }
 }
 
-/// The layout used where no module is active — Today, Upcoming, Inbox, a tag, a saved search.
+/// What Today asks of the shell.
+///
+/// ### Why Today is a canvas and Inbox is not
+/// They are both primary navigation and they want opposite shapes. Inbox is a list of captured
+/// records that you open one at a time, so it wants a narrow column and a wide reading surface
+/// beside it. Today is not a list of anything — it is a briefing, a timeline, work, and people,
+/// arranged together — and every one of those degrades into a column of wrapped fragments at the
+/// 340 points a list column gets. Squeezing it into the middle of a three-column shell would be the
+/// calendar's old bug again: the thing the destination exists to show, drawn in a third of the
+/// window, beside 720 points of "Nothing selected".
+///
+/// So the primary column is unbounded and takes the window, exactly as the calendar's and the time
+/// sheet's do. The page constrains its own measure from the inside — see ``TodayView`` — because a
+/// briefing stretched across an ultrawide display is not a better briefing.
+///
+/// The detail column is gone and the inspector stays. There is nothing for a third column to be
+/// *about* until something is selected, and when something is, the inspector is the right size for
+/// it: a task has a title, three dates, a project and some tags, none of which is prose.
+public enum TodayLayout {
+    public static let shell = ModuleShellLayout(
+        // No maximum, which is what makes it a canvas: it asks for whatever is left rather than for
+        // a number. The minimum is what the day's two columns — the date rail and the day — need
+        // before the rail folds away.
+        primary: PaneWidth(minimum: 420, ideal: 980),
+        detail: .unavailable,
+        inspector: DetailPanePolicy(
+            hidesWhenNothingSelected: true,
+            width: PaneWidth(
+                minimum: InspectorLayout.minimumWidth,
+                ideal: InspectorLayout.idealWidth,
+                maximum: InspectorLayout.maximumWidth
+            ),
+            compactWindowWidth: 1100
+        )
+    )
+}
+
+/// The layout used where no module is active and the destination is an ordinary list — Inbox, a tag,
+/// a saved search.
 ///
 /// Its own value rather than a module's, because primary navigation is not inside any module and
-/// borrowing one module's judgement for it would mean Today silently inheriting whatever People
+/// borrowing one module's judgement for it would mean Inbox silently inheriting whatever People
 /// most recently decided.
 public enum PrimaryNavigationLayout {
     public static let shell = ModuleShellLayout(
@@ -221,5 +259,19 @@ extension Optional where Wrapped == AppModule {
     /// The layout in force, module or not.
     public var shellLayout: ModuleShellLayout {
         self?.shellLayout ?? PrimaryNavigationLayout.shell
+    }
+}
+
+extension NavigationModel {
+    /// The layout the shell should be wearing right now.
+    ///
+    /// ### Why this asks the selection and not only the module
+    /// Because the module was the only thing asked, and outside a module there is exactly one
+    /// answer — which was fine while every module-less destination was a list. Today is not, and a
+    /// window that reads the module alone gives the day a 340-point column. The module still decides
+    /// wherever there is one; this is the one destination that has an opinion of its own.
+    public var shellLayout: ModuleShellLayout {
+        guard activeModule == nil else { return activeModule.shellLayout }
+        return selection.canonical == .today ? TodayLayout.shell : PrimaryNavigationLayout.shell
     }
 }

@@ -163,6 +163,7 @@ Read these before changing anything structural.
 | [26 — Calendar module record](docs/26-calendar-module-record.md) | What was built, seven bugs found, and three EventKit limits worth knowing |
 | [27 — Tasks module record](docs/25-tasks-module-record.md) | The three dates, Today as a plan, the Reminders write guarantee, and what was left |
 | [28 — The task-port message](docs/28-task-port-message.md) | Who emits it, why it is not ours, and the one real defect finding out surfaced |
+| [30 — Today](docs/30-today-record.md) | Why Home and Upcoming became one destination, the relevance rules, and what was deliberately left |
 
 Phase records: [10 — A scope](docs/10-phase-a-scope.md) ·
 [11 — B](docs/11-phase-b-record.md) · [12 — C](docs/12-phase-c-record.md) ·

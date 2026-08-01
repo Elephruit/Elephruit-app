@@ -330,7 +330,29 @@ public final class CalendarService {
         await reload()
     }
 
+    /// Bumped when ``events`` comes back **different**.
+    ///
+    /// ### Why a counter beside an observable array
+    /// Because a page that assembles something *from* the events cannot notice a change by watching
+    /// them: a body that reads the array to build a `task(id:)` token has already read the array,
+    /// and every reload would then invalidate every view that had. A single integer says "the
+    /// calendar answered with something new" in one comparison — the same argument
+    /// ``AppServices/changeToken`` makes for the library.
+    ///
+    /// ### Why it is not bumped on every load
+    /// Because a page that reloads when this changes, and loads the calendar in order to reload,
+    /// would never stop. Load, bump, invalidate, load. Comparing the answer before bumping is what
+    /// closes that loop: a window re-read that came back the same is not news, and the second pass
+    /// after a genuine change settles because the third answer equals the second.
+    ///
+    /// The comparison is a walk of a few dozen value types once per load, which is nothing beside
+    /// the round trip that produced them.
+    public private(set) var revision = 0
+
     private func reload() async {
+        let previous = events
+        defer { if events != previous { revision &+= 1 } }
+
         guard isEnabled, let range = loadedRange else {
             events = []
             isShowingCachedEvents = false

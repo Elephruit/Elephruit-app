@@ -53,6 +53,22 @@ public struct EventAnnotation: Sendable, Hashable {
     }
 }
 
+/// What a day's plan needs to know about one meeting.
+///
+/// Distinct from ``EventAnnotation``, which answers "what is attached to this" for an inspector.
+/// This answers "what is still to be done before it, and who is in it" for a page that is planning a
+/// day. Assembled together because both come from the same traversal — see
+/// ``EventAnnotationService/meetingContext(for:)``.
+public struct MeetingContext: Sendable, Hashable {
+    public var preparation: MeetingPreparation
+    public var linkedPersonIDs: [UUID]
+
+    public init(preparation: MeetingPreparation = MeetingPreparation(), linkedPersonIDs: [UUID] = []) {
+        self.preparation = preparation
+        self.linkedPersonIDs = linkedPersonIDs
+    }
+}
+
 /// Links between calendar events and the rest of the library.
 ///
 /// ### Why an event's links are an `Item`, not a table of their own
@@ -162,6 +178,83 @@ public final class EventAnnotationService {
             preparationNotes: sections.preparation,
             debriefNotes: sections.debrief
         )
+    }
+
+    /// Everything a day's plan needs to know about a window's meetings, in **one** pass.
+    ///
+    /// ### Why this is one call and not two
+    /// It was two, and both of them fetch every meeting item. A page showing five days therefore
+    /// traversed the meeting table ten times to draw one screen, and the traversal is a scan —
+    /// SwiftData cannot translate a comparison across a to-one relationship into SQL, so filtering
+    /// by event identity has to happen in Swift either way. One pass answers both questions.
+    ///
+    /// ### Why preparation is not derived from ``EventAnnotation``
+    /// Because an annotation deliberately does not distinguish a linked *task* from a linked note —
+    /// every non-person incoming link lands in `noteIDs`, which is the right shape for an inspector
+    /// listing what is attached. A day's plan asks a different question: *is there anything I still
+    /// have to do before this meeting*, and that question needs the task's status.
+    public func meetingContext(for identities: [EventIdentity]) throws(AppError) -> [String: MeetingContext] {
+        let wanted = Set(identities.map { $0.storageKey })
+        guard !wanted.isEmpty else { return [:] }
+
+        var result: [String: MeetingContext] = [:]
+
+        for meeting in try allMeetingItems() {
+            guard let reference = meeting.eventReference, wanted.contains(reference.identityKey) else {
+                continue
+            }
+
+            var openTaskIDs: [UUID] = []
+            var completedTaskCount = 0
+            var personIDs: [UUID] = []
+            var hasNote = false
+            var noteID: UUID?
+
+            for link in meeting.outgoingLinks {
+                guard let target = link.target, target.deletedAt == nil else { continue }
+                if target.kind == .person, link.kind == .participant { personIDs.append(target.id) }
+            }
+
+            for link in meeting.incomingLinks {
+                guard let source = link.source, source.deletedAt == nil else { continue }
+                switch source.kind {
+                case .task:
+                    if source.status == .open {
+                        openTaskIDs.append(source.id)
+                    } else {
+                        completedTaskCount += 1
+                    }
+                case .person:
+                    break
+                default:
+                    hasNote = true
+                    if noteID == nil { noteID = source.id }
+                }
+            }
+
+            // The meeting item's own body counts as the meeting's notes. It is where the "## Before"
+            // and "## After" sections live, so a meeting somebody has written a line about should
+            // not read as having no notes because they wrote it in the obvious place.
+            let sections = Self.split(body: meeting.body)
+            if !meeting.body.isEmpty {
+                hasNote = true
+                if noteID == nil { noteID = meeting.id }
+            }
+
+            result[reference.identityKey] = MeetingContext(
+                preparation: MeetingPreparation(
+                    hasNote: hasNote,
+                    noteID: noteID,
+                    openPreparationTaskIDs: openTaskIDs,
+                    completedPreparationTaskCount: completedTaskCount,
+                    hasPreparationNotes: !sections.preparation.isEmpty,
+                    linkedPersonCount: personIDs.count
+                ),
+                linkedPersonIDs: personIDs
+            )
+        }
+
+        return result
     }
 
     // MARK: - The meeting item

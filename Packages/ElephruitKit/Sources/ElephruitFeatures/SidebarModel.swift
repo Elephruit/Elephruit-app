@@ -97,28 +97,35 @@ public enum SidebarRegistry {
     public static let allDeclared: [SidebarDestination] = [
         // MARK: Primary
         //
-        // The four destinations that belong to no module, in the order they are read in. Everything
+        // The two destinations that belong to no module, in the order they are read in. Everything
         // else moved inside a module when the sidebar was rebuilt around them.
 
         // First, because it answers the question you have when you open the app rather than one you
         // go looking for.
+        SidebarDestination(
+            id: "today",
+            selection: .today,
+            band: .primary,
+            title: "Today",
+            symbolName: "sun.max",
+            hint: "Your day: what needs doing, who you are seeing, and what is coming.",
+            showsCount: true
+        ),
+
+        // Superseded by the row above, which is the two of them joined.
+        //
+        // Declared rather than deleted, on the same terms as every other unavailable destination: a
+        // scene restored from a build that had them still decodes, the accessors filter on
+        // availability so neither is ever enumerated, and `SidebarSelection.canonical` lands anybody
+        // who arrives by an old link on Today.
         SidebarDestination(
             id: "home",
             selection: .home,
             band: .primary,
             title: "Home",
             symbolName: "house",
-            hint: "Where the day starts: what is due, what is running, and what came in."
-        ),
-
-        SidebarDestination(
-            id: "today",
-            selection: .today,
-            band: .primary,
-            title: "Today",
-            symbolName: "circle.circle",
-            hint: "Everything due today, of every kind, plus anything already overdue.",
-            showsCount: true
+            hint: "Where the day starts: what is due, what is running, and what came in.",
+            isAvailable: false
         ),
         SidebarDestination(
             id: "upcoming",
@@ -126,7 +133,8 @@ public enum SidebarRegistry {
             band: .primary,
             title: "Upcoming",
             symbolName: "calendar",
-            hint: "Dated work of every kind, ahead of today."
+            hint: "Dated work of every kind, ahead of today.",
+            isAvailable: false
         ),
         SidebarDestination(
             id: "inbox",
@@ -324,9 +332,9 @@ public enum SidebarRegistry {
 
     /// The destination a numeric shortcut selects, if any.
     ///
-    /// Global destinations first, then one per module in module order, so `⌘1`–`⌘4` are Home,
-    /// Today, Upcoming and Inbox and the rest step through the modules exactly as the sidebar lists
-    /// them. Derived from the visible order, so the shortcut always matches what the user can see.
+    /// Global destinations first, then one per module in module order, so the numbered shortcuts run
+    /// Today, Inbox, and then the modules exactly as the sidebar lists them. Derived from the visible
+    /// order, so the shortcut always matches what the user can see.
     public static func destination(forShortcutIndex index: Int) -> SidebarDestination? {
         let ordered = shortcutOrder
         guard index >= 1, index <= ordered.count else { return nil }

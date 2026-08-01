@@ -15,10 +15,42 @@ import Testing
 struct ModuleNavigationTests {
     // MARK: - The primary level
 
-    @Test("The primary navigation is Home, Today, Upcoming, Inbox, in that order")
+    @Test("The primary navigation is Today then Inbox, and nothing else")
     func globalDestinationsAreOrdered() {
-        #expect(GlobalDestination.allCases == [.home, .today, .upcoming, .inbox])
-        #expect(GlobalDestination.allCases.map(\.selection) == [.home, .today, .upcoming, .inbox])
+        #expect(GlobalDestination.allCases == [.today, .inbox])
+        #expect(GlobalDestination.allCases.map(\.selection) == [.today, .inbox])
+    }
+
+    @Test("Home and Upcoming still resolve, and resolve to Today")
+    func supersededDestinationsRedirect() {
+        // The guarantee this pins down is not about the sidebar; it is about everything that stored
+        // one of these names before they were joined — a scene string, a restored window, a launch
+        // argument, somebody's muscle memory in the menu bar.
+        #expect(SidebarSelection.home.canonical == .today)
+        #expect(SidebarSelection.upcoming.canonical == .today)
+        #expect(SidebarSelection.today.canonical == .today)
+        #expect(SidebarSelection.home.isSuperseded)
+        #expect(!SidebarSelection.today.isSuperseded)
+
+        #expect(GlobalDestination.contains(.home))
+        #expect(GlobalDestination.contains(.upcoming))
+
+        let navigation = NavigationModel()
+        navigation.select(.inbox)
+        navigation.select(.home)
+        #expect(navigation.selection == .today)
+        navigation.select(.inbox)
+        navigation.select(.upcoming)
+        #expect(navigation.selection == .today)
+    }
+
+    @Test("A scene written before the merge restores onto Today")
+    func restoringASupersededSceneLandsOnToday() {
+        let navigation = NavigationModel()
+        navigation.restore(NavigationModel.RestorationState(module: nil, selection: .upcoming))
+
+        #expect(navigation.selection == .today)
+        #expect(navigation.activeModule == nil, "Today belongs to no module")
     }
 
     @Test("The modules are listed in the order the design fixed")
@@ -60,9 +92,9 @@ struct ModuleNavigationTests {
 
     @Test("The Tasks module keeps its own Today, Upcoming and Inbox")
     func tasksHasScopedVersionsOfTheGlobalRows() {
-        // Not a duplication: the global Today is everything due today of every kind, and the Tasks
-        // one is the plan you made. They are different questions with the same name, which is
-        // exactly the case the rule about redundant rows carves out.
+        // Not a duplication: the global Today is the whole day — work, meetings and the people they
+        // involve — and the Tasks one is the list of work you planned. They are different questions
+        // with the same name, which is exactly the case the rule about redundant rows carves out.
         #expect(AppModule.module(for: .taskView(.today)) == .tasks)
         #expect(AppModule.module(for: .taskView(.upcoming)) == .tasks)
         #expect(AppModule.module(for: .taskView(.inbox)) == .tasks)
@@ -119,14 +151,14 @@ struct ModuleNavigationTests {
     }
 
     @Test("Leaving a module returns to a real main view")
-    func leavingReturnsHome() {
+    func leavingReturnsToToday() {
         let navigation = NavigationModel()
         navigation.enterModule(.people)
         navigation.select(.people(.favorites))
         navigation.leaveModule()
 
         #expect(navigation.activeModule == nil)
-        #expect(navigation.selection == .home)
+        #expect(navigation.selection == .today)
         navigation.goBack()
         #expect(navigation.activeModule == .people)
         #expect(navigation.selection == .people(.favorites))

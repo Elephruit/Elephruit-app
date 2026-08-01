@@ -422,7 +422,10 @@ struct LayoutAuditTests {
 
     /// Every layout the shell can be in, named so a failure says which one.
     private func everyLayout() -> [(name: String, layout: ModuleShellLayout)] {
-        var all: [(String, ModuleShellLayout)] = [("Today and Upcoming", PrimaryNavigationLayout.shell)]
+        var all: [(String, ModuleShellLayout)] = [
+            ("Inbox and the rest of primary navigation", PrimaryNavigationLayout.shell),
+            ("Today", TodayLayout.shell),
+        ]
         all.append(contentsOf: AppModule.displayOrder.map { ($0.title, $0.shellLayout) })
         return all.map { (name: $0.0, layout: $0.1) }
     }
@@ -693,7 +696,72 @@ struct ShellFitTests {
         let fitted = layout.columns(fittingWindowOfWidth: minimumWindow, sidebarWidth: sidebar)
 
         #expect(fitted.contains(.primary))
-        #expect(fitted.contains(.detail), "Today and Upcoming lose their editor at the minimum window")
+        #expect(fitted.contains(.detail), "Inbox loses its editor at the minimum window")
+    }
+
+    /// Today is a canvas, on the same terms as the calendar and the time sheet.
+    ///
+    /// The failure this guards against is the one the calendar already had once: the thing a
+    /// destination exists to show, drawn in a third of the window, beside a wide pane captioned
+    /// "Nothing selected".
+    @Test("Today takes the window rather than sitting in a list column")
+    func todayIsACanvas() {
+        let layout = TodayLayout.shell
+
+        #expect(layout.primary.maximum == nil, "a canvas asks for what is left, not for a number")
+        #expect(!layout.detail.isAvailable, "there is nothing for a third column to be about")
+
+        for (name, width) in [("laptop", CGFloat(1440)), ("large display", CGFloat(1920))] {
+            let widths = layout.widths(
+                windowWidth: width,
+                sidebarWidth: sidebar,
+                userWantsInspector: false,
+                hasSelection: false
+            )
+            #expect(widths.detail == nil, "Today grew a detail column at \(name)")
+            #expect(
+                widths.primary >= width - sidebar - 1,
+                "Today left \(width - sidebar - widths.primary) points of nothing beside it at \(name)"
+            )
+        }
+    }
+
+    @Test("Today's inspector arrives with a selection and only when there is room")
+    func todayInspectorFollowsItsPolicy() {
+        let layout = TodayLayout.shell
+
+        let empty = layout.widths(
+            windowWidth: 1600, sidebarWidth: sidebar, userWantsInspector: true, hasSelection: false
+        )
+        #expect(empty.inspector == nil, "nothing is selected, so there is nothing to be about")
+
+        let selected = layout.widths(
+            windowWidth: 1600, sidebarWidth: sidebar, userWantsInspector: true, hasSelection: true
+        )
+        #expect(selected.inspector != nil)
+
+        let narrow = layout.widths(
+            windowWidth: 1000, sidebarWidth: sidebar, userWantsInspector: true, hasSelection: true
+        )
+        #expect(narrow.inspector == nil, "the day matters more than the pane describing one row of it")
+    }
+
+    @Test("The shell asks the selection, not only the module, which layout to wear")
+    func selectionDecidesTheLayoutOutsideAModule() {
+        let navigation = NavigationModel()
+
+        navigation.select(.today)
+        #expect(navigation.shellLayout == TodayLayout.shell)
+
+        navigation.select(.inbox)
+        #expect(navigation.shellLayout == PrimaryNavigationLayout.shell)
+
+        // A superseded destination wears Today's layout, because it *is* Today.
+        navigation.select(.upcoming)
+        #expect(navigation.shellLayout == TodayLayout.shell)
+
+        navigation.enterModule(.notes)
+        #expect(navigation.shellLayout == AppModule.notes.shellLayout)
     }
 
     /// The inspector goes first and the editor second, rather than everything narrowing at once.
