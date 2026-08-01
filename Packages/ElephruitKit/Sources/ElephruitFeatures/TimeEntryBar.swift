@@ -313,7 +313,9 @@ struct TimeTrackerCard: View {
                 .contentShape(.circle)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(Color.white)
+        // AppKit's own answer to "text on an accent fill", rather than white. White is right under
+        // a blue accent and wrong under a yellow one, and this is the token that knows which.
+        .foregroundStyle(Theme.Colors.onAccent)
         .background(
             Circle().fill(isRunning ? Theme.Colors.destructive : Theme.Colors.selection)
                 .opacity(canAct ? 1 : 0.4)
