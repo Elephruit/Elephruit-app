@@ -611,7 +611,7 @@ private struct ChildProfileCard: View {
             ForEach(summaryFacts) { fact in
                 HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.tight) {
                     Image(systemName: fact.symbol)
-                        .foregroundStyle(Color.pink)
+                        .foregroundStyle(Theme.Colors.familyAccent)
                         .frame(width: 14)
                     Text(fact.text)
                         .font(Theme.Text.metadata)
@@ -638,9 +638,9 @@ private struct ChildProfileCard: View {
             }
         }
         .padding(Theme.Spacing.small)
-        .background(Color.pink.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+        .background(Theme.Colors.familyAccent.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
         .overlay {
-            RoundedRectangle(cornerRadius: 12).strokeBorder(Color.pink.opacity(0.15))
+            RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.Colors.familyAccent.opacity(0.15))
         }
         .help("Open \(child.displayTitle) to add age, school, interests, and notes")
         .contextMenu {

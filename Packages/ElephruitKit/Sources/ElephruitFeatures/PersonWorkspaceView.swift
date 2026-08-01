@@ -730,12 +730,12 @@ struct PersonQuickActions: View {
     private func tint(for entry: PersonActionAvailability) -> Color {
         guard case .contact(let channel) = entry.kind else { return Theme.Colors.selection }
         switch channel {
-        case .call: return Color.green
-        case .message: return Color.blue
-        case .email: return Color.indigo
-        case .facetimeVideo, .facetimeAudio: return Color.cyan
-        case .maps: return Color.orange
-        case .web: return Color.purple
+        case .call: return Theme.Palette.green.color
+        case .message: return Theme.Palette.blue.color
+        case .email: return Theme.Palette.indigo.color
+        case .facetimeVideo, .facetimeAudio: return Theme.Palette.cyan.color
+        case .maps: return Theme.Palette.orange.color
+        case .web: return Theme.Palette.purple.color
         }
     }
 
@@ -800,7 +800,7 @@ private struct PersonDockButton: View {
                 }
             }
             .font(.system(.callout, weight: .semibold))
-            .foregroundStyle(isProminent ? Color.white : tint)
+            .foregroundStyle(isProminent ? Theme.Colors.onAccent : tint)
             .padding(.horizontal, showsTitle ? Theme.Spacing.medium : 0)
             .frame(width: showsTitle ? nil : 36, height: 36)
             .background(
@@ -809,7 +809,7 @@ private struct PersonDockButton: View {
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(isProminent ? Color.white.opacity(0.16) : tint.opacity(0.16))
+                    .strokeBorder(isProminent ? Theme.Colors.onAccent.opacity(0.16) : tint.opacity(0.16))
             }
             .shadow(color: isProminent ? tint.opacity(0.25) : .clear, radius: 7, y: 3)
             .contentShape(Rectangle())

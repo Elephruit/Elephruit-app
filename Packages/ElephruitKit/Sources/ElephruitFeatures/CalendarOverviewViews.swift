@@ -338,7 +338,7 @@ private struct DensitySquare: View {
             .overlay {
                 Text(dayNumber)
                     .font(.system(size: 8))
-                    .foregroundStyle(entry.intensity > 0.55 ? Color.white : Theme.Colors.tertiaryText)
+                    .foregroundStyle(entry.intensity > 0.55 ? Theme.Colors.onAccent : Theme.Colors.tertiaryText)
             }
             .contentShape(.rect)
             .hoverHighlight(cornerRadius: 2)

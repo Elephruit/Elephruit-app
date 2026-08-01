@@ -192,6 +192,29 @@ extension Theme {
         /// the default accent and so would be indistinguishable from selection on half the screen.
         public static let personalDetail = Color(nsColor: .systemTeal)
 
+        /// Text or a glyph drawn on top of a filled, saturated swatch.
+        ///
+        /// Not `Color.white`, which is what this replaces in four places. White is legible on a
+        /// saturated fill and wrong everywhere the fill is not saturated — under Increase Contrast,
+        /// where AppKit lightens some fills, and on the pale end of an intensity scale, where white
+        /// on near-white is invisible. `alternateSelectedControlTextColor` is AppKit's own token for
+        /// exactly this question and answers it per appearance.
+        public static let onAccent = Color(nsColor: .alternateSelectedControlTextColor)
+
+        /// The accent for the capture surfaces — Quick Jot and the person capture sheets.
+        ///
+        /// Named rather than spelled `Color.purple` at nine call sites. The literal adapts between
+        /// light and dark, so this is not a bug being fixed; it is nine independent decisions
+        /// becoming one, so that changing the colour of capture is an edit rather than a search.
+        public static let captureAccent = Color(nsColor: .systemPurple)
+
+        /// The accent for a child's evolving details on a parent's profile.
+        ///
+        /// Distinct from ``personalDetail`` on purpose: a child's facts are the one part of a
+        /// profile that is deliberately local to this app and never written to the address book, and
+        /// the tint is part of how that reads as its own thing.
+        public static let familyAccent = Color(nsColor: .systemPink)
+
         /// A detail that belongs to somebody's working life.
         ///
         /// Never the only signal that something is work: every place this appears also carries the

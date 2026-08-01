@@ -306,7 +306,7 @@ struct LogInteractionSheet: View {
                 .font(.system(size: 23, weight: .semibold))
                 .foregroundStyle(.purple)
                 .frame(width: 44, height: 44)
-                .background(Color.purple.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+                .background(Theme.Colors.captureAccent.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
 
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 Text("Log an interaction")
@@ -336,10 +336,10 @@ struct LogInteractionSheet: View {
                             .font(Theme.Text.chip)
                             .padding(.horizontal, Theme.Spacing.small)
                             .frame(height: 30)
-                            .foregroundStyle(draft.kind == kind ? Color.purple : Theme.Colors.secondaryText)
+                            .foregroundStyle(draft.kind == kind ? Theme.Colors.captureAccent : Theme.Colors.secondaryText)
                             .background(
                                 Capsule().fill(
-                                    draft.kind == kind ? Color.purple.opacity(0.14) : Theme.Colors.subtleFill
+                                    draft.kind == kind ? Theme.Colors.captureAccent.opacity(0.14) : Theme.Colors.subtleFill
                                 )
                             )
                     }
@@ -382,7 +382,7 @@ struct LogInteractionSheet: View {
                         }
                         .padding(.horizontal, 8)
                         .frame(height: 32)
-                        .background(Color.purple.opacity(0.1), in: Capsule())
+                        .background(Theme.Colors.captureAccent.opacity(0.1), in: Capsule())
                     }
 
                     Button {
@@ -432,7 +432,7 @@ struct LogInteractionSheet: View {
                                 Spacer()
                                 if draft.participantIDs.contains(candidate.id) {
                                     Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(Color.purple)
+                                        .foregroundStyle(Theme.Colors.captureAccent)
                                 }
                             }
                             .padding(.horizontal, Theme.Spacing.medium)
@@ -482,9 +482,9 @@ struct LogInteractionSheet: View {
             HStack(spacing: Theme.Spacing.medium) {
                 Image(systemName: "calendar.badge.clock")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.purple)
+                    .foregroundStyle(Theme.Colors.captureAccent)
                     .frame(width: 34, height: 34)
-                    .background(Color.purple.opacity(0.1), in: RoundedRectangle(cornerRadius: 9))
+                    .background(Theme.Colors.captureAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 9))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("When")
@@ -503,10 +503,10 @@ struct LogInteractionSheet: View {
             }
             .padding(.horizontal, Theme.Spacing.medium)
             .frame(height: 58)
-            .background(Color.purple.opacity(0.055), in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
+            .background(Theme.Colors.captureAccent.opacity(0.055), in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.Radius.medium)
-                    .strokeBorder(Color.purple.opacity(0.16))
+                    .strokeBorder(Theme.Colors.captureAccent.opacity(0.16))
             }
         }
     }
