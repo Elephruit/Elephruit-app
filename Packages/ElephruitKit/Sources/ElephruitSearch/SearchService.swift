@@ -49,6 +49,18 @@ public protocol SearchEngine: AnyObject {
 
     /// Discards the index. The next search falls back to the store.
     func invalidateIndex() async
+
+    /// How much is indexed, and whether the index is built yet.
+    ///
+    /// On the protocol rather than on the engines, which both had it already. Settings ▸ Advanced
+    /// reached it by casting `search` to `DefaultSearchEngine`; the engine in the app is an
+    /// `FTSSearchEngine`, so the cast failed, and the three rows that report the index were never
+    /// drawn. Nothing raised — a failed `as?` is a `nil` and the view simply had nothing to show, so
+    /// the screen looked like a screen with no statistics on it rather than like a bug.
+    ///
+    /// The general shape of that mistake is a view asking "which engine am I talking to"; the fix is
+    /// for it never to need to know.
+    func indexStatistics() async -> (items: Int, terms: Int, isWarm: Bool)
 }
 
 /// The v1 engine.
