@@ -81,6 +81,16 @@ public final class RemindersService {
         set { defaults.set(newValue, forKey: Self.defaultListKey) }
     }
 
+    /// What a list is called, for a row that has to say where a task came from.
+    ///
+    /// `nil` rather than a placeholder when the lists have not been read — before access is granted,
+    /// or in a build where the integration was never turned on. A row that cannot name the list says
+    /// nothing about it, which is better than one that says "Unknown list" about a list that exists.
+    public func listName(id: String?) -> String? {
+        guard let id else { return nil }
+        return lists.first { $0.id == id }?.title
+    }
+
     public func setParticipating(_ isParticipating: Bool, listID: String) {
         var current = participatingListIDs
         if isParticipating {
