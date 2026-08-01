@@ -495,9 +495,14 @@ struct MiniTimerView: View {
             Button {
                 controller.isCompact.toggle()
             } label: {
+                // A button shows what pressing it will do, not what state it is in — the rule the
+                // start/stop button on an item already follows. Compact, this widens: arrows apart.
+                // Wide, this narrows: arrows together. They were the other way round, so the one
+                // control on the panel whose meaning is carried entirely by its glyph was saying the
+                // opposite of what it did.
                 Image(systemName: controller.isCompact
-                    ? "arrow.right.and.line.vertical.and.arrow.left"
-                    : "arrow.left.and.line.vertical.and.arrow.right")
+                    ? "arrow.left.and.line.vertical.and.arrow.right"
+                    : "arrow.right.and.line.vertical.and.arrow.left")
                     .font(Theme.Text.metadata)
                     .frame(width: 22, height: 22)
                     .contentShape(.rect)

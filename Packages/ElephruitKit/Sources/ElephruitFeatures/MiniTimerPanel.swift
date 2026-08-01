@@ -310,8 +310,25 @@ public final class MiniTimerController {
     /// Called by the view when its hover state changes, because the window controls appear and
     /// disappear rather than sitting there invisibly reserving room — which on a panel this small is
     /// the difference between a tidy pill and a pill with a hole in it.
+    ///
+    /// ### Why it fits twice, the second time a turn later
+    /// This is the same failure `show()` documents, arriving by the other door, and it was worse
+    /// here because nothing came along afterwards to correct it. `fittingSize` asks SwiftUI how big
+    /// it wants to be, and asking *during the update that changed what is in it* gets the answer for
+    /// what was in it before: the controls had not been laid out yet, so the panel was set to the
+    /// width of a pill that did not have them.
+    ///
+    /// What that looked like is worth recording, because it does not look like a sizing bug. The
+    /// root of this view is `.fixedSize()`, so contents too big for the window are not compressed —
+    /// they overflow it and are clipped, **centred**. So the whole pill appeared to jump leftwards
+    /// by half the missing width and lose its right-hand end, which reads as the panel moving rather
+    /// than as the window being too small. One turn later the answer is settled, and because both
+    /// fits anchor the right edge the correction is invisible: the panel grows leftwards, which is
+    /// the direction it has to grow, since every control the pointer is on the way to is on the
+    /// right.
     public func contentSizeChanged() {
         resizeToFit()
+        DispatchQueue.main.async { [weak self] in self?.resizeToFit() }
     }
 
     /// Closes the panel and forgets it, for window teardown and tests.
