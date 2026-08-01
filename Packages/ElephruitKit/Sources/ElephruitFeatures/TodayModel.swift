@@ -13,8 +13,9 @@ import Observation
 /// the assembly happens here, once, and the view reads stored values.
 ///
 /// It also holds the *records*. A day plan names tasks by identifier, because the rules that produced
-/// it are pure values; the rows that draw them need the `Item`. Materialising them once per reload,
-/// into a dictionary, is the difference between one traversal and one fetch per visible row.
+/// it are pure values; the rows that draw them need the `Item`. The assembler has already read every
+/// one of them, so it hands them back with the days — see ``DailyPlanService/DayWindow`` — and the
+/// page never looks anything up.
 @Observable
 @MainActor
 public final class TodayModel {
@@ -143,37 +144,53 @@ public final class TodayModel {
 
     // MARK: - Assembly
 
-    /// Everything a reload depends on.
+    /// What the page is *looking at*.
     ///
-    /// A value rather than a list of `onChange` handlers, so a new dependency is one line here and
-    /// cannot be added to the model without also being watched.
-    public struct ReloadToken: Equatable {
+    /// ### Why this is separate from what it is looking at *with*
+    /// Because reading the calendar and assembling a day are different operations with different
+    /// costs, and mixing them made a loop. Today reloads when the calendar answers; loading the
+    /// calendar makes it answer. One token driving both meant load, answer, invalidate, load — for
+    /// as long as the page was on screen, which is what made a five-day window take seconds and made
+    /// toggling a filter take seconds more.
+    ///
+    /// So the window drives the *load* and nothing else does. This changes when the reader moves a
+    /// day, opens the days behind them, asks for another week, or changes what the page shows.
+    public struct WindowToken: Equatable {
         var date: Date
         var showsPrevious: Bool
         var futureCount: Int
         var filters: TodayFilters
-        var changeToken: Int
         var calendarIsEnabled: Bool
-        var calendarRevision: Int
     }
 
-    public var reloadToken: ReloadToken {
-        ReloadToken(
+    public var windowToken: WindowToken {
+        WindowToken(
             date: selectedDate,
             showsPrevious: isShowingPreviousDays,
             futureCount: futureDayCount,
             filters: services.todayPreferences.filters,
-            changeToken: services.changeToken,
-            calendarIsEnabled: services.calendar.isEnabled,
-            calendarRevision: services.calendar.revision
+            calendarIsEnabled: services.calendar.isEnabled
         )
     }
 
-    /// Assembles every day on screen.
+    /// What the page is looking at it *with*: the library, and whatever the calendar last answered.
+    ///
+    /// Drives ``assemble()``, which reads what is already in memory and never loads. That is what
+    /// closes the loop — nothing this token watches can be changed by reacting to it.
+    public struct SourceToken: Equatable {
+        var changeToken: Int
+        var calendarRevision: Int
+    }
+
+    public var sourceToken: SourceToken {
+        SourceToken(changeToken: services.changeToken, calendarRevision: services.calendar.revision)
+    }
+
+    /// Reads the calendar for the window on screen, then assembles it.
     ///
     /// Asynchronous because the calendar is, and only because the calendar is. The window is loaded
-    /// once for the whole span and each day is then assembled from what is in memory — one round
-    /// trip rather than one per day drawn.
+    /// once for the whole span and each day is then built from what is in memory — one round trip
+    /// rather than one per day drawn.
     public func reload() async {
         reloadGeneration &+= 1
         let generation = reloadGeneration
@@ -189,18 +206,28 @@ public final class TodayModel {
         // stale days.
         guard generation == reloadGeneration else { return }
 
+        assemble()
+    }
+
+    /// Rebuilds the days from what is already in memory.
+    ///
+    /// Synchronous, and touches no integration. Called when the library changes and when the
+    /// calendar reports a *different* answer — never in a way that could ask the calendar again.
+    public func assemble() {
         // The per-assembly caches exist to stop one pass reading the same person four times. Keeping
-        // them across a reload would mean an edit to somebody's role never appearing.
+        // them across an assembly would mean an edit to somebody's role never appearing.
         services.dailyPlan.invalidateCaches()
 
         do {
-            let assembled = try services.dailyPlan.plans(
-                from: first,
-                count: count,
+            let window = try services.dailyPlan.window(
+                from: firstVisibleDay,
+                count: visibleDayCount,
                 filters: services.todayPreferences.filters
             )
-            days = assembled
-            materialiseRecords(for: assembled)
+            days = window.days
+            tasksByID = window.tasks
+            peopleByID = window.people
+            activeContainers = window.containers
             failure = nil
         } catch {
             failure = error
@@ -218,70 +245,6 @@ public final class TodayModel {
 
     private var visibleDayCount: Int {
         (isShowingPreviousDays ? Self.previousDayCount : 0) + 1 + futureDayCount
-    }
-
-    /// Fetches the records the rows will need, once.
-    ///
-    /// ### Why this is a dictionary and not a lookup
-    /// A row asking the repository for its own task is a fetch during a render, which is the thing
-    /// `FetchAudit` fails a build over — and at forty rows across five days it is forty fetches per
-    /// frame of a scroll. Everything the visible days name is read here, on change, and the rows
-    /// read a dictionary.
-    private func materialiseRecords(for plans: [DayPlan]) {
-        var wantedTasks = Set<UUID>()
-        var wantedPeople = Set<UUID>()
-
-        for plan in plans {
-            for task in plan.tasks { wantedTasks.insert(task.taskID) }
-            wantedTasks.formUnion(plan.completedTaskIDs)
-            for event in plan.events {
-                wantedTasks.formUnion(event.preparation.openPreparationTaskIDs)
-            }
-            for person in plan.people {
-                if let id = person.personID { wantedPeople.insert(id) }
-            }
-        }
-
-        var tasks: [UUID: Item] = [:]
-        for id in wantedTasks {
-            // Reuse what is already in hand: SwiftData returns the same registered object, so this
-            // saves the round trip rather than the object.
-            if let existing = tasksByID[id], existing.deletedAt == nil {
-                tasks[id] = existing
-                continue
-            }
-            if let fetched = try? services.items.item(id: id) { tasks[id] = fetched }
-        }
-
-        var people: [UUID: Item] = [:]
-        for id in wantedPeople {
-            if let existing = peopleByID[id], existing.deletedAt == nil {
-                people[id] = existing
-                continue
-            }
-            if let fetched = try? services.items.item(id: id) { people[id] = fetched }
-        }
-
-        tasksByID = tasks
-        peopleByID = people
-        activeContainers = containers(among: tasks.values)
-    }
-
-    private func containers(among tasks: some Collection<Item>) -> [Item] {
-        var found: [UUID: Item] = [:]
-
-        for id in services.todayPreferences.filters.hiddenContainerIDs {
-            if let item = try? services.items.item(id: id) { found[id] = item }
-        }
-        for task in tasks {
-            let enclosing = task.enclosingContainers()
-            guard let container = enclosing.project ?? enclosing.list else { continue }
-            found[container.id] = container
-        }
-
-        return found.values.sorted {
-            $0.displayTitle.localizedCaseInsensitiveCompare($1.displayTitle) == .orderedAscending
-        }
     }
 
     // MARK: - Reading records

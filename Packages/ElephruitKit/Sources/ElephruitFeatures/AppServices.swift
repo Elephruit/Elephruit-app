@@ -261,6 +261,9 @@ public final class AppServices {
     /// presentation path with the recovery options `AppError` itself defines.
     public var lastError: AppError?
 
+    /// Counts store access while a measurement is running. `nil` outside a test.
+    public let fetchAudit: FetchAudit?
+
     /// Whether developer affordances — sample data, index statistics — are available.
     ///
     /// A launch argument rather than a build configuration, so a release build can be inspected
@@ -282,6 +285,9 @@ public final class AppServices {
     ///     flow be exercised without `EKEventStore` ever being constructed.
     ///   - defaults: Where per-device preferences live. A test passes a scratch suite so that
     ///     enabling Contacts in one does not leave the flag set for the user or for the next test.
+    ///   - audit: Counts store access, so "this page does not traverse the library once per day it
+    ///     draws" can be asserted rather than hoped for. `nil` everywhere but in a test, where it
+    ///     costs one optional check per fetch — see ``ElephruitPersistence/FetchAudit``.
     public init(
         stack: PersistenceStack,
         dateProvider: any DateProvider = SystemDateProvider(),
@@ -289,8 +295,10 @@ public final class AppServices {
         contactsProvider: (@Sendable () -> any ContactsProviding)? = nil,
         calendarProvider: (@Sendable () -> any CalendarProviding)? = nil,
         remindersProvider: (@Sendable () -> any RemindersProviding)? = nil,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        audit: FetchAudit? = nil
     ) {
+        self.fetchAudit = audit
         self.stack = stack
         self.dateProvider = dateProvider
         self.isDevelopmentMode = isDevelopmentMode
@@ -303,7 +311,9 @@ public final class AppServices {
         self.context = context
 
         let tags = SwiftDataTagRepository(context: context, dateProvider: dateProvider)
-        let items = SwiftDataItemRepository(context: context, dateProvider: dateProvider, tags: tags)
+        let items = SwiftDataItemRepository(
+            context: context, dateProvider: dateProvider, tags: tags, audit: audit
+        )
 
         self.tags = tags
         self.items = items
@@ -484,7 +494,8 @@ public final class AppServices {
         // synthetic one rather than reaching `EKEventStore`.
         calendarProvider: (@Sendable () -> any CalendarProviding)? = nil,
         remindersProvider: (@Sendable () -> any RemindersProviding)? = nil,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        audit: FetchAudit? = nil
     ) -> AppServices {
         // Previews must never crash a canvas, and an in-memory store failing to open would mean
         // the schema itself is broken — which the persistence tests already cover. A minimal
@@ -500,7 +511,8 @@ public final class AppServices {
             contactsProvider: contactsProvider,
             calendarProvider: calendarProvider,
             remindersProvider: remindersProvider,
-            defaults: defaults
+            defaults: defaults,
+            audit: audit
         )
         if populated {
             services.loadSampleData()

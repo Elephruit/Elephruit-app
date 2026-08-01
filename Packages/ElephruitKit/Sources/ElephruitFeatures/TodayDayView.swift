@@ -26,19 +26,28 @@ struct TodayDayView: View {
     @Binding var draftTitle: String
     var isDraftFocused: FocusState<Bool>.Binding
 
+    /// Whether there is room to put the people beside the day rather than under it.
+    var isWide = false
+
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             TodayDateRail(plan: plan, isEmphasised: true)
                 .frame(width: TodayMetrics.railWidth, alignment: .leading)
 
             VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+                // The briefing spans the whole measure. It is the one thing on the page that is
+                // about the day rather than about part of it, and boxing it into a column would put
+                // "3 meetings" and the meetings themselves in different halves of the window.
                 TodayBriefingView(plan: plan, actions: actions)
 
-                needsAttention
-                schedule
-                untimedTasks
-                people
-                dailyNote
+                if isWide {
+                    columns
+                } else {
+                    stacked
+                }
+
+                // Finished work runs the full width beneath both columns: it is a single collapsed
+                // line, and a line indented into a column reads as belonging to that column.
                 completed
 
                 if plan.isEmpty {
@@ -48,6 +57,42 @@ struct TodayDayView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .accessibilityIdentifier(AccessibilityID.Today.day(dayKey))
+    }
+
+    /// The arrangement when the window has room for it.
+    ///
+    /// ### Why people go beside the day and not under it
+    /// Because they are *context for* it rather than another item in it. Underneath, they sat below
+    /// a fold on a busy day — which is precisely the day you most want to know who you are about to
+    /// see — and left the right half of a wide window empty while the schedule wrapped in a column a
+    /// third of the width. Beside, the schedule gets the room a meeting title and its context need
+    /// to sit on one line, and the people are visible without scrolling.
+    private var columns: some View {
+        HStack(alignment: .top, spacing: Theme.Spacing.section) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+                needsAttention
+                schedule
+                untimedTasks
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+                people
+                dailyNote
+            }
+            .frame(width: Theme.Size.todaySideColumnWidth, alignment: .leading)
+        }
+    }
+
+    /// One column, in the order somebody reads it.
+    private var stacked: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+            needsAttention
+            schedule
+            untimedTasks
+            people
+            dailyNote
+        }
     }
 
     private var dayKey: String {
@@ -267,7 +312,9 @@ struct TodayDayView: View {
     private var people: some View {
         if !plan.people.isEmpty, let actions {
             TodaySection(title: "People", count: plan.people.count) {
-                TodayPeopleGrid(people: plan.people, plan: plan, model: model, actions: actions)
+                TodayPeopleGrid(
+                    people: plan.people, plan: plan, model: model, actions: actions, isStacked: isWide
+                )
             }
             .accessibilityIdentifier(AccessibilityID.Today.people)
         }
@@ -314,6 +361,7 @@ struct TodayCompactDayView: View {
     let model: TodayModel
     let navigation: NavigationModel
     let isPast: Bool
+    var isWide = false
 
     @State private var draftDay: Date?
     @State private var draftTitle = ""
@@ -333,7 +381,8 @@ struct TodayCompactDayView: View {
                         navigation: navigation,
                         draftDay: $draftDay,
                         draftTitle: $draftTitle,
-                        isDraftFocused: $isDraftFocused
+                        isDraftFocused: $isDraftFocused,
+                        isWide: isWide
                     )
 
                     disclosure
