@@ -38,16 +38,28 @@ open -n "$(xcodebuild -project Elephruit.xcodeproj -scheme Elephruit -showBuildS
 ### Inconsistent
 
 8. **Three different row layouts** for the same items — Today (checkbox, title, chips and date right
-   aligned), Tasks (metadata on a second line, `#hash` tags), Notes (no date at all). *Not addressed;
-   see remaining issues.*
+   aligned), Tasks (metadata on a second line, `#hash` tags), Notes (no date at all). **Fixed** for
+   the two that draw the same object. Tasks and Today now share the completion control and put their
+   facts on the trailing edge off the same rule — only what is currently true — with tags drawn as
+   `TagChip`s in both. What is still different in Today is what is genuinely different: a time gutter
+   for work pinned to an hour, the reason the task is there today, and that page's hover actions. A
+   note is not a task and keeps its own row.
 9. **Two vocabularies for the same two fields, on screen at once.** A task's detail pane says
-   "Start" and "Deadline"; the inspector beside it says "Defer until" and "Due". *Not addressed.*
+   "Start" and "Deadline"; the inspector beside it says "Defer until" and "Due". **Fixed.** The
+   inspector's words changed rather than the pane's: the pane's names come from the scheduling model
+   the whole module rests on — a *start* says do not ask me until then, a *deadline* is the only date
+   that can make anything late — and the inspector has fewer readers, so moving it cost less. It now
+   reads Start, Deadline and *Hidden until*. `deferUntil` keeps its name in the store, where it is a
+   column with a migration behind it.
 10. **"Colour" in three pickers**, plus "recognised" in three strings. **Fixed.**
 11. **"promise" as a tag chip.** The word was the app's, not the user's — sample data planted it and
     three files matched the literal. **Fixed**: `TagConventions.owed` is `follow-up`, and `promise`
     is still recognised so existing libraries keep their filing.
 12. **Two disclosure affordances 30 points apart** in the Tasks sidebar — "More" with a leading
-    chevron, "Smart Lists" with a trailing one. *Not addressed.*
+    chevron, "Smart Lists" with a trailing one. **Fixed.** *More* is gone and the system views are
+    flat, in three bands. Flagged, Waiting and All Tasks — three of the five it hid — became built-in
+    smart lists, which is what they always were. The container tree lost its header and its
+    collapse, so Smart Lists is now the only disclosure in the column.
 
 ### Visually weak
 
@@ -138,26 +150,25 @@ The "before" set is a build of `bf78afe` in a scratch worktree.
 
 ## Remaining issues, ranked
 
+Findings **8**, **9** and **12** were resolved by the Tasks interaction work — see
+`docs/31-tasks-interaction-scope.md` and the note beside each above.
+
 1. **The declared column maximum is still not enforced** (finding 19). The detail pane takes all the
    slack the window has, past its own ceiling. A frame maximum would cap the *content* and leave the
    pane's remainder empty, which reads as a rendering fault, so it needs the divider moved rather
    than the content constrained — most likely by holding the pin from `applyModuleLayout()` until a
    drag is detected, rather than releasing it after 50 ms.
-2. **Three row layouts for the same items** (finding 8). The largest remaining consistency problem
-   and the one most visible to a reviewer. Wants one row component with a per-module metadata slot.
-3. **"Start/Deadline" vs "Defer until/Due"** (finding 9) — two names for two fields, both on screen.
-   Pick one pair.
-4. **The person profile is the narrowest of four columns** and its quick facts are oversized cards
+2. **The person profile is the narrowest of four columns** and its quick facts are oversized cards
    (17). The pane with the most to say has the least room.
-5. **People rows are near twice the height they need** (18).
-6. **Two disclosure affordances in the Tasks sidebar** (12).
-7. **Notes rows carry no date** — the single most useful thing in a notes list.
-8. **Dark mode was not reviewed on screen.** No literal colour is named anywhere
+3. **People rows are near twice the height they need** (18).
+4. **Notes rows carry no date** — the single most useful thing in a notes list. Tasks and Today now
+   share a row; a note is not a task, but "no date at all" is still the wrong answer for one.
+5. **Dark mode was not reviewed on screen.** No literal colour is named anywhere
    (`SourceHygieneTests.coloursComeFromTheDesignSystem` enforces it), so it should be correct, but
    "should be" is not "was looked at".
-9. **Settings ▸ Advanced computes index statistics and never shows them** — `refreshStatistics()`
+6. **Settings ▸ Advanced computes index statistics and never shows them** — `refreshStatistics()`
    casts to `DefaultSearchEngine`, the engine is an `FTSSearchEngine`, the cast fails silently.
-10. **Arrow keys in the search *field*** do not move the highlight — only Tab-then-arrows does. The
+7. **Arrow keys in the search *field*** do not move the highlight — only Tab-then-arrows does. The
     field is in the toolbar and outside the view's responder chain; doing it properly needs an
     `NSEvent` monitor or a custom field.
 

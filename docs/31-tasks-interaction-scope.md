@@ -2,6 +2,10 @@
 
 The task **model** is finished and right. This is a plan for the shell around it.
 
+> **Status: items 1–6 shipped.** Six commits on `claude/tasks-ui-things-redesign-c07b40`, in the order
+> below. Item 7 (the draggable new-task control) was not built. What was decided along the way, and
+> what turned out differently from this plan, is recorded in *What actually happened* at the foot.
+
 `TaskSystemView` already declares Inbox, Today, Upcoming, Anytime, Someday and Logbook.
 `TaskScheduling.swift` already separates start, deadline and reminder, and already lets only the
 deadline make anything overdue. `TaskChecklist`, `ItemKind.heading`, areas ▸ projects ▸ headings ▸
@@ -250,3 +254,58 @@ before/after pair.
   Items 1 (notifications) and 4 (calendar in Today and Upcoming) need restating in the light of
   whatever is decided about *Add Reminder*.
 - `docs/redesign/README.md` — strike **#8**, **#9** and **#12**, one line each on how they went.
+
+---
+
+## What actually happened
+
+### The open decision, closed
+
+**Add Reminder is offered, with the truth attached** — option (a). The line under the control reads
+"Elephruit shows this time on the task. It does not send a notification yet.", and it is part of the
+control rather than a footnote beneath it. A reminder owned by Reminders says the opposite, because
+that one really does arrive. `docs/25` item 1 now records the choice and the wording.
+
+### What the plan got wrong, and what the tests found
+
+- **`TaskWhenChoice` was `CaseIterable` for about ten minutes.** The synthesised `allCases` had to
+  invent a date for `startingOn`, `Date()` was the obvious one, and it made the list depend on the
+  wall clock — which failed immediately against a fixed-clock store, because a real "now" is after a
+  fixed store's deadline and a start date may not follow one. It is now
+  `allChoices(startingOn:)`, and the caller supplies the day.
+- **`convertToProject` had its steps in the wrong order.** Re-homing the task before changing its
+  kind is a *task* being moved under an area, which containment forbids; changing the kind first is a
+  *project* inside a heading, which it also forbids. Going via the top level is the one path where
+  every intermediate state is valid. The test is what found this; the first version read fine.
+- **`familyAccent` had already been deleted from the design tokens with two call sites still naming
+  it**, so `ElephruitKit` did not compile at the branch point. Fixed first, in its own commit, before
+  any of this.
+
+### What changed from the plan
+
+- **Tasks became a canvas module.** The plan said the detail column stops routing `.task`; in
+  practice a module with a detail pane that is empty for its main object is still a module with an
+  empty column, so `.tasks` now declares `detail: .unavailable` alongside Calendar and Time.
+- **`TaskBatchBar` was deleted rather than folded.** Its actions and its guarantee — a batch never
+  writes to a system reminder — moved into `TaskBottomBar`'s multi-selection state, which is what
+  "folds into it" meant.
+- **Repeat was added to the card's actions**, which the plan listed but did not scope. Four cadences
+  and *Stop Repeating*, plus one sentence saying that quick entry can express the rest. See `docs/25`
+  item 5.
+- **The row keeps naming its container.** The observations argued for dropping it; the work item said
+  keep the existing rule verbatim, and the rule is there because an imported reminder with no visible
+  origin was a real bug. It stayed.
+- **The inspector's third date became "Hidden until"**, not "Start" — `deferUntil` and `startAt` are
+  two different columns and giving them one name would have replaced a vocabulary problem with a
+  worse one.
+
+### Verification
+
+`swift test --package-path Packages/ElephruitKit` — green, 2,033 tests. `xcodebuild -scheme Elephruit`
+— builds. New suites: `TaskAttributeVisibilityTests`, `TaskAttributeChipTests`,
+`TaskDateSuggestionTests`, `TaskWhenChoiceTests`, `TaskRelatedPeopleTests`, `ConvertToProjectTests`,
+`TasksSidebarCompositionTests`, `TaskHomeTests`.
+
+**Not done: the screenshot pass.** `docs/redesign/` has no after-pair for this work. The app launches
+against a temporary store and the walk-through in the checklist above has not been performed on
+screen, so everything here is asserted by tests and by reading rather than by looking.

@@ -31,8 +31,15 @@ tokens before anything is created.
 
 ## Information architecture
 
-**System views.** Inbox, Today, Upcoming, Anytime, Someday, Flagged, Waiting, Logbook, All Tasks.
-Four are always visible; five sit behind a disclosure. Counts appear on **two** rows.
+**System views.** Inbox, Today, Upcoming, Anytime, Someday, Logbook. All six are visible on arrival,
+in three bands: what is unfiled, what answers *when*, and what is behind you. Counts appear on **two**
+rows.
+
+Flagged, Waiting and All Tasks were system views and are now built-in smart lists, because that is
+what all three always were — a rule over the library rather than a place in it. `TaskViewService`
+returned a single ungrouped section for each, which is exactly what a smart list draws, so nothing
+about their contents changed. The `TaskSystemView` cases stay, so a scene stored by an earlier build
+still decodes. See `docs/31-tasks-interaction-scope.md`.
 
 **Today** is a plan, not a pile. It is the union of exactly three things: work the user chose, work
 whose start date is today, and work whose deadline is today or has passed. Nothing else arrives on
@@ -49,6 +56,37 @@ meaningless progress figure or an app that keeps offering to complete Groceries.
 
 **Smart lists** compute membership. A task remains owned by its area, project, or list; nothing in a
 smart list moves anything.
+
+## The interaction model
+
+**The editor is the row.** A task opens by making its own list row taller and putting the fields
+inside it — see `TaskCard`. The rows above hold still, the rows below move down, and nothing else on
+screen is covered, so the task never leaves the list that explains it. Three ways in: click a row
+that is already selected, Return on the selection, or double-click. A single click on an unselected
+row only selects it, because opening on first click would leave a trail of cards behind the arrow
+keys. Escape closes; so does clicking another row, arrowing away, or changing list.
+
+**There is no task detail column.** Tasks is a canvas module, on the same terms as Calendar and Time:
+the list is the module. A column beside the list had to re-answer "which task is this?" with a header
+and a container and a set of dates, every one of them a restatement of something already on screen.
+Following a link to a task from elsewhere — a backlink, a person's page, a search result — navigates
+to the list the task lives in and opens its card there; `TaskRedirect` and `TaskHome` are the two
+halves of working out where that is.
+
+**A control is a button while its value is absent and a chip once it is set.** Six attributes obey
+it — When, Tags, Checklist, Deadline, People, Priority — so a task with nothing set is one short row
+of controls rather than six empty form rows. The rule is a value, `TaskAttributes.layout`, with a
+suite over all six rather than a convention inside a `body`.
+
+**When is one control.** Today, This Evening, a date, Someday and Add Reminder are five answers to
+one question, and putting them in one popover is what stops a task being scheduled for Thursday and
+parked as Someday at the same time. Every route through it writes a start, a commitment or a
+reminder, and **never a deadline** — `TaskWhenChoice` names the five and `TaskWhenChoiceTests` walks
+them.
+
+**Actions live at the foot of the list**, not in the window toolbar, because what is useful depends
+on whether a card is open. The bar has three states — the list, the open task, and a multiple
+selection — and the last of those is what used to be a separate batch bar.
 
 ## Steps versus subtasks
 
@@ -179,11 +217,20 @@ true is the derived index in ADR 0004, not a bigger predicate.
 Stated rather than implied, because a half-built feature that looks whole is worse than an absent
 one.
 
-1. **Local notifications are not delivered.** `ReminderOwner` records *who* is responsible and the
-   invariants keep it honest, so a linked reminder never produces a second alarm. But nothing
-   schedules a `UNNotificationRequest` yet: the app holds no notification entitlement and asks for no
-   permission. A reminder on a local-only task is currently a date the interface shows, not an
-   interruption. The ownership model is the hard half and it is done; the scheduler is the next slice.
+1. **Local notifications are not delivered, and the interface now says so.** `ReminderOwner` records
+   *who* is responsible and the invariants keep it honest, so a linked reminder never produces a
+   second alarm. But nothing schedules a `UNNotificationRequest` yet: the app holds no notification
+   entitlement and asks for no permission. A reminder on a local-only task is a date the interface
+   shows, not an interruption.
+
+   The choice when the When popover was built was to withhold *Add Reminder* until a scheduler lands
+   or to offer it and be explicit. It is offered, and the line under the control reads "Elephruit
+   shows this time on the task. It does not send a notification yet." The field already exists on the
+   model and already draws on the row, so hiding it in the one place somebody would go looking for it
+   makes the app seem to have lost the time rather than seem careful. What would not be acceptable is
+   a prominent *Add Reminder* that silently never interrupts, which is why the sentence is part of
+   the control rather than a footnote. A reminder owned by Reminders says the opposite, because that
+   one really does arrive.
 2. **No editor for custom smart lists.** The rule model, its storage, its evaluation, and its
    round-trip are complete and tested, and a saved list appears in the sidebar and works. There is no
    screen to build one from menus, so today they can only arrive from sample data or a future import.
@@ -191,11 +238,17 @@ one.
 3. **The global quick-entry shortcut is application-scoped.** It is bound and it works while
    Elephruit is frontmost. Registering it system-wide goes through `GlobalHotKey`, which is wired for
    Quick Jot only.
-4. **Calendar events are not shown inside Today or Upcoming.** The calendar integration exists and
-   `ItemListView` shows events for the old Today; the new workspace does not yet fold them in. They
-   would be read-only when it does.
-5. **Recurrence edit scope is modelled, not offered.** `RecurrenceEditScope` and its three outcomes
-   are defined and documented; editing a repeating task currently changes the live occurrence.
+4. **Calendar events are not shown inside Upcoming.** The calendar integration exists, and Today
+   folds events into the day. Upcoming still shows only dated tasks, which is the remaining half of
+   this: an agenda of the next four months that omits the meetings is an agenda somebody has to read
+   beside another one. Events would be read-only when it lands.
+5. **Recurrence is set from four cadences, not built.** The bottom bar's *Repeat* offers daily,
+   weekly, monthly and yearly, and *Stop Repeating*. `RecurrenceRule` can express far more —
+   intervals, weekday sets, a day of the month, two anchors, three ways to end — and quick entry
+   already reads most of it from a phrase like "every 3 days after completion". What does not exist
+   is a screen for building one, so the popover says in a sentence where the rest lives rather than
+   offering a half-editor that looks like the whole thing. `RecurrenceEditScope` and its three
+   outcomes are defined and documented; editing a repeating task still changes the live occurrence.
 6. **Location reminders are recognised and declined out loud.** "Remind me when I get home" produces
    a token that says the app cannot do that, and the words stay in the title. EventKit's location
    alarms are not something this app creates.
