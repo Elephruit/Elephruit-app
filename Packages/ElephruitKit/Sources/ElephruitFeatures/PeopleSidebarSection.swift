@@ -187,6 +187,20 @@ struct PeopleSidebarSection: View {
 ///
 /// Everything here is *about* the person on screen rather than a peer of them, which is why it lives
 /// in the inspector rather than becoming a fourth column.
+///
+/// ### What it stopped repeating, and why that is what made it worth keeping
+/// It held eight sections and three of them were already on the profile a few hundred points to its
+/// left. *Related people* is the Relationships section; *Reach them* is the Contact section, minus
+/// the ability to do anything with a number; *Places* is one line of the same. A pane that opens
+/// itself whenever you click a name and then shows you a narrower copy of what you are looking at is
+/// not an inspector — it is a column the layout has to keep finding room for, in a module whose
+/// complaint was that the profile was cramped.
+///
+/// What is left is only what the profile does not say: what is **coming**, what is **open**, and
+/// what has not been confirmed in a while. Those are questions about the state of the record and of
+/// the relationship rather than about its contents, and none of them is answerable by scrolling the
+/// page. The pane is worth opening for them and is no longer opened on your behalf — see
+/// `AppModule.shellLayout`, where People stopped saying `opensAfterSelection`.
 struct PersonContextSidebar: View {
     @Environment(\.services) private var services
 
@@ -228,37 +242,12 @@ struct PersonContextSidebar: View {
                         }
                     }
 
-                    if !context.relatedPeople.isEmpty {
-                        InspectorSection("Related people") {
-                            ForEach(context.relatedPeople) { related in
-                                linkRow("\(related.name) · \(related.label)", systemImage: related.kind.symbolName) {
-                                    navigation.selectItem(related.id)
-                                }
-                            }
-                        }
-                    }
-
                     if !context.sharedProjects.isEmpty {
                         InspectorSection("Shared projects") {
                             ForEach(context.sharedProjects) { project in
                                 linkRow(project.name, systemImage: "square.stack.3d.up") {
                                     navigation.selectItem(project.id)
                                 }
-                            }
-                        }
-                    }
-
-                    if !context.places.isEmpty {
-                        InspectorSection("Places") {
-                            ForEach(context.places, id: \.self) { place in
-                                Button {
-                                    openInMaps(place)
-                                } label: {
-                                    Label(place, systemImage: "map")
-                                        .font(Theme.Text.rowSubtitle)
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(Theme.Colors.link)
                             }
                         }
                     }
@@ -277,20 +266,12 @@ struct PersonContextSidebar: View {
                         }
                     }
 
-                    if !context.destinations.isEmpty {
-                        InspectorSection("Reach them") {
-                            ForEach(context.destinations) { destination in
-                                Text(destination.displayText)
-                                    .font(Theme.Text.rowSubtitle)
-                                    .textSelection(.enabled)
-                            }
-                        }
-                    }
                 } else {
                     EmptyStateView(
                         symbolName: "sidebar.trailing",
-                        headline: "Nothing yet",
-                        message: "Meetings, tasks, and related people appear here as they accumulate."
+                        headline: "Nothing outstanding",
+                        message: "What is scheduled, what is open, and what is worth checking "
+                            + "appear here. Everything you know about this person is on the page."
                     )
                 }
             }

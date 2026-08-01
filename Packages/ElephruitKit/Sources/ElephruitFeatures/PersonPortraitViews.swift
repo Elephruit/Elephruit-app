@@ -378,7 +378,28 @@ struct StaleFactsBanner: View {
 
 // MARK: - Relationships
 
-/// Who this person is connected to, and the four ways of looking at it.
+/// Who this person is connected to.
+///
+/// ### One relationship system, not two
+/// It was two, and neither of them was arguing for itself honestly.
+///
+/// Children were drawn as large pink cards — a pink wash, a pink border, and a pink glyph on every
+/// fact inside them — and everybody else as a small grey capsule. Two problems, and the colour is
+/// the smaller one. Pink and red in this app mean *warning*, *error* and *destructive*; a section
+/// where the children are the only coloured thing on the page reads, for the second it takes to
+/// parse, as four things that have gone wrong. And the size difference made a claim nobody asked the
+/// software to make: that a child is a major relationship and a partner is a minor one, stated in
+/// card area, on every profile, whatever the family is actually like.
+///
+/// The defence for the split was that a child is somebody you keep a running picture of and a
+/// colleague is somebody you click through to. That is a difference in *what is recorded*, not in
+/// what kind of person they are — and a card that grows to fit what is known handles it without
+/// anybody deciding in advance whose facts deserve room. So there is one card. It shows the person's
+/// own avatar tint and no other colour, it carries whatever line of detail their record can offer,
+/// and it is the same shape for a daughter, a husband, a manager and a cat.
+///
+/// What tells the groups apart is the heading over them and the label on each card, which is where
+/// that information belongs and where it can be read.
 struct PersonRelationshipsSection: View {
     @Environment(\.services) private var services
 
@@ -389,69 +410,13 @@ struct PersonRelationshipsSection: View {
     @State private var isAddingRelationship = false
     @State private var relationshipKind: RelationshipKind = .friend
     @State private var editingRelationship: PersonRelationship?
-    @State private var childFactTarget: Item?
+    @State private var factTarget: Item?
     @State private var relationships: [PersonRelationship] = []
-    @State private var childPortraits: [UUID: PersonPortrait] = [:]
+    @State private var portraits: [UUID: PersonPortrait] = [:]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            HStack {
-                SectionHeader("Relationships", count: relationships.isEmpty ? nil : relationships.count)
-                Spacer()
-
-                // ### Why three controls became two
-                // *Charts*, *Add Child* and *Add* sat in a row at three different weights, and the
-                // middle one is a shortcut to the third with an argument pre-filled. A header that
-                // spends a third of its width on a shortcut reads as three equally important things
-                // to do, none of which is what somebody came to this section for. The shortcut is
-                // still one click — it is now the first line of the menu it belonged in.
-                Menu {
-                    ForEach(RelationshipChartKind.allCases) { kind in
-                        Button {
-                            onOpenChart(kind)
-                        } label: {
-                            Label(kind.displayName, systemImage: kind.symbolName)
-                        }
-                    }
-                } label: {
-                    Label("Charts", systemImage: "point.3.connected.trianglepath.dotted")
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .font(Theme.Text.metadata)
-                .accessibilityIdentifier(AccessibilityID.People.charts)
-
-                Menu {
-                    Button {
-                        relationshipKind = .child
-                        isAddingRelationship = true
-                    } label: {
-                        Label("Child…", systemImage: "figure.and.child.holdinghands")
-                    }
-
-                    Button {
-                        relationshipKind = .partner
-                        isAddingRelationship = true
-                    } label: {
-                        Label("Partner…", systemImage: "heart")
-                    }
-
-                    Divider()
-
-                    Button {
-                        relationshipKind = .friend
-                        isAddingRelationship = true
-                    } label: {
-                        Label("Somebody Else…", systemImage: "person.badge.plus")
-                    }
-                } label: {
-                    Label("Add", systemImage: "plus")
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .font(Theme.Text.metadata)
-                .accessibilityLabel("Add a relationship")
-            }
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            header
 
             if relationships.isEmpty {
                 Text("Nobody linked yet. Add a partner, a child, a colleague — or type “\(person.displayTitle) son Jack” in the command bar.")
@@ -459,71 +424,42 @@ struct PersonRelationshipsSection: View {
                     .foregroundStyle(Theme.Colors.tertiaryText)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                // ### Why children get cards and everybody else gets chips
-                // Because the two are asked about differently. A child is somebody you are keeping a
-                // running picture of — an age, a school year, what they are into this month — and a
-                // card is the only shape that can hold four facts and invite a fifth. A colleague is
-                // somebody you want to recognise and click through to, which is a name and a label.
-                // The same treatment for both would either bloat the colleagues into cards holding
-                // nothing or shrink the children into names with no room for what is known.
-                //
-                // What was missing was saying so. Two differently-shaped groups with no headers read
-                // as one group rendered inconsistently.
-                if !children.isEmpty {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-                        SectionHeader(children.count == 1 ? "Child" : "Children")
+                ForEach(groups, id: \.group) { entry in
+                    VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                        // A heading over every group, including when there is only one. A section
+                        // that names its groups only once there are two of them changes shape as
+                        // somebody's record grows, and the single group it leaves unlabelled is the
+                        // one whose heading would have been most informative.
+                        SectionHeader(entry.group.title, count: entry.relationships.count)
 
+                        // Wrapping rather than scrolling sideways, and adaptive rather than a fixed
+                        // column count: a horizontal scroller inside a vertically scrolling pane is
+                        // a second direction of scrolling nobody finds, and it hid every
+                        // relationship past the fourth. The range is wide enough that the profile
+                        // column lays out one, two or three abreast as it is resized without any of
+                        // them becoming a slab.
                         LazyVGrid(
                             columns: [
-                                GridItem(.adaptive(minimum: 210, maximum: 320), spacing: Theme.Spacing.small),
+                                GridItem(.adaptive(minimum: 240, maximum: 340), spacing: Theme.Spacing.small),
                             ],
                             alignment: .leading,
                             spacing: Theme.Spacing.small
                         ) {
-                            ForEach(children, id: \.id) { relationship in
-                                if let child = relationship.other {
-                                    ChildProfileCard(
-                                        child: child,
-                                        portrait: childPortraits[child.id],
-                                        onOpen: { onOpenPerson(child.id) },
-                                        onAddDetail: { childFactTarget = child },
+                            ForEach(entry.relationships, id: \.id) { relationship in
+                                if let other = relationship.other {
+                                    RelationshipCard(
+                                        other: other,
+                                        label: relationship.displayLabel,
+                                        portrait: portraits[other.id],
+                                        showsPrivacyMark: services?.contacts.isEnabled == true,
+                                        onOpen: { onOpenPerson(other.id) },
+                                        onAddDetail: { factTarget = other },
                                         onEdit: { editingRelationship = relationship }
                                     )
                                 }
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-
-                if !otherRelationships.isEmpty {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-                        if !children.isEmpty {
-                            SectionHeader("Everybody else")
-                        }
-
-                        // Wrapping rather than scrolling sideways. A horizontal scroller inside a
-                        // vertically scrolling pane is a second direction of scrolling nobody finds,
-                        // and it hid every relationship past the fourth.
-                        ElephruitDesign.FlowLayout(
-                            spacing: Theme.Spacing.small,
-                            lineSpacing: Theme.Spacing.small
-                        ) {
-                            ForEach(otherRelationships, id: \.id) { relationship in
-                                if let other = relationship.other {
-                                    RelatedPersonChip(
-                                        name: other.displayTitle,
-                                        label: relationship.displayLabel,
-                                        colorName: other.colorName,
-                                        isPlaceholder: other.personProfile?.isPlaceholder ?? false
-                                    ) {
-                                        onOpenPerson(other.id)
-                                    } onEdit: {
-                                        editingRelationship = relationship
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -542,34 +478,117 @@ struct PersonRelationshipsSection: View {
                 reload()
             }
         }
-        .sheet(item: $childFactTarget) { child in
+        .sheet(item: $factTarget) { subject in
             AddFactSheet(
-                personName: child.displayTitle,
+                personName: subject.displayTitle,
                 onSave: { draft, confidence, sensitivity, observedOn in
-                    addFact(draft, to: child, confidence: confidence, sensitivity: sensitivity, observedOn: observedOn)
-                    childFactTarget = nil
+                    addFact(draft, to: subject, confidence: confidence, sensitivity: sensitivity, observedOn: observedOn)
+                    factTarget = nil
                 },
-                onCancel: { childFactTarget = nil }
+                onCancel: { factTarget = nil }
             )
         }
     }
 
-    private var children: [PersonRelationship] {
-        relationships.filter { $0.kind == .child }
+    /// The heading, and the two things that can be done to the section.
+    ///
+    /// ### Why the charts are quieter than they were
+    /// A chart is worth having and is not what anybody came to this section for: the question on a
+    /// profile is "who is this person connected to", and the answer is the cards. The charts answer
+    /// a second question — how those connections fan out — and they answer it in a sheet. A labelled
+    /// control beside *Add* said the two were equally likely next moves. An icon with a tooltip says
+    /// it is there when wanted, which is what "secondary unless explicitly opened" means.
+    private var header: some View {
+        HStack(spacing: Theme.Spacing.small) {
+            SectionHeader("Relationships", count: relationships.isEmpty ? nil : relationships.count)
+
+            Spacer()
+
+            Menu {
+                ForEach(RelationshipChartKind.allCases) { kind in
+                    Button {
+                        onOpenChart(kind)
+                    } label: {
+                        Label(kind.displayName, systemImage: kind.symbolName)
+                    }
+                }
+            } label: {
+                Label("Charts", systemImage: "point.3.connected.trianglepath.dotted")
+                    .labelStyle(.iconOnly)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .font(Theme.Text.metadata)
+            .help("See these relationships as a family tree, a household, an organisation, or a network")
+            .accessibilityLabel("Relationship charts")
+            .accessibilityIdentifier(AccessibilityID.People.charts)
+
+            Menu {
+                // The three shortcuts are pre-filled kinds rather than three different actions, and
+                // they are listed in the order somebody reaches for them.
+                Button {
+                    relationshipKind = .child
+                    isAddingRelationship = true
+                } label: {
+                    Label("Child…", systemImage: "figure.and.child.holdinghands")
+                }
+
+                Button {
+                    relationshipKind = .partner
+                    isAddingRelationship = true
+                } label: {
+                    Label("Partner…", systemImage: "heart")
+                }
+
+                Divider()
+
+                Button {
+                    relationshipKind = .friend
+                    isAddingRelationship = true
+                } label: {
+                    Label("Somebody Else…", systemImage: "person.badge.plus")
+                }
+            } label: {
+                Label("Add", systemImage: "plus")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .font(Theme.Text.metadata)
+            .accessibilityLabel("Add a relationship")
+        }
     }
 
-    private var otherRelationships: [PersonRelationship] {
-        relationships.filter { $0.kind != .child }
+    /// The relationships, gathered under the headings that describe them.
+    ///
+    /// Empty groups are absent rather than shown empty, on the same terms as the contact card: a
+    /// *Work* heading with nothing under it implies homework nobody set.
+    private var groups: [(group: RelationshipGroup, relationships: [PersonRelationship])] {
+        Dictionary(grouping: relationships, by: { $0.kind.group })
+            .sorted { $0.key.sortOrder < $1.key.sortOrder }
+            .map { (group: $0.key, relationships: $0.value) }
     }
 
     private func reload() {
         guard let services else { return }
         relationships = (try? services.persons.relationships(of: person)) ?? []
-        childPortraits = Dictionary(uniqueKeysWithValues: relationships.compactMap { relationship in
-            guard relationship.kind == .child, let child = relationship.other,
-                  let portrait = try? services.personWorkspace.portrait(of: child)
+
+        // ### Which portraits are assembled, and why it is not "the children's"
+        // It was the children's, because they were the only cards with room for a fact. Every card
+        // has room now, so the question is which people have anything to put in one — and the answer
+        // is data-driven rather than kind-driven: somebody whose record already offers a role, an
+        // employer or a place has a line to show without assembling anything. Somebody who does not
+        // — a six-year-old, a cat, a friend recorded as a name — is exactly who a portrait can speak
+        // for, and there are never many of them.
+        //
+        // The cost is the same order as before: one small fetch per relationship that needs one, for
+        // a set that is a person's own relationships rather than a library.
+        portraits = Dictionary(uniqueKeysWithValues: relationships.compactMap { relationship in
+            guard let other = relationship.other,
+                  RelationshipCard.identityLine(for: other) == nil,
+                  let portrait = try? services.personWorkspace.portrait(of: other)
             else { return nil }
-            return (child.id, portrait)
+            return (other.id, portrait)
         })
     }
 
@@ -596,86 +615,100 @@ struct PersonRelationshipsSection: View {
     }
 }
 
-/// One child, with whatever is known about them.
+/// One relationship — any relationship — with whatever is known about the other person.
 ///
-/// ### Why this used to look wrong, and what changed
-/// It was a pink card: a pink wash, a pink border, and pink glyphs on every fact inside it. Three
-/// problems, in ascending order of seriousness. It named a literal colour, which is wrong in at
-/// least one of light mode, dark mode, Increase Contrast, and a non-default accent — the exact
-/// failure `SourceHygieneTests` exists to catch and did not, because a bare `Color.pink` is not a
-/// constructor. It stacked a fill *and* a stroke on a surface that already sits inside a padded
-/// pane, which is the decoration-accumulation `decorationDoesNotAccumulate` describes. And the
-/// colour meant nothing: pink for children is a decision about who these people are, made by the
-/// software, in a section that is otherwise scrupulous about not doing that.
+/// ### Why one card and no colour
+/// It was two shapes and one of them was pink. Children got a large card with a pink wash, a pink
+/// border and a pink glyph on every fact inside it; everybody else got a small grey capsule.
 ///
-/// Now the card is the same neutral fill every other grouped surface in the app uses, and the only
-/// colour on it is the person's *own* — the avatar tint they already carry everywhere else. The
-/// provenance line, which said "Elephruit only" on every single card, is a lock glyph with the
-/// sentence in its tooltip: it is worth being able to check and not worth a line of every card.
-private struct ChildProfileCard: View {
-    let child: Item
+/// The colour was the plainer mistake. Pink and red mean *warning*, *error* and *destructive* in
+/// this app — see ``ElephruitDesign/Theme/Colors/overdue`` and its neighbours — so a profile whose
+/// only coloured element was the children read, for the moment it takes to parse, as several things
+/// that had gone wrong. And the tint carried no information: everything on the card was already
+/// known to be about a child from the heading above it.
+///
+/// The size was the more serious one. A card three times the area of a capsule says that this
+/// relationship matters more than that one, on every profile, whatever the family is actually like —
+/// a partner of thirty years rendered smaller than a nephew. Software should not be making that
+/// claim, and it was making it in the most legible way available.
+///
+/// The argument for the split was that a child is somebody you keep a running picture of and a
+/// colleague is somebody you click through to. That is a difference in *what is recorded*, not in
+/// what kind of person they are. A card that grows to fit what is known settles it without anybody
+/// deciding in advance whose facts deserve room: a colleague with a job title gets a line, a
+/// six-year-old with an age and two interests gets three, and neither is a decision about them.
+///
+/// The only colour on the card is the person's own avatar tint, which they already carry everywhere
+/// else in the app. What tells relationships apart is the heading over the group and the label on
+/// the card, which is where that information can actually be read.
+struct RelationshipCard: View {
+    let other: Item
+    let label: String
     let portrait: PersonPortrait?
+
+    /// Whether to mark records this app holds privately.
+    ///
+    /// Only meaningful once an address book is connected: "not in your Contacts" is news about a
+    /// record when the alternative exists, and a lock on every card in a library that has never seen
+    /// Contacts is a wall of glyphs saying nothing.
+    let showsPrivacyMark: Bool
+
     let onOpen: () -> Void
     let onAddDetail: () -> Void
     let onEdit: () -> Void
 
     @State private var isHovering = false
 
+    /// The most detail a card shows before it stops being a card.
+    ///
+    /// Two, not four. A grid of cards is scanned rather than read, and the fourth fact about
+    /// somebody's nephew is four lines of somebody else's card that never got drawn. Everything is
+    /// on their own page, one click away, which is what the card is a door to.
+    private static let visibleFacts = 2
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            HStack(spacing: Theme.Spacing.tight) {
-                Button(action: onOpen) {
-                    HStack(spacing: Theme.Spacing.small) {
-                        PersonAvatar(name: child.displayTitle, colorName: child.colorName, size: 34)
+            Button(action: onOpen) {
+                HStack(alignment: .top, spacing: Theme.Spacing.small) {
+                    PersonAvatar(name: other.displayTitle, colorName: other.colorName, size: 32)
 
-                        VStack(alignment: .leading, spacing: 1) {
-                            HStack(spacing: Theme.Spacing.tight) {
-                                Text(child.displayTitle)
-                                    .font(.system(.callout, weight: .semibold))
-                                    .foregroundStyle(Theme.Colors.primaryText)
-                                    .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: Theme.Spacing.tight) {
+                            Text(other.displayTitle)
+                                .font(.system(.callout, weight: .semibold))
+                                .foregroundStyle(Theme.Colors.primaryText)
+                                .lineLimit(1)
 
-                                if child.personProfile?.contactsIdentifier == nil {
-                                    Image(systemName: "lock.shield")
-                                        .font(Theme.Text.metadata)
-                                        .foregroundStyle(Theme.Colors.tertiaryText)
-                                        .help("Held in Elephruit only — never written to your address book")
-                                        .accessibilityLabel("Elephruit only")
-                                }
+                            if showsPrivacyMark, other.personProfile?.contactsIdentifier == nil {
+                                Image(systemName: "lock.shield")
+                                    .font(Theme.Text.metadata)
+                                    .foregroundStyle(Theme.Colors.tertiaryText)
+                                    .help("Held in Elephruit only — never written to your address book")
+                                    .accessibilityLabel("Elephruit only")
                             }
+                        }
 
+                        if let detail {
                             Text(detail)
                                 .font(Theme.Text.metadata)
                                 .foregroundStyle(Theme.Colors.secondaryText)
                                 .lineLimit(2)
                         }
-
-                        Spacer(minLength: Theme.Spacing.tight)
                     }
-                    .contentShape(Rectangle())
+
+                    Spacer(minLength: 0)
                 }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity)
-
-                // A word rather than a glyph, for the reason set out on ``RelatedPersonChip``: an
-                // unlabelled `…` is the one route to changing or removing this relationship, and it
-                // reads as decoration. "Relationship" says which of the several things on this card
-                // the button acts on, which "Edit" on its own would not.
-                Button("Relationship", systemImage: "pencil", action: onEdit)
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
-                    .font(Theme.Text.metadata)
-                    .help("Change or remove this relationship")
-                    .accessibilityLabel("Relationship with \(child.displayTitle)")
-                    .accessibilityHint("Change or remove this relationship")
+                .contentShape(.rect)
             }
+            .buttonStyle(.plain)
 
-            if !summaryFacts.isEmpty {
+            if !facts.isEmpty {
                 VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                    ForEach(summaryFacts) { fact in
+                    ForEach(facts) { fact in
                         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.tight) {
                             Image(systemName: fact.symbol)
-                                .foregroundStyle(Theme.Colors.familyAccent)
+                                .font(Theme.Text.metadata)
+                                .foregroundStyle(Theme.Colors.tertiaryText)
                                 .frame(width: 14)
 
                             Text(fact.text)
@@ -684,6 +717,8 @@ private struct ChildProfileCard: View {
                                 .lineLimit(2)
 
                             if fact.isUncertain {
+                                // The one place a colour still means something here, and it means
+                                // what it always means: this has not been confirmed.
                                 Text("Unconfirmed")
                                     .font(Theme.Text.chip)
                                     .foregroundStyle(Theme.Colors.warning)
@@ -693,102 +728,43 @@ private struct ChildProfileCard: View {
                 }
             }
 
-            Button("Add detail", systemImage: "plus.circle", action: onAddDetail)
-                .buttonStyle(.borderless)
-                .font(Theme.Text.metadata)
-                .opacity(isHovering || summaryFacts.isEmpty ? 1 : 0)
+            controls
         }
         .padding(Theme.Spacing.small)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.Colors.familyAccent.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.Colors.familyAccent.opacity(0.15))
-        }
+        // One treatment, not a fill *and* a stroke. The card already sits inside a padded pane and
+        // the grid's own gaps separate one from the next; a border on top of a fill on top of that
+        // is the decoration accumulation `SourceHygieneTests` exists to keep out.
+        .background(
+            Theme.Colors.subtleFill,
+            in: RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
+        )
         .onHover { isHovering = $0 }
         .calmAnimation(value: isHovering)
-        .help("Open \(child.displayTitle) to add age, school, interests, and notes")
+        .help(helpText)
         .contextMenu {
-            Button("Edit Relationship…", systemImage: "pencil", action: onEdit)
+            Button("Open \(other.displayTitle)", systemImage: "person.crop.circle", action: onOpen)
+            Button("Add Detail…", systemImage: "plus.circle", action: onAddDetail)
+            Divider()
+            Button("Change Relationship…", systemImage: "pencil", action: onEdit)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(other.displayTitle), \(label)")
     }
 
-    private var detail: String {
-        if let line = portrait?.ageAndGradeLine { return line }
-        if child.personProfile?.isPlaceholder == true { return "Sketch · add age, school, and interests" }
-        return "Add age, school, and interests"
-    }
-
-    private var summaryFacts: [ChildSummaryFact] {
-        guard let portrait else { return [] }
-        return portrait.cards
-            .filter { $0.attribute != .observedAge && $0.attribute != .schoolGrade }
-            .flatMap { card in
-                card.values.map {
-                    ChildSummaryFact(
-                        id: $0.id,
-                        text: $0.text,
-                        symbol: card.attribute.symbolName,
-                        isUncertain: $0.confidence.needsLabel
-                    )
-                }
-            }
-            .prefix(4)
-            .map { $0 }
-    }
-}
-
-private struct ChildSummaryFact: Identifiable {
-    let id: UUID
-    let text: String
-    let symbol: String
-    let isUncertain: Bool
-}
-
-struct RelatedPersonChip: View {
-    let name: String
-    let label: String
-    let colorName: String?
-    let isPlaceholder: Bool
-    let onOpen: () -> Void
-    let onEdit: () -> Void
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.hairline) {
-            Button(action: onOpen) {
-                HStack(spacing: Theme.Spacing.small) {
-                    PersonAvatar(name: name, colorName: colorName, size: 26)
-
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(name)
-                            .font(Theme.Text.rowSubtitle)
-                            .lineLimit(1)
-
-                        if isPlaceholder {
-                            Text("sketch")
-                                .font(Theme.Text.metadata)
-                                .foregroundStyle(Theme.Colors.tertiaryText)
-                                .lineLimit(1)
-                        }
-                    }
-                }
-                .padding(.leading, Theme.Spacing.small)
-                .padding(.vertical, Theme.Spacing.tight)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            // ### Why the relationship type *is* the control
-            // Editing and deleting a relationship both worked and both had a confirmation. The only
-            // way in was a bare `…` with a tooltip, beside the relationship type drawn as static
-            // text — so the one thing on the chip a person would want to change looked like a label,
-            // and the thing that changed it looked like nothing in particular.
-            //
-            // Making the type itself the button says both facts in one control: this is the
-            // relationship, and this is what you press to change it. The chevron is what makes it
-            // read as editable rather than as a caption, and the whole word is the hit target rather
-            // than a 24-point circle.
-            //
-            // The context menu stays, as a second route rather than the only one.
+    /// The relationship, which is also the way to change it, and the way to record something.
+    ///
+    /// ### Why the label *is* the control
+    /// Editing and removing a relationship both worked and the only way in was an unlabelled `…`
+    /// beside the relationship type drawn as static text — so the one thing on the card somebody
+    /// would want to change looked like a caption, and the thing that changed it looked like
+    /// decoration. Making the type itself the button says both facts in one control: this is the
+    /// relationship, and this is what you press to change it. The chevron is what makes it read as
+    /// editable, and the whole word is the target rather than a 24-point circle.
+    ///
+    /// The context menu stays as a second route rather than the only one.
+    private var controls: some View {
+        HStack(spacing: Theme.Spacing.small) {
             Button(action: onEdit) {
                 HStack(spacing: Theme.Spacing.hairline) {
                     Text(label)
@@ -799,22 +775,89 @@ struct RelatedPersonChip: View {
                 }
                 .foregroundStyle(Theme.Colors.secondaryText)
                 .padding(.horizontal, Theme.Spacing.small)
-                .padding(.vertical, Theme.Spacing.tight)
-                .background(Theme.Colors.subtleFill, in: Capsule())
-                .contentShape(Capsule())
+                .padding(.vertical, 1)
+                .background(Theme.Colors.contentBackground, in: Capsule())
+                .contentShape(.capsule)
             }
             .buttonStyle(.plain)
             .help("Change or remove this relationship")
-            .accessibilityLabel("Relationship with \(name): \(label)")
+            .accessibilityLabel("Relationship with \(other.displayTitle): \(label)")
             .accessibilityHint("Change or remove this relationship")
-        }
-        .padding(.trailing, Theme.Spacing.tight)
-        .background(Theme.Colors.subtleFill, in: Capsule())
-        .help(isPlaceholder ? "\(name) — a lightweight record with no details yet" : name)
-        .contextMenu {
-            Button("Change Relationship…", systemImage: "pencil", action: onEdit)
+
+            Spacer(minLength: 0)
+
+            Button(action: onAddDetail) {
+                Image(systemName: "plus.circle")
+                    .font(Theme.Text.metadata)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.Colors.secondaryText)
+            // Always offered on a card with nothing on it, because that is the card the invitation
+            // is for; on hover otherwise, so a full grid is not a grid of plus signs.
+            .opacity(isHovering || (detail == nil && facts.isEmpty) ? 1 : 0)
+            .help("Record something about \(other.displayTitle)")
+            .accessibilityLabel("Add a detail about \(other.displayTitle)")
         }
     }
+
+    /// The one line under the name: what their record already says, or what a portrait can say.
+    ///
+    /// `nil` rather than an instruction. A card reading "Add age, school, and interests" on every
+    /// person the user has not filled in is a grid of homework, and the invitation is already the
+    /// button below it.
+    private var detail: String? {
+        if let line = Self.identityLine(for: other) { return line }
+        if let line = portrait?.ageAndGradeLine { return line }
+        if other.personProfile?.isPlaceholder == true { return "Sketch — no details yet" }
+        return nil
+    }
+
+    /// Role, employer and place, from what is already stored.
+    ///
+    /// Static so the section can ask the same question when deciding whose portrait is worth
+    /// assembling — see `PersonRelationshipsSection.reload()`. Asking it in two places with two
+    /// implementations is how a card ends up blank because the fetch it needed was skipped.
+    static func identityLine(for person: Item) -> String? {
+        guard let profile = person.personProfile else { return nil }
+        return ContactCard.identityLine(
+            name: person.displayTitle,
+            role: profile.roleTitle,
+            organization: profile.organizationName,
+            location: profile.locationText
+        )
+    }
+
+    private var facts: [RelationshipCardFact] {
+        guard let portrait else { return [] }
+        return portrait.cards
+            .filter { $0.attribute != .observedAge && $0.attribute != .schoolGrade }
+            .flatMap { card in
+                card.values.map {
+                    RelationshipCardFact(
+                        id: $0.id,
+                        text: $0.text,
+                        symbol: card.attribute.symbolName,
+                        isUncertain: $0.confidence.needsLabel
+                    )
+                }
+            }
+            .prefix(Self.visibleFacts)
+            .map { $0 }
+    }
+
+    private var helpText: String {
+        if other.personProfile?.isPlaceholder == true {
+            return "\(other.displayTitle) — a lightweight record with no details yet"
+        }
+        return "Open \(other.displayTitle)"
+    }
+}
+
+private struct RelationshipCardFact: Identifiable {
+    let id: UUID
+    let text: String
+    let symbol: String
+    let isUncertain: Bool
 }
 
 // MARK: - Timeline

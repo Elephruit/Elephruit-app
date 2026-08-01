@@ -45,6 +45,12 @@ public struct TimeView: View {
     @State private var editingRowID: String?
     @State private var reloadTick = 0
 
+    /// The row the keyboard is on. Also what the row actions act on when there is no pointer.
+    @State private var selectedRowID: String?
+
+    /// The last deletion, until the offer to undo it expires or is taken.
+    @State private var undoableDeletion: DeletedTimeEntries?
+
     public init(navigation: NavigationModel) {
         self.navigation = navigation
     }
@@ -53,49 +59,86 @@ public struct TimeView: View {
         VStack(spacing: 0) {
             banners
 
-            // ### Why everything below is measured rather than stretched
-            // On a wide window a full-bleed layout puts the description at the far left and the
-            // total at the far right with two feet of nothing between them, and the eye has to
-            // travel the whole way to join one row up. A measure caps that. It is generous — wide
-            // enough that nothing wraps at a normal window size — and it only bites on the screens
-            // where stretching was doing damage.
-            VStack(spacing: Theme.Spacing.small) {
-                TimeTrackerCard(
-                    onChange: { bump() },
-                    onOpenSubject: { id in navigation.selectItem(id) },
-                    onAddManually: { isAddingManually = true }
+            if let undoableDeletion {
+                DeletedEntriesBanner(
+                    deletion: undoableDeletion,
+                    onUndo: { restore(undoableDeletion) },
+                    onDismiss: { self.undoableDeletion = nil }
+                )
+            }
+
+            // ### One frame, not four
+            // Everything below sits inside the same measure, applied once, here. It used to be
+            // applied three times — centred on the tracker, centred on the summary, and
+            // *left-aligned* on each log row through a `measuredRow()` helper — so on any window
+            // wider than the measure the card and the totals sat in the middle of the screen and
+            // the rows they described started at the far left, under a list whose own separators
+            // and insets ran the full width regardless. Three columns, none of them aligned, and a
+            // list that stretched however wide the window went.
+            //
+            // A measure is what makes a log readable at all: a description at the far left and a
+            // total at the far right of a 2,000-point window have to be joined by eye across two
+            // feet of nothing, and joining them is the only thing anybody does with a log. Applying
+            // it to the whole page rather than to the parts means the parts cannot disagree, and
+            // the list's separators stop where the content stops.
+            VStack(spacing: 0) {
+                VStack(spacing: Theme.Spacing.small) {
+                    TimeTrackerCard(
+                        onChange: { bump() },
+                        onOpenSubject: { id in navigation.selectItem(id) },
+                        onAddManually: { isAddingManually = true }
+                    )
+
+                    if let session = services?.timer.pomodoro {
+                        FocusStrip(session: session)
+                    }
+                }
+                .padding(.horizontal, Theme.Spacing.large)
+                .padding(.top, Theme.Spacing.medium)
+                .padding(.bottom, Theme.Spacing.small)
+
+                // ### Why the rail sits under the tracker rather than above it
+                // Everything below it is *of* the chosen period — the summary, the day sections,
+                // the entries — and the tracker is not: it is about now, and starting a timer has
+                // nothing to do with which week you happen to be reading. So the rail goes exactly
+                // where its authority begins.
+                //
+                // On Reports it is at the very top, for the same rule rather than in spite of it:
+                // there, everything on the page answers to it.
+                TimeFilterBar(
+                    // The short windows only. A log is a place you correct yesterday from, and a
+                    // year of one is a list nobody can correct anything from — the long ranges
+                    // belong to Reports, which is the surface that can draw one.
+                    windows: TimeWindow.logWindows,
+                    selectedWindow: window,
+                    onSelectWindow: { navigation.timeWindow = $0 },
+                    groupings: TimeGrouping.allCases,
+                    grouping: grouping,
+                    onSelectGrouping: { navigation.timeGrouping = $0 }
                 )
 
-                if let session = services?.timer.pomodoro {
-                    FocusStrip(session: session)
+                Divider()
+
+                // ### Why the summary disappears rather than reading zero
+                // A period with nothing in it used to say so three times on one screen: "Nothing
+                // tracked" in the window subtitle, a large "0:00" over the words "Nothing tracked
+                // in this period.", and then the centred empty state below saying "No time tracked
+                // today" with the instruction and the button.
+                //
+                // Only the last of those is worth the room. It is the one that says what to do
+                // about it. A headline zero and a sentence restating it are a summary of nothing,
+                // and they push the useful part down the screen.
+                if !report.isEmpty {
+                    summary
+                        .padding(.horizontal, Theme.Spacing.large)
+
+                    Divider()
                 }
+
+                log
             }
             .frame(maxWidth: Self.measure)
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, Theme.Spacing.large)
-            .padding(.top, Theme.Spacing.medium)
-            .padding(.bottom, Theme.Spacing.small)
-
-            // ### Why the summary disappears rather than reading zero
-            // A period with nothing in it used to say so three times on one screen: "Nothing
-            // tracked" in the window subtitle, a large "0:00" over the words "Nothing tracked in
-            // this period.", and then the centred empty state below saying "No time tracked today"
-            // with the instruction and the button.
-            //
-            // Only the last of those is worth the room. It is the one that says what to do about
-            // it. A headline zero and a sentence restating it are a summary of nothing, and they
-            // push the useful part down the screen. When there is time to report, the summary is
-            // the best thing on the page and it comes back.
-            if showsSummary {
-                summary
-                    .frame(maxWidth: Self.measure)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, Theme.Spacing.large)
-
-                Divider()
-            }
-
-            log
         }
         .navigationTitle(navigation.windowTitle)
         .navigationSubtitle(subtitle)
@@ -161,19 +204,13 @@ public struct TimeView: View {
     ///
     /// A measure, in the typographic sense. Long lines are hard to read and long *rows* are hard to
     /// join up, and the fix is the same for both.
-    static let measure: CGFloat = 1_100
-
-    /// Whether the breakdown above the log earns its space.
     ///
-    /// ### Why one row is not a summary
-    /// A single bar drawn at a hundred percent of a peak it is also setting says nothing that the
-    /// number above it did not — and full width, it reads as a stray progress indicator rather than
-    /// a chart. That is exactly what a day of untracked-against work produced: one row, "No item",
-    /// a bar right across the window. The headline facts stay; the chart waits until there is
-    /// something to compare.
-    private var showsSummary: Bool {
-        report.rows.count > 1
-    }
+    /// Eight hundred and sixty rather than the eleven hundred it was. What a log row actually holds
+    /// is a count badge, a description with a line of metadata under it, a couple of tags, a
+    /// duration and two controls — and at eleven hundred points the duration column had already
+    /// separated from the description it belongs to. Anything past this is not more room for the
+    /// content; it is more distance between the two halves of one row.
+    static let measure: CGFloat = 860
 
     private var summary: some View {
         TimeSummaryView(
@@ -215,6 +252,18 @@ public struct TimeView: View {
         )
     }
 
+    /// Day by day, and reachable without a pointer.
+    ///
+    /// ### Why the log has a selection now
+    /// Because every correction in it was behind the pointer. Editing was a pencil that appeared on
+    /// hover, deleting was a context menu, and both are invisible to somebody working from the
+    /// keyboard — a row that cannot be reached cannot be corrected, and correcting is what this
+    /// screen is for. A `List` with a selection gives arrow keys, Home and End, and a row that knows
+    /// it is current; the row shows its controls when the pointer is over it *or* when it is the
+    /// selected one, so the two ways in are the same set of actions.
+    ///
+    /// Return edits the selection and Delete removes it, which is what those keys do everywhere
+    /// else in this app.
     @ViewBuilder
     private var log: some View {
         if entries.isEmpty {
@@ -227,28 +276,33 @@ public struct TimeView: View {
                 action: { isAddingManually = true }
             )
         } else {
-            List {
+            List(selection: $selectedRowID) {
                 ForEach(sections) { section in
                     Section {
                         ForEach(section.groups) { group in
                             groupRow(group)
-                                .measuredRow()
+                                .tag(group.id)
 
                             if expandedGroups.contains(group.id), !group.isSingle {
                                 ForEach(group.entries) { entry in
                                     entryRow(entry)
-                                        .measuredRow()
+                                        .tag(entry.id.uuidString)
                                 }
                             }
                         }
                     } header: {
                         TimeDayHeader(section: section)
-                            .measuredRow()
                     }
                 }
             }
             .listStyle(.inset)
             .alternatingRowBackgrounds(.disabled)
+            .onDeleteCommand { deleteSelection() }
+            .onKeyPress(.return) {
+                guard let selectedRowID, editingRowID == nil else { return .ignored }
+                editingRowID = selectedRowID
+                return .handled
+            }
         }
     }
 
@@ -257,6 +311,7 @@ public struct TimeView: View {
             group: group,
             isExpanded: expandedGroups.contains(group.id),
             isEditing: editingRowID == group.id,
+            isCurrent: selectedRowID == group.id,
             onToggleExpanded: { toggleExpanded(group) },
             onResume: { group.lead.map(resume) },
             onOpen: { group.lead?.itemID.map { navigation.selectItem($0) } },
@@ -267,7 +322,7 @@ public struct TimeView: View {
             },
             onCancelEdit: { editingRowID = nil },
             onDuplicate: { group.lead.map(duplicate) },
-            onDelete: { delete(group.entries.map(\.id)) }
+            onDelete: { delete(group.entries.map(\.id), describing: group.displayTitle) }
         )
     }
 
@@ -275,6 +330,7 @@ public struct TimeView: View {
         TimeEntryRow(
             entry: entry,
             isEditing: editingRowID == entry.id.uuidString,
+            isCurrent: selectedRowID == entry.id.uuidString,
             onEdit: { editingRowID = entry.id.uuidString },
             onCommit: { edit in
                 apply(edit, to: [entry.id])
@@ -282,8 +338,19 @@ public struct TimeView: View {
             },
             onCancelEdit: { editingRowID = nil },
             onDuplicate: { duplicate(entry) },
-            onDelete: { delete([entry.id]) }
+            onDelete: { delete([entry.id], describing: entry.displayTitle) }
         )
+    }
+
+    /// Removes whatever the keyboard is on, group or single stretch.
+    private func deleteSelection() {
+        guard let selectedRowID else { return }
+
+        if let group = sections.flatMap(\.groups).first(where: { $0.id == selectedRowID }) {
+            delete(group.entries.map(\.id), describing: group.displayTitle)
+        } else if let entry = entries.first(where: { $0.id.uuidString == selectedRowID }) {
+            delete([entry.id], describing: entry.displayTitle)
+        }
     }
 
     private func toggleExpanded(_ group: TimeEntryGroup) {
@@ -296,26 +363,17 @@ public struct TimeView: View {
 
     // MARK: - Toolbar
 
+    /// ### What is no longer in this toolbar
+    /// The period and the grouping. They were here as two menus, in the sidebar as two sections of
+    /// checkmark rows, and — once Reports grew a filter rail — in the view as well. Three copies of
+    /// one control, two of which hid their options behind a click, on the surface where flipping
+    /// between periods is most of the activity.
+    ///
+    /// They live in ``TimeFilterBar`` now, in the view, which both Time surfaces share. What stays
+    /// here is what is genuinely about the *log* rather than about the period: how it is displayed,
+    /// how to add time by hand, and the way across to Reports.
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem {
-            // The log's own windows only. The long ranges belong to Reports, which is the surface
-            // that can draw a year without becoming a list nobody can correct anything from.
-            Picker("Period", selection: windowBinding) {
-                ForEach(TimeWindow.logWindows, id: \.self) { Text($0.displayName).tag($0) }
-            }
-            .pickerStyle(.menu)
-            .accessibilityIdentifier(AccessibilityID.Time.windowPicker)
-        }
-
-        ToolbarItem {
-            Picker("Group By", selection: groupingBinding) {
-                ForEach(TimeGrouping.allCases, id: \.self) { Text($0.displayName).tag($0) }
-            }
-            .pickerStyle(.menu)
-            .accessibilityIdentifier(AccessibilityID.Time.groupingPicker)
-        }
-
         ToolbarItem {
             // A menu rather than a bare `Toggle`, which rendered as an unlabelled filled circle —
             // a control whose only clue to what it does is whether it looks pressed.
@@ -340,14 +398,6 @@ public struct TimeView: View {
             }
             .help("Totals over any period, ready to export")
         }
-    }
-
-    private var windowBinding: Binding<TimeWindow> {
-        Binding(get: { navigation.timeWindow }, set: { navigation.timeWindow = $0 })
-    }
-
-    private var groupingBinding: Binding<TimeGrouping> {
-        Binding(get: { navigation.timeGrouping }, set: { navigation.timeGrouping = $0 })
     }
 
     private var subtitle: String {
@@ -397,7 +447,18 @@ public struct TimeView: View {
         bump()
     }
 
-    private func delete(_ ids: [UUID]) {
+    /// Removes tracked time, and offers it straight back.
+    ///
+    /// ### Why an offer rather than a question
+    /// A confirmation dialogue in front of every deletion in a log is a dialogue somebody dismisses
+    /// forty times a day and then, once, dismisses without reading. It also gets the cost backwards:
+    /// this delete is *soft* — `TimeEntryRepository.delete(_:)` stamps `deletedAt` and
+    /// `restore(_:)` puts it back — so the honest interface is one that does the thing and says how
+    /// to have it back, in the place the user is already looking.
+    ///
+    /// It is the only offer on screen at a time, and taking it restores every stretch the action
+    /// removed, which is what makes deleting a collapsed row of eight safe to try.
+    private func delete(_ ids: [UUID], describing title: String) {
         guard let services else { return }
         services.perform {
             for id in ids {
@@ -409,6 +470,25 @@ public struct TimeView: View {
         // is what tells it to take the calendar copy back.
         ids.forEach { services.mirrorTime(entryID: $0) }
         services.timer.refresh()
+
+        if selectedRowID != nil, ids.contains(where: { $0.uuidString == selectedRowID }) {
+            selectedRowID = nil
+        }
+        undoableDeletion = DeletedTimeEntries(ids: ids, title: title)
+        bump()
+    }
+
+    private func restore(_ deletion: DeletedTimeEntries) {
+        guard let services else { return }
+        services.perform {
+            for id in deletion.ids {
+                guard let entry = try services.timeEntries.entry(id: id) else { continue }
+                try services.timeEntries.restore(entry)
+            }
+        }
+        deletion.ids.forEach { services.mirrorTime(entryID: $0) }
+        services.timer.refresh()
+        undoableDeletion = nil
         bump()
     }
 
@@ -458,6 +538,67 @@ public struct TimeView: View {
     }
 }
 
+// MARK: - Undo
+
+/// What one delete removed, kept only long enough to offer it back.
+///
+/// The identifiers rather than the entries: a soft-deleted row is still in the store, and holding
+/// `TimeEntry` in view state across a reload is the thing this codebase does not do.
+struct DeletedTimeEntries: Equatable {
+    var ids: [UUID]
+
+    /// What the row said, so the offer can name what it would restore.
+    var title: String
+
+    var summary: String {
+        let subject = title.isEmpty ? "That entry" : "“\(title)”"
+        return ids.count == 1
+            ? "\(subject) was deleted."
+            : "\(ids.count) stretches of \(subject) were deleted."
+    }
+}
+
+/// The offer to have deleted time back.
+///
+/// A banner in the flow rather than a toast over it, on the same terms as the recovery and idle
+/// banners above: it is a statement about something that has already happened, it must not cover
+/// the log it refers to, and it must not steal the next click.
+struct DeletedEntriesBanner: View {
+    let deletion: DeletedTimeEntries
+    let onUndo: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.small) {
+            Image(systemName: "trash")
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .accessibilityHidden(true)
+
+            Text(deletion.summary)
+                .font(Theme.Text.rowSubtitle)
+
+            Spacer(minLength: Theme.Spacing.small)
+
+            Button("Undo", action: onUndo)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .keyboardShortcut("z", modifiers: .command)
+                .accessibilityIdentifier(AccessibilityID.Time.undoDelete)
+
+            Button("Dismiss", action: onDismiss)
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, Theme.Spacing.medium)
+        .padding(.vertical, Theme.Spacing.small)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.Colors.subtleFill)
+        .overlay(alignment: .bottom) { Divider() }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(deletion.summary) Undo is available.")
+    }
+}
+
 // MARK: - Summary
 
 /// Totals, and where the time went.
@@ -486,6 +627,23 @@ struct TimeSummaryView: View {
     /// screen — this is a summary, and a summary as long as what it summarises is a second list.
     private let visibleRows = 6
 
+    /// Whether the bars earn their space.
+    ///
+    /// ### Why one row is not a chart, and why the total still is
+    /// A single bar drawn at a hundred percent of a peak it is also setting says nothing the number
+    /// above it did not, and it reads as a stray progress indicator rather than as a chart of one
+    /// row. That much was already true and is still the rule.
+    ///
+    /// What did not follow was hiding the *whole summary* with it. A day spent on one project has a
+    /// total, a billable figure and a count of stretches — three facts somebody would otherwise
+    /// count by hand off the list — and they went missing precisely on the tidiest day of the week,
+    /// leaving a tracker card, a rule, and a list, with the only total in the window's subtitle.
+    /// The headline stays whenever there is anything to total. The chart waits for something to
+    /// compare.
+    private var showsChart: Bool {
+        report.rows.count > 1
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
             headline
@@ -494,7 +652,7 @@ struct TimeSummaryView: View {
                 dayProgress(target: dayTarget)
             }
 
-            if !report.isEmpty {
+            if showsChart {
                 VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
                     ForEach(report.rows.prefix(visibleRows)) { row in
                         TimeSummaryBar(row: row, peak: report.peak, onOpen: onOpen)
@@ -506,7 +664,7 @@ struct TimeSummaryView: View {
                             .foregroundStyle(Theme.Colors.tertiaryText)
                     }
 
-                    if grouping.rowsCanOverlap, report.rows.count > 1 {
+                    if grouping.rowsCanOverlap {
                         // Said rather than left to be discovered in a column that does not add up.
                         Text("One entry can appear in more than one row, so these need not total \(TimeFormatting.short(report.total)).")
                             .font(Theme.Text.metadata)

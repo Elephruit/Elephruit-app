@@ -189,6 +189,14 @@ public final class ReminderSyncEngine {
     // MARK: - Linking
 
     /// Brings a system reminder in as a task, linked to it.
+    ///
+    /// The task is created with no parent, no tags and no filing, because there is nothing honest to
+    /// put it under: the user filed it in Reminders, and inventing a project here would be the app
+    /// making a decision on their behalf. What that *used* to mean is that it matched the Inbox's
+    /// definition — active, unparented, untagged, unfiled — the instant it existed, so a connected
+    /// account with four hundred reminders in it produced four hundred rows of triage the user had
+    /// already done somewhere else. See ``ElephruitModel/Item/hasHome``, which now counts the list it
+    /// came from as the home it is.
     @discardableResult
     public func importReminder(
         _ snapshot: ReminderSnapshot,
@@ -199,6 +207,10 @@ public final class ReminderSyncEngine {
                 kind: .task,
                 title: snapshot.title,
                 parentID: container?.id,
+                // The reminder's own identifier, kept whatever happens to the link afterwards. It is
+                // what stops a second pass importing this reminder again — see
+                // ``knownReminderIdentifiers()`` — and it is what the row cites when it says where
+                // this task came from.
                 source: ItemSource(kind: .systemStore, identifier: snapshot.id)
             )
         )
@@ -500,7 +512,7 @@ public final class ReminderSyncEngine {
 
     // MARK: - Discovery
 
-    /// Reminders in the chosen lists that are not linked to anything here yet.
+    /// Reminders in the chosen lists that this library has never seen.
     ///
     /// ### An empty list of lists means none
     /// `RemindersProviding.reminders(inLists:)` reads an empty array as *every* list — a reasonable
@@ -511,12 +523,50 @@ public final class ReminderSyncEngine {
     /// Those two readings met here. Connecting an account and ticking nothing would have imported
     /// the user's entire Reminders database on the first pass — every list, including the ones they
     /// had deliberately left out. The guard is what keeps the promise the settings screen makes.
+    ///
+    /// ### Never seen, not currently linked
+    /// This asked ``knownReminderIdentifiers()`` for *linked* tasks, which is a narrower set than the
+    /// one that matters and produced duplicates two ways.
+    ///
+    /// A task whose link the user deliberately broke — `importAsLocalOnly(_:into:)`, or answering
+    /// *Keep as a local task* to a reminder that vanished and came back — carries no
+    /// `externalIdentifier` at all. It fell out of the set, the reminder read as new, and the next
+    /// pass imported a second copy beside the one already on screen. And a task in the Trash was
+    /// filtered out by `linkedTasks()`, so tidying up an imported reminder here brought it straight
+    /// back, and restoring the original later left two.
+    ///
+    /// The honest question is not "am I keeping this in step" but "have I ever taken this reminder
+    /// in", and the app already records the answer: ``ElephruitModel/Item/sourceIdentifier`` holds
+    /// the reminder's identifier from the moment it is imported and survives both unlinking and the
+    /// Trash. Deleting the local task for good is what forgets a reminder — which is the only place
+    /// where re-importing it is the right answer.
     public func unlinkedReminders(inLists listIDs: [String]) async -> [ReminderSnapshot] {
         guard !listIDs.isEmpty else { return [] }
 
         let remote = await provider.reminders(inLists: listIDs, includingCompleted: false)
-        let known = Set(((try? linkedTasks()) ?? []).compactMap(\.externalIdentifier))
+        let known = knownReminderIdentifiers()
         return remote.filter { !known.contains($0.id) }
+    }
+
+    /// Every reminder identifier this library has a record of, however that record is filed now.
+    ///
+    /// Live links, broken links, and items in the Trash alike. See ``unlinkedReminders(inLists:)``.
+    func knownReminderIdentifiers() -> Set<String> {
+        var query = ItemQuery()
+        query.kinds = [.task]
+        query.scope = .all
+        // Everything, including what has been archived or thrown away: a reminder the user deleted
+        // here is one they have already decided about, and re-importing it would be the app arguing.
+        let all = (try? items.items(matching: query)) ?? []
+
+        var known: Set<String> = []
+        for task in all {
+            if let identifier = task.externalIdentifier { known.insert(identifier) }
+            if task.source.kind == .systemStore, let identifier = task.sourceIdentifier {
+                known.insert(identifier)
+            }
+        }
+        return known
     }
 
     public func lists() async -> [ReminderListSummary] {

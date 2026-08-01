@@ -1,5 +1,79 @@
 import SwiftUI
 
+// MARK: - Report series
+
+/// What colour a series in a report is drawn in.
+///
+/// ### Why a rule rather than a colour per chart
+/// Because the same project appears in the daily chart, in the breakdown under it, and on a chip in
+/// the tracker at the top of the log — and if those three disagree, the colour is decoration. The
+/// rule is the one `TimeChipLabel` already follows: a thing that carries its own tint is drawn in
+/// it, everywhere it appears.
+///
+/// What is new is the fallback. Most rows have no tint of their own — a tag, a person, a project
+/// nobody has coloured — and a chart of six identical bars is not colour-coded. Those take a palette
+/// entry by their **rank in the report**, largest first, so the colour says something true about the
+/// picture: the biggest slice is always the same colour as the top row of the table beneath it.
+///
+/// Ranked rather than hashed, because a hash is stable across *renames* and nothing else anybody can
+/// see, while a rank is what the eye is comparing. The cost is that a series changes colour when it
+/// changes place in the ranking, which is a change the user has just caused and can see happening.
+public enum ReportSeriesPalette {
+    /// The palette entries used for series with no colour of their own, in order.
+    ///
+    /// Chosen to stay apart at a glance and to survive the two commonest colour-vision deficiencies:
+    /// no red beside green, and no pairing that collapses to the same value. Red is absent
+    /// altogether — in this app it means *overdue* and *destructive*, and a project that happens to
+    /// rank fourth has done nothing wrong.
+    ///
+    /// Spelled `Theme.Palette.blue` rather than `.blue`, and not only to satisfy
+    /// `SourceHygieneTests.coloursComeFromTheDesignSystem` — though it does, and the check is right
+    /// to be suspicious of a bare `.blue` it cannot prove is a palette case. Written out, the line
+    /// says what it is at a glance: ten entries of the app's own palette, which adapt to light,
+    /// dark, Increase Contrast and a non-default accent, rather than ten SwiftUI literals that do
+    /// not.
+    public static let ranked: [Theme.Palette] = [
+        Theme.Palette.blue,
+        Theme.Palette.orange,
+        Theme.Palette.teal,
+        Theme.Palette.purple,
+        Theme.Palette.yellow,
+        Theme.Palette.indigo,
+        Theme.Palette.mint,
+        Theme.Palette.brown,
+        Theme.Palette.cyan,
+        Theme.Palette.pink,
+    ]
+
+    /// The colour for a series, given what it carries and where it ranks.
+    ///
+    /// - Parameters:
+    ///   - colorName: the item's own stored palette name, when the row has an item and it has one.
+    ///   - rank: the row's position in the report, largest first.
+    ///   - isUnassigned: whether this row is an *absence* — "No project", "Untagged", "On your own".
+    public static func color(colorName: String?, rank: Int, isUnassigned: Bool) -> Color {
+        // An absence is not a category and must not look like one. Grey says "these are the ones
+        // that are not filed", which is what the row means, and it keeps the palette for the rows
+        // that are actually about something.
+        if isUnassigned { return Theme.Palette.graphite.color }
+
+        if let colorName, let entry = Theme.Palette(rawValue: colorName) { return entry.color }
+
+        guard !ranked.isEmpty else { return Theme.Colors.selection }
+        return ranked[rank % ranked.count].color
+    }
+
+    /// Whether a report row's key is one of the sentinels the reporting rules use for "not filed".
+    ///
+    /// The sentinels are prefixed with a control character precisely so they cannot collide with a
+    /// tag somebody typed — see `TimeReporting.slices(for:grouping:clippedTo:calendar:now:)`.
+    /// Reading the prefix rather than listing the sentinels means a new one is handled on the day it
+    /// is added rather than the day somebody notices it is the wrong colour.
+    public static func isUnassignedKey(_ key: String) -> Bool {
+        key.hasPrefix("\u{1}")
+    }
+}
+
 // MARK: - Calendar metrics
 
 extension Theme {

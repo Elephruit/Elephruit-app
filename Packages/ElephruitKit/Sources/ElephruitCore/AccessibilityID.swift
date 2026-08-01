@@ -112,6 +112,11 @@ public enum AccessibilityID {
         public static let manualSheet = "time.manualSheet"
         public static let manualAddButton = "time.manualSheet.add"
         public static let editRowButton = "time.editRow"
+        public static let deleteRowButton = "time.deleteRow"
+        public static let undoDelete = "time.undoDelete"
+
+        /// The period-and-grouping rail, which both Time surfaces draw — see `TimeFilterBar`.
+        public static let filterBar = "time.filterBar"
 
         // The floating timer, over every screen in the window.
         public static let floatingTimer = "time.floating"
