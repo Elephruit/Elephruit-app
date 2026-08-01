@@ -48,17 +48,24 @@ struct ModuleSidebar: View {
             }
         }
         .listStyle(.sidebar)
-        // ### Why the list is inset from its own top edge
+        // ### Why the list is held clear of the header's divider
         // The module header sits above this list with a `Divider` between them, and a `List` starts
         // its first row flush against its own bounds. A selected first row therefore drew its
-        // rounded accent fill *through* that divider — the fill has no top inset of its own, and
-        // `hoverHighlight(extending:)` widens the highlight outward as well. The result read as the
-        // selection escaping the navigation region, which is exactly what it was doing.
+        // rounded accent fill hard against that divider — no gap, the fill's rounded corner meeting
+        // a hairline — which reads as the selection escaping the navigation region rather than
+        // sitting in it.
         //
-        // A scroll-content margin rather than padding on the row: padding would move the row and
-        // leave the fill where it was, and it would only fix whichever row happened to be first.
-        // This keeps every fill — selected, hovering, or a disclosure's — inside the list.
-        .contentMargins(.vertical, Theme.Spacing.tight, for: .scrollContent)
+        // ### And why this is padding rather than a content margin
+        // Because a content margin was the first attempt and it did nothing. `contentMargins(_:_:for:
+        // .scrollContent)` is honoured by a `ScrollView`; a `List` under `.sidebar` style on macOS
+        // is an `NSTableView` in a scroll view AppKit owns, and it kept its own insets. The
+        // selection carried on touching the line.
+        //
+        // Padding moves the list's *bounds*, which nothing downstream can decline: every fill the
+        // list draws — selected, hovering, a disclosure's — is clipped to those bounds, so none of
+        // them can reach the divider however far the list is scrolled. The gap shows the same
+        // sidebar material the list is drawn on, so there is no seam to see.
+        .padding(.top, Theme.Spacing.small)
         .accessibilityIdentifier("sidebar.module.\(module.rawValue).list")
     }
 
