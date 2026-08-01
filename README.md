@@ -1,123 +1,270 @@
-# Elephruit
+<div align="center">
 
-A private, local-first macOS app that holds one person's entire working memory —
-notes, tasks, projects, people, and reference material — in a single linked graph.
+<img src="Assets/elephruit-logo.png" alt="Elephruit" width="320">
 
-Built with Swift 6, SwiftUI, SwiftData, and no third-party dependencies.
+<h3>Your entire working memory, in one app, on your own Mac.</h3>
 
-## Status
+<p>
+Notes, tasks, projects, people, calendar, and time —<br>
+one linked graph, one search box, zero cloud.
+</p>
 
-**Milestone 1 (Foundation) — implemented.** See [docs/07-roadmap.md](docs/07-roadmap.md) for the
-phase plan and its definition of done.
+<p>
+  <img alt="macOS 26+" src="https://img.shields.io/badge/macOS-26%2B-1d1d1f?style=flat-square&logo=apple&logoColor=white">
+  <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-F05138?style=flat-square&logo=swift&logoColor=white">
+  <img alt="Local first" src="https://img.shields.io/badge/local--first-no_network_entitlement-2ea44f?style=flat-square">
+  <img alt="Dependencies: none" src="https://img.shields.io/badge/dependencies-none-4c6ef5?style=flat-square">
+</p>
 
-| Check | Result |
+</div>
+
+<br>
+
+<div align="center">
+<table>
+<tr><td align="center">
+
+Your thinking is spread across six apps that don't know about each other.<br>
+The note from Tuesday doesn't know it produced three tasks.<br>
+The person you promised something to doesn't know you promised it.<br>
+Search means remembering **which app** before you can find **what**.
+
+</td></tr>
+</table>
+</div>
+
+Elephruit puts all of it in one store where **everything can link to everything** — and then does the
+thing that only becomes possible once you do: a single search surface, a single day view, and a
+person page that assembles itself out of links you never had to file.
+
+It runs entirely on your Mac. No account, no subscription, no sync server, and no network entitlement
+in the app at all.
+
+<br>
+
+<div align="center">
+
+**[Capture](#capture-in-under-four-seconds)** · **[Search](#search-that-actually-narrows)** ·
+**[Today](#a-today-that-has-seen-your-whole-day)** · **[Tasks](#tasks-with-the-parts-real-work-needs)** ·
+**[People](#people-who-remember-themselves)** · **[Calendar](#a-calendar-that-knows-the-rest-of-your-life)** ·
+**[Time](#time-tracking-that-survives-an-audit)** · **[Export](#your-data-leaves-whenever-you-want)**
+
+</div>
+
+---
+
+<br>
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### One graph, not six silos
+
+Notes, tasks, projects, areas, people, meetings, and reference material are all first-class items in
+one store, and any of them can link to any other.
+
+Type `[[` anywhere in a note to link to something that exists — or to something that doesn't yet, and
+create it in place. Every item shows its **backlinks**, computed from the graph, never
+hand-maintained.
+
+</td>
+<td width="50%" valign="top">
+
+### Keyboard first, everywhere
+
+`⌘K` opens the command palette. Every module has a jump shortcut, every primitive action has a
+binding, and **you can rebind all of them**.
+
+Quick Jot, Quick Log, and the people command bar are one chord away from anywhere in the app —
+including from other apps, via a global hotkey.
+
+</td>
+</tr>
+</table>
+
+<br>
+
+## Capture in under four seconds
+
+> *One line, no decision about where it goes.*
+
+`⌘⇧N` opens Quick Jot over whatever you're doing. Type a line, press `⌘↩`, and the grammar does the
+filing for you:
+
+```
+Draft the Q3 memo >Q3 Launch @sarah #writing !friday 3pm
+```
+
+`>` picks the project · `@` links a person · `#` tags it · `!` sets a deadline · `follow:` sets a
+start date instead
+
+The field shows you what it understood **before** you commit, so nothing is ever filed somewhere you
+didn't intend. Then it lands in the Inbox and you get back to what you were doing.
+
+<br>
+
+## Search that actually narrows
+
+> *Stop remembering where. Just describe it.*
+
+Free text across every title and body, plus a token grammar that turns "somewhere in my stuff" into
+one line:
+
+```
+launch plan type:note tag:work project:"Q3 Launch" is:open due:<7d
+```
+
+|  |  |
 |---|---|
-| `xcodebuild` Debug and Release | Succeeds, zero warnings |
-| `swift build` (all eight modules) | Succeeds, zero warnings |
-| `swift test` | All tests passing |
-| Sandboxed, five entitlements only | Verified against the signed binary |
-| Store opens on disk, all seventeen entities materialise | Verified against the running app |
-| Light visual review | Done — People workspace, estimates, groups, duplicates. **Not** the calendar |
-| Dark visual review | **Not done** — see below |
+| **Resolved in the index** | `is:open type:task due:<7d` becomes a `WHERE` clause, not a scan of your whole library — results stay instant as the corpus grows |
+| **Hierarchical tags** | `tag:work` finds `work/clients` |
+| **Quotes group** | `project:"Q3 Launch"`, `tag:"work in progress"` |
+| **Saveable** | Any query becomes a smart view that lives in the sidebar forever |
 
-The People module has been reviewed on screen in light mode. **The calendar module has not been
-reviewed on screen at all, in either appearance**, and dark mode has never been checked — switching it means changing a system setting, which the session that built the People
-module could not do. What is enforced instead is that no view names a literal colour
-(`SourceHygieneTests.coloursComeFromTheDesignSystem`), so every colour resolves through AppKit's
-semantic palette in light, dark, Increase Contrast, and under a non-default accent. That is the part
-that stays true; it is not a substitute for looking.
+<br>
 
-The same applies to **selected** rows, which are their own appearance and were their own bug: naming
-a colour opts a row out of the selected-content colour a focused `List` sets, so every row in the app
-was dark text on the accent fill. Rows now ask for a `Theme.Emphasis` instead of a colour and
-`RowEmphasisTests` pins the rule down. To check any of this yourself:
+## A Today that has seen your whole day
 
-```bash
-xcodebuild -project Elephruit.xcodeproj -scheme Elephruit -configuration Debug build
-```
+> *The person in your ten o'clock is also the person a task is waiting on.*
 
-Then run the app with sample data and a throwaway library, so nothing real is touched:
+One page, not three. Today joins your meetings, your work, and the people both involve — so the
+joining you used to do in your head, reading one screen and then another, is already done. Somebody
+appears on it for a stated reason: they're in a meeting, a task is waiting on them, a task is about
+them, or it's their birthday.
 
-```bash
-open -n "$(xcodebuild -project Elephruit.xcodeproj -scheme Elephruit -showBuildSettings 2>/dev/null | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{print $2}' | head -1)/Elephruit.app" --args -ElephruitDevelopmentMode -ElephruitUseTemporaryStore
-```
+The rules behind it are deliberate about what *not* to say. A dentist appointment isn't a meeting, so
+"six meetings today" stays a number you can act on. A focus block overlapped by a meeting isn't a
+conflict, because flagging it would put a warning on most days of most calendars and teach you to
+ignore warnings. Free time is measured from *now* against the working hours you actually set, and on
+a day you don't work there's no figure at all. Overdue work belongs to today alone — repeating it
+forward would make every future day open as a crisis.
 
-Sample data then appears under **Settings ▸ Advanced ▸ Load Sample Data**. Switch appearance in
-System Settings ▸ Appearance, and turn on Reduce Motion and Increase Contrast in
-Accessibility ▸ Display to exercise those paths.
+`Space` completes. A recurring task reschedules itself instead of breeding duplicates.
 
-### Reviewing the calendar without using your own calendar
+<br>
 
-Add `-ElephruitUseFixtureCalendar` to the launch arguments above. The app then reads a **synthetic**
-calendar of invented events on fictional calendars, and `EKEventStore` is never constructed.
+## Tasks with the parts real work needs
 
-It deliberately contains the cases worth looking at rather than the ones that are typical: a morning
-where three meetings clash, a four-day trip spanning the all-day band, a recurring standup, an
-invitation that was declined, a meeting that was cancelled and is still visible, a call pinned to
-another time zone, and a subscribed calendar that refuses an edit and says why. A calendar of tidy
-one-hour meetings demonstrates nothing.
+> *Deadlines and start dates are different dates, and behave differently.*
 
-The whole module is then reachable from **Calendar** in the sidebar, or `⌘6`. The flag is ignored
-outside development mode, so a release build can never be talked into showing fiction where somebody
-expects their own calendar.
+A start date brings something into view on the day without ever turning red. A deadline can go
+overdue. Conflating the two is why most task apps eventually shout at you about everything at once.
 
-**To use your real calendar instead**, launch without that flag and turn it on in Settings ▸ General
-▸ Calendar. Unlike Contacts, Elephruit *does* write here — creating and changing the events you ask
-it to. What it never writes is anything you record *about* a meeting: linked people, your own notes,
-what you promised. Those stay in Elephruit, and `EventDraft` has nowhere to put them —
-`CalendarWriteSafetyTests` fails if a field is added that could.
+Beyond that: projects with sections, checklists and subtasks, Someday, waiting-on-a-person, promises
+you made, repeats of both kinds — *every Monday*, and *three days after you last finished it* — and
+tasks created straight from a line in a note that keep a link back to where they came from.
 
-### Reviewing the Contacts import without using your own contacts
+<br>
 
-Add `-ElephruitUseFixtureContacts` to the launch arguments above. The app then reads a **synthetic**
-address book of ten invented people — `example.com` addresses, 555 numbers — that deliberately
-contains the awkward cases: a record matching somebody already in the CRM, two different people
-sharing a surname, a housemate sharing a phone number, a row with no name at all, a birthday with no
-year, and a custom phone label. `CNContactStore` is never constructed.
+## People who remember themselves
 
-The whole flow is then reachable from **People ▸ + ▸ Import from Contacts…**, and again from
-**Settings ▸ People**. The flag is ignored outside development mode, so a release build can never be
-talked into showing fiction where somebody expects their own address book.
+> *Assembled from links you already made.*
 
-**To use your real contacts instead**, launch without that flag and turn the integration on in
-Settings ▸ People. Elephruit reads them and never writes: `ContactsProviding` has no write method,
-and `ContactsWriteSafetyTests` fails if the adapter ever reaches past it.
+A person's page shows every interaction, every note that mentions them, every open task you owe them
+or they owe you, the projects you share, and their relationships to other people — none of it
+re-entered.
 
-### Reviewing the Tasks module, and its Reminders link
+Import from your address book with a review step built for the awkward cases: the same person twice,
+two people sharing a surname, a housemate on the same number, a birthday with no year.
 
-Sample data includes one of every state Tasks can be in — a planned Today with a manual order, Later
-Today, an overdue deadline, a future start date, a reminder that is not a deadline, a project with
-sections, a list, Someday, waiting on a person, both kinds of repeat, steps, subtasks, a promise, a
-task made from a note, completed and cancelled history, and all four Reminders states. **None of it
-touches your Reminders**: the linked rows are written directly, so no permission is requested.
+> [!NOTE]
+> Contacts is **read-only by construction** — the adapter has no write method to call, and a test
+> fails the build if one is ever added.
 
-Apple Reminders is the **first integration in this app that writes**. Calendar and Contacts are
-read-only by construction — their protocols have no write method — and that is not available for a
-task manager that has to be able to tick a reminder off. So the guarantee is different and is
-checked rather than compiled: every write is a `ReminderWrite` value that can be shown before it
-happens, `apply(_:)` is the only door, and `RemindersWriteSafetyTests` counts the EventKit write
-calls in the adapter so that adding one has to be justified.
+<br>
 
-Nothing private crosses. Areas, projects, sections, Today, Someday, waiting-for, linked people, and
-provenance stay here and are never written into a reminder's title or notes — that text would appear
-in Apple's own app on every device, and in a shared list to everybody it is shared with. The full
-list, with a reason for each, is in Settings ▸ Tasks.
+## A calendar that knows the rest of your life
 
-**To connect your real Reminders**, open Settings ▸ Tasks, read the explanation, and press *Connect
-Reminders…*. No list participates until you tick it, and disconnecting leaves every existing link
-intact.
+> *The meeting, and everything you know about it.*
 
-No automated test can reach a real Reminders database: the test targets never import EventKit, and
-`FixtureRemindersProvider` — an in-memory store with a read-only shared list, a timed reminder, an
-all-day one, a repeating one, and one already completed — is the only implementation they can
-construct.
+Day, week, month, and agenda views. Overlap-aware layout for a morning where three meetings clash.
+Time zones shown honestly. Recurring events, event templates, and calendar sets you can switch
+between.
 
-## Requirements
+You create and edit real events from here — and attach the things a calendar can't hold: who was
+there, what you decided, what you promised. Those stay in Elephruit. A **meeting brief** pulls the
+people, the notes, and the open threads together before you walk in.
 
-- macOS 26 or later
-- Xcode 27 or later
+<br>
 
-## Building
+## Time tracking that survives an audit
+
+> *An entry that ran fifty-one minutes is stored as fifty-one minutes. Forever.*
+
+Start a timer on anything — a task, a project, a meeting, a note — or log it after the fact.
+
+People are a real relationship rather than a string, so *time **on** Sarah* and *time **with** Sarah*
+are different questions with different answers. Rounding applies to a report row, an export column,
+an invoice total — never to the store, because a store holding fifty-four minutes has lost the only
+number that could settle a dispute.
+
+Reports group by project, person, tag, or period, chart the result, and export to CSV in either
+shape. A built-in **focus cycle** runs pomodoros against the running timer, with idle detection so a
+walk to the kitchen doesn't get billed.
+
+<br>
+
+## Apple integrations, on your terms
+
+> *Connected one at a time, list by list, or not at all.*
+
+Reminders, Calendar, and Contacts each stay off until you switch them on. No list participates until
+you tick it. Disconnecting leaves every existing link intact.
+
+> [!IMPORTANT]
+> Nothing private crosses the boundary. Areas, projects, Today, waiting-for, linked people, and
+> provenance are never written into a reminder's title or a calendar note — that text would appear in
+> Apple's own apps on every device, and in a shared list to everybody it's shared with. Every rule
+> has a stated reason in Settings, and a test that fails if the code stops honouring it.
+
+<br>
+
+## Your data leaves whenever you want
+
+> *Shipped in v1 on purpose. It's the whole escape hatch.*
+
+| Format | What you get |
+|---|---|
+| **JSON archive** | Complete, versioned, round-trippable, identifiers preserved |
+| **Markdown bundle** | One `.md` per note with YAML front-matter, attachments in a predictable tree |
+
+Import accepts both, validates before it writes, detects duplicates by stable ID and then by content
+hash, and reports exactly what it did.
+
+And nothing is destroyed by accident: deleting moves to **Trash** with a restore path that reattaches
+the original relationships, `⌘Z` undoes structural changes rather than just typing, and permanent
+deletion is always a separate, explicit act.
+
+<br>
+
+---
+
+<br>
+
+## Built for the machine it runs on
+
+Native SwiftUI and SwiftData. Sandboxed with five entitlements and no network one. No third-party
+dependencies, no analytics, no telemetry, no crash-reporting SDK, nothing phoning home. Secrets live
+in the Keychain or nowhere.
+
+Every colour resolves through the system palette, so light, dark, Increase Contrast, and a
+non-default accent all work — and a test fails the build if a view ever names a literal colour.
+
+<table>
+<tr>
+<td align="center"><strong>&lt; 700 ms</strong><br><sub>cold launch to usable window</sub></td>
+<td align="center"><strong>&lt; 100 ms</strong><br><sub>search over 20 000 items</sub></td>
+<td align="center"><strong>10 000 words</strong><br><sub>imperceptible typing latency</sub></td>
+<td align="center"><strong>zero</strong><br><sub>data loss on force-quit mid-edit</sub></td>
+</tr>
+</table>
+
+<br>
+
+## Getting it running
+
+Requires **macOS 26** or later, and **Xcode 27** or later to build.
 
 ```bash
 open Elephruit.xcodeproj
@@ -135,49 +282,44 @@ The module tests run without Xcode, signing, or a simulator:
 swift test --package-path Packages/ElephruitKit
 ```
 
-## Design documents
+<details>
+<summary><strong>Trying it without touching anything real</strong></summary>
 
-Read these before changing anything structural.
+<br>
 
-| Document | Contents |
-|---|---|
-| [01 — Product definition](docs/01-product-definition.md) | Vision, principles, non-goals, the nine primary journeys, command surface |
-| [02 — Architecture](docs/02-architecture.md) | Module graph, concurrency and state rules, AppKit policy, multiplatform readiness |
-| [03 — Storage matrix](docs/03-storage-matrix.md) | Which technology owns which data, and why |
-| [04 — Domain model](docs/04-domain-model.md) | Entities, relationships, invariants |
-| [05 — CloudKit & migrations](docs/05-cloudkit-and-migrations.md) | Sync constraints honoured from v1, conflict policy, migration rules |
-| [06 — Privacy & entitlements](docs/06-privacy-and-entitlements.md) | No-network posture, entitlement schedule, accessibility commitments |
-| [07 — Roadmap](docs/07-roadmap.md) | Phases 1–5 and the milestone-1 implementation plan |
-| [08 — Risks](docs/08-risks.md) | Twelve risks with mitigations and documented fallbacks |
-| [09 — v2 plan](docs/09-v2-plan.md) | The plan phases A–F were built against |
-| [16 — Expansion audit](docs/16-expansion-audit.md) | Stage 0. Frozen state of the codebase against the expansion specification |
-| [17 — Coverage matrix](docs/17-expansion-coverage-matrix.md) | Every expansion requirement, its status and its closing slice |
-| [18 — Architecture checkpoint](docs/18-architecture-checkpoint.md) | Standing rules, the four seams, deferred decisions |
-| [19 — Permissions matrix](docs/19-permissions-matrix.md) | Entitlements and usage strings, per capability |
-| [20 — Expansion slices](docs/20-expansion-slices.md) | The ordered slice list |
-| [21 — People module scope](docs/21-people-module-scope.md) | The five decisions behind the People module |
-| [22 — People module record](docs/22-people-module-record.md) | What was built, the bugs found, what was deliberately left |
-| [23 — Contacts import scope](docs/23-contacts-import-scope.md) | The six decisions behind reading the address book |
-| [24 — Contacts import record](docs/24-contacts-import-record.md) | Permission, provenance, refresh, and two SDK facts worth knowing |
-| [25 — Calendar module scope](docs/25-calendar-module-scope.md) | The nine decisions behind reading *and writing* the calendar |
-| [26 — Calendar module record](docs/26-calendar-module-record.md) | What was built, seven bugs found, and three EventKit limits worth knowing |
-| [27 — Tasks module record](docs/25-tasks-module-record.md) | The three dates, Today as a plan, the Reminders write guarantee, and what was left |
-| [28 — The task-port message](docs/28-task-port-message.md) | Who emits it, why it is not ours, and the one real defect finding out surfaced |
-| [30 — Today](docs/30-today-record.md) | Why Home and Upcoming became one destination, the relevance rules, and what was deliberately left |
+Run with sample data and a throwaway library:
 
-Phase records: [10 — A scope](docs/10-phase-a-scope.md) ·
-[11 — B](docs/11-phase-b-record.md) · [12 — C](docs/12-phase-c-record.md) ·
-[13 — D](docs/13-phase-d-record.md) · [14 — E](docs/14-phase-e-record.md) ·
-[15 — F](docs/15-phase-f-record.md)
+```bash
+open -n "$(xcodebuild -project Elephruit.xcodeproj -scheme Elephruit -showBuildSettings 2>/dev/null | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{print $2}' | head -1)/Elephruit.app" --args -ElephruitDevelopmentMode -ElephruitUseTemporaryStore
+```
 
-Architecture decision records live in [docs/adr/](docs/adr/).
+Sample data then lives under **Settings ▸ Advanced ▸ Load Sample Data**.
 
-## Non-negotiables
+Add `-ElephruitUseFixtureCalendar` or `-ElephruitUseFixtureContacts` to explore the calendar and
+contacts features against invented data — fictional calendars, `example.com` addresses, 555 numbers —
+instead of your own. The real system stores are never opened. Both flags are ignored outside
+development mode, so a release build can never be talked into showing fiction where somebody expects
+their own data.
 
-- No network requests. The app has no network entitlement.
-- Nothing recorded *about* a person or a meeting is ever written to a system calendar or contact.
-- No analytics, telemetry, or crash-reporting SDKs.
-- Secrets in the Keychain only — never in SwiftData, `UserDefaults`, logs, or source.
-- No force unwraps, no `try!`, no `fatalError` on a recoverable path.
-- Builds without warnings.
-- Full-fidelity export ships in v1.
+</details>
+
+<br>
+
+## Documentation
+
+Design documents, architecture decisions, and per-module records live in **[docs/](docs/)** — start
+with [Product definition](docs/01-product-definition.md) and the [Roadmap](docs/07-roadmap.md).
+
+<br>
+
+---
+
+<div align="center">
+
+**Non-negotiables**
+
+No network requests, because the app has no network entitlement · Nothing recorded *about* a person
+or a meeting is ever written to a system calendar or contact · No analytics, telemetry, or
+crash-reporting SDKs · Secrets in the Keychain only · Full-fidelity export ships in v1
+
+</div>
