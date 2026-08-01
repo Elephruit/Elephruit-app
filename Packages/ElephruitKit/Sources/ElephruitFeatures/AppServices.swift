@@ -57,6 +57,19 @@ public final class AppServices {
     @ObservationIgnored
     public private(set) lazy var miniTimer = MiniTimerController(services: self, defaults: defaults)
 
+    /// The panel that starts a timer from any application, and names it once it is going.
+    ///
+    /// Held here rather than on the composition root — which is where Quick Jot's controller lives —
+    /// because three separate surfaces need to open it: the global shortcut, the File menu, and the
+    /// menu bar. A controller reachable only from the app object would have to be threaded through
+    /// every one of them, and `ElephruitCommands` has no route to it at all.
+    ///
+    /// Lazy and `@ObservationIgnored` on the same terms as ``miniTimer``: an app whose owner never
+    /// presses the shortcut should never construct a panel, the reference never changes, and what
+    /// views watch is the controller's own observable state.
+    @ObservationIgnored
+    public private(set) lazy var quickLog = QuickLogController(services: self)
+
     /// Where this machine's preferences live.
     ///
     /// Held rather than reached for, so a preview or a test can hand over a throwaway suite and not

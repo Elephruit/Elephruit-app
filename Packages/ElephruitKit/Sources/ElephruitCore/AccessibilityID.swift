@@ -120,6 +120,14 @@ public enum AccessibilityID {
         public static let floatingStop = "time.floating.stop"
         public static let floatingCollapse = "time.floating.collapse"
 
+        // The panel that starts a timer from any application.
+        public static let quickLog = "time.quickLog"
+        public static let quickLogDescription = "time.quickLog.description"
+        public static let quickLogDiscard = "time.quickLog.discard"
+        public static let quickLogStop = "time.quickLog.stop"
+        public static let quickLogDone = "time.quickLog.done"
+        public static let quickLogStart = "time.quickLog.start"
+
         // The app, collapsed to the clock.
         public static let miniTimer = "time.mini"
         public static let miniTimerMenu = "time.mini.menu"
