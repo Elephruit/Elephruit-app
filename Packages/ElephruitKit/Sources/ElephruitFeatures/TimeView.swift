@@ -292,6 +292,13 @@ public struct TimeView: View {
                 .help("Record time you have already spent")
                 .accessibilityIdentifier(AccessibilityID.Time.addEntryButton)
         }
+
+        ToolbarItem {
+            Button("Reports", systemImage: "chart.bar.xaxis") {
+                navigation.timeSurface = .report
+            }
+            .help("Totals over any period, ready to export")
+        }
     }
 
     private var modeBinding: Binding<TimeEntryMode> {

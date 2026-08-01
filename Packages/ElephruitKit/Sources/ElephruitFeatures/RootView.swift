@@ -303,7 +303,12 @@ public struct RootView: View {
                     // those rules or a list that cannot show them.
                     TaskWorkspaceView(navigation: navigation)
                 } else if navigation.selection == .time {
-                    TimeView(navigation: navigation)
+                    switch navigation.timeSurface {
+                    case .log:
+                        TimeView(navigation: navigation)
+                    case .report:
+                        TimeReportView(navigation: navigation)
+                    }
                 } else if navigation.selection == .calendar {
                     // The calendar replaces the middle column rather than opening beside it, on the
                     // same terms as Time and the People workspace: it *is* that column's contents

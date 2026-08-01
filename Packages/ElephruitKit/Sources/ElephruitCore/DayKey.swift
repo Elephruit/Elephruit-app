@@ -1,3 +1,5 @@
+import Foundation
+
 /// Formats and reads `yyyy-MM-dd` day keys.
 ///
 /// A day key is a *calendar day label* in the user's own calendar, not an instant. It is
@@ -25,6 +27,23 @@ public enum DayKey {
     /// Whether a string is a well-formed day key.
     public static func isValid(_ key: String) -> Bool {
         components(from: key) != nil
+    }
+
+    /// The start of the day a key names, in a given calendar.
+    ///
+    /// The inverse of ``string(year:month:day:)``, and the only place a key becomes an instant
+    /// again. Needed by anything that has to *plot* days rather than list them — a chart axis wants
+    /// dates, and a chart labelled with strings cannot space its bars by how far apart the days are.
+    ///
+    /// Takes the calendar rather than assuming one, because a key is a label in the user's calendar
+    /// and reading it back in a different one would move it by up to a day.
+    public static func date(from key: String, in calendar: Calendar = .current) -> Date? {
+        guard let parts = components(from: key) else { return nil }
+        var components = DateComponents()
+        components.year = parts.year
+        components.month = parts.month
+        components.day = parts.day
+        return calendar.date(from: components)
     }
 
     /// Two-digit zero padding, for clock faces and durations.

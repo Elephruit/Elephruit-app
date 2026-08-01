@@ -111,34 +111,56 @@ struct TimeSidebarSection: View {
             }
         }
 
-        Section("Period") {
-            ForEach(TimeWindow.allCases, id: \.self) { window in
+        Section("View") {
+            ForEach(TimeSurface.allCases, id: \.self) { surface in
                 ModeRow(
-                    title: window.displayName,
-                    symbolName: window.symbolName,
-                    hint: window.hint,
-                    isOn: navigation.timeWindow == window,
-                    identifier: "sidebar.time.window.\(window.rawValue)",
+                    title: surface.displayName,
+                    symbolName: surface.symbolName,
+                    hint: surface.hint,
+                    isOn: navigation.timeSurface == surface,
+                    identifier: "sidebar.time.surface.\(surface.rawValue)",
                     rowHeight: rowHeight
                 ) {
                     navigation.select(.time)
-                    navigation.timeWindow = window
+                    navigation.timeSurface = surface
                 }
             }
         }
 
-        Section("Grouped By") {
-            ForEach(TimeGrouping.allCases, id: \.self) { grouping in
-                ModeRow(
-                    title: grouping.displayName,
-                    symbolName: grouping.symbolName,
-                    hint: grouping.hint,
-                    isOn: navigation.timeGrouping == grouping,
-                    identifier: "sidebar.time.grouping.\(grouping.rawValue)",
-                    rowHeight: rowHeight
-                ) {
-                    navigation.select(.time)
-                    navigation.timeGrouping = grouping
+        // Both of these belong to the log. Reports carry their own period and grouping, because the
+        // period a report covers is usually a month somebody is invoicing and the period the log
+        // shows is usually today — and one setting serving both means changing it in one place to
+        // answer a question in the other.
+        if navigation.timeSurface == .log {
+            Section("Period") {
+                ForEach(TimeWindow.logWindows, id: \.self) { window in
+                    ModeRow(
+                        title: window.displayName,
+                        symbolName: window.symbolName,
+                        hint: window.hint,
+                        isOn: navigation.timeWindow == window,
+                        identifier: "sidebar.time.window.\(window.rawValue)",
+                        rowHeight: rowHeight
+                    ) {
+                        navigation.select(.time)
+                        navigation.timeWindow = window
+                    }
+                }
+            }
+
+            Section("Grouped By") {
+                ForEach(TimeGrouping.allCases, id: \.self) { grouping in
+                    ModeRow(
+                        title: grouping.displayName,
+                        symbolName: grouping.symbolName,
+                        hint: grouping.hint,
+                        isOn: navigation.timeGrouping == grouping,
+                        identifier: "sidebar.time.grouping.\(grouping.rawValue)",
+                        rowHeight: rowHeight
+                    ) {
+                        navigation.select(.time)
+                        navigation.timeGrouping = grouping
+                    }
                 }
             }
         }
