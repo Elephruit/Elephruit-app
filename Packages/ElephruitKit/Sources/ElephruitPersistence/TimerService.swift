@@ -33,6 +33,12 @@ public final class TimerService {
     private let entries: any TimeEntryRepository
     private let dateProvider: any DateProvider
 
+    /// What the machine says about whether anybody is here.
+    private let idleClock: any IdleClock
+
+    /// The rule about when a gap in input becomes a question. See ``IdleDetector``.
+    private var idleDetector: IdleDetector
+
     /// The running timer, or `nil`. A value, so views can read it while drawing.
     public private(set) var running: RunningTimer?
 
@@ -45,6 +51,14 @@ public final class TimerService {
     /// behalf, because each destroys something different and which of those matters is not something
     /// the app can know.
     public private(set) var pendingRecovery: TimerRecovery?
+
+    /// A stretch the timer ran through with nobody at the machine, waiting to be answered for.
+    ///
+    /// The sibling of ``pendingRecovery`` and a different question: that one asks what happened
+    /// while the app was not running, this one asks what happened while it was running and watching
+    /// nothing. Presented on the same terms — never resolved by the app, because no heuristic can
+    /// tell reading a document from being at lunch.
+    public private(set) var pendingIdle: IdleObservation?
 
     /// Set when the invariant had to be repaired, so the user can be told rather than have their
     /// timers silently rearranged.
@@ -59,9 +73,16 @@ public final class TimerService {
     /// The last heartbeat this process wrote, so ticking does not write on every second.
     private var lastHeartbeatWrite: Date?
 
-    public init(entries: any TimeEntryRepository, dateProvider: any DateProvider) {
+    public init(
+        entries: any TimeEntryRepository,
+        dateProvider: any DateProvider,
+        idleClock: any IdleClock = SystemIdleClock(),
+        idleThreshold: TimeInterval = IdleDetector.defaultThreshold
+    ) {
         self.entries = entries
         self.dateProvider = dateProvider
+        self.idleClock = idleClock
+        self.idleDetector = IdleDetector(threshold: idleThreshold)
     }
 
     // MARK: - Lifecycle
@@ -144,19 +165,106 @@ public final class TimerService {
     // MARK: - Commands
 
     @discardableResult
-    public func start(item: Item?, description: String = "", tagSlugs: [String] = []) -> Bool {
-        perform { try entries.start(item: item, description: description, tagSlugs: tagSlugs) }
+    public func start(
+        item: Item?,
+        description: String = "",
+        tagSlugs: [String] = [],
+        isBillable: Bool = false
+    ) -> Bool {
+        perform {
+            try entries.start(
+                item: item,
+                description: description,
+                tagSlugs: tagSlugs,
+                isBillable: isBillable
+            )
+        }
     }
 
     /// Stops what is running and starts this instead.
     @discardableResult
-    public func switchTo(item: Item?, description: String = "", tagSlugs: [String] = []) -> Bool {
-        perform { try entries.switchTo(item: item, description: description, tagSlugs: tagSlugs) }
+    public func switchTo(
+        item: Item?,
+        description: String = "",
+        tagSlugs: [String] = [],
+        isBillable: Bool = false
+    ) -> Bool {
+        perform {
+            try entries.switchTo(
+                item: item,
+                description: description,
+                tagSlugs: tagSlugs,
+                isBillable: isBillable
+            )
+        }
     }
 
     @discardableResult
     public func stop() -> Bool {
         perform { try entries.stopRunning(at: nil) }
+    }
+
+    /// Throws the running timer away rather than recording it.
+    ///
+    /// The button next to Stop, and a different answer to a different question: Stop says the work
+    /// happened, this says the timer should never have been running.
+    @discardableResult
+    public func discard() -> Bool {
+        perform { try entries.discardRunning() }
+    }
+
+    // MARK: Editing what is running
+
+    /// Rewrites the running entry's description.
+    ///
+    /// Called as the field commits rather than on every keystroke. A timer's description is
+    /// something you finish typing before you care about it being saved, and a write per character
+    /// would be a thousand saves for a sentence.
+    @discardableResult
+    public func setDescription(_ description: String) -> Bool {
+        updateRunning { $0.entryDescription = description.trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
+    /// Points the running entry at an item, or at nothing.
+    @discardableResult
+    public func setSubject(_ item: Item?) -> Bool {
+        updateRunning { $0.item = item }
+    }
+
+    @discardableResult
+    public func setBillable(_ isBillable: Bool) -> Bool {
+        updateRunning { $0.isBillable = isBillable }
+    }
+
+    @discardableResult
+    public func setTags(_ slugs: [String]) -> Bool {
+        perform {
+            guard let running = try entries.runningEntry() else { return nil }
+            try entries.setTags(slugs, on: running)
+            return running
+        }
+    }
+
+    /// Back-dates the running timer so that it has been going for exactly this long.
+    ///
+    /// The "I started this at two" correction: there is no end to move on something still running,
+    /// so the start moves instead. Refuses a duration that would place the start in the future.
+    @discardableResult
+    public func setElapsed(_ duration: TimeInterval) -> Bool {
+        guard duration >= 0 else { return false }
+        return perform {
+            guard let running = try entries.runningEntry() else { return nil }
+            try entries.setDuration(duration, for: running)
+            return running
+        }
+    }
+
+    private func updateRunning(_ mutate: @escaping (TimeEntry) -> Void) -> Bool {
+        perform {
+            guard let running = try entries.runningEntry() else { return nil }
+            try entries.update(running, mutate)
+            return running
+        }
     }
 
     /// Starts, or stops if the same item is already being timed.
@@ -234,6 +342,58 @@ public final class TimerService {
         pendingRecovery = nil
     }
 
+    // MARK: - Idle
+
+    /// Applies the user's decision about an idle stretch, and only the user's decision.
+    public func resolveIdle(_ choice: IdleChoice) {
+        guard let pending = pendingIdle else { return }
+
+        do {
+            try entries.resolveIdle(choice, for: pending)
+            pendingIdle = nil
+            refresh()
+        } catch {
+            lastError = error
+        }
+    }
+
+    /// Dismisses the question without answering it, keeping the gap.
+    ///
+    /// Unlike a recovered timer this is *not* offered again: the gap has already been counted as
+    /// worked by the timer that ran through it, and re-asking about the same minutes every tick
+    /// would be nagging rather than care.
+    public func deferIdle() {
+        pendingIdle = nil
+    }
+
+    /// Notices a gap in input that has just ended.
+    ///
+    /// Skipped entirely while a recovery is pending, because a sleep long enough to produce one has
+    /// also produced a gap in input, and asking the same question in two banners with two different
+    /// sets of answers is worse than asking it once.
+    private func checkIdle(at now: Date) {
+        guard pendingRecovery == nil else {
+            idleDetector.reset()
+            return
+        }
+
+        let gap = idleDetector.observe(
+            secondsSinceInput: idleClock.secondsSinceLastInput,
+            now: now,
+            timerStartedAt: running?.startedAt
+        )
+
+        guard let gap, let running, pendingIdle == nil else { return }
+
+        pendingIdle = IdleObservation(
+            id: running.id,
+            entryDescription: running.entryDescription,
+            itemTitle: running.itemTitle,
+            idleSince: gap.from,
+            idleUntil: gap.to
+        )
+    }
+
     // MARK: - Ticking and heartbeat
 
     private func startTicking() {
@@ -248,13 +408,18 @@ public final class TimerService {
     }
 
     private func tick() {
+        let now = dateProvider.now
+
         guard let running else {
             elapsed = 0
+            // Still fed while nothing runs, so an open gap is closed rather than left to be
+            // reported against whatever timer starts next.
+            checkIdle(at: now)
             return
         }
 
-        let now = dateProvider.now
         elapsed = running.elapsed(at: now)
+        checkIdle(at: now)
 
         // The clock ticks every second; the store is written every thirty. A timer that wrote once a
         // second would be a hundred thousand writes a day for no gain.
@@ -303,7 +468,10 @@ public final class TimerService {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                // The gap is offered rather than absorbed, on exactly the same terms as a crash.
+                // The gap is offered rather than absorbed, on exactly the same terms as a crash —
+                // and by crash recovery rather than by idle detection, which is told to forget the
+                // sleep so the same minutes are not queried twice.
+                self.idleDetector.reset()
                 self.detectStaleTimer()
                 self.refresh()
             }
