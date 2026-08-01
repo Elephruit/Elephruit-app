@@ -80,6 +80,34 @@ extension Theme {
         /// The editor's measure. Long lines are hard to read; this caps them at roughly 80
         /// characters at the default size while leaving the window free to be any width.
         public static let editorMaxWidth: CGFloat = 720
+
+        /// The measure of a page built from columns of rows rather than from prose.
+        ///
+        /// Wider than ``editorMaxWidth`` because the constraint is different: a paragraph is capped
+        /// so the eye does not have to travel back across it, and a day's plan has no paragraphs —
+        /// it has a date rail, a time gutter, titles, and metadata that need room to sit on one line
+        /// rather than wrap. Capped all the same, because a briefing stretched across an ultrawide
+        /// display puts a metre of glass between "2 overdue" and the work it is about.
+        ///
+        /// Sized for the two-column arrangement a day takes when there is room for it: the schedule
+        /// and the work on the left, the people and the note on the right. At 1080 the second column
+        /// had nowhere to go and the page was a narrow strip with half a window of nothing beside it.
+        public static let todayContentWidth: CGFloat = 1240
+
+        /// The trailing column of a day — people, the day's note — when the window is wide enough to
+        /// hold one.
+        ///
+        /// A person's card is a name, a role, why they are here and when you last spoke. Below about
+        /// 280 those wrap into a paragraph; above about 360 the whitespace inside the card starts
+        /// reading as an alignment mistake.
+        public static let todaySideColumnWidth: CGFloat = 320
+
+        /// The window width below which a day is one column.
+        ///
+        /// Derived rather than picked: the day needs its date rail, a schedule column wide enough
+        /// that a meeting title and its context sit on one line, and the side column above — below
+        /// that, two columns means two cramped ones.
+        public static let todayTwoColumnMinimum: CGFloat = 860
     }
 }
 

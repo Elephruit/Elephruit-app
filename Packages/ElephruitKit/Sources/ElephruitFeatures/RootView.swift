@@ -260,8 +260,26 @@ public struct RootView: View {
         }
     }
 
-    /// The column widths the module this window is in has asked for.
-    private var shellLayout: ModuleShellLayout { navigation.activeModule.shellLayout }
+    /// The column widths whatever this window is showing has asked for.
+    private var shellLayout: ModuleShellLayout { navigation.shellLayout }
+
+    /// What the shell's shape depends on.
+    ///
+    /// The module, and — because Today is a canvas where the rest of primary navigation is a list —
+    /// whether Today is what is on screen. Watching the module alone meant moving between Inbox and
+    /// Today changed every column without the shell being told, so the width recorder read the snap
+    /// as a drag and stored the day's full width as somebody's preferred Inbox list.
+    private struct ShellShape: Equatable {
+        var module: AppModule?
+        var isToday: Bool
+    }
+
+    private var shellShape: ShellShape {
+        ShellShape(
+            module: navigation.activeModule,
+            isToday: navigation.activeModule == nil && navigation.selection.canonical == .today
+        )
+    }
 
     /// What primary navigation needs, at the current text size.
     private var sidebarWidths: SidebarWidths {
@@ -329,8 +347,12 @@ public struct RootView: View {
                     // same terms as Time and the People workspace: it *is* that column's contents
                     // for this destination.
                     CalendarWorkspaceView(navigation: navigation)
-                } else if navigation.selection == .home {
-                    HomeView(navigation: navigation)
+                } else if navigation.selection == .today {
+                    // Today replaces the middle column on the same terms as the calendar and the
+                    // time sheet: it *is* that column's contents. It is not a filtered list, so
+                    // there is nothing for `ItemListView` to draw and nothing for a third column to
+                    // be about until something is picked.
+                    TodayView(navigation: navigation)
                 } else if case .people(let scope) = navigation.selection {
                     if PeoplePerformanceIsolation.usesIsolatedList {
                         IsolatedPeopleListView()
@@ -405,7 +427,7 @@ public struct RootView: View {
         // Applying a module's own widths on arrival is the whole point: AppKit's split view keeps
         // its divider wherever it was last put, so without this, widening the pane to read somebody's
         // profile also moved the calendar's divider — and the calendar had no say in it.
-        .task(id: navigation.activeModule) { await applyModuleLayout() }
+        .task(id: shellShape) { await applyModuleLayout() }
         .onAppear { wireWidthRecorder() }
         // Anything that happened in Reminders while the app was in the background arrives when it
         // comes back. `reconcile()` is idempotent, so a pass that finds nothing writes nothing.
@@ -495,14 +517,8 @@ public struct RootView: View {
             PaletteCommand(id: "go-today", title: "Go to Today", category: .navigate, symbolName: "sun.max", command: .goToday, in: registry) {
                 navigation.select(.today)
             },
-            PaletteCommand(id: "go-upcoming", title: "Go to Upcoming", category: .navigate, symbolName: "calendar") {
-                navigation.select(.upcoming)
-            },
             PaletteCommand(id: "go-inbox", title: "Go to Inbox", category: .navigate, symbolName: "tray", command: .goInbox, in: registry) {
                 navigation.select(.inbox)
-            },
-            PaletteCommand(id: "go-home", title: "Go to Home", category: .navigate, symbolName: "house") {
-                navigation.select(.home)
             },
         ]
 

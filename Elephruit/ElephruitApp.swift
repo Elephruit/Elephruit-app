@@ -305,18 +305,13 @@ struct ElephruitCommands: Commands {
 
             Divider()
 
-            // The four destinations that belong to no module, in sidebar order. Every one of them
-            // now goes through the registry — Home was the exception, binding ⌘1 as a literal while
-            // the registry gave ⌘1 to Inbox, so two menu items claimed the same keys and Inbox's
-            // did nothing. A binding whose name and effect disagree is worse than no binding, which
-            // is why `ShortcutRegistry` gives every shortcut exactly one owner, and why nothing here
-            // is allowed to bind keys behind its back.
-            Button("Home") { navigation?.select(.home) }
-                .shortcut(.goHome, in: shortcuts)
+            // The two destinations that belong to no module, in sidebar order. Both go through the
+            // registry — nothing here is allowed to bind keys behind its back, because a binding
+            // whose name and effect disagree is worse than no binding, and `ShortcutRegistry` gives
+            // every shortcut exactly one owner so that a collision fails a test rather than
+            // silently shadowing another menu item.
             Button("Today") { navigation?.select(.today) }
                 .shortcut(.goToday, in: shortcuts)
-            Button("Upcoming") { navigation?.select(.upcoming) }
-                .shortcut(.goUpcoming, in: shortcuts)
             Button("Inbox") { navigation?.select(.inbox) }
                 .shortcut(.goInbox, in: shortcuts)
 

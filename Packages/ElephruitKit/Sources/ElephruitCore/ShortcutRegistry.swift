@@ -59,14 +59,12 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
     case quickCapture
     case newWindow
     case importFiles
-    case goHome
     case exportLibrary
     case moveToTrash
     case search
     case commandPalette
     case goToday
     case goInbox
-    case goUpcoming
     case goNotes
     case goProjects
     case goPeople
@@ -97,14 +95,12 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .quickCapture: "Quick Jot"
         case .newWindow: "New Window"
         case .importFiles: "Import Files…"
-        case .goHome: "Go to Home"
         case .exportLibrary: "Export Library…"
         case .moveToTrash: "Move to Trash"
         case .search: "Search Everything"
         case .commandPalette: "Command Palette"
         case .goToday: "Go to Today"
         case .goInbox: "Go to Inbox"
-        case .goUpcoming: "Go to Upcoming"
         case .goNotes: "Go to Notes"
         case .goProjects: "Go to Projects"
         case .goPeople: "Go to People"
@@ -146,23 +142,16 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         // and made the shortcut editor in Settings offer to rebind the inspector and rebind importing.
         case .importFiles: KeyBinding("i", [.command, .shift])
 
-        // ⌥⌘H. Home was bound with a literal `.keyboardShortcut(KeyEquivalent("1"), …)` in the menu
-        // rather than through the registry, and ⌘1 already belongs to Inbox — so two menu items
-        // claimed the same keys, macOS gave them to the first, and Inbox's shortcut did nothing.
-        // `ShortcutRegistryTests` could not see the collision because one side never entered the
-        // registry, which is precisely the failure the registry was built to prevent.
-        //
-        // Home moves rather than Inbox because Inbox's binding is the one the registry, the palette
-        // and Settings have all been advertising. ⌥⌘H is free, is not a system binding, and says the
-        // word.
-        case .goHome: KeyBinding("h", [.command, .option])
         case .exportLibrary: KeyBinding("e", [.command, .shift, .option])
         case .moveToTrash: KeyBinding("\u{8}", .command)
         case .search: KeyBinding("f")
         case .commandPalette: KeyBinding("k")
         case .goToday: KeyBinding("0")
         case .goInbox: KeyBinding("1")
-        case .goUpcoming: KeyBinding("2")
+        // ⌘2 is deliberately unbound. It belonged to Upcoming, which is now part of Today, and the
+        // three bindings below are not a numbered list of sidebar rows — they are stable bindings
+        // for three modules. Sliding them up to close a gap would relearn three shortcuts to tidy
+        // one, which is a worse trade than a free key.
         case .goNotes: KeyBinding("3")
         case .goProjects: KeyBinding("4")
         case .goPeople: KeyBinding("5")
