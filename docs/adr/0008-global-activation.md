@@ -60,3 +60,25 @@ shortcut when it is free, and gets told when it is not.
 5. **Verification happens in a signed, sandboxed release build.** Debug behaviour under Xcode is
    not representative of hotkey registration, and this is the one requirement here that a unit
    test cannot discharge.
+
+## Amendment — 2026-08-01: which commands get one
+
+Three commands are now offered to the whole system: Quick Jot at `⌘⇧J`, **Quick Log at `⌘⇧L`**, and
+New Event at `⌘⇧E`. The mechanism, the failure handling and the Settings reporting are unchanged;
+this records the rule for what may join them, because "one more shortcut" is the decision that goes
+wrong by accretion rather than by any single step.
+
+A command earns a global binding only when **the moment it is wanted is a moment you are looking at
+something else**. Capturing a thought qualifies: the thought arrives during the work, not during the
+note-taking. Starting a timer qualifies more strongly than either of the other two — the clock is
+wrong from the instant work begins, and the whole reason people abandon time tracking is that the
+cost of starting exceeds the value of the number. Putting a meeting in the calendar qualifies
+because it is usually said out loud by somebody else while you are mid-conversation.
+
+Almost nothing else does. Navigating to a module, toggling an inspector, or completing a task are all
+things you do *with the app in front of you*, and a global binding for one of them would be a claim
+staked in the user's input space for no gain — see `ShortcutSettingsSection.globalCommands`, which is
+the list, and is deliberately short.
+
+`⌘⇧L` inherits §4 and §5 unchanged: it includes Command, so it satisfies even the stricter
+pre-15.2 modifier rule, and it has **not** yet been pressed in a signed sandboxed build.
