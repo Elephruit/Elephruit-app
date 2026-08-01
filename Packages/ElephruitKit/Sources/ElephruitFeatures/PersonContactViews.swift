@@ -1,3 +1,4 @@
+import AppKit
 import ElephruitCore
 import ElephruitDesign
 import ElephruitModel
@@ -58,14 +59,32 @@ struct PersonContactSection: View {
             // while every label happened to be shorter than that — and the moment one was not, the
             // whole column stepped sideways for one row. A `Grid` measures the widest label once and
             // gives every row the same answer, at any text size and in any language.
-            ForEach(groups) { group in
-                VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-                    ContactAffinityChip(group.affinity)
+            //
+            // ### And why *one* grid rather than one per group
+            // Because a grid only aligns what is inside it. Personal and Work each had their own,
+            // so the two label columns were measured separately and landed at two different
+            // x-positions — with a tinted pill floating above each, outside both grids, aligned to
+            // neither. Three left edges in a section whose whole job is to be a tidy column of
+            // facts.
+            //
+            // The headings are rows of this grid now, spanning both cells. Every label in the
+            // section is measured together, every value starts at the same place, and the category
+            // sits over its rows rather than beside nothing.
+            Grid(
+                alignment: .leadingFirstTextBaseline,
+                horizontalSpacing: Theme.Spacing.medium,
+                verticalSpacing: Theme.Spacing.small
+            ) {
+                ForEach(groups) { group in
+                    GridRow {
+                        ContactAffinityHeading(group.affinity)
+                            .gridCellColumns(2)
+                    }
+                    // The heading belongs to what follows it, not to what precedes it.
+                    .padding(.top, group.id == groups.first?.id ? 0 : Theme.Spacing.small)
 
-                    Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: Theme.Spacing.medium, verticalSpacing: Theme.Spacing.small) {
-                        ForEach(group.details) { detail in
-                            ContactDetailRow(detail: detail) { act(on: detail) }
-                        }
+                    ForEach(group.details) { detail in
+                        ContactDetailRow(detail: detail, affinity: group.affinity) { act(on: detail) }
                     }
                 }
             }
@@ -108,47 +127,118 @@ struct PersonContactSection: View {
     }
 }
 
-/// One line of a person's card: label, value, and the one thing that can be done with it.
+/// The category a run of rows belongs to: which side of somebody's life these details are.
 ///
-/// The value is selectable so it can be copied without any action being taken at all, which is what
-/// somebody reading an address onto a form actually wants.
+/// ### Why this is a heading and not a pill any more
+/// It was `ContactAffinityChip` — a tinted capsule, in the affinity's own colour, floating above a
+/// grid it was not part of. Three problems. It read at the same weight as the values under it, so a
+/// section of six facts had two of the loudest things in it saying "Personal" and "Work". It was the
+/// only pill in a pane that otherwise has none, and this app's restraint about tinted backgrounds is
+/// most of why it looks calm. And because it sat outside the grid, it aligned with nothing.
+///
+/// A heading is what it always was. Small, uppercase, kerned — the same treatment every other
+/// section header in the app uses — so the eye reads it as a divider rather than as a value. The
+/// colour and the symbol stay, at that size, where they mark the category without competing with it.
+private struct ContactAffinityHeading: View {
+    let affinity: ContactAffinity
+
+    init(_ affinity: ContactAffinity) {
+        self.affinity = affinity
+    }
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.tight) {
+            Image(systemName: affinity.symbolName)
+                .font(Theme.Text.sectionHeader)
+                .foregroundStyle(affinity.color)
+                .accessibilityHidden(true)
+
+            Text(affinity.displayName.uppercased())
+                .font(Theme.Text.sectionHeader)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .kerning(Theme.Text.Tracking.caps)
+
+            Spacer(minLength: 0)
+        }
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityLabel("\(affinity.displayName) details")
+    }
+}
+
+/// One line of a person's card: label, value, and what can be done with it.
+///
+/// The value is selectable so it can be copied by hand, and there is a Copy button so it does not
+/// have to be — reading an address onto a form is the commonest thing anybody does here, and
+/// selecting a wrapped three-line address with a trackpad is not a pleasure.
 private struct ContactDetailRow: View {
     let detail: ContactDetail
+
+    /// The heading this row sits under, so the label can decline to repeat it.
+    let affinity: ContactAffinity
+
     let onUse: () -> Void
 
     @State private var isHovering = false
+    @State private var didCopy = false
 
     var body: some View {
         GridRow {
-            Label(detail.displayLabel, systemImage: detail.kind.symbolName)
-                .font(Theme.Text.metadata)
-                .labelStyle(.titleAndIcon)
-                .foregroundStyle(detail.affinity.color)
-                .gridColumnAlignment(.leading)
+            // ### Why the label is quiet and the kind is a glyph
+            // The label used to be drawn in the affinity's colour, which meant the *field name* was
+            // the most saturated thing in the section — six coloured labels beside six plain values,
+            // colouring the part nobody is looking for. The category carries the colour now, once,
+            // in its heading. Down here the glyph says which kind of thing this is and the words say
+            // what it was called; both are secondary, because the value is the point.
+            Label(
+                detail.displayLabel(under: affinity),
+                systemImage: detail.kind.symbolName
+            )
+            .font(Theme.Text.metadata)
+            .labelStyle(.titleAndIcon)
+            .foregroundStyle(Theme.Colors.secondaryText)
+            .lineLimit(1)
+            .gridColumnAlignment(.leading)
 
-            // The value and its one action, together. Beside the value rather than at the pane's
-            // trailing edge: a wide detail pane would otherwise strand the button half a screen from
-            // the thing it acts on, which is both a longer mouse journey and a weaker claim about
-            // what it does.
+            // The value and its actions, together. Beside the value rather than at the pane's
+            // trailing edge: a wide profile would otherwise strand the buttons half a screen from
+            // the thing they act on, which is both a longer mouse journey and a weaker claim about
+            // what they do.
             //
             // Revealed on hover, because a row of small glyphs down the right of every value is
             // chrome the eye has to step over to read the numbers — which is what the section is
-            // for. It stays in the layout while hidden, so nothing shifts when the pointer arrives,
-            // and it is always present for VoiceOver and for the keyboard.
+            // for. They stay in the layout while hidden, so nothing shifts when the pointer arrives,
+            // and they are always present for VoiceOver and for the keyboard.
             HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
+                // A postal address is three lines and an email is one, and both have to sit in the
+                // same column without the row above stepping sideways. `fixedSize` vertically means
+                // the value wraps rather than truncating; the grid keeps the left edge whatever it
+                // wraps to.
                 Text(detail.displayValue)
                     .font(Theme.Text.rowSubtitle)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Button(action: onUse) {
-                    Image(systemName: useSymbol)
-                        .font(Theme.Text.metadata)
+                HStack(spacing: Theme.Spacing.small) {
+                    Button(action: copy) {
+                        Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
+                            .font(Theme.Text.metadata)
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .buttonStyle(.borderless)
+                    .help(didCopy ? "Copied" : "Copy \(detail.kind.displayName.lowercased())")
+                    .accessibilityLabel("Copy \(detail.kind.displayName.lowercased())")
+
+                    Button(action: onUse) {
+                        Image(systemName: useSymbol)
+                            .font(Theme.Text.metadata)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(useDescription)
+                    .accessibilityLabel(useDescription)
                 }
-                .buttonStyle(.borderless)
-                .opacity(isHovering ? 1 : 0)
-                .help(useDescription)
-                .accessibilityLabel(useDescription)
+                // Both fade together, and the confirmation stays up after the pointer leaves —
+                // a tick that vanishes with the pointer is a tick nobody saw.
+                .opacity(isHovering || didCopy ? 1 : 0)
 
                 Spacer(minLength: 0)
             }
@@ -157,11 +247,28 @@ private struct ContactDetailRow: View {
         .contentShape(.rect)
         .onHover { isHovering = $0 }
         .calmAnimation(value: isHovering)
+        .calmAnimation(value: didCopy)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(
-            "\(detail.affinity.displayName) \(detail.kind.displayName.lowercased()), "
+            "\(affinity.displayName) \(detail.kind.displayName.lowercased()), "
                 + "\(detail.displayLabel), \(detail.displayValue)"
         )
+    }
+
+    /// Copies the value the address book stores, not the one on screen.
+    ///
+    /// A phone number is displayed grouped — `+44 20 7946 0958` — and pasting that into a dialler is
+    /// a coin toss. ``ContactDetail/value`` is the stored spelling, which is what dials and what
+    /// matches, and is what somebody pasting into another app wants.
+    private func copy() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(detail.value, forType: .string)
+
+        didCopy = true
+        Task {
+            try? await Task.sleep(for: .seconds(1.6))
+            didCopy = false
+        }
     }
 
     private var useSymbol: String {

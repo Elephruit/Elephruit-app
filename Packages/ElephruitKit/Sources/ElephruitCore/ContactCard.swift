@@ -133,6 +133,31 @@ public struct ContactDetail: Sendable, Hashable, Identifiable {
     public var displayLabel: String {
         ContactLabelReader.displayName(of: label) ?? kind.displayName
     }
+
+    /// The label as it reads *underneath a heading that has already said the category*.
+    ///
+    /// ### Why this is not just ``displayLabel``
+    /// Because a card grouped by affinity puts "Personal" over a group and then, for a detail
+    /// labelled `personal` in the address book, "Personal" again on the row — twice, in two type
+    /// sizes, six points apart, saying the same word about the same value. The second one is not a
+    /// weaker signal than the first; it is the *same* signal, and a reader looking for what
+    /// distinguishes these three rows from each other finds a column that does not.
+    ///
+    /// What the row is actually about, once the heading has said which side of somebody's life it
+    /// belongs to, is which *kind* of thing it is: an email, a number, an address. So a label that
+    /// merely restates the heading yields to that, and a label that says something the heading does
+    /// not — "Beach house", "iPhone", "Mum's" — is kept exactly as written.
+    ///
+    /// Compared through ``TextNormalizer/foldedForMatching(_:)``, so "PERSONAL" and "personal" are
+    /// both caught, and taking the *label* out rather than the heading, because a heading with no
+    /// word under it would be a group of unlabelled rows.
+    public func displayLabel(under affinity: ContactAffinity) -> String {
+        let shown = displayLabel
+        guard TextNormalizer.foldedForMatching(shown)
+            == TextNormalizer.foldedForMatching(affinity.displayName)
+        else { return shown }
+        return kind.displayName
+    }
 }
 
 /// Reads what a contact label means.
