@@ -18,24 +18,26 @@ struct PersonPortraitSection: View {
     let portrait: PersonPortrait?
     @Binding var bodyText: String
 
-    let onAddFact: () -> Void
+    let onAddFact: (QuickFactSeed?) -> Void
     let onConfirm: (PortraitValue) -> Void
     let onCorrect: (PortraitValue) -> Void
+    let onDelete: (PortraitValue) -> Void
     let onOpenSource: (UUID) -> Void
-
-    /// Two columns on a wide window, one when narrow. A card is a paragraph, not a table row, and
-    /// stretching one across 900 points makes it unreadable.
-    private let columns = [GridItem(.adaptive(minimum: 260, maximum: 420), spacing: Theme.Spacing.medium)]
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
             HStack {
-                SectionHeader("What's true", count: portrait?.cards.count)
+                VStack(alignment: .leading, spacing: 2) {
+                    SectionHeader("Quick Facts", count: factCount)
+                    Text("The useful things to remember")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.tertiaryText)
+                }
                 Spacer()
                 Button {
-                    onAddFact()
+                    onAddFact(nil)
                 } label: {
-                    Label("Add a fact", systemImage: "plus")
+                    Label("Add quick fact", systemImage: "plus.circle.fill")
                 }
                 .buttonStyle(.borderless)
                 .font(Theme.Text.rowSubtitle)
@@ -47,27 +49,24 @@ struct PersonPortraitSection: View {
             }
 
             if let cards = portrait?.cards, !cards.isEmpty {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.Spacing.medium) {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 280, maximum: 420), spacing: Theme.Spacing.medium)],
+                    alignment: .leading,
+                    spacing: Theme.Spacing.medium
+                ) {
                     ForEach(cards) { card in
                         PortraitCardView(
                             card: card,
                             onConfirm: onConfirm,
                             onCorrect: onCorrect,
+                            onDelete: onDelete,
                             onOpenSource: onOpenSource
                         )
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                EmptyStateView(
-                    symbolName: "person.text.rectangle",
-                    headline: "Nothing recorded yet",
-                    message: """
-                        Add what matters about \(person.displayTitle) — why you know them, what \
-                        they like, what is going on in their life. Every fact keeps the date it \
-                        was learned.
-                        """
-                )
-                .frame(maxWidth: .infinity)
+                quickFactEmptyState
             }
 
             NotesField(
@@ -78,6 +77,69 @@ struct PersonPortraitSection: View {
         }
         .padding(.horizontal, Theme.Spacing.large)
     }
+
+    private var factCount: Int? {
+        let count = portrait?.cards.reduce(0) { $0 + $1.values.count } ?? 0
+        return count == 0 ? nil : count
+    }
+
+    private var quickFactEmptyState: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            HStack(spacing: Theme.Spacing.medium) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.selection)
+                    .frame(width: 42, height: 42)
+                    .background(Theme.Colors.selection.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Build a better mental picture")
+                        .font(.system(.headline, weight: .semibold))
+                    Text("Remember what makes time with \(person.displayTitle) thoughtful and easy.")
+                        .font(Theme.Text.rowSubtitle)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                }
+            }
+
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 145), spacing: Theme.Spacing.small)],
+                spacing: Theme.Spacing.small
+            ) {
+                ForEach(Self.starters, id: \.value) { seed in
+                    Button {
+                        onAddFact(seed)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: seed.category.symbol)
+                                .foregroundStyle(seed.category.tint)
+                            Text(seed.value)
+                                .font(Theme.Text.chip)
+                                .foregroundStyle(Theme.Colors.primaryText)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, Theme.Spacing.small)
+                        .frame(height: 32)
+                        .background(seed.category.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(Theme.Spacing.large)
+        .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.Colors.separator.opacity(0.55))
+        }
+    }
+
+    private static let starters = [
+        QuickFactSeed(category: .foodAndDrink, value: "Vegetarian"),
+        QuickFactSeed(category: .foodAndDrink, value: "Doesn’t drink alcohol"),
+        QuickFactSeed(category: .foodAndDrink, value: "Likes wine"),
+        QuickFactSeed(category: .askAbout, value: "The kids"),
+    ]
 }
 
 /// One card: an attribute, its current values, and how sure the app is about each.
@@ -90,47 +152,63 @@ struct PortraitCardView: View {
     let card: PortraitCard
     let onConfirm: (PortraitValue) -> Void
     let onCorrect: (PortraitValue) -> Void
+    let onDelete: (PortraitValue) -> Void
     let onOpenSource: (UUID) -> Void
 
     @State private var isShowingHistory = false
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            Label(card.attribute.displayName, systemImage: card.attribute.symbolName)
-                .font(Theme.Text.sectionHeader)
-                .foregroundStyle(Theme.Colors.secondaryText)
+    private var category: QuickFactCategory { .category(for: card.attribute) }
 
-            ForEach(card.values) { value in
-                PortraitValueRow(
-                    value: value,
-                    onConfirm: { onConfirm(value) },
-                    onCorrect: { onCorrect(value) },
-                    onOpenSource: onOpenSource
-                )
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            HStack(spacing: Theme.Spacing.small) {
+                Image(systemName: card.attribute.symbolName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(category.tint)
+                    .frame(width: 30, height: 30)
+                    .background(category.tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 9))
+
+                Text(card.attribute.displayName)
+                    .font(Theme.Text.sectionHeader)
+                    .foregroundStyle(Theme.Colors.secondaryText)
             }
 
-            if card.historyCount > 0 {
-                Button {
-                    isShowingHistory = true
-                } label: {
-                    Text(card.historyCount == 1 ? "1 earlier value" : "\(card.historyCount) earlier values")
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.tertiaryText)
+            VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                ForEach(card.values) { value in
+                    PortraitValueRow(
+                        value: value,
+                        tint: category.tint,
+                        onConfirm: { onConfirm(value) },
+                        onCorrect: { onCorrect(value) },
+                        onDelete: { onDelete(value) },
+                        onOpenSource: onOpenSource
+                    )
                 }
-                .buttonStyle(.plain)
-                .help("Nothing is ever overwritten — see what this used to say")
-                .popover(isPresented: $isShowingHistory) {
-                    FactHistoryPopover(attribute: card.attribute, values: card.values)
+
+                if card.historyCount > 0 {
+                    Button {
+                        isShowingHistory = true
+                    } label: {
+                        Text(card.historyCount == 1 ? "1 earlier value" : "\(card.historyCount) earlier values")
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Nothing is ever overwritten — see what this used to say")
+                    .popover(isPresented: $isShowingHistory) {
+                        FactHistoryPopover(attribute: card.attribute, values: card.values)
+                    }
                 }
             }
         }
         .padding(Theme.Spacing.medium)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.Colors.subtleFill, in: RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
-                .strokeBorder(Theme.Colors.separator.opacity(0.6))
-        )
+        .frame(maxWidth: 420, alignment: .leading)
+        .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: 15))
+        .overlay {
+            RoundedRectangle(cornerRadius: 15)
+                .strokeBorder(category.tint.opacity(0.16))
+        }
+        .shadow(color: .black.opacity(0.025), radius: 8, y: 2)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(card.attribute.displayName)
     }
@@ -139,8 +217,10 @@ struct PortraitCardView: View {
 /// One value, with its provenance and the two things that can be done to it.
 struct PortraitValueRow: View {
     let value: PortraitValue
+    let tint: Color
     let onConfirm: () -> Void
     let onCorrect: () -> Void
+    let onDelete: () -> Void
     let onOpenSource: (UUID) -> Void
 
     @State private var isHovering = false
@@ -191,17 +271,23 @@ struct PortraitValueRow: View {
                 .foregroundStyle(Theme.Colors.link)
             }
         }
+        .padding(.horizontal, Theme.Spacing.small)
+        .padding(.vertical, Theme.Spacing.tight)
+        .background(tint.opacity(0.055), in: RoundedRectangle(cornerRadius: 9))
         .contentShape(.rect)
         .onHover { isHovering = $0 }
         .contextMenu {
             Button("Still true", action: onConfirm)
             Button("Correct this…", action: onCorrect)
+            Divider()
+            Button("Delete Quick Fact", role: .destructive, action: onDelete)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
         .accessibilityActions {
             Button("Confirm still true", action: onConfirm)
             Button("Correct", action: onCorrect)
+            Button("Delete quick fact", action: onDelete)
         }
     }
 
@@ -220,6 +306,13 @@ struct PortraitValueRow: View {
             .buttonStyle(.borderless)
             .help("Correct this — the previous value is kept")
             .accessibilityLabel("Correct")
+
+            Button(role: .destructive, action: onDelete) {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .help("Delete this quick fact")
+            .accessibilityLabel("Delete quick fact")
         }
         .font(Theme.Text.metadata)
     }
@@ -307,6 +400,11 @@ struct PersonRelationshipsSection: View {
     let onOpenPerson: (UUID) -> Void
 
     @State private var isAddingRelationship = false
+    @State private var relationshipKind: RelationshipKind = .friend
+    @State private var editingRelationship: PersonRelationship?
+    @State private var childFactTarget: Item?
+    @State private var relationships: [PersonRelationship] = []
+    @State private var childPortraits: [UUID: PersonPortrait] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
@@ -331,6 +429,16 @@ struct PersonRelationshipsSection: View {
                 .accessibilityIdentifier(AccessibilityID.People.charts)
 
                 Button {
+                    relationshipKind = .child
+                    isAddingRelationship = true
+                } label: {
+                    Label("Add Child", systemImage: "figure.and.child.holdinghands")
+                }
+                .buttonStyle(.borderless)
+                .font(Theme.Text.rowSubtitle)
+
+                Button {
+                    relationshipKind = .friend
                     isAddingRelationship = true
                 } label: {
                     Label("Add", systemImage: "plus")
@@ -346,9 +454,30 @@ struct PersonRelationshipsSection: View {
                     .foregroundStyle(Theme.Colors.tertiaryText)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
+                if !children.isEmpty {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 210, maximum: 320), spacing: Theme.Spacing.small)],
+                        alignment: .leading,
+                        spacing: Theme.Spacing.small
+                    ) {
+                        ForEach(children, id: \.id) { relationship in
+                            if let child = relationship.other {
+                                ChildProfileCard(
+                                    child: child,
+                                    portrait: childPortraits[child.id],
+                                    onOpen: { onOpenPerson(child.id) },
+                                    onAddDetail: { childFactTarget = child },
+                                    onEdit: { editingRelationship = relationship }
+                                )
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: Theme.Spacing.small) {
-                        ForEach(relationships, id: \.id) { relationship in
+                        ForEach(otherRelationships, id: \.id) { relationship in
                             if let other = relationship.other {
                                 RelatedPersonChip(
                                     name: other.displayTitle,
@@ -357,6 +486,8 @@ struct PersonRelationshipsSection: View {
                                     isPlaceholder: other.personProfile?.isPlaceholder ?? false
                                 ) {
                                     onOpenPerson(other.id)
+                                } onEdit: {
+                                    editingRelationship = relationship
                                 }
                             }
                         }
@@ -366,15 +497,195 @@ struct PersonRelationshipsSection: View {
             }
         }
         .padding(.horizontal, Theme.Spacing.large)
+        .task(id: person.id) { reload() }
         .sheet(isPresented: $isAddingRelationship) {
-            AddRelationshipSheet(person: person) { isAddingRelationship = false }
+            AddRelationshipSheet(person: person, initialKind: relationshipKind) {
+                isAddingRelationship = false
+                reload()
+            }
+        }
+        .sheet(item: $editingRelationship) { relationship in
+            EditRelationshipSheet(person: person, relationship: relationship) {
+                editingRelationship = nil
+                reload()
+            }
+        }
+        .sheet(item: $childFactTarget) { child in
+            AddFactSheet(
+                personName: child.displayTitle,
+                onSave: { draft, confidence, sensitivity, observedOn in
+                    addFact(draft, to: child, confidence: confidence, sensitivity: sensitivity, observedOn: observedOn)
+                    childFactTarget = nil
+                },
+                onCancel: { childFactTarget = nil }
+            )
         }
     }
 
-    private var relationships: [PersonRelationship] {
-        guard let services else { return [] }
-        return (try? services.persons.relationships(of: person)) ?? []
+    private var children: [PersonRelationship] {
+        relationships.filter { $0.kind == .child }
     }
+
+    private var otherRelationships: [PersonRelationship] {
+        relationships.filter { $0.kind != .child }
+    }
+
+    private func reload() {
+        guard let services else { return }
+        relationships = (try? services.persons.relationships(of: person)) ?? []
+        childPortraits = Dictionary(uniqueKeysWithValues: relationships.compactMap { relationship in
+            guard relationship.kind == .child, let child = relationship.other,
+                  let portrait = try? services.personWorkspace.portrait(of: child)
+            else { return nil }
+            return (child.id, portrait)
+        })
+    }
+
+    private func addFact(
+        _ draft: ObservationDraft,
+        to child: Item,
+        confidence: FactConfidence,
+        sensitivity: FactSensitivity,
+        observedOn: Date
+    ) {
+        guard let services else { return }
+        services.perform {
+            try services.persons.record(
+                draft,
+                about: child,
+                observedOn: observedOn,
+                confidence: confidence,
+                sensitivity: sensitivity,
+                source: nil
+            )
+            services.noteChange(to: child)
+        }
+        reload()
+    }
+}
+
+private struct ChildProfileCard: View {
+    let child: Item
+    let portrait: PersonPortrait?
+    let onOpen: () -> Void
+    let onAddDetail: () -> Void
+    let onEdit: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            HStack(spacing: Theme.Spacing.tight) {
+                Button(action: onOpen) {
+                    HStack(spacing: Theme.Spacing.small) {
+                        PersonAvatar(name: child.displayTitle, colorName: child.colorName, size: 34)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(child.displayTitle)
+                                .font(.system(.callout, weight: .semibold))
+                                .foregroundStyle(Theme.Colors.primaryText)
+                                .lineLimit(1)
+                            Text(detail)
+                                .font(Theme.Text.metadata)
+                                .foregroundStyle(Theme.Colors.secondaryText)
+                                .lineLimit(2)
+                        }
+
+                        Spacer(minLength: Theme.Spacing.tight)
+                        Image(systemName: "chevron.right")
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+
+                Button(action: onEdit) {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                }
+                .buttonStyle(.borderless)
+                .help("Edit or delete relationship")
+                .accessibilityLabel("Edit relationship with \(child.displayTitle)")
+            }
+
+            ForEach(summaryFacts) { fact in
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.tight) {
+                    Image(systemName: fact.symbol)
+                        .foregroundStyle(Color.pink)
+                        .frame(width: 14)
+                    Text(fact.text)
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.primaryText)
+                        .lineLimit(2)
+                    if fact.isUncertain {
+                        Text("Unconfirmed")
+                            .font(Theme.Text.chip)
+                            .foregroundStyle(Theme.Colors.warning)
+                    }
+                }
+            }
+
+            HStack {
+                Label(storageLabel, systemImage: storageSymbol)
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+
+                Spacer()
+
+                Button("Add detail", systemImage: "plus.circle", action: onAddDetail)
+                    .buttonStyle(.borderless)
+                    .font(Theme.Text.metadata)
+            }
+        }
+        .padding(Theme.Spacing.small)
+        .background(Color.pink.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12).strokeBorder(Color.pink.opacity(0.15))
+        }
+        .help("Open \(child.displayTitle) to add age, school, interests, and notes")
+        .contextMenu {
+            Button("Edit Relationship…", systemImage: "pencil", action: onEdit)
+        }
+    }
+
+    private var detail: String {
+        if let line = portrait?.ageAndGradeLine { return line }
+        if child.personProfile?.isPlaceholder == true { return "Sketch · add age, school, and interests" }
+        return "Add age, school, and interests"
+    }
+
+    private var storageLabel: String {
+        child.personProfile?.contactsIdentifier == nil ? "Elephruit only" : "Linked to Contacts"
+    }
+
+    private var storageSymbol: String {
+        child.personProfile?.contactsIdentifier == nil ? "lock.shield" : "person.crop.rectangle.stack"
+    }
+
+    private var summaryFacts: [ChildSummaryFact] {
+        guard let portrait else { return [] }
+        return portrait.cards
+            .filter { $0.attribute != .observedAge && $0.attribute != .schoolGrade }
+            .flatMap { card in
+                card.values.map {
+                    ChildSummaryFact(
+                        id: $0.id,
+                        text: $0.text,
+                        symbol: card.attribute.symbolName,
+                        isUncertain: $0.confidence.needsLabel
+                    )
+                }
+            }
+            .prefix(4)
+            .map { $0 }
+    }
+}
+
+private struct ChildSummaryFact: Identifiable {
+    let id: UUID
+    let text: String
+    let symbol: String
+    let isUncertain: Bool
 }
 
 struct RelatedPersonChip: View {
@@ -383,30 +694,47 @@ struct RelatedPersonChip: View {
     let colorName: String?
     let isPlaceholder: Bool
     let onOpen: () -> Void
+    let onEdit: () -> Void
 
     var body: some View {
-        Button(action: onOpen) {
-            HStack(spacing: Theme.Spacing.small) {
-                PersonAvatar(name: name, colorName: colorName, size: 26)
+        HStack(spacing: Theme.Spacing.hairline) {
+            Button(action: onOpen) {
+                HStack(spacing: Theme.Spacing.small) {
+                    PersonAvatar(name: name, colorName: colorName, size: 26)
 
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(name)
-                        .font(Theme.Text.rowSubtitle)
-                        .lineLimit(1)
-                    Text(isPlaceholder ? "\(label) · sketch" : label)
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.tertiaryText)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(name)
+                            .font(Theme.Text.rowSubtitle)
+                            .lineLimit(1)
+                        Text(isPlaceholder ? "\(label) · sketch" : label)
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
+                            .lineLimit(1)
+                    }
                 }
+                .padding(.leading, Theme.Spacing.small)
+                .padding(.vertical, Theme.Spacing.tight)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, Theme.Spacing.small)
-            .padding(.vertical, Theme.Spacing.tight)
-            .background(Theme.Colors.subtleFill, in: Capsule())
-            .contentShape(Capsule())
+            .buttonStyle(.plain)
+
+            Button(action: onEdit) {
+                Image(systemName: "ellipsis")
+                    .font(Theme.Text.metadata)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.borderless)
+            .help("Edit or delete relationship")
+            .accessibilityLabel("Edit relationship with \(name)")
         }
-        .buttonStyle(.plain)
+        .padding(.trailing, Theme.Spacing.tight)
+        .background(Theme.Colors.subtleFill, in: Capsule())
         .help(isPlaceholder ? "\(name) — a lightweight record with no details yet" : name)
         .accessibilityLabel("\(name), \(label)")
+        .contextMenu {
+            Button("Edit Relationship…", systemImage: "pencil", action: onEdit)
+        }
     }
 }
 
@@ -495,9 +823,9 @@ struct TimelineEntryRow: View {
                             .lineLimit(1)
 
                         if entry.isPromise {
-                            Label("promise", systemImage: "hand.raised")
+                            Label("task", systemImage: "checkmark.circle")
                                 .font(Theme.Text.chip)
-                                .foregroundStyle(Theme.Colors.dueToday)
+                                .foregroundStyle(Theme.Colors.selection)
                                 .labelStyle(.titleAndIcon)
                         }
 

@@ -2,6 +2,7 @@ import ElephruitCore
 import ElephruitDesign
 import ElephruitModel
 import ElephruitPersistence
+import AppKit
 import SwiftUI
 
 /// Which slice of People the middle column is showing.
@@ -28,7 +29,7 @@ public enum PeopleScope: Hashable, Sendable, Codable {
         switch self {
         case .all: "All People"
         case .recentlyViewed: "Recently Viewed"
-        case .favorites: "Favourites"
+        case .favorites: "Favorites"
         case .celebrations: "Celebrations"
         case .needsFollowUp: "Needs Follow-up"
         case .group: "Group"
@@ -162,6 +163,9 @@ struct PeopleListView: View {
         }
         .searchable(text: $searchText, placement: .toolbar, prompt: "people in Austin · likes natural wine")
         .searchFocused($isSearchFocused)
+        .onKeyPress(.downArrow) { moveSearchSelection(by: 1) }
+        .onKeyPress(.upArrow) { moveSearchSelection(by: -1) }
+        .onSubmit(of: .search) { openSearchSelection() }
         .toolbar { sortMenu }
         .onChange(of: searchText) { _, query in beginSearch(query) }
         // ⌘F belongs to the list it is looking at. Without this it opened the app-wide search field
@@ -169,7 +173,11 @@ struct PeopleListView: View {
         // stayed exactly as it was.
         .onChange(of: navigation.isSearchActive) { _, isActive in
             guard isActive, navigation.selection.isPeopleDestination else { return }
-            isSearchFocused = true
+            focusSearchField(selectingContents: !searchText.isEmpty)
+        }
+        .onChange(of: navigation.searchFocusRequest) { _, _ in
+            guard navigation.isSearchActive, navigation.selection.isPeopleDestination else { return }
+            focusSearchField(selectingContents: !searchText.isEmpty)
         }
         .navigationTitle(navigation.windowTitle)
         .accessibilityIdentifier(AccessibilityID.People.list)
@@ -267,14 +275,13 @@ struct PeopleListView: View {
     private func row(for person: Item, reason: String?) -> some View {
         PersonRow(
             person: person,
-            dateProvider: services?.dateProvider ?? SystemDateProvider(),
             isSelected: selection.contains(person.id),
             matchReason: reason
         )
         .tag(person.id)
         .contextMenu {
             Button("Open") { navigation.selectItem(person.id) }
-            Button(person.isFavorite ? "Remove from Favourites" : "Add to Favourites") {
+            Button(person.isFavorite ? "Remove from Favorites" : "Add to Favorites") {
                 toggleFavorite(person)
             }
             Divider()
@@ -481,6 +488,19 @@ struct PeopleListView: View {
 
     // MARK: - Searching
 
+    private func focusSearchField(selectingContents: Bool) {
+        isSearchFocused = true
+        guard selectingContents else { return }
+
+        // `.searchFocused` makes the toolbar field first responder on the next run-loop turn. Send
+        // the standard AppKit action then, so this keeps working with SwiftUI's private search field.
+        Task { @MainActor in
+            await Task.yield()
+            NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+            navigation.didSelectSearchQuery()
+        }
+    }
+
     /// Runs the search off the main thread and abandons a query the user has typed past.
     ///
     /// It used to run synchronously inside `onChange`, which meant every keystroke walked the index
@@ -528,6 +548,42 @@ struct PeopleListView: View {
         selectionBeforeSearch = []
     }
 
+    /// Lets the search field and its results behave as one keyboard surface.
+    ///
+    /// The search field remains first responder while arrows move the highlighted result. Return
+    /// then commits that highlight and hands focus to the list, so finding somebody never requires
+    /// a mouse or trackpad.
+    private func moveSearchSelection(by direction: Int) -> KeyPress.Result {
+        guard isSearchFocused, model.isSearching else { return .ignored }
+        let ids = model.flattenedIDs
+        guard !ids.isEmpty else { return .handled }
+
+        let target: Int
+        if let selected = selection.first, let current = ids.firstIndex(of: selected) {
+            target = min(ids.count - 1, max(0, current + direction))
+        } else {
+            target = direction > 0 ? 0 : ids.count - 1
+        }
+
+        selectSearchResult(ids[target])
+        return .handled
+    }
+
+    private func openSearchSelection() {
+        guard model.isSearching else { return }
+        let ids = model.flattenedIDs
+        guard let id = selection.first.flatMap({ ids.contains($0) ? $0 : nil }) ?? ids.first else { return }
+        selectSearchResult(id)
+        isSearchFocused = false
+        isListFocused = true
+    }
+
+    private func selectSearchResult(_ id: UUID) {
+        selection = [id]
+        navigation.selectedItemIDs = selection
+        pendingScroll = .person(id)
+    }
+
     /// Reloads the scope and re-runs any live search, so a change is reflected in whichever of the
     /// two the user is looking at.
     private func refresh() {
@@ -563,23 +619,12 @@ struct PeopleListView: View {
     }
 }
 
-/// One compact row.
+/// One compact row: a person's name and, when recorded, their company.
 ///
-/// ### Three lines, and only the ones that have something to say
-/// Who they are, then how to reach them. The middle line used to be role-and-organisation with a
-/// relationship summary behind it, which produced rows reading "Caroline Howe / Caroline Howe" for
-/// every record whose company field holds the person's own name — a thing address books imported
-/// from elsewhere do constantly. ``ContactCard/identityLine(name:role:organization:location:)``
-/// drops anything that merely repeats the name, so that line is now either informative or absent.
-///
-/// The contact line is the answer to what the list is usually open for: an address and a number,
-/// each carrying the label the user gave it, so which one is work and which is home is visible
-/// without opening anybody.
+/// Contact details, role, location, and relationship history belong on the person's page. Keeping
+/// them out of the list also keeps row construction proportional to what the list actually shows.
 struct PersonRow: View {
-    @Environment(\.services) private var services
-
     let person: Item
-    let dateProvider: any DateProvider
 
     /// Suppresses the hover fill on a row that already carries the selection fill.
     var isSelected: Bool = false
@@ -588,6 +633,9 @@ struct PersonRow: View {
     var matchReason: String?
 
     var body: some View {
+        let profile = person.personProfile
+        let company = profile?.organizationName?.trimmingCharacters(in: .whitespacesAndNewlines)
+
         HStack(alignment: .top, spacing: Theme.Spacing.small) {
             PersonAvatar(name: person.displayTitle, colorName: person.colorName, size: 28)
 
@@ -604,39 +652,12 @@ struct PersonRow: View {
                             .rowTint(Theme.Colors.dueToday)
                     }
 
-                    if let state = linkState {
-                        ContactSourceBadge(state: state)
-                    }
                 }
 
-                if let identityLine {
-                    Text(identityLine)
+                if let company, !company.isEmpty {
+                    Text(company)
                         .font(Theme.Text.metadata)
                         .rowForeground(.secondary)
-                        .lineLimit(1)
-                }
-
-                if !rowDetails.isEmpty {
-                    // Wrapped rather than truncated: two details on a narrow list column are worth a
-                    // second line, and a middle-truncated email address is worth nothing.
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: Theme.Spacing.medium) { detailLabels }
-                        VStack(alignment: .leading, spacing: Theme.Spacing.hairline) { detailLabels }
-                    }
-                } else if let relationshipLine {
-                    Text(relationshipLine)
-                        .font(Theme.Text.metadata)
-                        .rowForeground(.tertiary)
-                        .lineLimit(1)
-                }
-
-                // Below the details rather than instead of them: "likes natural wine" explains the
-                // row's presence, and the row still has to answer the question the list is for.
-                if let matchReason {
-                    Label(matchReason, systemImage: "sparkle.magnifyingglass")
-                        .font(Theme.Text.metadata)
-                        .rowForeground(.tertiary)
-                        .labelStyle(.titleAndIcon)
                         .lineLimit(1)
                 }
             }
@@ -646,78 +667,14 @@ struct PersonRow: View {
         .padding(.vertical, Theme.Spacing.tight)
         .frame(minHeight: Theme.Size.rowHeightExpanded)
         .hoverHighlight(isEnabled: !isSelected, extending: Theme.Spacing.small)
-        // Everything the row shows, at full length — a work address and a mobile number are exactly
-        // the things a narrow list column truncates, and exactly the things somebody hovers for.
-        .help(tooltip)
+        .help([person.displayTitle, company].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n"))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityDescription)
-    }
-
-    @ViewBuilder
-    private var detailLabels: some View {
-        ForEach(rowDetails) { detail in
-            ContactDetailLabel(detail)
-        }
-    }
-
-    /// The whole row, untruncated, one line each.
-    ///
-    /// The row truncates the identity line and fits the contact details to the column width; the
-    /// tooltip is where a long address or a role that ran out of room can be read in full.
-    private var tooltip: String {
-        var lines = [person.displayTitle]
-        if let identityLine { lines.append(identityLine) }
-        if rowDetails.isEmpty {
-            if let relationshipLine { lines.append(relationshipLine) }
-        } else {
-            lines.append(contentsOf: rowDetails.map { "\($0.displayLabel): \($0.value)" })
-        }
-        return lines.joined(separator: "\n")
-    }
-
-    /// Whether this person's details come from the address book, and whether that still works.
-    private var linkState: ContactSyncState? {
-        guard let services else { return nil }
-        return (try? services.contactImports.link(for: person))?.state
-    }
-
-    /// Role, organisation, and place — never a second copy of the name.
-    private var identityLine: String? {
-        ContactCard.identityLine(
-            name: person.displayTitle,
-            role: person.personProfile?.roleTitle,
-            organization: person.personProfile?.organizationName,
-            location: person.personProfile?.locationText
+        .accessibilityLabel(
+            [person.displayTitle, company, matchReason]
+                .compactMap { $0 }
+                .filter { !$0.isEmpty }
+                .joined(separator: ", ")
         )
-    }
-
-    /// The email and the number, or whichever two details exist.
-    private var rowDetails: [ContactDetail] {
-        guard let profile = person.personProfile else { return [] }
-        return ContactCard.rowDetails(from: profile.contactDetails())
-    }
-
-    /// Where the relationship stands, shown only when there is nothing to reach them by — a row with
-    /// an address and "Nothing recorded yet" would spend its last line on the less useful of the two.
-    private var relationshipLine: String? {
-        guard let services else { return nil }
-        return services.people.context(for: person).summary(using: dateProvider)
-    }
-
-    private var accessibilityDescription: String {
-        var parts = [person.displayTitle]
-        if let matchReason { parts.append(matchReason) }
-        if let identityLine { parts.append(identityLine) }
-        if rowDetails.isEmpty {
-            if let relationshipLine { parts.append(relationshipLine) }
-        } else {
-            parts.append(
-                contentsOf: rowDetails.map {
-                    "\($0.displayLabel) \($0.kind.displayName.lowercased()), \($0.value)"
-                }
-            )
-        }
-        return parts.joined(separator: ", ")
     }
 }
 

@@ -92,7 +92,7 @@ struct CalendarEventRow: View {
         }
         if let location = event.locationName, !location.isEmpty { parts.append(location) }
         if let calendar = event.calendarName, !calendar.isEmpty { parts.append(calendar) }
-        if event.isCancelled { parts.append("cancelled") }
+        if event.isCancelled { parts.append("canceled") }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
@@ -102,7 +102,7 @@ struct CalendarEventRow: View {
             ? "all day"
             : "\(event.startAt.formatted(date: .omitted, time: .shortened)) to \(event.endAt.formatted(date: .omitted, time: .shortened))")
         if event.isRecurring { parts.append("repeating") }
-        if event.isCancelled { parts.append("cancelled") }
+        if event.isCancelled { parts.append("canceled") }
         if let location = event.locationName, !location.isEmpty { parts.append("at \(location)") }
         return parts.joined(separator: ", ")
     }
@@ -245,80 +245,8 @@ public struct CalendarSettingsSection: View {
         }
         return """
             Your events appear in Elephruit, and you can create and change them here. Anything you \
-            write *about* a meeting — linked people, your own notes, what you promised — stays in \
+            write *about* a meeting — linked people, your own notes, and related tasks — stays in \
             Elephruit and is never added to the calendar event.
             """
-    }
-}
-
-// MARK: - Interactions
-
-/// Recording that a conversation happened.
-///
-/// Small on purpose. The point is to capture *that* it happened and roughly what about, in a few
-/// seconds — a form asking for channel, duration, sentiment and follow-up date is a form nobody
-/// fills in, and an unrecorded conversation is worth less than a badly recorded one.
-struct RecordInteractionSheet: View {
-    let personName: String
-    let onSave: (_ summary: String, _ notes: String, _ date: Date) -> Void
-    let onCancel: () -> Void
-
-    @Environment(\.services) private var services
-
-    @State private var summary = ""
-    @State private var notes = ""
-    @State private var date = Date()
-    @FocusState private var isSummaryFocused: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-            Text("Conversation with \(personName)")
-                .font(Theme.Text.title)
-
-            TextField("What was it about?", text: $summary)
-                .textFieldStyle(.roundedBorder)
-                .focused($isSummaryFocused)
-                .onSubmit(save)
-
-            DatePicker("When", selection: $date)
-                .datePickerStyle(.compact)
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-                Text("Notes")
-                    .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.secondaryText)
-
-                TextEditor(text: $notes)
-                    .font(Theme.Text.rowSubtitle)
-                    .frame(height: 90)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                            .strokeBorder(Theme.Colors.separator)
-                    }
-            }
-
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel, action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                Button("Record", action: save)
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(Theme.Spacing.large)
-        .frame(width: 440)
-        .onAppear {
-            date = services?.dateProvider.now ?? Date()
-            isSummaryFocused = true
-        }
-        .accessibilityIdentifier(AccessibilityID.People.interactionSheet)
-    }
-
-    private func save() {
-        let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        onSave(trimmed, notes, date)
     }
 }

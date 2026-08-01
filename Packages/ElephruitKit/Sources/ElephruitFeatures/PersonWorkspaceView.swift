@@ -29,15 +29,19 @@ struct PersonWorkspaceView: View {
     @State private var timeline: [PersonTimelineEntry] = []
     @State private var timelineFilter: TimelineGrouping.Filter = .everything
     @State private var isRecordingInteraction = false
+    @State private var isAddingNote = false
     @State private var isAddingFact = false
+    @State private var quickFactSeed: QuickFactSeed?
     @State private var isShowingBrief = false
     @State private var chartKind: RelationshipChartKind?
     @State private var pendingAction: ContactActionRequest?
     @State private var correctionTarget: PortraitValue?
+    @State private var deletionTarget: PortraitValue?
     @State private var isEditingContactDetails = false
     @State private var pendingWriteBack: ContactDetailsEdit?
     @State private var loadFailure: AppError?
     @State private var isAddingRelationship = false
+    @State private var presentedTimelineEntry: PersonTimelineEntry?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,6 +54,7 @@ struct PersonWorkspaceView: View {
                 // sections — which is worse than the action being off and saying so.
                 hasHistory: !timeline.isEmpty,
                 onAction: { pendingAction = $0 },
+                onAddNote: { isAddingNote = true },
                 onRecordInteraction: { isRecordingInteraction = true },
                 onShowBrief: { isShowingBrief = true },
                 onAddRelationship: { isAddingRelationship = true }
@@ -68,9 +73,13 @@ struct PersonWorkspaceView: View {
                         person: person,
                         portrait: portrait,
                         bodyText: $bodyText,
-                        onAddFact: { isAddingFact = true },
+                        onAddFact: { seed in
+                            quickFactSeed = seed
+                            isAddingFact = true
+                        },
                         onConfirm: confirm(_:),
                         onCorrect: { correctionTarget = $0 },
+                        onDelete: { deletionTarget = $0 },
                         onOpenSource: { navigation.selectItem($0) }
                     )
 
@@ -94,7 +103,9 @@ struct PersonWorkspaceView: View {
                         entries: timeline,
                         filter: $timelineFilter,
                         dateProvider: services?.dateProvider ?? SystemDateProvider(),
-                        onOpen: { navigation.selectItem($0) }
+                        onOpen: { id in
+                            presentedTimelineEntry = timeline.first(where: { $0.id == id })
+                        }
                     )
                 }
                 .padding(.vertical, Theme.Spacing.large)
@@ -109,23 +120,49 @@ struct PersonWorkspaceView: View {
         // the moment it exists, not the next time somebody navigates back here.
         .onChange(of: services?.changeToken) { _, _ in reload() }
         .sheet(isPresented: $isRecordingInteraction) {
-            RecordInteractionSheet(
-                personName: person.displayTitle,
-                onSave: { summary, notes, date in
-                    record(summary: summary, notes: notes, at: date)
+            LogInteractionSheet(
+                person: person,
+                onSave: { draft in
+                    record(draft)
                     isRecordingInteraction = false
                 },
                 onCancel: { isRecordingInteraction = false }
             )
         }
+        .sheet(item: $presentedTimelineEntry) { entry in
+            PersonTimelineDetailSheet(
+                entry: entry,
+                personID: person.id,
+                personName: person.displayTitle,
+                onClose: {
+                    presentedTimelineEntry = nil
+                    reload()
+                }
+            )
+        }
+        .sheet(isPresented: $isAddingNote) {
+            PersonNoteSheet(
+                personName: person.displayTitle,
+                onSave: { draft in
+                    saveNote(draft)
+                    isAddingNote = false
+                },
+                onCancel: { isAddingNote = false }
+            )
+        }
         .sheet(isPresented: $isAddingFact) {
             AddFactSheet(
                 personName: person.displayTitle,
+                seed: quickFactSeed,
                 onSave: { draft, confidence, sensitivity, observedOn in
                     addFact(draft, confidence: confidence, sensitivity: sensitivity, observedOn: observedOn)
+                    quickFactSeed = nil
                     isAddingFact = false
                 },
-                onCancel: { isAddingFact = false }
+                onCancel: {
+                    quickFactSeed = nil
+                    isAddingFact = false
+                }
             )
         }
         .sheet(isPresented: $isShowingBrief) {
@@ -140,21 +177,25 @@ struct PersonWorkspaceView: View {
                 navigation.selectItem(id)
             }
         }
-        .sheet(isPresented: $isEditingContactDetails) {
-            EditContactDetailsSheet(
-                person: person,
-                onSave: { edit in
+        .sheet(isPresented: $isEditingContactDetails, onDismiss: { pendingWriteBack = nil }) {
+            // One sheet owns the whole transaction. Dismissing the editor and racing to present a
+            // second sheet could lose the write-back prompt while SwiftUI was still completing the
+            // first dismissal, which made a linked edit look saved while Contacts kept the old value.
+            if let edit = pendingWriteBack {
+                ContactWriteBackSheet(person: person, edit: edit) {
+                    pendingWriteBack = nil
                     isEditingContactDetails = false
-                    reload()
-                    // Saved here either way. The address book is a separate question, and only one
-                    // worth asking for somebody whose record came from there.
-                    if person.personProfile?.contactsIdentifier != nil { pendingWriteBack = edit }
-                },
-                onCancel: { isEditingContactDetails = false }
-            )
-        }
-        .sheet(item: $pendingWriteBack) { edit in
-            ContactWriteBackSheet(person: person, edit: edit) { pendingWriteBack = nil }
+                }
+            } else {
+                EditContactDetailsSheet(
+                    person: person,
+                    onSave: { edit in
+                        reload()
+                        offerContactWriteBack(for: edit)
+                    },
+                    onCancel: { isEditingContactDetails = false }
+                )
+            }
         }
         .sheet(item: $correctionTarget) { value in
             CorrectFactSheet(
@@ -174,9 +215,47 @@ struct PersonWorkspaceView: View {
                 }
             }
         }
+        .confirmationDialog(
+            "Delete this quick fact?",
+            isPresented: Binding(
+                get: { deletionTarget != nil },
+                set: { if !$0 { deletionTarget = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Quick Fact", role: .destructive) {
+                if let deletionTarget { deleteFact(deletionTarget) }
+                deletionTarget = nil
+            }
+            Button("Cancel", role: .cancel) { deletionTarget = nil }
+        } message: {
+            Text("This removes the selected value from (person.displayTitle).")
+        }
     }
 
     // MARK: - Loading
+
+    /// Offers the address-book write only when it can actually be performed.
+    ///
+    /// A Contacts identifier survives permission being revoked and the integration being switched
+    /// off, because the local person and their imported details survive too. The identifier alone
+    /// therefore cannot decide whether to show a write prompt. Re-reading macOS authorization here
+    /// also avoids trusting the state captured when the app launched.
+    private func offerContactWriteBack(for edit: ContactDetailsEdit) {
+        guard let services, person.personProfile?.contactsIdentifier != nil else {
+            isEditingContactDetails = false
+            return
+        }
+
+        Task {
+            await services.contacts.refreshAuthorization()
+            guard services.contacts.isEnabled, services.contacts.authorization.canRead else {
+                isEditingContactDetails = false
+                return
+            }
+            pendingWriteBack = edit
+        }
+    }
 
     private func reload() {
         guard let services else { return }
@@ -196,15 +275,42 @@ struct PersonWorkspaceView: View {
 
     // MARK: - Actions
 
-    private func record(summary: String, notes: String, at date: Date) {
+    private func record(_ draft: PersonInteractionDraft) {
         guard let services else { return }
         services.perform {
-            let interaction = try services.people.recordInteraction(
-                with: person, summary: summary, at: date, notes: notes
+            let created = try services.people.recordInteractionBundle(
+                with: interactionParticipants(for: draft, services: services),
+                summary: draft.cleanedSummary,
+                kind: draft.kind,
+                at: draft.occurredAt,
+                discussion: draft.cleanedDiscussion,
+                followUps: draft.followUpItems,
+                commitments: draft.commitmentItems
             )
-            // Written down by hand, so it counts as contact — see `InteractionProvenance`.
-            try services.items.update(interaction) { $0.sourceIdentifier = InteractionProvenance.logged.rawValue }
-            services.noteChange(to: interaction)
+            for item in created { services.noteChange(to: item) }
+        }
+        reload()
+    }
+
+    private func interactionParticipants(for draft: PersonInteractionDraft, services: AppServices) -> [Item] {
+        draft.participantIDs.compactMap { id in
+            try? services.persons.person(id: id)
+        }
+    }
+
+    private func saveNote(_ draft: PersonNoteDraft) {
+        guard let services else { return }
+        services.perform {
+            let note = try services.items.create(
+                ItemDraft(
+                    kind: .note,
+                    title: draft.resolvedTitle(personName: person.displayTitle),
+                    body: draft.cleanedBody,
+                    tagSlugs: draft.tagSlugs
+                )
+            )
+            try services.items.link(note, to: person, kind: .mentions)
+            services.noteChange(to: note)
         }
         reload()
     }
@@ -247,6 +353,18 @@ struct PersonWorkspaceView: View {
         reload()
     }
 
+    private func deleteFact(_ value: PortraitValue) {
+        guard let services else { return }
+        services.perform {
+            guard let record = try services.persons.observations(for: person)
+                .first(where: { $0.id == value.observationID })
+            else { return }
+            try services.persons.remove(record)
+            services.noteChange(to: person)
+        }
+        reload()
+    }
+
     /// Records that the user *started* reaching somebody — never that they spoke.
     ///
     /// The app saw a button press and nothing more. Recording "spoke to Maya" on that basis would put
@@ -284,6 +402,7 @@ struct PersonHeaderView: View {
     let hasHistory: Bool
 
     let onAction: (ContactActionRequest) -> Void
+    let onAddNote: () -> Void
     let onRecordInteraction: () -> Void
     let onShowBrief: () -> Void
     let onAddRelationship: () -> Void
@@ -318,8 +437,8 @@ struct PersonHeaderView: View {
                                 .foregroundStyle(person.isFavorite ? Theme.Colors.dueToday : Theme.Colors.secondaryText)
                         }
                         .buttonStyle(.borderless)
-                        .help(person.isFavorite ? "Remove from Favourites" : "Add to Favourites")
-                        .accessibilityLabel(person.isFavorite ? "Remove from favourites" : "Add to favourites")
+                        .help(person.isFavorite ? "Remove from Favorites" : "Add to Favorites")
+                        .accessibilityLabel(person.isFavorite ? "Remove from favorites" : "Add to favorites")
                     }
 
                     if let pronunciation = profile?.pronunciation, !pronunciation.isEmpty {
@@ -345,6 +464,7 @@ struct PersonHeaderView: View {
                 person: person,
                 hasHistory: hasHistory,
                 onAction: onAction,
+                onAddNote: onAddNote,
                 onRecordInteraction: onRecordInteraction,
                 onShowBrief: onShowBrief,
                 onAddRelationship: onAddRelationship
@@ -492,28 +612,106 @@ struct PersonQuickActions: View {
     let hasHistory: Bool
 
     let onAction: (ContactActionRequest) -> Void
+    let onAddNote: () -> Void
     let onRecordInteraction: () -> Void
     let onShowBrief: () -> Void
     let onAddRelationship: () -> Void
 
     var body: some View {
-        AdaptiveActionBar(actions)
+        ViewThatFits(in: .horizontal) {
+            actionDock(showsContactTitles: true)
+            actionDock(showsContactTitles: false)
+        }
             .accessibilityIdentifier(AccessibilityID.People.quickActions)
     }
 
-    private var actions: [ActionItem] {
-        availability.map { entry in
-            ActionItem(
-                id: entry.id,
-                title: entry.title,
-                symbolName: entry.symbolName,
-                priority: priority(for: entry),
-                isEnabled: entry.isAvailable,
-                unavailabilityReason: entry.unavailabilityReason,
-                detail: entry.detail,
-                perform: { perform(entry) }
-            )
+    private func actionDock(showsContactTitles: Bool) -> some View {
+        HStack(spacing: Theme.Spacing.small) {
+            ForEach(primaryContactActions) { entry in
+                PersonDockButton(
+                    entry: entry,
+                    tint: tint(for: entry),
+                    showsTitle: showsContactTitles,
+                    isProminent: false
+                ) { perform(entry) }
+            }
+
+            if !primaryContactActions.isEmpty {
+                Divider()
+                    .frame(height: 24)
+                    .padding(.horizontal, 2)
+            }
+
+            if let interactionAction {
+                PersonDockButton(
+                    entry: interactionAction,
+                    tint: .purple,
+                    showsTitle: true,
+                    isProminent: false
+                ) { perform(interactionAction) }
+            }
+
+            if let noteAction {
+                PersonDockButton(
+                    entry: noteAction,
+                    tint: .orange,
+                    showsTitle: showsContactTitles,
+                    isProminent: false
+                ) { perform(noteAction) }
+            }
+
+            if !secondaryActions.isEmpty {
+                Menu {
+                    ForEach(secondaryActions) { entry in
+                        Button {
+                            perform(entry)
+                        } label: {
+                            Label(entry.title, systemImage: entry.symbolName)
+                        }
+                        .disabled(!entry.isAvailable)
+                        .help(entry.unavailabilityReason ?? entry.detail ?? entry.title)
+                    }
+                } label: {
+                    Label("More", systemImage: "ellipsis")
+                        .labelStyle(.iconOnly)
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 36, height: 36)
+                        .background(Theme.Colors.subtleFill, in: Circle())
+                }
+                .menuIndicator(.hidden)
+                .buttonStyle(.plain)
+                .help("More actions")
+                .accessibilityLabel("More actions")
+            }
         }
+        .padding(7)
+        .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: 15))
+        .overlay {
+            RoundedRectangle(cornerRadius: 15)
+                .strokeBorder(Theme.Colors.separator.opacity(0.55))
+        }
+        .shadow(color: .black.opacity(0.055), radius: 12, y: 4)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var primaryContactActions: [PersonActionAvailability] {
+        availability.filter { entry in
+            guard entry.isAvailable, case .contact(let channel) = entry.kind else { return false }
+            return channel == .call || channel == .message || channel == .email
+        }
+    }
+
+    private var interactionAction: PersonActionAvailability? {
+        availability.first { if case .logInteraction = $0.kind { true } else { false } }
+    }
+
+    private var noteAction: PersonActionAvailability? {
+        availability.first { if case .addNote = $0.kind { true } else { false } }
+    }
+
+    private var secondaryActions: [PersonActionAvailability] {
+        let visible = Set(primaryContactActions.map(\.id) + [interactionAction?.id, noteAction?.id].compactMap { $0 })
+        return availability.filter { !visible.contains($0.id) }
     }
 
     private var availability: [PersonActionAvailability] {
@@ -529,13 +727,15 @@ struct PersonQuickActions: View {
         return (try? services.persons.relationships(of: person)) ?? []
     }
 
-    /// The availability rule already ranked these; this is only the coarse banding the action bar
-    /// sheds labels by, so the two cannot disagree about which action matters most.
-    private func priority(for entry: PersonActionAvailability) -> ActionItem.Priority {
-        switch entry.rank {
-        case 80...: .essential
-        case 50..<80: .common
-        default: .occasional
+    private func tint(for entry: PersonActionAvailability) -> Color {
+        guard case .contact(let channel) = entry.kind else { return Theme.Colors.selection }
+        switch channel {
+        case .call: return Color.green
+        case .message: return Color.blue
+        case .email: return Color.indigo
+        case .facetimeVideo, .facetimeAudio: return Color.cyan
+        case .maps: return Color.orange
+        case .web: return Color.purple
         }
     }
 
@@ -554,7 +754,7 @@ struct PersonQuickActions: View {
             )
 
         case .addNote:
-            createNote()
+            onAddNote()
 
         case .logInteraction:
             onRecordInteraction()
@@ -570,17 +770,6 @@ struct PersonQuickActions: View {
         }
     }
 
-    private func createNote() {
-        guard let services else { return }
-        services.perform {
-            let note = try services.items.create(
-                ItemDraft(kind: .note, title: "Note about \(person.displayTitle)")
-            )
-            try services.items.link(note, to: person, kind: .mentions)
-            services.noteChange(to: note)
-        }
-    }
-
     private func createTask() {
         guard let services else { return }
         services.perform {
@@ -590,5 +779,46 @@ struct PersonQuickActions: View {
             try services.items.link(task, to: person, kind: .mentions)
             services.noteChange(to: task)
         }
+    }
+}
+
+private struct PersonDockButton: View {
+    let entry: PersonActionAvailability
+    let tint: Color
+    let showsTitle: Bool
+    let isProminent: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Group {
+                if showsTitle {
+                    Label(entry.title, systemImage: entry.symbolName)
+                } else {
+                    Label(entry.title, systemImage: entry.symbolName)
+                        .labelStyle(.iconOnly)
+                }
+            }
+            .font(.system(.callout, weight: .semibold))
+            .foregroundStyle(isProminent ? Color.white : tint)
+            .padding(.horizontal, showsTitle ? Theme.Spacing.medium : 0)
+            .frame(width: showsTitle ? nil : 36, height: 36)
+            .background(
+                isProminent ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(tint.opacity(0.11)),
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(isProminent ? Color.white.opacity(0.16) : tint.opacity(0.16))
+            }
+            .shadow(color: isProminent ? tint.opacity(0.25) : .clear, radius: 7, y: 3)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!entry.isAvailable)
+        .help(entry.unavailabilityReason ?? entry.detail ?? entry.title)
+        .accessibilityLabel(entry.title)
+        .accessibilityHint(entry.unavailabilityReason ?? entry.detail ?? "")
+        .accessibilityIdentifier("action.\(entry.id)")
     }
 }

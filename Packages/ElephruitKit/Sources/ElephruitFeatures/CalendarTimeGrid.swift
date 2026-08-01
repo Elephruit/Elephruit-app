@@ -671,7 +671,7 @@ struct EventBlockView: View {
         var parts = [event.displayTitle]
         parts.append(event.timeSummary(in: timeZoneDisplay.displayZone, calendar: calendar))
         if event.isRecurring { parts.append("repeating") }
-        if event.isCancelled { parts.append("cancelled") }
+        if event.isCancelled { parts.append("canceled") }
         if let location = event.locationName, !location.isEmpty { parts.append("at \(location)") }
         if let name = event.calendarName { parts.append("on \(name)") }
         if isAnnotated { parts.append("has notes") }

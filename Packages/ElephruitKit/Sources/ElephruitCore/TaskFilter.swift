@@ -402,7 +402,7 @@ public struct BuiltInSmartList: Sendable, Hashable, Identifiable {
         ),
         BuiltInSmartList(
             id: "open-promises",
-            title: "Open Promises",
+            title: "Open Tasks with People",
             symbolName: "hand.raised",
             hint: "Something you owe somebody, or somebody owes you.",
             filter: TaskFilter(

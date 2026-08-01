@@ -23,12 +23,12 @@ struct PersonModuleTests {
         let groups: PersonGroupService
 
         @MainActor
-        init(dateProvider: FixedDateProvider = .reference) throws {
-            let store = try StoreFixture(dateProvider: dateProvider)
+        init(dateProvider: FixedDateProvider = .reference, audit: FetchAudit? = nil) throws {
+            let store = try StoreFixture(dateProvider: dateProvider, audit: audit)
             self.store = store
 
             let people = SwiftDataPersonRepository(
-                context: store.context, items: store.items, dateProvider: dateProvider
+                context: store.context, items: store.items, dateProvider: dateProvider, audit: audit
             )
             self.people = people
             self.workspace = PersonWorkspaceService(
@@ -92,6 +92,15 @@ struct PersonModuleTests {
 
         let stored = try fixture.store.requireItem(id: maya.id)
         #expect(!stored.searchText.contains("5550192"), "“555” must not match three people for invisible reasons")
+    }
+
+    @Test("A complete surname remains searchable when it contains a command word")
+    func surnameContainingPromiseKeywordIsSearchable() throws {
+        let fixture = try Fixture()
+        _ = try fixture.people.createPerson(PersonDraft(fullName: "Caroline Howe"))
+
+        #expect(try fixture.search.search("how").map(\.name) == ["Caroline Howe"])
+        #expect(try fixture.search.search("howe").map(\.name) == ["Caroline Howe"])
     }
 
     @Test("Adding details never removes the ones already there")
@@ -179,6 +188,23 @@ struct PersonModuleTests {
 
         #expect(try fixture.people.relationships(of: maya).isEmpty)
         #expect(try fixture.people.relationships(of: jack).isEmpty, "a one-sided relationship is a bug, not a state")
+    }
+
+    @Test("Editing a relationship updates both halves")
+    func editingIsSymmetric() throws {
+        let fixture = try Fixture()
+        let maya = try fixture.people.createPerson(PersonDraft(fullName: "Maya Chen"))
+        let stella = try fixture.people.createPerson(PersonDraft(fullName: "Stella"))
+        let relationship = try fixture.people.relate(maya, to: stella, as: .friend, label: nil)
+
+        try fixture.people.update(relationship, kind: .child, label: "daughter")
+
+        let mayaSide = try #require(try fixture.people.relationships(of: maya).first)
+        let stellaSide = try #require(try fixture.people.relationships(of: stella).first)
+        #expect(mayaSide.kind == .child)
+        #expect(mayaSide.customLabel == "daughter")
+        #expect(stellaSide.kind == .parent)
+        #expect(stellaSide.customLabel == nil)
     }
 
     @Test("Relating the same pair twice changes nothing")
@@ -343,6 +369,22 @@ struct PersonModuleTests {
         let ledger = try fixture.people.ledger(for: maya)
         #expect(ledger.current(.location).map(\.value) == ["Austin"])
         #expect(ledger.history(.location).map(\.value) == ["Portland"])
+    }
+
+    @Test("A quick fact can be removed without deleting the person")
+    func factsCanBeRemoved() throws {
+        let fixture = try Fixture()
+        let maya = try fixture.people.createPerson(PersonDraft(fullName: "Maya Chen"))
+        let observation = try fixture.people.record(
+            ObservationDraft(attribute: .foodAndDrink, value: "Vegetarian"),
+            about: maya, observedOn: Self.date(2026, 7, 18),
+            confidence: .stated, sensitivity: .normal, source: nil
+        )
+
+        try fixture.people.remove(observation)
+
+        #expect(try fixture.people.observations(for: maya).isEmpty)
+        #expect(try fixture.people.person(id: maya.id)?.displayTitle == "Maya Chen")
     }
 
     @Test("Likes accumulate rather than replacing each other")
@@ -799,6 +841,24 @@ struct PersonModuleTests {
         let mayasBirthdays = all.filter { $0.personID == maya.id && $0.kind == .birthday }
         #expect(mayasBirthdays.count == 1, "the profile and the celebration row must not both report it")
         #expect(maya.personProfile?.birthdayHasYear == true)
+    }
+
+    @Test("Loading all celebrations uses a bounded number of fetches")
+    func allCelebrationsDoesNotFetchPerPerson() throws {
+        let audit = FetchAudit()
+        let fixture = try Fixture(audit: audit)
+
+        for index in 0..<20 {
+            _ = try fixture.people.createPerson(PersonDraft(fullName: "Person \(index)"))
+        }
+
+        let (_, tally) = try audit.measure {
+            try fixture.people.allCelebrations()
+        }
+
+        #expect(tally.itemFetches == 1, "people should be loaded in one fetch: \(tally.description)")
+        #expect(tally.otherFetches == 1, "celebrations should be loaded in one fetch: \(tally.description)")
+        #expect(tally.total == 2, "the fetch count must not grow with the number of people: \(tally.description)")
     }
 
     @Test("My Card is exactly one person")

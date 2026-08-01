@@ -24,7 +24,7 @@ public enum ShareableField: String, Codable, Sendable, Hashable, CaseIterable, I
         case .pronouns: "Pronouns"
         case .pronunciation: "Name pronunciation"
         case .jobTitle: "Job title"
-        case .organization: "Organisation"
+        case .organization: "Organization"
         case .personalEmail: "Personal email"
         case .workEmail: "Work email"
         case .mobilePhone: "Mobile"

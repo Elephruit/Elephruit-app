@@ -28,6 +28,7 @@ struct EditContactDetailsSheet: View {
 
     @State private var edit: ContactDetailsEdit
     @State private var saveFailure: AppError?
+    @State private var selectedPage: ContactEditorPage = .name
 
     init(person: Item, onSave: @escaping (ContactDetailsEdit) -> Void, onCancel: @escaping () -> Void) {
         self.person = person
@@ -37,78 +38,259 @@ struct EditContactDetailsSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-            Text("Edit \(person.displayTitle)")
-                .font(Theme.Text.title)
+        HStack(spacing: 0) {
+            editorSidebar
+            Divider()
 
-            Form {
-                Section("Name") {
-                    // In parts, because Contacts keeps them in parts and the header's single field
-                    // is what makes them drift. Somebody whose family name comes first, or who has a
-                    // suffix, can say so here instead of having it guessed from a rename.
-                    TextField("Prefix", text: $edit.namePrefix)
-                    TextField("First", text: $edit.givenName)
-                    TextField("Middle", text: $edit.middleName)
-                    TextField("Last", text: $edit.familyName)
-                    TextField("Suffix", text: $edit.nameSuffix)
-                    TextField("Nickname", text: $edit.nickname)
+            VStack(spacing: 0) {
+                pageHeader
+                Divider()
+                ZStack {
+                    Theme.Colors.windowBackground
+                    pageContent
+                        .id(selectedPage)
+                        .transition(.opacity.combined(with: .move(edge: .trailing)))
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                Divider()
+                editorFooter
+            }
+        }
+        .frame(width: 860, height: 620)
+        .background(Theme.Colors.windowBackground)
+        .accessibilityIdentifier(AccessibilityID.People.contactEditor)
+    }
 
-                Section("Work") {
-                    TextField("Role", text: $edit.roleTitle)
-                    TextField("Department", text: $edit.departmentName)
-                    TextField("Organisation", text: $edit.organizationName)
-                    TextField("Location", text: $edit.locationText)
+    private var editorSidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: Theme.Spacing.medium) {
+                ZStack {
+                    Circle().fill(Theme.Colors.selection.gradient)
+                    Text(personInitials)
+                        .font(.system(.headline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.white)
                 }
+                .frame(width: 44, height: 44)
 
-                Section("Birthday") {
-                    Toggle("Has a birthday recorded", isOn: $edit.hasBirthday)
-
-                    if edit.hasBirthday {
-                        DatePicker("Date", selection: $edit.birthday, displayedComponents: .date)
-
-                        // The year is genuinely often unknown, and both this app and Contacts store
-                        // that as an absence. A toggle rather than a blank field, so "I do not know
-                        // the year" is a thing somebody can say rather than a thing they leave.
-                        Toggle("The year is known", isOn: $edit.birthdayHasYear)
-                    }
-                }
-
-                ForEach(ContactDetailKind.allCases, id: \.rawValue) { kind in
-                    ValueListSection(kind: kind, values: binding(for: kind))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(person.displayTitle)
+                        .font(.system(.headline, weight: .semibold))
+                        .lineLimit(1)
+                    Text("Contact profile")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.secondaryText)
                 }
             }
-            .formStyle(.grouped)
+            .padding(.horizontal, Theme.Spacing.large)
+            .padding(.top, Theme.Spacing.section)
+            .padding(.bottom, Theme.Spacing.large)
 
+            Text("DETAILS")
+                .font(.system(size: 10, weight: .bold))
+                .tracking(0.8)
+                .foregroundStyle(Theme.Colors.tertiaryText)
+                .padding(.horizontal, Theme.Spacing.large)
+                .padding(.bottom, Theme.Spacing.small)
+
+            VStack(spacing: 4) {
+                ForEach(ContactEditorPage.allCases) { page in
+                    Button {
+                        withAnimation(.easeOut(duration: 0.18)) { selectedPage = page }
+                    } label: {
+                        HStack(spacing: Theme.Spacing.small) {
+                            Image(systemName: page.systemImage)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(selectedPage == page ? page.tint : Theme.Colors.secondaryText)
+                                .frame(width: 24, height: 24)
+                                .background(
+                                    page.tint.opacity(selectedPage == page ? 0.14 : 0),
+                                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                )
+                            Text(page.title)
+                                .font(.system(.body, weight: selectedPage == page ? .semibold : .regular))
+                                .foregroundStyle(Theme.Colors.primaryText)
+                            Spacer()
+                            if let count = pageCount(page), count > 0 {
+                                Text("\(count)")
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .foregroundStyle(selectedPage == page ? page.tint : Theme.Colors.secondaryText)
+                                    .padding(.horizontal, 6)
+                                    .frame(minHeight: 18)
+                                    .background(page.tint.opacity(0.1), in: Capsule())
+                            }
+                        }
+                        .padding(.horizontal, Theme.Spacing.small)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 38)
+                        .contentShape(Rectangle())
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(selectedPage == page ? Theme.Colors.contentBackground : .clear)
+                                .shadow(color: selectedPage == page ? .black.opacity(0.06) : .clear, radius: 5, y: 2)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.medium)
+
+            Spacer()
+
+            if isLinked {
+                HStack(alignment: .top, spacing: Theme.Spacing.small) {
+                    Image(systemName: "checkmark.icloud.fill")
+                        .foregroundStyle(Theme.Colors.selection)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Linked to Contacts")
+                            .font(.system(.caption, weight: .semibold))
+                        Text("Changes are confirmed before writing back.")
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(Theme.Spacing.medium)
+                .background(Theme.Colors.selection.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
+                .padding(Theme.Spacing.medium)
+            }
+        }
+        .frame(width: 218)
+    }
+
+    private var pageHeader: some View {
+        HStack(spacing: Theme.Spacing.medium) {
+            Image(systemName: selectedPage.systemImage)
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(selectedPage.tint)
+                .frame(width: 42, height: 42)
+                .background(selectedPage.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(selectedPage.title)
+                    .font(.system(.title2, weight: .semibold))
+                Text(selectedPage.subtitle)
+                    .font(Theme.Text.rowSubtitle)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, Theme.Spacing.section)
+        .frame(height: 84)
+        .background(Theme.Colors.contentBackground)
+    }
+
+    @ViewBuilder
+    private var pageContent: some View {
+        ScrollView {
+            VStack(spacing: Theme.Spacing.large) {
+                switch selectedPage {
+                case .name:
+                    EditorPanel {
+                        VStack(spacing: Theme.Spacing.large) {
+                            HStack(alignment: .top, spacing: Theme.Spacing.medium) {
+                                EditorField("Prefix", text: $edit.namePrefix)
+                                EditorField("First name", text: $edit.givenName)
+                                EditorField("Middle name", text: $edit.middleName)
+                            }
+                            HStack(alignment: .top, spacing: Theme.Spacing.medium) {
+                                EditorField("Last name", text: $edit.familyName)
+                                EditorField("Suffix", text: $edit.nameSuffix)
+                                EditorField("Nickname", text: $edit.nickname)
+                            }
+                        }
+                    }
+                case .work:
+                    EditorPanel {
+                        VStack(spacing: Theme.Spacing.large) {
+                            HStack(alignment: .top, spacing: Theme.Spacing.medium) {
+                                EditorField("Role", text: $edit.roleTitle)
+                                EditorField("Department", text: $edit.departmentName)
+                            }
+                            HStack(alignment: .top, spacing: Theme.Spacing.medium) {
+                                EditorField("Organization", text: $edit.organizationName)
+                                EditorField("Location", text: $edit.locationText)
+                            }
+                        }
+                    }
+                case .birthday:
+                    EditorPanel {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.large) {
+                            Toggle(isOn: $edit.hasBirthday) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("Remember their birthday")
+                                        .font(.system(.body, weight: .semibold))
+                                    Text("Show it in Celebrations and upcoming reminders.")
+                                        .font(Theme.Text.rowSubtitle)
+                                        .foregroundStyle(Theme.Colors.secondaryText)
+                                }
+                            }
+                            .toggleStyle(.switch)
+                            if edit.hasBirthday {
+                                Divider()
+                                HStack(spacing: Theme.Spacing.section) {
+                                    DatePicker("Birthday", selection: $edit.birthday, displayedComponents: .date)
+                                    Toggle("Include birth year", isOn: $edit.birthdayHasYear)
+                                        .toggleStyle(.switch)
+                                }
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
+                        }
+                    }
+                case .email: contactPage(.email)
+                case .phone: contactPage(.phone)
+                case .address: contactPage(.address)
+                case .website: contactPage(.website)
+                }
+            }
+            .padding(Theme.Spacing.section)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+    }
+
+    private func contactPage(_ kind: ContactDetailKind) -> some View {
+        EditorPanel { ValueListSection(kind: kind, values: binding(for: kind)) }
+    }
+
+    private var personInitials: String {
+        person.displayTitle.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased()
+    }
+
+    private func pageCount(_ page: ContactEditorPage) -> Int? {
+        switch page {
+        case .name, .work: nil
+        case .birthday: edit.hasBirthday ? 1 : nil
+        case .email: edit.emails.count
+        case .phone: edit.phones.count
+        case .address: edit.addresses.count
+        case .website: edit.websites.count
+        }
+    }
+
+    private var editorFooter: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
             if let saveFailure {
-                Label(saveFailure.localizedDescription, systemImage: "exclamationmark.triangle")
+                Label(saveFailure.localizedDescription, systemImage: "exclamationmark.triangle.fill")
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.overdue)
             }
 
-            HStack {
-                if isLinked {
-                    Label(
-                        "Linked to your address book — you will be asked before anything is written there.",
-                        systemImage: "person.crop.rectangle.stack"
-                    )
+            HStack(spacing: Theme.Spacing.medium) {
+                Text("Changes are saved to this profile first.")
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.tertiaryText)
-                }
-
                 Spacer()
 
                 Button("Cancel", role: .cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
 
-                Button("Save", action: save)
+                Button("Save Changes", action: save)
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
             }
         }
-        .padding(Theme.Spacing.large)
-        .frame(minWidth: 520, minHeight: 480)
-        .accessibilityIdentifier(AccessibilityID.People.contactEditor)
+        .padding(.horizontal, Theme.Spacing.section)
+        .frame(minHeight: 58)
+        .background(Theme.Colors.contentBackground)
     }
 
     private var isLinked: Bool {
@@ -155,43 +337,185 @@ struct EditContactDetailsSheet: View {
     }
 }
 
+private enum ContactEditorPage: String, CaseIterable, Identifiable {
+    case name, work, birthday, email, phone, address, website
+
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+
+    var subtitle: String {
+        switch self {
+        case .name: "How this person appears throughout the app"
+        case .work: "Their role, team, and organization"
+        case .birthday: "A date worth remembering"
+        case .email: "Where you can reach them by email"
+        case .phone: "Numbers for calls and messages"
+        case .address: "Places associated with this person"
+        case .website: "Personal and professional links"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .name: "person.fill"
+        case .work: "briefcase.fill"
+        case .birthday: "birthday.cake.fill"
+        case .email: "envelope.fill"
+        case .phone: "phone.fill"
+        case .address: "mappin.and.ellipse"
+        case .website: "safari.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .name: .blue
+        case .work: .indigo
+        case .birthday: .pink
+        case .email: .cyan
+        case .phone: .green
+        case .address: .orange
+        case .website: .purple
+        }
+    }
+}
+
+/// A quiet canvas for the selected task, rather than one card in a long stack.
+private struct EditorPanel<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+        .padding(Theme.Spacing.section)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Theme.Colors.contentBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Theme.Colors.separator.opacity(0.55))
+        )
+        .shadow(color: .black.opacity(0.04), radius: 16, y: 6)
+    }
+}
+
+/// A field whose label stays above the value, so editing always begins at the leading edge.
+private struct EditorField: View {
+    let title: String
+    @Binding var text: String
+    let width: CGFloat?
+
+    init(_ title: String, text: Binding<String>, width: CGFloat? = nil) {
+        self.title = title
+        _text = text
+        self.width = width
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+            Text(title)
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.secondaryText)
+
+            TextField("", text: $text)
+                .labelsHidden()
+                .textFieldStyle(.plain)
+                .multilineTextAlignment(.leading)
+                .padding(.horizontal, Theme.Spacing.small)
+                .frame(height: 32)
+                .background(fieldBackground)
+                .accessibilityLabel(title)
+        }
+        .frame(width: width)
+        .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
+    }
+
+    private var fieldBackground: some View {
+        RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+            .fill(Theme.Colors.windowBackground)
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                    .strokeBorder(Theme.Colors.separator.opacity(0.8))
+            )
+    }
+}
+
 /// One kind's list of labelled values, with the controls that make it a list rather than a display.
 private struct ValueListSection: View {
     let kind: ContactDetailKind
     @Binding var values: [LabelledValue]
 
     var body: some View {
-        Section(kind.displayName) {
-            ForEach($values, id: \.self) { $value in
-                HStack(spacing: Theme.Spacing.small) {
-                    LabelField(label: $value.label, kind: kind)
-
-                    TextField(kind.valuePrompt, text: $value.value)
-                        .textFieldStyle(.roundedBorder)
-
-                    Button {
-                        remove(value)
-                    } label: {
-                        Image(systemName: "minus.circle")
+        VStack(spacing: Theme.Spacing.medium) {
+            if values.isEmpty {
+                VStack(spacing: Theme.Spacing.medium) {
+                    Image(systemName: kind.symbolName)
+                        .font(.system(size: 26, weight: .medium))
+                        .foregroundStyle(kind.editorTint)
+                        .frame(width: 54, height: 54)
+                        .background(kind.editorTint.opacity(0.1), in: Circle())
+                    VStack(spacing: 4) {
+                        Text("No \(kind.displayName.lowercased()) added")
+                            .font(.system(.body, weight: .semibold))
+                        Text("Add one whenever it becomes useful.")
+                            .font(Theme.Text.rowSubtitle)
+                            .foregroundStyle(Theme.Colors.secondaryText)
                     }
-                    .buttonStyle(.borderless)
-                    .help("Remove this \(kind.displayName.lowercased())")
-                    .accessibilityLabel("Remove this \(kind.displayName.lowercased())")
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Theme.Spacing.section)
+            } else {
+                ForEach(values.indices, id: \.self) { index in
+                    HStack(alignment: .center, spacing: Theme.Spacing.medium) {
+                        LabelField(label: $values[index].label, kind: kind)
+
+                        TextField("", text: $values[index].value)
+                            .labelsHidden()
+                            .textFieldStyle(.plain)
+                            .multilineTextAlignment(.leading)
+                            .padding(.horizontal, Theme.Spacing.small)
+                            .frame(height: 36)
+                            .background(
+                                RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                                    .fill(Theme.Colors.windowBackground)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                                            .strokeBorder(Theme.Colors.separator.opacity(0.8))
+                                    )
+                            )
+                            .frame(maxWidth: .infinity)
+                            .accessibilityLabel(kind.displayName)
+
+                        Button {
+                            values.remove(at: index)
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundStyle(Theme.Colors.tertiaryText)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Remove this \(kind.displayName.lowercased())")
+                        .accessibilityLabel("Remove this \(kind.displayName.lowercased())")
+                    }
+
+                    if index != values.indices.last { Divider() }
                 }
             }
 
             Button {
-                values.append(LabelledValue(label: kind.defaultLabel, value: ""))
+                values.append(LabelledValue(label: kind.editorDefaultLabel, value: ""))
             } label: {
                 Label("Add \(kind.displayName.lowercased())", systemImage: "plus.circle")
+                    .font(.system(.body, weight: .semibold))
+                    .padding(.horizontal, Theme.Spacing.medium)
+                    .frame(height: 34)
+                    .background(kind.editorTint.opacity(0.1), in: Capsule())
             }
             .buttonStyle(.borderless)
+            .foregroundStyle(kind.editorTint)
+            .frame(maxWidth: .infinity, alignment: values.isEmpty ? .center : .leading)
         }
-    }
-
-    private func remove(_ value: LabelledValue) {
-        guard let index = values.firstIndex(of: value) else { return }
-        values.remove(at: index)
+        .animation(.easeOut(duration: 0.16), value: values.count)
     }
 }
 
@@ -201,13 +525,16 @@ private struct LabelField: View {
     let kind: ContactDetailKind
 
     var body: some View {
-        HStack(spacing: 2) {
-            TextField("Label", text: $label)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 90)
+        HStack(spacing: Theme.Spacing.tight) {
+            TextField("", text: $label)
+                .labelsHidden()
+                .textFieldStyle(.plain)
+                .multilineTextAlignment(.leading)
+                .padding(.leading, Theme.Spacing.small)
+                .accessibilityLabel("Label")
 
             Menu {
-                ForEach(kind.commonLabels, id: \.self) { option in
+                ForEach(kind.editorLabelOptions, id: \.self) { option in
                     Button(option) { label = option }
                 }
             } label: {
@@ -215,10 +542,19 @@ private struct LabelField: View {
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
-            .frame(width: 16)
+            .frame(width: 18)
             .help("Common labels")
             .accessibilityLabel("Choose a common label")
         }
+        .frame(width: 146, height: 36, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                .fill(Theme.Colors.windowBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                        .strokeBorder(Theme.Colors.separator.opacity(0.8))
+                )
+        )
     }
 }
 
@@ -325,7 +661,7 @@ struct ContactDetailsEdit: Equatable, Identifiable {
             let trimmed = value.value.trimmed()
             guard !trimmed.isEmpty else { return nil }
             let label = value.label.trimmed()
-            return LabelledValue(label: label.isEmpty ? kind.defaultLabel : label, value: trimmed)
+            return LabelledValue(label: label.isEmpty ? kind.editorDefaultLabel : label, value: trimmed)
         }
     }
 
@@ -358,32 +694,29 @@ private extension String {
     func trimmed() -> String { trimmingCharacters(in: .whitespacesAndNewlines) }
 }
 
-private extension ContactDetailKind {
-    /// What an empty field asks for. Specific enough to imply the format without stating a rule.
-    var valuePrompt: String {
+extension ContactDetailKind {
+    var editorTint: Color {
         switch self {
-        case .email: "name@example.com"
-        case .phone: "+1 512 555 0192"
-        case .address: "12 Rosewood Lane, Austin"
-        case .website: "example.com"
+        case .email: .blue
+        case .phone: .green
+        case .address: .orange
+        case .website: .purple
         }
     }
 
     /// The label a newly added row starts with.
-    var defaultLabel: String {
+    var editorDefaultLabel: String {
         switch self {
-        case .email: "home"
-        case .phone: "mobile"
+        case .email, .phone: "personal"
         case .address: "home"
         case .website: "homepage"
         }
     }
 
     /// Offered in the menu. Not a closed set — the field beside it takes anything.
-    var commonLabels: [String] {
+    var editorLabelOptions: [String] {
         switch self {
-        case .email: ["home", "work", "school", "other"]
-        case .phone: ["mobile", "home", "work", "main", "other"]
+        case .email, .phone: ["personal", "work"]
         case .address: ["home", "work", "other"]
         case .website: ["homepage", "work", "blog", "other"]
         }

@@ -72,6 +72,15 @@ struct ModuleLayoutTests {
         )
     }
 
+    @Test("The contact list stays compact beside the profile")
+    func contactListStaysCompact() {
+        let bounds = AppModule.people.shellLayout.primary
+
+        #expect(bounds.ideal == 300)
+        #expect(bounds.maximum == 380)
+        #expect(bounds.ideal < AppModule.people.shellLayout.detail.width.ideal)
+    }
+
     @Test("Every module's widths are independent")
     func modulesDoNotShareWidths() {
         let layout = store()

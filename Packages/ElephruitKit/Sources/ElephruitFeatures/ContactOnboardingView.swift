@@ -171,7 +171,7 @@ struct ContactExplanationView: View {
                     "arrow.left.arrow.right.circle",
                     "Your notes never go back into Contacts",
                     """
-                    Private reflections, relationship history, promises, tags, confidence, and \
+                    Private reflections, relationship history, tasks, tags, confidence, and \
                     provenance stay in Elephruit. Your address book never sees them.
                     """
                 )

@@ -149,7 +149,7 @@ public enum RelationshipChartKind: String, Sendable, Hashable, CaseIterable, Ide
         switch self {
         case .family: "Family"
         case .household: "Household"
-        case .professional: "Organisation"
+        case .professional: "Organization"
         case .network: "Network"
         }
     }

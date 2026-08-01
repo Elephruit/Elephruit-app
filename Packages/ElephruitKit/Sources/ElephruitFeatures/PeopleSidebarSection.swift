@@ -19,7 +19,7 @@ struct PeopleSidebarSection: View {
 
     let navigation: NavigationModel
 
-    @State private var groups: [PersonGroup] = []
+    @State private var groups: [PersonGroupSummary] = []
     @State private var duplicateCount = 0
     @State private var linkedCount = 0
     @State private var isExpanded = true
@@ -55,7 +55,7 @@ struct PeopleSidebarSection: View {
                     for: .group(id: group.id),
                     title: group.name,
                     symbolName: group.symbolName,
-                    count: group.memberCount
+                    count: nil
                 )
             }
 
@@ -183,7 +183,7 @@ struct PeopleSidebarSection: View {
 
     private func reload() {
         guard let services else { return }
-        groups = (try? services.personGroups.allGroups()) ?? []
+        groups = (try? services.personGroups.allGroupSummaries()) ?? []
         duplicateCount = ((try? services.personIdentity.duplicates()) ?? []).count
         linkedCount = (try? services.contactImports.linkedCount()) ?? 0
     }
@@ -232,18 +232,8 @@ struct PersonContextSidebar: View {
                         }
                     }
 
-                    if !context.promises.isEmpty {
-                        InspectorSection("You promised") {
-                            ForEach(context.promises) { entry in
-                                linkRow(entry.title, systemImage: "hand.raised") {
-                                    navigation.selectItem(entry.id)
-                                }
-                            }
-                        }
-                    }
-
                     if !context.openItems.isEmpty {
-                        InspectorSection("Open") {
+                        InspectorSection("Tasks") {
                             ForEach(context.openItems.prefix(6)) { entry in
                                 linkRow(entry.title, systemImage: entry.kind.symbolName) {
                                     navigation.selectItem(entry.id)
@@ -314,7 +304,7 @@ struct PersonContextSidebar: View {
                     EmptyStateView(
                         symbolName: "sidebar.trailing",
                         headline: "Nothing yet",
-                        message: "Meetings, promises, and related people appear here as they accumulate."
+                        message: "Meetings, tasks, and related people appear here as they accumulate."
                     )
                 }
             }
@@ -322,7 +312,7 @@ struct PersonContextSidebar: View {
         }
         .accessibilityIdentifier(AccessibilityID.People.contextSidebar)
         .task(id: person.id) { reload() }
-        // "Open" and "You promised" are lists of other items pointing here, so a new task about
+        // Tasks are other items pointing here, so a new task about
         // this person has to arrive without a navigation — see ``AppServices/changeToken``.
         .onChange(of: services?.changeToken) { _, _ in reload() }
     }

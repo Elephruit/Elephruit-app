@@ -93,7 +93,7 @@ public enum EventSearchFlag: String, Sendable, Hashable, CaseIterable {
         case .withAttachments: "With attachments"
         case .withLinks: "Linked"
         case .declined: "Declined"
-        case .cancelled: "Cancelled"
+        case .cancelled: "Canceled"
         case .past: "Past"
         case .upcoming: "Upcoming"
         }

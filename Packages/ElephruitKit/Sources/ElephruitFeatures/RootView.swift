@@ -275,7 +275,10 @@ public struct RootView: View {
         } content: {
             // Time replaces the list rather than opening beside it: it *is* the middle column's
             // contents for that destination, in the same way a project's task list is.
-            Group {
+            // A concrete container is essential here. `Group` is layout-transparent, so AppKit's
+            // split view can miss the width modifier below and let this column consume half the
+            // window despite the module's declared maximum.
+            ZStack {
                 if navigation.selection.isTaskDestination {
                     // Tasks replace the middle column rather than filtering it. The sections, the
                     // headings, and the inline row are all specific to the scheduling model, and
@@ -292,20 +295,25 @@ public struct RootView: View {
                 } else if navigation.selection == .home {
                     HomeView(navigation: navigation)
                 } else if case .people(let scope) = navigation.selection {
-                    // Celebrations and My Card are not lists of people, so they replace the column
-                    // rather than filtering it — the same arrangement Time already uses.
-                    switch scope {
-                    case .celebrations:
-                        CelebrationsView(navigation: navigation)
-                    case .duplicates:
-                        DuplicatesView(navigation: navigation)
-                    default:
-                        PeopleListView(navigation: navigation, scope: scope)
+                    if PeoplePerformanceIsolation.usesIsolatedList {
+                        IsolatedPeopleListView()
+                    } else {
+                        // Celebrations and My Card are not lists of people, so they replace the column
+                        // rather than filtering it — the same arrangement Time already uses.
+                        switch scope {
+                        case .celebrations:
+                            CelebrationsView(navigation: navigation)
+                        case .duplicates:
+                            DuplicatesView(navigation: navigation)
+                        default:
+                            PeopleListView(navigation: navigation, scope: scope)
+                        }
                     }
                 } else {
                     ItemListView(navigation: navigation)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .moduleColumnWidth(
                 .primary,
                 layout: shellLayout,
@@ -480,7 +488,7 @@ public struct RootView: View {
             PaletteCommand(id: "stop-timer", title: "Stop Timer", category: .create, symbolName: "stop.circle") {
                 services?.timer.stop()
             },
-            PaletteCommand(id: "new-event", title: "New Event…", category: .create, symbolName: "calendar.badge.plus") {
+            PaletteCommand(id: "new-event", title: "New Event…", category: .create, symbolName: "calendar.badge.plus", command: .newEvent, in: registry) {
                 navigation.select(.calendar)
                 navigation.isCalendarQuickEntryVisible = true
             },

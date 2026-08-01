@@ -137,7 +137,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .quickCapture: KeyBinding("j", [.command, .shift])
         case .newWindow: KeyBinding("n", [.command, .control])
         case .toggleInspector: KeyBinding("i", [.command, .shift])
-        case .exportLibrary: KeyBinding("e", [.command, .shift])
+        case .exportLibrary: KeyBinding("e", [.command, .shift, .option])
         case .moveToTrash: KeyBinding("\u{8}", .command)
         case .search: KeyBinding("f")
         case .commandPalette: KeyBinding("k")
@@ -160,11 +160,9 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
 
         // ⌘6, continuing the numeric run that already reaches People at ⌘5.
         case .goCalendar: KeyBinding("6")
-        // ⌃⌘E for an event, ⌃⌘F for finding one. Both keep the calendar on the control layer, and
-        // both were checked against every other default rather than assumed free — ⌃⌘N and ⌥⌘F,
-        // the obvious choices, are already New Window and Focus Mode, and `ShortcutRegistryTests`
-        // caught both the moment they were written.
-        case .newEvent: KeyBinding("e", [.command, .control])
+        // ⌘⇧E for an event: memorable, reachable, and global. Export moves to ⌥⇧⌘E so the action
+        // somebody uses throughout the day owns the simpler binding.
+        case .newEvent: KeyBinding("e", [.command, .shift])
         case .searchCalendar: KeyBinding("f", [.command, .control])
         case .switchCalendarSet: KeyBinding("s", [.command, .option])
 
