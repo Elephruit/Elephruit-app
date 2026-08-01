@@ -22,6 +22,69 @@ private func makeServices(remindersAuthorization: IntegrationAuthorization = .au
     )
 }
 
+/// ### Why the sidebar's shape is asserted at all
+/// Because it is the app's answer to "what do you ask of your own work, and in what order", and an
+/// answer that lives only inside a `body` can be changed by dragging a `ForEach` two lines. These
+/// assertions are not about pixels; they are about which destinations exist and which band each one
+/// is in. ``TasksSidebarComposition`` exists so they can be written.
+@Suite("The Tasks sidebar is flat, banded, and hides nothing")
+struct TasksSidebarCompositionTests {
+    @Test("Three bands, in order: capture, then when, then what is behind you")
+    func bandOrder() {
+        #expect(TasksSidebarComposition.bands == [
+            [.taskView(.inbox)],
+            [.taskView(.today), .taskView(.upcoming), .taskView(.anytime), .taskView(.someday)],
+            [.taskView(.completed), .trash],
+        ])
+    }
+
+    @Test("Nothing is hidden behind a disclosure — every fixed row is a row")
+    func nothingIsBehindMore() {
+        let rows = TasksSidebarComposition.bands.flatMap { $0 }
+        // Seven fixed rows, all of them visible on arrival. The count is asserted so that adding an
+        // eighth is a decision somebody makes here rather than one that happens in a view.
+        #expect(rows.count == 7)
+        #expect(Set(rows).count == rows.count)
+    }
+
+    @Test("Flagged, Waiting and All Tasks are reachable, as smart lists")
+    func demotedViewsAreReachable() throws {
+        let rows = Set(TasksSidebarComposition.bands.flatMap { $0 })
+
+        for (view, listID) in TasksSidebarComposition.demotedViews {
+            #expect(!rows.contains(.taskView(view)), "\(view.title) is still a system row")
+
+            let list = try #require(
+                BuiltInSmartList.list(id: listID),
+                "\(view.title) was demoted to a smart list that does not exist"
+            )
+            // The two titles are allowed to differ — "All Tasks" is the same words either way — but a
+            // row the user knew by one name must not silently become a different one.
+            #expect(list.title == view.title)
+        }
+    }
+
+    @Test("Every system view is either a sidebar row or a smart list, so none is orphaned")
+    func nothingWasLost() {
+        let rows = Set(TasksSidebarComposition.bands.flatMap { $0 })
+
+        for view in TaskSystemView.allCases {
+            let isRow = rows.contains(.taskView(view))
+            let isSmartList = TasksSidebarComposition.demotedViews[view] != nil
+            #expect(isRow != isSmartList, "\(view.title) is \(isRow ? "both" : "neither")")
+        }
+    }
+
+    @Test("Every row says something the title does not")
+    func hintsAreNotRestatements() {
+        for selection in TasksSidebarComposition.bands.flatMap({ $0 }) {
+            let hint = TasksSidebarComposition.hint(for: selection)
+            #expect(!hint.isEmpty, "\(selection.title) has no hint")
+            #expect(hint.lowercased() != selection.title.lowercased())
+        }
+    }
+}
+
 @Suite("The Tasks module is wired end to end")
 @MainActor
 struct TaskWiringTests {

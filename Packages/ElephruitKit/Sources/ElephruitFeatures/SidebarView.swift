@@ -51,7 +51,66 @@ public struct SidebarView: View {
             levels
         }
         .accessibilityIdentifier(AccessibilityID.Sidebar.root)
-        .safeAreaInset(edge: .bottom, spacing: 0) { statusLine }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                newListFooter
+                statusLine
+            }
+        }
+    }
+
+    // MARK: - Making a container
+
+    /// The one control that adds to the sidebar rather than navigating it.
+    ///
+    /// ### Why it is here and not in the toolbar
+    /// A project and an area are *sidebar* objects: they are the shape of the column, not content in
+    /// the view beside it. The toolbar's `+` makes a task, in whichever list is open — a second `+`
+    /// up there making a container instead would be two plus signs a few points apart meaning two
+    /// different things.
+    ///
+    /// ### Why a menu rather than two buttons
+    /// Because the question is which of the two, and most people do not yet know. The menu can carry
+    /// the one line that distinguishes them at the moment of choosing, which is the only moment the
+    /// distinction matters. A project finishes; an area does not.
+    ///
+    /// Only in Tasks. Notes and Calendar have no containers of this kind, and a disabled control in
+    /// every other module would be a permanent offer the app never intends to honour.
+    @ViewBuilder
+    private var newListFooter: some View {
+        if navigation.activeModule == .tasks {
+            Menu {
+                Button("New Project") { create(.project) }
+                    .help("Something with an end. It shows progress and can be finished.")
+
+                Button("New Area") { create(.area) }
+                    .help("A standing responsibility. It never finishes, so it never shows progress.")
+            } label: {
+                Label("New List", systemImage: "plus")
+                    .font(Theme.Text.metadata)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .padding(.horizontal, SidebarMetrics.leadingInset)
+            .padding(.top, Theme.Spacing.small)
+            .help("Add a project or an area to the list below")
+            .accessibilityIdentifier("sidebar.tasks.newList")
+        }
+    }
+
+    /// Creates the container, then opens it so the first thing that happens is naming it.
+    ///
+    /// The title is the kind's own name rather than an empty string, because an untitled row in a
+    /// tree of named ones reads as a rendering fault. It is selected on arrival, so typing replaces
+    /// it — see ``ItemDetailView``.
+    private func create(_ kind: ItemKind) {
+        guard let services else { return }
+        let draft = ItemDraft(kind: kind, title: kind == .area ? "New Area" : "New Project")
+        var created: Item?
+        guard services.perform({ created = try services.items.create(draft) }), let created else { return }
+        services.noteChange(to: created)
+        navigation.select(.item(id: created.id))
     }
 
     /// The two levels, and the move between them.

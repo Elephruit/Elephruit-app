@@ -4,14 +4,89 @@ import ElephruitModel
 import ElephruitPersistence
 import SwiftUI
 
+/// What the Tasks sidebar is made of, as data rather than as view code.
+///
+/// The order of these rows is a product decision — it is the app's answer to "what are the questions
+/// somebody asks of their own work, and in what order" — and a product decision that only exists
+/// inside a `body` is one that can be changed by accident while moving a `ForEach`. Declared here, it
+/// is a value a test can read, which is what ``ElephruitFeaturesTests`` does.
+///
+/// Containers and smart lists are not here because they are not fixed: one is the user's tree and the
+/// other is a list they can add to. What is fixed is the three bands above them.
+public enum TasksSidebarComposition {
+    /// The fixed rows, banded, in order. Each band is one `Section`.
+    public static let bands: [[SidebarSelection]] = [
+        // Unfiled work, alone. It is the only row that is a queue rather than a view: you go here to
+        // empty it, and an empty Inbox is the point of it.
+        [.taskView(.inbox)],
+
+        // The four that answer *when*, in the order time runs.
+        [.taskView(.today), .taskView(.upcoming), .taskView(.anytime), .taskView(.someday)],
+
+        // What is behind you. Both of these are places you go to retrieve something rather than to
+        // decide something.
+        //
+        // The Trash is also its own module — see ``AppModule/trash`` — and stays one, because
+        // emptying it is an action that belongs beside a full-width list and not on a sidebar row.
+        // This row is the *route* to it, not a second copy of it: selecting it enters that module,
+        // the way selecting any row that belongs to another module does.
+        [.taskView(.completed), .trash],
+    ]
+
+    /// The three system views that stopped being sidebar rows, and the built-in smart list each one
+    /// became.
+    ///
+    /// All three were always rules over the library rather than places in it — "everything I
+    /// flagged", "everything somebody else has", "everything". Keeping them as system views cost the
+    /// sidebar a disclosure to hide them behind, which is the whole reason *More* existed.
+    /// ``ElephruitPersistence/TaskViewService/contents(of:)`` returned a single ungrouped section for
+    /// each of them, which is exactly what a smart list draws, so nothing about what a user sees when
+    /// they open one has changed.
+    ///
+    /// The ``TaskSystemView`` cases stay: a scene stored by an earlier build still decodes to one,
+    /// and the workspace still draws it.
+    public static let demotedViews: [TaskSystemView: String] = [
+        .flagged: "flagged",
+        .waiting: "waiting",
+        .all: "all-tasks",
+    ]
+
+    /// What a row says when the pointer rests on it. Never a restatement of the title.
+    public static func hint(for selection: SidebarSelection) -> String {
+        if let view = selection.taskSystemView { return view.hint }
+        switch selection {
+        case .trash: return "Deleted tasks, until you empty it."
+        default: return ""
+        }
+    }
+}
+
 /// The Tasks band of the sidebar.
 ///
-/// ### Why the system views are not all at the same weight
-/// Nine destinations at equal weight is a menu, and a menu is what you read when you do not know
-/// where you are going. Four of these answer a question you have every day — what needs me now, what
-/// did I choose, what is coming, where does this go — and the rest answer questions you have
-/// occasionally. So Today, Upcoming, Inbox, and Anytime are always visible, and Someday, Flagged,
-/// Waiting, the Logbook, and All Tasks live behind a disclosure that remembers whether you opened it.
+/// ### Four bands, no disclosure
+/// The system views used to be split four-and-five, with the five behind a row labelled *More*. That
+/// hid Someday — a decision the user made about a task, which they then have to go looking for — and
+/// it put a second disclosure affordance thirty points from the one on *Smart Lists*, pointing the
+/// other way. Two ways to open something, in one column, is the shape of a control panel.
+///
+/// So the views are flat, and grouped by what they answer rather than by how often they are asked:
+///
+/// | Band | Rows | The question |
+/// |---|---|---|
+/// | 1 | Inbox | What have I not filed? |
+/// | 2 | Today, Upcoming, Anytime, Someday | When? |
+/// | 3 | Logbook, Trash | What is behind me? |
+/// | 4 | Areas and projects | Where does this live? |
+/// | 5 | Smart Lists | What matches? |
+///
+/// Flagged, Waiting and All Tasks are gone from the system views and are ``BuiltInSmartList``s
+/// instead, because that is what all three always were: a rule over the library rather than a place
+/// in it. Nothing about their contents changed — ``ElephruitPersistence/TaskViewService`` already
+/// returned a single ungrouped section for each of them, which is exactly what a smart list draws.
+///
+/// The container tree has no header. A header would name what the tree already says, and the tree is
+/// the one band whose contents the user built themselves. Smart Lists keeps its disclosure, and is
+/// now the only one in the column.
 ///
 /// Counts appear on exactly two rows. A number beside every destination turns a sidebar into a
 /// scoreboard, and a scoreboard is what this app has decided not to be.
@@ -23,46 +98,39 @@ public struct TasksSidebarSection: View {
         self.navigation = navigation
     }
 
-    @SceneStorage("sidebar.tasks.more") private var isMoreExpanded = false
-    @SceneStorage("sidebar.tasks.lists") private var isListsExpanded = true
     @SceneStorage("sidebar.tasks.smart") private var isSmartExpanded = false
 
     @ScaledMetric(relativeTo: .body) private var rowHeight = SidebarMetrics.baseRowHeight
 
-    /// The four that earn a permanent row.
-    private static let primaryViews: [TaskSystemView] = [.today, .upcoming, .inbox, .anytime]
-
-    /// The rest, one step quieter.
-    private static let secondaryViews: [TaskSystemView] = [
-        .someday, .flagged, .waiting, .completed, .all,
-    ]
-
     public var body: some View {
-        Section {
-            ForEach(Self.primaryViews, id: \.self) { view in
-                systemRow(view)
-            }
-
-            DisclosureGroup(isExpanded: $isMoreExpanded) {
-                ForEach(Self.secondaryViews, id: \.self) { view in
-                    systemRow(view)
+        ForEach(Array(TasksSidebarComposition.bands.enumerated()), id: \.offset) { _, band in
+            Section {
+                ForEach(band, id: \.self) { selection in
+                    row(for: selection)
                 }
-            } label: {
-                Label("More", systemImage: "ellipsis.circle")
-                    .frame(minHeight: rowHeight)
-                    .help("Someday, Flagged, Waiting, and the log of what you have finished")
             }
-
         }
 
-        // Sections rather than disclosure groups nested inside one, now that Tasks has the sidebar
-        // to itself. A section header is the native way to divide a sidebar, and it keeps the
-        // container tree at the same indent as the views above it rather than one step in.
         containersSection
         smartListsSection
     }
 
     // MARK: - Rows
+
+    /// A task view draws a badge-aware row; anything else in a band is a plain destination.
+    @ViewBuilder
+    private func row(for selection: SidebarSelection) -> some View {
+        if let view = selection.taskSystemView {
+            systemRow(view)
+        } else {
+            destinationRow(
+                title: selection.title,
+                symbolName: selection.symbolName,
+                hint: TasksSidebarComposition.hint(for: selection),
+                selection: selection
+            )
+        }
+    }
 
     private func systemRow(_ view: TaskSystemView) -> some View {
         HStack(spacing: SidebarMetrics.iconGap) {
@@ -93,11 +161,15 @@ public struct TasksSidebarSection: View {
     /// Areas are shown at the top level with their contents indented, because "where does this
     /// belong" is answered by the shape of the tree and not by a flat list of every container the
     /// user has ever made.
+    ///
+    /// Unheaded, and not collapsible. A tree of named containers explains itself, and "Areas &
+    /// Projects" over the top of one was a label restating its own contents. Collapsing it hid the
+    /// only part of this sidebar the user wrote.
     @ViewBuilder
     private var containersSection: some View {
         let rows = containerRows()
         if !rows.isEmpty {
-            Section("Areas & Projects", isExpanded: $isListsExpanded) {
+            Section {
                 ForEach(rows) { row in
                     ContainerSidebarRow(
                         row: row,
@@ -113,7 +185,7 @@ public struct TasksSidebarSection: View {
     private var smartListsSection: some View {
         Section("Smart Lists", isExpanded: $isSmartExpanded) {
             ForEach(BuiltInSmartList.all) { list in
-                smartRow(
+                destinationRow(
                     title: list.title,
                     symbolName: list.symbolName,
                     hint: list.hint,
@@ -122,7 +194,7 @@ public struct TasksSidebarSection: View {
             }
 
             ForEach(savedSmartLists(), id: \.id) { saved in
-                smartRow(
+                destinationRow(
                     title: saved.displayName,
                     symbolName: saved.effectiveSymbolName,
                     hint: "A list you built. Membership is worked out each time you open it.",
@@ -132,7 +204,7 @@ public struct TasksSidebarSection: View {
         }
     }
 
-    private func smartRow(
+    private func destinationRow(
         title: String,
         symbolName: String,
         hint: String,
