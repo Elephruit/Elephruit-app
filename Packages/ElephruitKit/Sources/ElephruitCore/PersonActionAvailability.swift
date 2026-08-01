@@ -39,7 +39,7 @@ public struct PersonActionAvailability: Sendable, Hashable, Identifiable {
     /// Why not, in a sentence a tooltip can carry. `nil` when it is available.
     public var unavailabilityReason: String?
 
-    /// What will happen, when the label alone does not say — "mobile · 512-555-0192".
+    /// What will happen, when the label alone does not say — "mobile · (512) 555-0192".
     public var detail: String?
 
     /// Higher survives longer in a narrowing row.
