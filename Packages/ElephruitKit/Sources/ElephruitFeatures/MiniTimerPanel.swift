@@ -375,12 +375,6 @@ public final class MiniTimerController {
         panel.setFrame(frame, display: true)
     }
 
-    /// Read from the workspace rather than the SwiftUI environment, because this is a window being
-    /// moved rather than a view being drawn — and the setting means the same thing to both.
-    private static var prefersReducedMotion: Bool {
-        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-    }
-
     /// Follows the window when the user drags it, and only then.
     ///
     /// The anchor is the whole of this panel's position, so something has to write to it when the
@@ -471,46 +465,20 @@ public final class MiniTimerController {
     public func contentSizeChanged(to size: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
 
-        let isFirst = contentSize == nil
         contentSize = size
 
-        // ### Why growing happens now and shrinking waits to be told
-        // The card slides; the window does not. A window that grows while something opens inside it
-        // uncovers, on every frame, a strip of itself it has not drawn — and only growing does that,
-        // which is why closing the menu was smooth and opening it stuttered, and why nothing about
-        // reading the code suggested the two were different at all.
+        // ### Why this happens now, and why nothing here is scheduled
+        // Because a window is only ever the wrong size *between* the moment its contents change and
+        // the moment it is told. Every attempt to put something in that gap — animating the window,
+        // waiting a fixed interval for a slide to finish, waiting to be told the slide had finished
+        // — made the gap longer and gave it a way to go wrong: a window uncovering strips of itself
+        // it had not drawn, a drawer left standing open when the wait was cancelled by an unrelated
+        // report, a click that appeared to do nothing at all while the deferred work sat unserviced.
         //
-        // So the room is made **before** the card needs it and taken away **after** it has stopped
-        // wanting it. Growing goes through immediately: the card is still its old size, so the strip
-        // that appears is transparent, uncovered once rather than ten times, and nothing is drawn
-        // into it until the slide arrives. Shrinking waits for ``contentSettled()``, because a
-        // window that closed in first would crop the card while it was still moving.
-        guard isFirst || Self.prefersReducedMotion || grows(to: size, from: panel) else { return }
+        // So the gap is nothing. The report arrives during the update that changed the row, and the
+        // window is resized inside it. There is no pending anything, in either direction, and the
+        // press is finished by the time the button lets go.
         place()
-    }
-
-    /// Told when the card has finished moving, so the window can give back room it no longer needs.
-    ///
-    /// ### Why this is a message rather than a delay
-    /// It was a delay: a quarter of a second, chosen to outlast a slide of eighteen hundredths. A
-    /// guessed interval is wrong in both directions. Too short crops the card while it is still
-    /// moving; too long, or cancelled by one of the size reports the running clock produces as its
-    /// digits change width, leaves the window standing open around a card that has already closed —
-    /// a drawer that will not shut, which is exactly what it looked like.
-    ///
-    /// The card knows when it has stopped. Nothing else has to.
-    public func contentSettled() {
-        place()
-    }
-
-    /// Whether this size needs more room than the window currently has, in either direction.
-    ///
-    /// Either direction, because the cost of being wrong one way is a strip of empty window nobody
-    /// can see, and the cost of being wrong the other is the card cut off while it moves.
-    private func grows(to size: CGSize, from panel: MiniTimerPanel?) -> Bool {
-        guard let panel else { return true }
-        let current = panel.contentRect(forFrameRect: panel.frame).size
-        return size.width > current.width || size.height > current.height
     }
 
     /// Closes the panel and forgets it, for window teardown and tests.
