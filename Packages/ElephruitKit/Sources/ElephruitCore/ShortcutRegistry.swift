@@ -58,7 +58,8 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
     case newProject
     case quickCapture
     case newWindow
-    case toggleInspector
+    case importFiles
+    case goHome
     case exportLibrary
     case moveToTrash
     case search
@@ -94,7 +95,8 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .newProject: "New Project"
         case .quickCapture: "Quick Jot"
         case .newWindow: "New Window"
-        case .toggleInspector: "Show Inspector"
+        case .importFiles: "Import Files…"
+        case .goHome: "Go to Home"
         case .exportLibrary: "Export Library…"
         case .moveToTrash: "Move to Trash"
         case .search: "Search Everything"
@@ -136,7 +138,22 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         // anything else, which is what a shortcut you press from inside another application needs.
         case .quickCapture: KeyBinding("j", [.command, .shift])
         case .newWindow: KeyBinding("n", [.command, .control])
-        case .toggleInspector: KeyBinding("i", [.command, .shift])
+        // ⌘⇧I, which is the binding this command already had — under the name "Show Inspector",
+        // which is not what it does. The registry exists so that a shortcut has exactly one owner and
+        // that owner's name is true; a menu item borrowing another command's identity defeats both,
+        // and made the shortcut editor in Settings offer to rebind the inspector and rebind importing.
+        case .importFiles: KeyBinding("i", [.command, .shift])
+
+        // ⌥⌘H. Home was bound with a literal `.keyboardShortcut(KeyEquivalent("1"), …)` in the menu
+        // rather than through the registry, and ⌘1 already belongs to Inbox — so two menu items
+        // claimed the same keys, macOS gave them to the first, and Inbox's shortcut did nothing.
+        // `ShortcutRegistryTests` could not see the collision because one side never entered the
+        // registry, which is precisely the failure the registry was built to prevent.
+        //
+        // Home moves rather than Inbox because Inbox's binding is the one the registry, the palette
+        // and Settings have all been advertising. ⌥⌘H is free, is not a system binding, and says the
+        // word.
+        case .goHome: KeyBinding("h", [.command, .option])
         case .exportLibrary: KeyBinding("e", [.command, .shift, .option])
         case .moveToTrash: KeyBinding("\u{8}", .command)
         case .search: KeyBinding("f")
