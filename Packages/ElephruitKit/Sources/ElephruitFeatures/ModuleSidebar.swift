@@ -30,7 +30,11 @@ struct ModuleSidebar: View {
             case .tasks:
                 TasksSidebarSection(navigation: navigation)
             case .people:
-                PeopleSidebarSection(navigation: navigation)
+                if PeoplePerformanceIsolation.usesIsolatedSidebar {
+                    IsolatedPeopleSidebarSection(navigation: navigation)
+                } else {
+                    PeopleSidebarSection(navigation: navigation)
+                }
             case .notes:
                 NotesSidebarSection(navigation: navigation)
             case .time:

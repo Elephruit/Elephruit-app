@@ -30,7 +30,7 @@ public enum ItemStatus: String, Codable, Sendable, Hashable, CaseIterable {
         case .none: "No Status"
         case .open: "Open"
         case .completed: "Completed"
-        case .cancelled: "Cancelled"
+        case .cancelled: "Canceled"
         }
     }
 
@@ -154,7 +154,7 @@ public enum LinkKind: String, Codable, Sendable, Hashable, CaseIterable {
         case .participant: "Participant"
         case .blockedBy: "Blocked By"
         case .waitingOn: "Waiting on"
-        case .promisedTo: "Promised to"
+        case .promisedTo: "Task for"
         case .recurrenceSeries: "Recurrence"
         case .conflictCopy: "Conflicted Copy"
         }

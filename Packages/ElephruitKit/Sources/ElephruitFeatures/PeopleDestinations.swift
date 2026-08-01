@@ -467,7 +467,7 @@ struct CardScanView: View {
                 TextField("Name", text: $name)
                 TextField("Email", text: $email)
                 TextField("Phone", text: $phone)
-                TextField("Organisation", text: $organization)
+                TextField("Organization", text: $organization)
                 TextField("Role", text: $jobTitle)
             }
             .formStyle(.grouped)

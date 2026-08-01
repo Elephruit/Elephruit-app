@@ -149,6 +149,9 @@ public protocol PersonRepository: AnyObject {
     /// Says the fact still holds, without changing it.
     func confirm(_ observation: PersonObservationRecord) throws(AppError)
 
+    /// Removes one observation. Superseded history remains unless it is explicitly removed too.
+    func remove(_ observation: PersonObservationRecord) throws(AppError)
+
     /// Replaces a fact, keeping the original as history.
     @discardableResult
     func correct(
@@ -172,6 +175,13 @@ public protocol PersonRepository: AnyObject {
 
     /// Removes a relationship and its reciprocal.
     func unrelate(_ relationship: PersonRelationship) throws(AppError)
+
+    /// Changes a relationship and keeps its reciprocal in agreement.
+    func update(
+        _ relationship: PersonRelationship,
+        kind: RelationshipKind,
+        label: String?
+    ) throws(AppError)
 
     /// Finds somebody by name, or makes a placeholder for them.
     func resolveOrCreatePlaceholder(named name: String) throws(AppError) -> Item
@@ -203,11 +213,18 @@ public final class SwiftDataPersonRepository: PersonRepository {
     private let context: ModelContext
     private let items: any ItemRepository
     private let dateProvider: any DateProvider
+    private let audit: FetchAudit?
 
-    public init(context: ModelContext, items: any ItemRepository, dateProvider: any DateProvider) {
+    public init(
+        context: ModelContext,
+        items: any ItemRepository,
+        dateProvider: any DateProvider,
+        audit: FetchAudit? = nil
+    ) {
         self.context = context
         self.items = items
         self.dateProvider = dateProvider
+        self.audit = audit
     }
 
     // MARK: - People
@@ -223,6 +240,7 @@ public final class SwiftDataPersonRepository: PersonRepository {
         query.scope = .active
         query.sort = .titleAscending
         query.limit = nil
+        query.prefetches = [.personProfile]
 
         let people = try items.items(matching: query)
         guard !includingPlaceholders else { return people }
@@ -436,6 +454,15 @@ public final class SwiftDataPersonRepository: PersonRepository {
         try save()
     }
 
+    public func remove(_ observation: PersonObservationRecord) throws(AppError) {
+        let person = observation.subject
+        context.delete(observation)
+        if let person {
+            try items.update(person) { $0.refreshSearchText() }
+        }
+        try save()
+    }
+
     @discardableResult
     public func correct(
         _ observation: PersonObservationRecord,
@@ -538,6 +565,26 @@ public final class SwiftDataPersonRepository: PersonRepository {
         try save()
     }
 
+    public func update(
+        _ relationship: PersonRelationship,
+        kind: RelationshipKind,
+        label: String?
+    ) throws(AppError) {
+        let trimmedLabel = label?.trimmingCharacters(in: .whitespacesAndNewlines)
+        relationship.kind = kind
+        relationship.customLabel = trimmedLabel?.isEmpty == false ? trimmedLabel : nil
+
+        if let reciprocalID = relationship.reciprocalID {
+            let descriptor = FetchDescriptor<PersonRelationship>(predicate: #Predicate { $0.id == reciprocalID })
+            if let reciprocal = try fetch(descriptor).first {
+                reciprocal.kind = kind.inverse
+                reciprocal.customLabel = nil
+            }
+        }
+
+        try save()
+    }
+
     public func resolveOrCreatePlaceholder(named name: String) throws(AppError) -> Item {
         let key = TextNormalizer.foldedForMatching(name)
         guard !key.isEmpty else { throw .validation(ValidationFailure(reason: .emptyPersonName, field: "name")) }
@@ -560,6 +607,12 @@ public final class SwiftDataPersonRepository: PersonRepository {
     }
 
     public func allCelebrations() throws(AppError) -> [Celebration] {
+        var descriptor = FetchDescriptor<PersonCelebration>()
+        descriptor.relationshipKeyPathsForPrefetching = [\.person]
+        let storedByPersonID = Dictionary(
+            grouping: try fetch(descriptor),
+            by: { $0.person?.id }
+        )
         var result: [Celebration] = []
 
         for person in try allPeople(includingPlaceholders: true) {
@@ -578,7 +631,7 @@ public final class SwiftDataPersonRepository: PersonRepository {
                 )
             }
 
-            result.append(contentsOf: try celebrations(of: person).compactMap { $0.asValue() })
+            result.append(contentsOf: (storedByPersonID[person.id] ?? []).compactMap { $0.asValue() })
         }
 
         return result
@@ -635,6 +688,7 @@ public final class SwiftDataPersonRepository: PersonRepository {
     // MARK: - Store
 
     private func fetch<Model: PersistentModel>(_ descriptor: FetchDescriptor<Model>) throws(AppError) -> [Model] {
+        audit?.record(.other)
         do {
             return try context.fetch(descriptor)
         } catch {

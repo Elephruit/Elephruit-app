@@ -210,6 +210,52 @@ struct InteractionTests {
         #expect(fixture.people.context(for: ana).daysSinceLastContact(using: fixture.clock) == 3)
     }
 
+    @Test("Logging an interaction turns every next step into a task")
+    func interactionBundleCreatesTasks() throws {
+        let fixture = try PeopleFixture()
+        let ana = try fixture.makePerson("Ana")
+
+        let created = try fixture.people.recordInteractionBundle(
+            with: ana,
+            summary: "Project catch-up",
+            kind: .phone,
+            discussion: "Talked about the launch",
+            followUps: ["Book Tuesday"],
+            commitments: ["Send Ana the deck"]
+        )
+
+        #expect(created.count == 3)
+        let interaction = try #require(created.first { $0.kind == .interaction })
+        #expect(interaction.body == "Talked about the launch")
+        #expect(interaction.tagSlugs.contains("interaction/phone"))
+
+        let tasks = created.filter { $0.kind == .task }
+        #expect(tasks.count == 2)
+        #expect(tasks.allSatisfy { $0.status == .open })
+        #expect(tasks.allSatisfy { !$0.tagSlugs.contains("promise") })
+        #expect(fixture.people.context(for: ana).openItemIDs.count == 2)
+    }
+
+    @Test("One conversation appears in every attendee's history")
+    func groupInteractionLinksEveryAttendee() throws {
+        let fixture = try PeopleFixture()
+        let ana = try fixture.makePerson("Ana")
+        let maya = try fixture.makePerson("Maya")
+
+        let created = try fixture.people.recordInteractionBundle(
+            with: [ana, maya, ana],
+            summary: "Conference call",
+            kind: .video,
+            followUps: ["Share the recording"]
+        )
+
+        #expect(created.filter { $0.kind == .interaction }.count == 1)
+        #expect(fixture.people.context(for: ana).lastContact?.title == "Conference call")
+        #expect(fixture.people.context(for: maya).lastContact?.title == "Conference call")
+        #expect(fixture.people.context(for: ana).openItemIDs.count == 1)
+        #expect(fixture.people.context(for: maya).openItemIDs.count == 1)
+    }
+
     @Test("There is at most one daily entry per day")
     func oneEntryPerDay() throws {
         let fixture = try PeopleFixture()

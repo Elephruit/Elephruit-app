@@ -56,7 +56,7 @@ public enum TaskLifecycle: String, Sendable, Hashable, CaseIterable, Codable {
         case .waiting: "Waiting"
         case .someday: "Someday"
         case .completed: "Completed"
-        case .cancelled: "Cancelled"
+        case .cancelled: "Canceled"
         }
     }
 }
@@ -559,7 +559,7 @@ public enum TaskInvariants {
             facts.reminderAt = nil
             facts.reminderOwner = .none
             corrections.append(
-                Correction(field: "reminder", reason: "A cancelled task does not send notifications.")
+                Correction(field: "reminder", reason: "A canceled task does not send notifications.")
             )
         }
 

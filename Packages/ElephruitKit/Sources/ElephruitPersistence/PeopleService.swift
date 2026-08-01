@@ -114,15 +114,94 @@ public final class PeopleService {
         with person: Item,
         summary: String,
         at date: Date? = nil,
-        notes: String = ""
+        notes: String = "",
+        tagSlugs: [String] = []
     ) throws(AppError) -> Item {
         var draft = ItemDraft(kind: .interaction, title: summary)
         draft.body = notes
         draft.startAt = date ?? dateProvider.now
+        draft.tagSlugs = tagSlugs
 
         let interaction = try items.create(draft)
         try items.link(interaction, to: person, kind: .mentions)
         return interaction
+    }
+
+    /// Records one interaction and every action the user captured alongside it.
+    ///
+    /// Every next step becomes an ordinary open task linked to each attendee. Returning every
+    /// created item lets the feature announce each change to the index without duplicating this
+    /// persistence policy in multiple views. The second list remains in the API so drafts saved by
+    /// an older build migrate without losing their contents.
+    public func recordInteractionBundle(
+        with person: Item,
+        summary: String,
+        kind: PersonInteractionKind,
+        at date: Date? = nil,
+        discussion: String = "",
+        followUps: [String] = [],
+        commitments: [String] = []
+    ) throws(AppError) -> [Item] {
+        try recordInteractionBundle(
+            with: [person],
+            summary: summary,
+            kind: kind,
+            at: date,
+            discussion: discussion,
+            followUps: followUps,
+            commitments: commitments
+        )
+    }
+
+    /// Records one shared interaction for every person who took part.
+    ///
+    /// The interaction is created once and linked to each attendee. That makes a conference call
+    /// appear in every person's history without manufacturing several conversations that can later
+    /// disagree about what happened.
+    public func recordInteractionBundle(
+        with people: [Item],
+        summary: String,
+        kind: PersonInteractionKind,
+        at date: Date? = nil,
+        discussion: String = "",
+        followUps: [String] = [],
+        commitments: [String] = []
+    ) throws(AppError) -> [Item] {
+        let attendees = people.reduce(into: [Item]()) { unique, person in
+            guard person.kind == .person, !unique.contains(where: { $0.id == person.id }) else { return }
+            unique.append(person)
+        }
+        guard let firstAttendee = attendees.first else { return [] }
+
+        let interaction = try recordInteraction(
+            with: firstAttendee,
+            summary: summary,
+            at: date,
+            notes: discussion,
+            tagSlugs: [kind.tagSlug]
+        )
+        for attendee in attendees.dropFirst() {
+            try items.link(interaction, to: attendee, kind: .mentions)
+        }
+        try items.update(interaction) { $0.sourceIdentifier = InteractionProvenance.logged.rawValue }
+
+        var created = [interaction]
+
+        for title in followUps {
+            let task = try items.create(ItemDraft(kind: .task, title: title))
+            for attendee in attendees { try items.link(task, to: attendee, kind: .mentions) }
+            created.append(task)
+        }
+
+        // Older callers may still send the second legacy action list. It now creates the same
+        // ordinary linked tasks as every other next step; no new "promise" subtype is introduced.
+        for title in commitments {
+            let task = try items.create(ItemDraft(kind: .task, title: title))
+            for attendee in attendees { try items.link(task, to: attendee, kind: .mentions) }
+            created.append(task)
+        }
+
+        return created
     }
 
     // MARK: - Daily entries

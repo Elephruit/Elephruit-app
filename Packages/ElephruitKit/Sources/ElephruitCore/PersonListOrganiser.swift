@@ -13,7 +13,7 @@ public enum PersonListSort: String, Sendable, Hashable, CaseIterable, Codable, I
         switch self {
         case .firstName: "First Name"
         case .lastName: "Last Name"
-        case .organization: "Organisation"
+        case .organization: "Organization"
         case .recentInteraction: "Recent Interaction"
         }
     }
@@ -94,7 +94,7 @@ public enum PersonListOrganiser {
     public static let symbolSectionTitle = "#"
 
     /// Where somebody with no organisation goes when the list is ordered by organisation.
-    public static let noOrganizationTitle = "No Organisation"
+    public static let noOrganizationTitle = "No Organization"
 
     // MARK: - Sorting
 

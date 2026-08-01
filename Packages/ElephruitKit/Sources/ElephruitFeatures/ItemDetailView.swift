@@ -159,7 +159,7 @@ public struct ItemDetailView: View {
                 update(item) { $0.isFavorite.toggle() }
             } label: {
                 Label(
-                    item.isFavorite ? "Remove from Favourites" : "Add to Favourites",
+                    item.isFavorite ? "Remove from Favorites" : "Add to Favorites",
                     systemImage: item.isFavorite ? "star.fill" : "star"
                 )
             }

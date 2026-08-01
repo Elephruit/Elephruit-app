@@ -91,8 +91,8 @@ public enum StateFilter: String, Sendable, Hashable, CaseIterable {
         switch self {
         case .open: "Open"
         case .completed: "Completed"
-        case .cancelled: "Cancelled"
-        case .favorite: "Favourite"
+        case .cancelled: "Canceled"
+        case .favorite: "Favorite"
         case .pinned: "Pinned"
         case .archived: "Archived"
         case .trashed: "In Trash"

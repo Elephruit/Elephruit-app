@@ -98,7 +98,7 @@ public enum IdentityEvidence: String, Sendable, Hashable, CaseIterable {
         case .identicalName: "Same name"
         case .nameAndInitial: "Same surname and first initial"
         case .sameBirthday: "Same birthday"
-        case .sameOrganization: "Same organisation"
+        case .sameOrganization: "Same organization"
         }
     }
 }

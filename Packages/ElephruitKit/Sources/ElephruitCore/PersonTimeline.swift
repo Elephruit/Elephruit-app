@@ -1,5 +1,48 @@
 import Foundation
 
+/// How a deliberately logged interaction happened.
+///
+/// Stored as a namespaced tag on the interaction item: it remains searchable and exportable without
+/// adding a mostly-empty column to every item in the shared table. The timeline consumes the tag as
+/// structure and does not draw it again as a generic tag chip.
+public enum PersonInteractionKind: String, CaseIterable, Sendable, Hashable, Codable {
+    case inPerson = "in-person"
+    case phone
+    case video
+    case message
+    case email
+    case other
+
+    public var displayName: String {
+        switch self {
+        case .inPerson: "In person"
+        case .phone: "Phone"
+        case .video: "Video"
+        case .message: "Message"
+        case .email: "Email"
+        case .other: "Other"
+        }
+    }
+
+    public var symbolName: String {
+        switch self {
+        case .inPerson: "person.2.fill"
+        case .phone: "phone.fill"
+        case .video: "video.fill"
+        case .message: "message.fill"
+        case .email: "envelope.fill"
+        case .other: "ellipsis.bubble.fill"
+        }
+    }
+
+    public var tagSlug: String { "interaction/\(rawValue)" }
+
+    public init?(tagSlugs: [String]) {
+        guard let slug = tagSlugs.first(where: { $0.hasPrefix("interaction/") }) else { return nil }
+        self.init(rawValue: String(slug.dropFirst("interaction/".count)))
+    }
+}
+
 /// One thing that happened, on somebody's page.
 ///
 /// ### Why the timeline is a projection and not a table
@@ -31,6 +74,9 @@ public struct PersonTimelineEntry: Sendable, Hashable, Identifiable {
     /// Which channel it happened through, when that is known.
     public var channel: ContactChannel?
 
+    /// The kind explicitly chosen when this interaction was logged.
+    public var interactionKind: PersonInteractionKind?
+
     public var tagSlugs: [String]
 
     /// Everybody else involved.
@@ -59,6 +105,7 @@ public struct PersonTimelineEntry: Sendable, Hashable, Identifiable {
         source: SourceKind = .manual,
         provenance: InteractionProvenance? = nil,
         channel: ContactChannel? = nil,
+        interactionKind: PersonInteractionKind? = nil,
         tagSlugs: [String] = [],
         otherPeople: [PersonReference] = [],
         confirmedFactCount: Int = 0,
@@ -75,6 +122,7 @@ public struct PersonTimelineEntry: Sendable, Hashable, Identifiable {
         self.source = source
         self.provenance = provenance
         self.channel = channel
+        self.interactionKind = interactionKind
         self.tagSlugs = tagSlugs
         self.otherPeople = otherPeople
         self.confirmedFactCount = confirmedFactCount
@@ -88,7 +136,9 @@ public struct PersonTimelineEntry: Sendable, Hashable, Identifiable {
     public var provenanceLine: String {
         var parts: [String] = []
 
-        if let provenance {
+        if provenance == .logged, let interactionKind {
+            parts.append("\(interactionKind.displayName.lowercased()) — logged")
+        } else if let provenance {
             parts.append(provenance.phrase(channel: channel))
         } else {
             parts.append(kind.displayName.lowercased())
@@ -157,7 +207,7 @@ public enum TimelineGrouping {
             case .everything: "Everything"
             case .conversations: "Conversations"
             case .notes: "Notes"
-            case .commitments: "Tasks & promises"
+            case .commitments: "Tasks"
             case .files: "Files"
             }
         }

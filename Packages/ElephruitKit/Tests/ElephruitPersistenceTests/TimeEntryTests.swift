@@ -387,3 +387,161 @@ struct TimeEntryItemTests {
         #expect(try fixture.time.runningEntry() == nil)
     }
 }
+
+/// The corrections a log has to support to be worth keeping.
+@Suite("Correcting tracked time")
+@MainActor
+struct TimeEntryCorrectionTests {
+    @Test("A typed duration moves the end of a finished entry")
+    func durationMovesTheEnd() throws {
+        // The work began when it began; the guess about when it stopped is the part being fixed.
+        let fixture = try TimeFixture()
+        let started = fixture.now.addingTimeInterval(-3_600)
+        let entry = try fixture.time.addManual(
+            item: nil,
+            description: "Drafting",
+            startedAt: started,
+            endedAt: fixture.now,
+            tagSlugs: []
+        )
+
+        try fixture.time.setDuration(5_400, for: entry)
+
+        #expect(entry.startedAt == started)
+        #expect(entry.endedAt == started.addingTimeInterval(5_400))
+        #expect(entry.duration() == 5_400)
+    }
+
+    @Test("A typed duration back-dates a running timer instead")
+    func durationBackDatesARunningTimer() throws {
+        // There is no end to move on something still running: its end is the present moment and
+        // will still be the present moment a second later.
+        let fixture = try TimeFixture()
+        let entry = try fixture.time.start(item: nil, description: "Drafting", tagSlugs: [])
+
+        try fixture.time.setDuration(5_400, for: entry)
+
+        #expect(entry.endedAt == nil)
+        #expect(entry.startedAt == fixture.now.addingTimeInterval(-5_400))
+        #expect(entry.duration(at: fixture.now) == 5_400)
+    }
+
+    @Test("A negative length is refused rather than quietly corrected")
+    func negativeDurationRefused() throws {
+        let fixture = try TimeFixture()
+        let entry = try fixture.time.start(item: nil, description: "", tagSlugs: [])
+
+        #expect(throws: AppError.self) {
+            try fixture.time.setDuration(-60, for: entry)
+        }
+    }
+
+    @Test("Tags can be replaced after the fact")
+    func tagsAreEditable() throws {
+        // One of the two fields most often wrong, because it is one of the two you skip when
+        // starting a timer in a hurry.
+        let fixture = try TimeFixture()
+        let entry = try fixture.time.start(item: nil, description: "", tagSlugs: ["draft"])
+
+        try fixture.time.setTags(["deep", "writing"], on: entry)
+
+        #expect(entry.tagSlugs == ["deep", "writing"])
+    }
+
+    @Test("Duplicating copies an entry over the same stretch of clock")
+    func duplicateLandsWhereTheOriginalDid() throws {
+        let fixture = try TimeFixture()
+        let task = try fixture.makeTask("Standup")
+        let original = try fixture.time.addManual(
+            item: task,
+            description: "the second one",
+            startedAt: fixture.now.addingTimeInterval(-1_800),
+            endedAt: fixture.now,
+            tagSlugs: ["meeting"],
+            isBillable: true
+        )
+
+        let copy = try fixture.time.duplicate(original)
+
+        #expect(copy.id != original.id)
+        #expect(copy.startedAt == original.startedAt)
+        #expect(copy.endedAt == original.endedAt)
+        #expect(copy.item?.id == task.id)
+        #expect(copy.entryDescription == "the second one")
+        #expect(copy.tagSlugs == ["meeting"])
+        #expect(copy.isBillable)
+
+        // Typed into existence, so nothing can ever offer it for crash recovery.
+        #expect(copy.source == .manual)
+    }
+
+    @Test("A running timer cannot be duplicated")
+    func duplicateRefusesARunningTimer() throws {
+        // Copying something with no end would produce a second running timer, which is the one
+        // thing the whole repository exists to prevent.
+        let fixture = try TimeFixture()
+        let entry = try fixture.time.start(item: nil, description: "", tagSlugs: [])
+
+        #expect(throws: AppError.self) {
+            try fixture.time.duplicate(entry)
+        }
+        #expect(try fixture.time.runningEntry()?.id == entry.id)
+    }
+
+    @Test("Continuing an entry carries its billability")
+    func resumeCarriesBillable() throws {
+        // Whether work is billable is a fact about the work, not about the stretch of clock, so
+        // losing it on continue is a silent revenue leak nobody notices until the invoice.
+        let fixture = try TimeFixture()
+        let task = try fixture.makeTask("Client work")
+        let original = try fixture.time.addManual(
+            item: task,
+            description: "review",
+            startedAt: fixture.now.addingTimeInterval(-3_600),
+            endedAt: fixture.now,
+            tagSlugs: ["client"],
+            isBillable: true
+        )
+
+        let resumed = try fixture.time.resume(original)
+
+        #expect(resumed.isBillable)
+        #expect(resumed.item?.id == task.id)
+        #expect(resumed.tagSlugs == ["client"])
+    }
+
+    @Test("Discarding a running timer keeps no time and leaves nothing running")
+    func discardRunningKeepsNothing() throws {
+        let fixture = try TimeFixture()
+        _ = try fixture.time.start(item: nil, description: "Started by mistake", tagSlugs: [])
+
+        let discarded = try #require(try fixture.time.discardRunning())
+
+        #expect(try fixture.time.runningEntry() == nil)
+        #expect(discarded.isDeleted)
+
+        let window = fixture.now.addingTimeInterval(-86_400)..<fixture.now.addingTimeInterval(86_400)
+        #expect(try fixture.time.entries(in: window, limit: nil).isEmpty)
+    }
+
+    @Test("A discarded timer restored from the trash does not come back running")
+    func restoringADiscardedTimerIsSafe() throws {
+        // A soft-deleted entry with no end is still `endedAt == nil`, so restoring it would
+        // resurrect a second running timer. Discarding closes it as well as deleting it.
+        let fixture = try TimeFixture()
+        _ = try fixture.time.start(item: nil, description: "Started by mistake", tagSlugs: [])
+        let discarded = try #require(try fixture.time.discardRunning())
+
+        _ = try fixture.time.start(item: nil, description: "The real work", tagSlugs: [])
+        try fixture.time.restore(discarded)
+
+        #expect(try fixture.time.reconcileConcurrentTimers() == 0)
+        #expect(try fixture.time.runningEntry()?.entryDescription == "The real work")
+    }
+
+    @Test("Discarding with nothing running is harmless")
+    func discardWithNothingRunning() throws {
+        let fixture = try TimeFixture()
+        #expect(try fixture.time.discardRunning() == nil)
+    }
+}

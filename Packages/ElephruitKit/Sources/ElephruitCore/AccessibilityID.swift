@@ -92,7 +92,6 @@ public enum AccessibilityID {
         public static let startButton = "time.start"
         public static let stopButton = "time.stop"
         public static let addEntryButton = "time.addEntry"
-        public static let manualEntrySheet = "time.manualEntry"
         public static let windowPicker = "time.window"
         public static let groupingPicker = "time.grouping"
         public static let recoveryBanner = "time.recovery"
@@ -100,7 +99,27 @@ public enum AccessibilityID {
         public static let recoveryKeep = "time.recovery.keep"
         public static let recoveryDiscard = "time.recovery.discard"
 
+        // The entry bar: one row that both starts timers and records time already spent.
+        public static let modeToggle = "time.mode"
+        public static let descriptionField = "time.description"
+        public static let subjectPicker = "time.subject"
+        public static let tagPicker = "time.tags"
+        public static let billableToggle = "time.billable"
+        public static let durationField = "time.duration"
+        public static let discardButton = "time.discard"
+
+        public static let groupingToggle = "time.groupSimilar"
+
+        // Idle.
+        public static let idleBanner = "time.idle"
+        public static let idleDiscard = "time.idle.discard"
+        public static let idleDiscardAndContinue = "time.idle.discardAndContinue"
+        public static let idleKeep = "time.idle.keep"
+        public static let idleSeparate = "time.idle.separate"
+
         public static func entryRow(id: String) -> String { "time.entry.\(id)" }
+        public static func groupRow(id: String) -> String { "time.group.\(id)" }
+        public static func daySection(key: String) -> String { "time.day.\(key)" }
         public static func itemToggle(id: String) -> String { "time.toggle.\(id)" }
     }
 

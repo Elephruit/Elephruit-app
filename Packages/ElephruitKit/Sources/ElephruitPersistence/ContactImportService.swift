@@ -292,6 +292,18 @@ public final class ContactImportService {
         try allLinks().count { $0.person != nil }
     }
 
+    /// Whether the People sidebar has a linked-contact scope to show.
+    ///
+    /// The sidebar needs a Boolean, not every link and its person relationship. A one-row bounded
+    /// fetch keeps entering People independent of the size of the imported address book.
+    public func hasLinkedPeople() throws(AppError) -> Bool {
+        var descriptor = FetchDescriptor<SystemContactLink>(
+            predicate: #Predicate { $0.person != nil }
+        )
+        descriptor.fetchLimit = 1
+        return try fetch(descriptor).isEmpty == false
+    }
+
     /// Removes the association, keeping both records.
     ///
     /// The imported values go with the link — they are its provenance, and provenance for a link that

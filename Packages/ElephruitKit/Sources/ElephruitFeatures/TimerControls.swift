@@ -3,71 +3,6 @@ import ElephruitDesign
 import ElephruitModel
 import SwiftUI
 
-/// The bar at the top of the Time view: what is running, and the one button that changes it.
-struct TimerBar: View {
-    @Environment(\.services) private var services
-
-    let onStart: () -> Void
-    let onStop: () -> Void
-    let onOpenSubject: (UUID) -> Void
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.medium) {
-            if let running = services?.timer.running {
-                Image(systemName: "record.circle")
-                    .foregroundStyle(Theme.Colors.destructive)
-                    .symbolEffect(.pulse, options: .repeating)
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 0) {
-                    if let itemID = running.itemID {
-                        Button(running.displayTitle) { onOpenSubject(itemID) }
-                            .buttonStyle(.link)
-                            .font(Theme.Text.rowTitleEmphasised)
-                    } else {
-                        Text(running.displayTitle)
-                            .font(Theme.Text.rowTitleEmphasised)
-                    }
-
-                    Text("started \(running.startedAt.formatted(date: .omitted, time: .shortened))")
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.secondaryText)
-                }
-
-                Spacer()
-
-                Text(services?.timer.elapsedDisplay ?? "0:00")
-                    .font(.system(.title2, design: .rounded, weight: .medium))
-                    .monospacedDigit()
-                    .accessibilityLabel("Elapsed \(TimeFormatting.spelled(services?.timer.elapsed ?? 0))")
-
-                Button("Stop", systemImage: "stop.fill", action: onStop)
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier(AccessibilityID.Time.stopButton)
-            } else {
-                Image(systemName: "timer")
-                    .foregroundStyle(Theme.Colors.secondaryText)
-                    .accessibilityHidden(true)
-
-                Text("No timer running")
-                    .font(Theme.Text.rowSubtitle)
-                    .foregroundStyle(Theme.Colors.secondaryText)
-
-                Spacer()
-
-                Button("Start", systemImage: "play.fill", action: onStart)
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier(AccessibilityID.Time.startButton)
-            }
-        }
-        .padding(.horizontal, Theme.Spacing.medium)
-        .padding(.vertical, Theme.Spacing.small)
-        .frame(minHeight: 52)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(AccessibilityID.Time.timerBar)
-    }
-}
-
 /// The start/stop button that lives on an item.
 ///
 /// One button, not two. It shows what pressing it will do: a play triangle when this item is not
@@ -147,10 +82,10 @@ public struct TimerMenuBarContent: View {
 
                 Divider()
 
-                ForEach(recentSubjects, id: \.id) { subject in
-                    Button("Start “\(subject.title)”") {
-                        guard let item = try? services.items.item(id: subject.id) else { return }
-                        services.timer.switchTo(item: item)
+                ForEach(recentEntries, id: \.id) { recent in
+                    Button("Continue “\(recent.title)”") {
+                        guard let entry = try? services.timeEntries.entry(id: recent.id) else { return }
+                        services.timer.resume(entry)
                     }
                 }
 
@@ -174,17 +109,35 @@ public struct TimerMenuBarContent: View {
     }
 
     /// A few things worth continuing, so the common case is one click from anywhere.
-    private var recentSubjects: [(id: UUID, title: String)] {
+    ///
+    /// ### Why these are entries rather than items
+    /// This used to offer the *subjects* of recent entries and start a bare timer against them,
+    /// which threw away the description, the tags and the billable flag every time. Continuing an
+    /// entry keeps all of it, and it is the same `resume` the log's play button calls — so the menu
+    /// bar and the list can no longer disagree about what "continue" means.
+    ///
+    /// Deduplicated by what a continued timer would actually be, not by item: two entries against
+    /// one task with different descriptions are two different things to carry on with, and showing
+    /// only the newer of them hides the other from the one surface that is visible while working in
+    /// another app. Entries with no subject and no description are skipped — there is nothing to
+    /// name them by, and a menu of three identical "Continue" lines helps nobody.
+    private var recentEntries: [(id: UUID, title: String)] {
         guard let recent = try? services.timeEntries.recentEntries(limit: 12) else { return [] }
 
-        var seen = Set<UUID>()
-        var subjects: [(id: UUID, title: String)] = []
+        var seen = Set<String>()
+        var continuations: [(id: UUID, title: String)] = []
+
         for entry in recent {
-            guard let item = entry.item, seen.insert(item.id).inserted else { continue }
-            subjects.append((item.id, item.displayTitle))
-            if subjects.count == 3 { break }
+            let title = entry.item?.displayTitle ?? entry.entryDescription
+            guard !title.isEmpty else { continue }
+
+            let key = "\(entry.item?.id.uuidString ?? "")\u{1f}\(entry.entryDescription)"
+            guard seen.insert(key).inserted else { continue }
+
+            continuations.append((entry.id, title))
+            if continuations.count == 3 { break }
         }
-        return subjects
+        return continuations
     }
 }
 
