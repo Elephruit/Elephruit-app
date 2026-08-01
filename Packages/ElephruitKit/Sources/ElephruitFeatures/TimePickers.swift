@@ -15,35 +15,52 @@ import SwiftUI
 struct TimeChipLabel: View {
     let symbolName: String
 
-    /// The value, or the field's own name when nothing is chosen yet.
+    /// The value, shown only once there is one.
     var title: String?
 
     var isFilled: Bool
 
+    /// The subject's own colour, when it has one — a project's tint, carried through from the
+    /// library so the same work is the same colour everywhere it appears.
+    var tint: Color?
+
     /// How much room the text may take before it truncates. Bounded so that one long project name
-    /// cannot push the tags off the line.
-    var maximumWidth: CGFloat = 130
+    /// cannot push the clock off the row.
+    var maximumWidth: CGFloat = 150
 
     var body: some View {
         HStack(spacing: Theme.Spacing.tight) {
-            Image(systemName: symbolName)
-                .font(Theme.Text.metadata)
+            if isFilled, let tint {
+                // A dot rather than a tinted glyph: the colour identifies the *project*, and putting
+                // it on the icon would make the icon mean two things at once.
+                Circle()
+                    .fill(tint)
+                    .frame(width: 7, height: 7)
+            } else {
+                Image(systemName: symbolName)
+                    .font(Theme.Text.rowSubtitle)
+            }
 
-            if let title, !title.isEmpty {
+            if isFilled, let title, !title.isEmpty {
                 Text(title)
-                    .font(Theme.Text.metadata)
+                    .font(Theme.Text.rowSubtitle)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: maximumWidth, alignment: .leading)
                     .fixedSize(horizontal: true, vertical: false)
             }
         }
-        .padding(.horizontal, Theme.Spacing.small)
-        .padding(.vertical, 3)
-        .foregroundStyle(isFilled ? Theme.Colors.selection : Theme.Colors.secondaryText)
-        .background(
-            Capsule().fill(isFilled ? Theme.Colors.selection.opacity(0.12) : Theme.Colors.subtleFill)
-        )
+        .frame(minWidth: 26, minHeight: 26)
+        .padding(.horizontal, isFilled ? Theme.Spacing.small : 0)
+        .foregroundStyle(isFilled ? (tint ?? Theme.Colors.selection) : Theme.Colors.secondaryText)
+        .background {
+            // Only a chosen value earns a background. An empty one is a plain glyph in a toolbar of
+            // glyphs, which is what it is — five filled capsules saying nothing was five things
+            // shouting for attention before any of them had anything to say.
+            if isFilled {
+                Capsule().fill((tint ?? Theme.Colors.selection).opacity(0.12))
+            }
+        }
         .contentShape(.capsule)
     }
 }
@@ -58,8 +75,6 @@ struct TimeChipLabel: View {
 struct TimeSubjectPicker: View {
     @Environment(\.services) private var services
 
-    /// What the chip says before anything is chosen.
-    var placeholder: String?
 
     let subject: SubjectReference?
     let onPick: (SubjectReference?) -> Void
@@ -74,8 +89,8 @@ struct TimeSubjectPicker: View {
             isPresented = true
         } label: {
             TimeChipLabel(
-                symbolName: subject == nil ? "folder.badge.plus" : "folder.fill",
-                title: subject?.title ?? placeholder,
+                symbolName: "doc.text",
+                title: subject?.title,
                 isFilled: subject != nil
             )
         }
@@ -114,13 +129,14 @@ struct TimeSubjectPicker: View {
 struct TimeProjectPicker: View {
     @Environment(\.services) private var services
 
-    var placeholder: String?
 
     let project: SubjectReference?
     let onPick: (SubjectReference?) -> Void
 
     @State private var isPresented = false
-    @State private var projects: [SubjectReference] = []
+    @State private var projects: [ProjectChoice] = []
+    @State private var query = ""
+    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         Button {
@@ -128,9 +144,10 @@ struct TimeProjectPicker: View {
             isPresented = true
         } label: {
             TimeChipLabel(
-                symbolName: project == nil ? "square.stack.3d.up" : "square.stack.3d.up.fill",
-                title: project?.title ?? placeholder,
-                isFilled: project != nil
+                symbolName: "folder",
+                title: project?.title,
+                isFilled: project != nil,
+                tint: chosenTint
             )
         }
         .buttonStyle(.plain)
@@ -139,63 +156,179 @@ struct TimeProjectPicker: View {
         .accessibilityValue(project?.title ?? "derived from the subject")
         .accessibilityIdentifier(AccessibilityID.Time.projectPicker)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                Text("Bill to a project")
-                    .font(Theme.Text.sectionHeader)
-                    .foregroundStyle(Theme.Colors.secondaryText)
-
-                if project != nil {
-                    Button("Use the subject's own project", systemImage: "arrow.uturn.backward") {
-                        onPick(nil)
-                        isPresented = false
-                    }
-                    .buttonStyle(.link)
-                    .font(Theme.Text.metadata)
-                }
-
-                if projects.isEmpty {
-                    Text("No projects yet.")
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.tertiaryText)
-                } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                            ForEach(projects) { candidate in
-                                Button(candidate.title) {
-                                    onPick(candidate)
-                                    isPresented = false
-                                }
-                                .buttonStyle(.link)
-                                .font(Theme.Text.rowSubtitle)
-                                .lineLimit(1)
-                            }
-                        }
-                    }
-                    .frame(maxHeight: 220)
-                }
-
-                Text("Left alone, time against a task is billed to that task's own project.")
-                    .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.tertiaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(Theme.Spacing.medium)
-            .frame(width: 260)
+            popoverContent
         }
     }
 
-    /// Every open project, by name.
+    /// Search at the top, the list in the middle, the way out at the bottom.
     ///
-    /// A list rather than a search field, unlike the subject picker, because the number of live
-    /// projects is small enough to read and choosing from a list is faster than remembering enough
-    /// of a name to type it.
+    /// The shape every picker in this module now shares. A list you have to leave in order to make
+    /// the thing you were looking for is a list that sends you round the houses; a *Create* pinned
+    /// to the bottom is always in the same place whether the list is empty or fifty long.
+    private var popoverContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            TextField("Search projects and areas…", text: $query)
+                .textFieldStyle(.roundedBorder)
+                .focused($isSearchFocused)
+                .padding(Theme.Spacing.small)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 1) {
+                    ProjectChoiceRow(
+                        title: "No project",
+                        detail: "Use whatever the subject belongs to",
+                        tint: nil,
+                        isChosen: project == nil
+                    ) {
+                        onPick(nil)
+                        isPresented = false
+                    }
+
+                    ForEach(groups, id: \.name) { group in
+                        if !group.name.isEmpty {
+                            Text(group.name.uppercased())
+                                .font(Theme.Text.sectionHeader)
+                                .foregroundStyle(Theme.Colors.tertiaryText)
+                                .kerning(0.4)
+                                .padding(.horizontal, Theme.Spacing.small)
+                                .padding(.top, Theme.Spacing.small)
+                        }
+
+                        ForEach(group.projects) { candidate in
+                            ProjectChoiceRow(
+                                title: candidate.title,
+                                detail: nil,
+                                tint: candidate.tint,
+                                isChosen: project?.id == candidate.id
+                            ) {
+                                onPick(SubjectReference(id: candidate.id, title: candidate.title))
+                                isPresented = false
+                            }
+                        }
+                    }
+
+                    if groups.isEmpty, !query.isEmpty {
+                        Text("Nothing matches.")
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
+                            .padding(Theme.Spacing.small)
+                    }
+                }
+                .padding(.vertical, Theme.Spacing.tight)
+            }
+            .frame(maxHeight: 260)
+
+            Divider()
+
+            Text("Time against a task already counts towards that task's project. This is for the hour that belongs to one it does not sit inside.")
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.tertiaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(Theme.Spacing.small)
+        }
+        .frame(width: 300)
+        .onAppear { isSearchFocused = true }
+    }
+
+    private var chosenTint: Color? {
+        projects.first { $0.id == project?.id }?.tint
+    }
+
+    private var groups: [(name: String, projects: [ProjectChoice])] {
+        let matching = query.isEmpty
+            ? projects
+            : projects.filter { $0.title.localizedCaseInsensitiveContains(query)
+                || $0.areaName.localizedCaseInsensitiveContains(query) }
+
+        return Dictionary(grouping: matching, by: \.areaName)
+            .sorted { $0.key < $1.key }
+            .map { (name: $0.key, projects: $0.value.sorted {
+                $0.title.localizedStandardCompare($1.title) == .orderedAscending
+            }) }
+    }
+
+    /// Every live project, with its area and its colour.
+    ///
+    /// Grouped by area because that is how somebody holds their own projects in their head — the
+    /// same reason Toggl groups its project picker by client. A flat alphabetical list of thirty is
+    /// a list you read; twelve under three headings is one you point at.
     private func loadProjects() {
         guard let services else { return }
         let found = (try? services.items.items(matching: .kind(.project))) ?? []
         projects = found
             .filter { $0.status != .cancelled }
-            .map { SubjectReference(id: $0.id, title: $0.displayTitle) }
-            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+            .map { item in
+                ProjectChoice(
+                    id: item.id,
+                    title: item.displayTitle,
+                    areaName: item.parent?.displayTitle ?? "",
+                    tint: Theme.Palette.color(named: item.colorName)
+                )
+            }
+    }
+}
+
+/// A project as the picker sees it.
+struct ProjectChoice: Identifiable, Hashable {
+    let id: UUID
+    let title: String
+    let areaName: String
+    let tint: Color
+}
+
+/// One row of the project picker.
+private struct ProjectChoiceRow: View {
+    let title: String
+    var detail: String?
+    let tint: Color?
+    let isChosen: Bool
+    let onPick: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: onPick) {
+            HStack(spacing: Theme.Spacing.small) {
+                Circle()
+                    .fill(tint ?? Theme.Colors.tertiaryText)
+                    .frame(width: 8, height: 8)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(title)
+                        .font(Theme.Text.rowSubtitle)
+                        .lineLimit(1)
+
+                    if let detail {
+                        Text(detail)
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: Theme.Spacing.small)
+
+                if isChosen {
+                    Image(systemName: "checkmark")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.selection)
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.small)
+            .padding(.vertical, Theme.Spacing.tight)
+            .contentShape(.rect)
+            .background {
+                if isHovering {
+                    RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
+                        .fill(Theme.Colors.hoverFill)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.Colors.primaryText)
+        .onHover { isHovering = $0 }
     }
 }
 
@@ -209,7 +342,6 @@ struct TimeProjectPicker: View {
 struct TimePeoplePicker: View {
     @Environment(\.services) private var services
 
-    var placeholder: String?
 
     let people: [SubjectReference]
     let onChange: ([SubjectReference]) -> Void
@@ -221,8 +353,8 @@ struct TimePeoplePicker: View {
             isPresented = true
         } label: {
             TimeChipLabel(
-                symbolName: people.isEmpty ? "person.badge.plus" : "person.2.fill",
-                title: summary ?? placeholder,
+                symbolName: "person.2",
+                title: summary,
                 isFilled: !people.isEmpty
             )
         }
@@ -305,7 +437,6 @@ struct TimePeoplePicker: View {
 struct TimeTagPicker: View {
     @Environment(\.services) private var services
 
-    var placeholder: String?
 
     let slugs: [String]
     let onChange: ([String]) -> Void
@@ -313,6 +444,7 @@ struct TimeTagPicker: View {
     @State private var isPresented = false
     @State private var newTag = ""
     @State private var available: [String] = []
+    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         Button {
@@ -320,8 +452,8 @@ struct TimeTagPicker: View {
             isPresented = true
         } label: {
             TimeChipLabel(
-                symbolName: slugs.isEmpty ? "tag" : "tag.fill",
-                title: summary ?? placeholder,
+                symbolName: "tag",
+                title: summary,
                 isFilled: !slugs.isEmpty
             )
         }
@@ -343,37 +475,74 @@ struct TimeTagPicker: View {
         }
     }
 
+    /// The same shape as the project picker: search at the top, list in the middle, create pinned to
+    /// the bottom where it is in the same place whether there are no tags or fifty.
     private var popoverContent: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            HStack(spacing: Theme.Spacing.tight) {
-                TextField("New tag", text: $newTag)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(addTyped)
+        VStack(alignment: .leading, spacing: 0) {
+            TextField("Add or filter tags…", text: $newTag)
+                .textFieldStyle(.roundedBorder)
+                .focused($isSearchFocused)
+                .onSubmit(addTyped)
+                .padding(Theme.Spacing.small)
 
-                Button("Add", action: addTyped)
-                    .disabled(newTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
+            Divider()
 
-            if available.isEmpty {
-                Text("No tags yet.")
-                    .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.tertiaryText)
+            if matching.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                    Text(available.isEmpty ? "No tags yet." : "Nothing matches.")
+                        .font(Theme.Text.rowSubtitle)
+
+                    Text("Type a name and press Return to make one.")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.tertiaryText)
+                }
+                .padding(Theme.Spacing.medium)
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(available, id: \.self) { slug in
+                    VStack(alignment: .leading, spacing: 1) {
+                        ForEach(matching, id: \.self) { slug in
                             Toggle(isOn: binding(for: slug)) {
                                 Text(slug).font(Theme.Text.rowSubtitle)
                             }
                             .toggleStyle(.checkbox)
+                            .padding(.horizontal, Theme.Spacing.small)
+                            .padding(.vertical, 1)
                         }
                     }
+                    .padding(.vertical, Theme.Spacing.tight)
                 }
-                .frame(maxHeight: 200)
+                .frame(maxHeight: 220)
             }
+
+            Divider()
+
+            Button(action: addTyped) {
+                Label(
+                    typedSlug.isEmpty ? "Create tag" : "Create “\(typedSlug)”",
+                    systemImage: "plus"
+                )
+                .font(Theme.Text.rowSubtitle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Theme.Spacing.small)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(typedSlug.isEmpty ? Theme.Colors.tertiaryText : Theme.Colors.selection)
+            .disabled(typedSlug.isEmpty)
         }
-        .padding(Theme.Spacing.medium)
-        .frame(width: 240)
+        .frame(width: 260)
+        .onAppear { isSearchFocused = true }
+    }
+
+    /// What the field would create, normalised — so the button names the tag that will exist rather
+    /// than the text that was typed.
+    private var typedSlug: String {
+        TextNormalizer.slug(newTag.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    private var matching: [String] {
+        guard !newTag.isEmpty else { return available }
+        return available.filter { $0.localizedCaseInsensitiveContains(newTag) }
     }
 
     private func binding(for slug: String) -> Binding<Bool> {

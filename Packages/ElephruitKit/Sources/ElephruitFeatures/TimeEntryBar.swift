@@ -147,36 +147,41 @@ struct TimeTrackerCard: View {
 
     /// The clock leads, then what you are doing, then what it is filed under.
     private func runningState(_ running: RunningTimer) -> some View {
-        // One row, vertically centred. Stacking the clock over its buttons left a band of empty
-        // card under the chips — the right column was taller than the left, and the card grew to
-        // fit it. A card with a hole in it does not read as considered.
-        HStack(alignment: .center, spacing: Theme.Spacing.large) {
+        // ### The arrangement, and why it is this one
+        // The description takes the whole left because it is the only field typed into every single
+        // time. Everything it is filed under is a compact cluster of glyphs immediately left of the
+        // clock — a toolbar, read as a toolbar — rather than a row of labelled capsules under the
+        // text, which pushed the card to two storeys and made five optional things look like five
+        // required ones. A glyph with nothing in it is just a glyph; the moment it has a value it
+        // takes that value's colour and shows it.
+        HStack(alignment: .center, spacing: Theme.Spacing.medium) {
             Image(systemName: "record.circle")
-                .font(.title2)
+                .font(.title3)
                 .foregroundStyle(Theme.Colors.destructive)
                 .symbolEffect(.pulse, options: .repeating)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                TextField("What are you working on?", text: $draft.description)
-                    .textFieldStyle(.plain)
-                    .font(.system(.title3, design: .default, weight: .regular))
-                    .focused($isDescriptionFocused)
-                    .onSubmit { isDescriptionFocused = false }
-                    // Written when the field gives up focus rather than on every keystroke: a
-                    // running timer's description is something you finish typing before you care
-                    // that it is saved, and a write per character is a thousand saves per sentence.
-                    .onChange(of: isDescriptionFocused) { _, focused in
-                        guard !focused else { return }
-                        services?.timer.setDescription(draft.description)
-                        commitChange()
-                    }
-                    .accessibilityIdentifier(AccessibilityID.Time.descriptionField)
+            TextField("Add a description", text: $draft.description)
+                .textFieldStyle(.plain)
+                .font(.system(.title3, design: .default, weight: .regular))
+                .focused($isDescriptionFocused)
+                .onSubmit { isDescriptionFocused = false }
+                // Written when the field gives up focus rather than on every keystroke: a running
+                // timer's description is something you finish typing before you care that it is
+                // saved, and a write per character is a thousand saves per sentence.
+                .onChange(of: isDescriptionFocused) { _, focused in
+                    guard !focused else { return }
+                    services?.timer.setDescription(draft.description)
+                    commitChange()
+                }
+                .accessibilityIdentifier(AccessibilityID.Time.descriptionField)
 
-                filingChips
-            }
+            Spacer(minLength: Theme.Spacing.small)
 
-            Spacer(minLength: Theme.Spacing.medium)
+            filingChips
+
+            Divider()
+                .frame(height: 24)
 
             clock(running)
 
@@ -186,14 +191,13 @@ struct TimeTrackerCard: View {
         }
     }
 
-    /// Everything the entry is filed under, wrapping rather than compressing.
+    /// Everything the entry is filed under, as one cluster.
     ///
     /// Only while something runs. These are the questions you can answer once the clock is going,
     /// and putting them in front of Start was what made beginning to track a form to fill in.
     private var filingChips: some View {
-        ElephruitDesign.FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
+        HStack(spacing: Theme.Spacing.tight) {
             TimeSubjectPicker(
-                placeholder: "Item",
                 subject: draft.subject,
                 onPick: { subject in
                     draft.subject = subject
@@ -203,19 +207,19 @@ struct TimeTrackerCard: View {
                 onOpen: onOpenSubject
             )
 
-            TimeProjectPicker(placeholder: "Project", project: draft.project) { project in
+            TimeProjectPicker(project: draft.project) { project in
                 draft.project = project
                 services?.timer.setProject(resolve(draft.project))
                 commitChange()
             }
 
-            TimePeoplePicker(placeholder: "People", people: draft.people) { people in
+            TimePeoplePicker(people: draft.people) { people in
                 draft.people = people
                 services?.timer.setPeople(resolveAll(draft.people))
                 commitChange()
             }
 
-            TimeTagPicker(placeholder: "Tags", slugs: draft.tagSlugs) { slugs in
+            TimeTagPicker(slugs: draft.tagSlugs) { slugs in
                 draft.tagSlugs = slugs
                 services?.timer.setTags(slugs)
                 commitChange()
@@ -227,8 +231,8 @@ struct TimeTrackerCard: View {
                 commitChange()
             } label: {
                 TimeChipLabel(
-                    symbolName: draft.isBillable ? "dollarsign.circle.fill" : "dollarsign.circle",
-                    title: "Billable",
+                    symbolName: "dollarsign.circle",
+                    title: nil,
                     isFilled: draft.isBillable
                 )
             }
@@ -265,7 +269,7 @@ struct TimeTrackerCard: View {
                 .font(clockFont)
                 .monospacedDigit()
                 .multilineTextAlignment(.trailing)
-                .frame(width: 170)
+                .frame(width: 128)
                 .focused($isDurationFocused)
                 .onSubmit(finishEditingDuration)
                 .onChange(of: isDurationFocused) { _, focused in
@@ -282,7 +286,7 @@ struct TimeTrackerCard: View {
                     .monospacedDigit()
                     .contentTransition(.numericText())
             }
-            .frame(width: 170, alignment: .trailing)
+            .frame(width: 128, alignment: .trailing)
             .contentShape(.rect)
             .onTapGesture { beginEditingDuration() }
             .help("Started at \(running.startedAt.formatted(date: .omitted, time: .shortened)) — click to correct")
@@ -296,7 +300,7 @@ struct TimeTrackerCard: View {
     /// A stopwatch that has to be hunted for is one nobody trusts is going. This is the single piece
     /// of the interface that answers the question the whole module exists for.
     private var clockFont: Font {
-        .system(size: 38, weight: .medium, design: .rounded)
+        .system(size: 30, weight: .medium, design: .rounded)
     }
 
     // MARK: - Buttons
