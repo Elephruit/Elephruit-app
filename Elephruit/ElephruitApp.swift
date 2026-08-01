@@ -267,6 +267,19 @@ struct ElephruitCommands: Commands {
         CommandGroup(after: .sidebar) {
             Divider()
 
+            // A keyboard way in and out, because the buttons themselves are revealed on hover and a
+            // control you can only reach with a pointer is one a keyboard user cannot reach at all.
+            if services?.miniTimer.isCollapsed == true {
+                Button("Back to Elephruit") { services?.miniTimer.expand() }
+                    .keyboardShortcut(KeyEquivalent("m"), modifiers: [.command, .control])
+            } else {
+                Button("Collapse to Timer") { services?.miniTimer.collapse() }
+                    .keyboardShortcut(KeyEquivalent("m"), modifiers: [.command, .control])
+                    .disabled(services == nil)
+            }
+
+            Divider()
+
             Button("Back") { navigation?.goBack() }
                 .keyboardShortcut(KeyEquivalent("["), modifiers: .command)
                 .disabled(navigation?.canGoBack != true)
