@@ -77,11 +77,18 @@ struct PersonContactSection: View {
             ) {
                 ForEach(groups) { group in
                     GridRow {
-                        ContactAffinityHeading(group.affinity)
-                            .gridCellColumns(2)
+                        // The padding is inside the heading rather than on the `GridRow`. A modifier
+                        // applied to a row turns it into an ordinary view, and an ordinary view in a
+                        // `Grid` is one cell rather than a row — which would put the heading in the
+                        // label column and start a fresh measurement for everything under it, in the
+                        // section whose whole point is that everything is measured together.
+                        ContactAffinityHeading(
+                            group.affinity,
+                            // The heading belongs to what follows it, not to what precedes it.
+                            topPadding: group.id == groups.first?.id ? 0 : Theme.Spacing.small
+                        )
+                        .gridCellColumns(2)
                     }
-                    // The heading belongs to what follows it, not to what precedes it.
-                    .padding(.top, group.id == groups.first?.id ? 0 : Theme.Spacing.small)
 
                     ForEach(group.details) { detail in
                         ContactDetailRow(detail: detail, affinity: group.affinity) { act(on: detail) }
@@ -142,8 +149,13 @@ struct PersonContactSection: View {
 private struct ContactAffinityHeading: View {
     let affinity: ContactAffinity
 
-    init(_ affinity: ContactAffinity) {
+    /// Space above, so the heading can sit closer to its own rows than to the group before it —
+    /// applied here rather than to the enclosing `GridRow`, which would stop being a row.
+    var topPadding: CGFloat = 0
+
+    init(_ affinity: ContactAffinity, topPadding: CGFloat = 0) {
         self.affinity = affinity
+        self.topPadding = topPadding
     }
 
     var body: some View {
@@ -160,6 +172,7 @@ private struct ContactAffinityHeading: View {
 
             Spacer(minLength: 0)
         }
+        .padding(.top, topPadding)
         .accessibilityAddTraits(.isHeader)
         .accessibilityLabel("\(affinity.displayName) details")
     }
