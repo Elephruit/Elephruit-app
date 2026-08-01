@@ -238,13 +238,6 @@ public final class MiniTimerController {
     /// own work.
     private var placedFrame: NSRect?
 
-    /// Set while the window is animating to a new frame.
-    ///
-    /// An animation is a stream of move notifications for frames that match nothing, so without this
-    /// the panel would read its own resize as the user dragging it and rewrite the anchor from a
-    /// half-finished position.
-    private var isAnimatingFrame = false
-
     private var moveObserver: (any NSObjectProtocol)?
 
     private let services: AppServices
@@ -350,8 +343,7 @@ public final class MiniTimerController {
     ///
     /// The arithmetic itself is in ``MiniTimerPlacement``, where it can be asserted.
     ///
-    /// - Parameter animated: whether the left edge travels to its new position or arrives there.
-    private func place(animated: Bool = false) {
+    private func place() {
         guard let panel, let screen = panel.screen ?? NSScreen.main else { return }
 
         let placement = MiniTimerPlacement(
@@ -378,34 +370,10 @@ public final class MiniTimerController {
         guard frame != placedFrame else { return }
         placedFrame = frame
 
-        guard animated, !Self.prefersReducedMotion else {
-            panel.setFrame(frame, display: true)
-            return
-        }
-
-        // ### Why the window animates rather than the contents
-        // Because only one of them can. The contents animating their width inside a window that is
-        // being resized to match them is two animations of the same widening on two clocks, and what
-        // that looked like was the pill lurching downwards and back as it opened: the contents are
-        // centred in the window, the window was a frame behind them, and the mismatch showed up as
-        // vertical drift on a surface whose height never changed at all.
-        //
-        // So the contents take their final size at once and the window is the only thing that
-        // travels. Core Animation interpolates the frame on the window server, which is as smooth as
-        // this can be made, and the controls are revealed by the left edge sliding out past them.
-        isAnimatingFrame = true
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = Self.resizeDuration
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().setFrame(frame, display: true)
-        } completionHandler: { [weak self] in
-            MainActor.assumeIsolated { self?.isAnimatingFrame = false }
-        }
+        // In one step, always. Nothing about this window moves gradually — the sliding is the card's
+        // job, and ``contentSizeChanged(to:)`` says why it has to be.
+        panel.setFrame(frame, display: true)
     }
-
-    /// Matches ``ElephruitDesign/Theme/Motion/standard``, which is what every other state change the
-    /// user is watching uses. A window is not a reason to invent a second tempo.
-    private static let resizeDuration: TimeInterval = 0.18
 
     /// Read from the workspace rather than the SwiftUI environment, because this is a window being
     /// moved rather than a view being drawn — and the setting means the same thing to both.
@@ -429,9 +397,7 @@ public final class MiniTimerController {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, !self.isAnimatingFrame,
-                      let panel = self.panel, panel.frame != self.placedFrame
-                else { return }
+                guard let self, let panel = self.panel, panel.frame != self.placedFrame else { return }
                 self.anchor = NSPoint(x: panel.frame.maxX, y: panel.frame.minY)
             }
         }
@@ -505,18 +471,59 @@ public final class MiniTimerController {
     public func contentSizeChanged(to size: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
 
-        // The first measurement is the panel arriving at its real size from the placeholder, which is
-        // not a change anybody asked to watch. Every one after it is the pill opening or closing
-        // under the pointer, which is.
+        settling?.cancel()
+        settling = nil
+
         let isFirst = contentSize == nil
         contentSize = size
-        place(animated: !isFirst)
+
+        // ### Why growing happens now and shrinking happens later
+        // The card slides; the window does not. A window that grows while something opens inside it
+        // uncovers, on every frame, a strip of itself it has not drawn — and only growing does that,
+        // which is why closing the menu was smooth and opening it stuttered, and why nothing about
+        // reading the code suggested the two were different at all.
+        //
+        // So the room is made **before** the card needs it and taken away **after** it has stopped
+        // wanting it. Growing goes through immediately: the card is still its old size, so the strip
+        // that appears is transparent, uncovered once rather than ten times, and nothing is drawn
+        // into it until the slide arrives. Shrinking waits for the slide to finish, because a window
+        // that closed in first would crop the card while it was still moving.
+        guard !isFirst, !Self.prefersReducedMotion, let panel, !grows(to: size, from: panel) else {
+            place()
+            return
+        }
+
+        settling = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.settleDelay)
+            guard !Task.isCancelled else { return }
+            self?.place()
+        }
     }
+
+    /// Whether this size needs more room than the window currently has, in either direction.
+    ///
+    /// Either direction, because the cost of being wrong one way is a strip of empty window nobody
+    /// can see, and the cost of being wrong the other is the card cut off while it moves.
+    private func grows(to size: CGSize, from panel: NSPanel) -> Bool {
+        let current = panel.contentRect(forFrameRect: panel.frame).size
+        return size.width > current.width || size.height > current.height
+    }
+
+    /// A pending shrink, cancelled by anything that changes the answer before it lands.
+    private var settling: Task<Void, Never>?
+
+    /// Long enough to outlast the card's own slide, which is ``ElephruitDesign/Theme/Motion/standard``
+    /// at 0.18 seconds. Erring long costs a strip of transparent window for a few frames, which
+    /// nobody can see; erring short crops the card mid-movement, which everybody can.
+    private static let settleDelay = Duration.milliseconds(240)
 
     /// Closes the panel and forgets it, for window teardown and tests.
     public func shutDown() {
         if let moveObserver { NotificationCenter.default.removeObserver(moveObserver) }
         moveObserver = nil
+
+        settling?.cancel()
+        settling = nil
 
         panel?.orderOut(nil)
         panel = nil
