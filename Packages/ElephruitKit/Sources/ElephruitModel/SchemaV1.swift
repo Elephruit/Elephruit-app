@@ -311,6 +311,30 @@ public enum SchemaV9: VersionedSchema {
     }
 }
 
+/// The tenth schema: one nullable date saying the user put a synchronised item in the Inbox.
+///
+/// `Item.inboxedAt`, and nothing else. Additive, optional, defaulted to `nil` — a store opened under
+/// this version gains a nullable column and keeps every byte it had.
+///
+/// ### Why the flood needed no data migration
+/// Because the Inbox is a *query*, not a column. Imported reminders were never written into it; they
+/// matched its definition — active, unparented, untagged, unfiled — the moment they were created.
+/// Teaching ``Item/hasHome`` that a list in Apple Reminders is a home is therefore the whole fix, and
+/// it takes effect on the next evaluation for every reminder already imported. Nothing is rewritten,
+/// nothing is deleted, and no reminder or sync link is touched, which is the constraint that mattered
+/// most: a library with four hundred imported reminders in its Inbox has four hundred fewer rows
+/// there after this change and exactly the same rows in it.
+///
+/// This column exists only for the *other* direction — the user saying "put that one back", which is
+/// the one thing a definition made of absences cannot express without breaking the link.
+public enum SchemaV10: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 10) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV9.models
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -323,7 +347,7 @@ public enum SchemaV9: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV9.self]
+        [SchemaV10.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -343,13 +367,15 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV9.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV10.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV9.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV10.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {
-        let version = SchemaV9.versionIdentifier
+        // Read from `versioned` rather than named again, so a new version cannot leave the archives
+        // and the diagnostics claiming the previous one.
+        let version = versioned.versionIdentifier
         return "\(version.major).\(version.minor).\(version.patch)"
     }
 }

@@ -65,6 +65,33 @@ struct ContactCardTests {
         #expect(detail.affinity == .unspecified)
     }
 
+    /// The card groups by affinity and heads each group with its name. A row under *Personal* whose
+    /// own label is also "personal" was printing the word twice, in two type sizes, six points
+    /// apart, about the same value — and a reader looking for what distinguishes three rows from
+    /// each other found a column that does not.
+    @Test("A row does not repeat the heading it is sitting under")
+    func labelDoesNotRepeatItsHeading() {
+        let personalEmail = ContactDetail(kind: .email, label: "personal", value: "a@example.com")
+        #expect(personalEmail.displayLabel == "Personal")
+        #expect(personalEmail.displayLabel(under: .personal) == "Email")
+
+        // Case-folded, because address books are not consistent about it.
+        let shouted = ContactDetail(kind: .phone, label: "WORK", value: "555")
+        #expect(shouted.displayLabel(under: .work) == "Phone")
+
+        // A label that says something the heading does not is kept exactly as written. This is the
+        // whole reason for taking the *label* out rather than the heading.
+        let beachHouse = ContactDetail(kind: .address, label: "Beach house", value: "1 Sea Road")
+        #expect(beachHouse.displayLabel(under: .unspecified) == "Beach house")
+
+        let mobile = ContactDetail(kind: .phone, label: "iPhone", value: "555")
+        #expect(mobile.displayLabel(under: .unspecified) == "iPhone")
+
+        // And a heading it is *not* under leaves it alone: the same personal email listed under
+        // Work — which the reader would want to see is odd — still says so.
+        #expect(personalEmail.displayLabel(under: .work) == "Personal")
+    }
+
     // MARK: - The identity line
 
     /// The bug in the screenshot: address books imported from elsewhere routinely put the person's

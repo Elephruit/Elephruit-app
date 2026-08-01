@@ -154,8 +154,24 @@ struct TaskRow: View {
         let facts = task.taskFacts()
         var pieces: [MetadataPiece] = []
 
+        // Where this task lives, and the list in Reminders counts as a place it lives.
+        //
+        // ### Why an imported task cites its list
+        // Because it has no container, no filing and no tags — that is what an imported reminder
+        // looks like, and it is why the Inbox used to collect every one of them. Now that they sit
+        // outside the Inbox on the strength of a home nothing on the row mentioned, the row has to
+        // mention it: a task appearing in Anytime with no visible origin is a task the user did not
+        // create and cannot account for. The list's own name, not the word "System".
         if showsContainer, let container = containerTitle {
             pieces.append(MetadataPiece(id: "container", symbolName: "folder", text: container))
+        } else if showsContainer, task.isKeptInStepWithAnExternalList {
+            pieces.append(
+                MetadataPiece(
+                    id: "reminders",
+                    symbolName: "app.badge.checkmark",
+                    text: services?.reminders.listName(id: task.externalListIdentifier) ?? "Reminders"
+                )
+            )
         }
 
         switch facts.deadlineUrgency(on: clock.now, calendar: clock.calendar) {

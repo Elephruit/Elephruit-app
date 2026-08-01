@@ -424,6 +424,19 @@ public struct BuiltInSmartList: Sendable, Hashable, Identifiable {
             hint: "Everything on a cycle, so the cycle itself can be reviewed.",
             filter: TaskFilter(rules: [.repeating(true)])
         ),
+        // ### Why this list exists
+        // Because imported reminders stopped appearing in the Inbox, and a thing that is nowhere is
+        // worse than a thing in the wrong place. Their home is the list they came from, in another
+        // application — true, and not somewhere this app can show you. This is where they are
+        // reachable *here*: everything brought in from Reminders, in one place, whether or not it
+        // has been filed since. See ``ElephruitModel/Item/hasHome``.
+        BuiltInSmartList(
+            id: "from-reminders",
+            title: "From Reminders",
+            symbolName: "app.badge.checkmark",
+            hint: "Brought in from your Reminders lists, and kept in step with them.",
+            filter: TaskFilter(rules: [.source(.systemStore)])
+        ),
         BuiltInSmartList(
             id: "sync-issues",
             title: "Reminders Sync Issues",

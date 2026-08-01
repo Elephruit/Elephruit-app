@@ -131,6 +131,77 @@ public enum RelationshipKind: String, Codable, Sendable, Hashable, CaseIterable 
     }
 }
 
+// MARK: - Grouping
+
+/// How a person's relationships are gathered on their page.
+///
+/// ### Why not "Children" and "Everybody else"
+/// Because that was the grouping, and it made two claims the app has no business making.
+///
+/// It said that one relationship is the interesting one and the rest are a remainder. Somebody's
+/// partner, their mother, their sister and their oldest friend were all *Everybody else*, filed under
+/// a heading whose only meaning is "not children" — which is a statement about whose life this is,
+/// made by software, in a module that is otherwise careful not to. And it does not scale: a person
+/// with no children got one unnamed group, a person with four got a wall of cards above a remainder,
+/// and neither arrangement says anything about how the people in it are related.
+///
+/// These four are the same cut the charts already make — see ``RelationshipChartKind`` — so the
+/// section and the family tree agree about what counts as family. Every group is a category rather
+/// than an exception, no group is defined by what it is not, and a household of housemates, a family
+/// with no children, and a person whose whole record is colleagues each get headings that describe
+/// them rather than headings that place them.
+public enum RelationshipGroup: String, Sendable, Hashable, CaseIterable, Identifiable {
+    case family
+    case household
+    case work
+    case other
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .family: "Family"
+        case .household: "Household"
+        case .work: "Work"
+        case .other: "Other"
+        }
+    }
+
+    public var symbolName: String {
+        switch self {
+        case .family: "figure.2.and.child.holdinghands"
+        case .household: "house"
+        case .work: "building.2"
+        case .other: "person.2"
+        }
+    }
+
+    /// The order the groups read in: closest first.
+    public var sortOrder: Int {
+        switch self {
+        case .family: 0
+        case .household: 1
+        case .work: 2
+        case .other: 3
+        }
+    }
+}
+
+extension RelationshipKind {
+    /// Which group this relationship is shown under.
+    ///
+    /// A `switch` rather than a table, so a kind added later has to be placed rather than silently
+    /// falling into *Other*.
+    public var group: RelationshipGroup {
+        switch self {
+        case .partner, .parent, .child, .sibling: .family
+        case .householdMember, .petOwner, .pet: .household
+        case .colleague, .manager, .directReport, .worksWith: .work
+        case .friend, .introducedBy, .introduced: .other
+        }
+    }
+}
+
 // MARK: - Charts
 
 /// Which view of somebody's relationships is on screen.
