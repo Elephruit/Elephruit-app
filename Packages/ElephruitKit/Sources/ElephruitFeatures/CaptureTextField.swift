@@ -17,6 +17,9 @@ struct CaptureTextField: NSViewRepresentable {
     @Binding var text: String
     @Binding var caret: Int
 
+    /// The names the grammar may spell out without quotes, so a two-word project draws as one token.
+    var vocabulary: CaptureVocabulary = .empty
+
     var onSubmit: () -> Void
     var onCancel: () -> Void
     /// `-1` for up, `1` for down.
@@ -43,6 +46,7 @@ struct CaptureTextField: NSViewRepresentable {
         textView.isAutomaticTextReplacementEnabled = false
         textView.textContainerInset = NSSize(width: 6, height: 8)
         textView.drawsBackground = false
+        textView.vocabulary = vocabulary
         textView.applyHighlighting()
 
         scrollView.drawsBackground = false
@@ -63,6 +67,7 @@ struct CaptureTextField: NSViewRepresentable {
             textView.setSelectedRange(NSRange(location: target, length: 0))
         }
 
+        textView.vocabulary = vocabulary
         textView.applyHighlighting()
     }
 
@@ -123,6 +128,9 @@ struct CaptureTextField: NSViewRepresentable {
 final class TokenisedTextView: NSTextView {
     weak var coordinator: CaptureTextField.Coordinator?
 
+    /// The names the parser may read across a space. Kept in step with the field above.
+    var vocabulary: CaptureVocabulary = .empty
+
     /// What the parser made of the current string. Recomputed whenever the string changes.
     private var highlights: [CaptureHighlight] = []
 
@@ -140,7 +148,7 @@ final class TokenisedTextView: NSTextView {
     func applyHighlighting() {
         guard let storage = textStorage else { return }
 
-        let updated = CaptureHighlight.spans(in: string)
+        let updated = CaptureHighlight.spans(in: string, knowing: vocabulary)
         highlights = updated
 
         let whole = NSRange(location: 0, length: storage.length)

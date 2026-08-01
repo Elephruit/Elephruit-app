@@ -29,9 +29,27 @@ public struct CaptureService {
     /// The whole entry point, in one call: `try capture(text: "Call Sarah #urgent !tomorrow")`.
     @discardableResult
     public func capture(text: String) throws(AppError) -> Item? {
-        let draft = CaptureParser.parse(text)
+        let draft = CaptureParser.parse(text, knowing: try vocabulary())
         guard !draft.isEmpty else { return nil }
         return try capture(draft)
+    }
+
+    /// The names `>` and `@` can spell out without quotes.
+    ///
+    /// Read here rather than in the parser, for the same reason resolution is: it needs the store.
+    /// Every door into Quick Jot asks for this and hands it to the same parser, so the field, the
+    /// interpretation row and the saved item cannot disagree about where a name ends.
+    public func vocabulary() throws(AppError) -> CaptureVocabulary {
+        var containers = ItemQuery()
+        containers.kinds = [.project, .area, .goal]
+
+        var people = ItemQuery()
+        people.kinds = [.person]
+
+        return CaptureVocabulary(
+            projects: try items.items(matching: containers).map(\.title),
+            people: try items.items(matching: people).map(\.title)
+        )
     }
 
     /// Captures an already-parsed draft.

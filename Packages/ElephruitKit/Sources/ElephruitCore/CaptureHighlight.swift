@@ -70,8 +70,15 @@ extension CaptureHighlight {
     /// Only the first line carries tokens, because only the first line is parsed for grammar: a `#`
     /// in the third paragraph of a jotted note is a hash, not a tag, and highlighting it would
     /// promise a tag that never gets written.
-    public static func spans(in text: String) -> [CaptureHighlight] {
-        let draft = CaptureParser.parse(text)
+    ///
+    /// The vocabulary is passed straight through for the same reason it exists: a field that drew
+    /// `>Q3 Launch` as one token while the save path filed it under "Q3" would be lying about what
+    /// it had understood.
+    public static func spans(
+        in text: String,
+        knowing vocabulary: CaptureVocabulary = .empty
+    ) -> [CaptureHighlight] {
+        let draft = CaptureParser.parse(text, knowing: vocabulary)
 
         let understood = draft.tokens.map {
             (standing: Standing.understood, token: $0)

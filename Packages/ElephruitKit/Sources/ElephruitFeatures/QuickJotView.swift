@@ -41,38 +41,68 @@ public struct CaptureCompletion: Sendable, Hashable {
 }
 
 extension CaptureCompletion {
+    /// How many words *before* the one being typed a `>` or `@` is still looked for. Two extra words
+    /// covers nearly every project and person name, and is short enough that an ordinary sentence
+    /// stops offering suggestions rather than trailing them to the end of the line.
+    private static let extraNameWords = 2
+
     /// Works out what, if anything, the caret is completing.
     ///
     /// Scans back from the caret to the start of the current word. A completion ends at whitespace,
     /// so `#work ` is finished and `#wo` is not — which is the behaviour that stops a suggestion
     /// list appearing over text the user has moved on from.
+    ///
+    /// For `>` and `@` the scan carries on past a space, because those name things whose names
+    /// contain spaces: half-way through `>Q3 Lau` the user is still naming a project, and a
+    /// suggestion list that vanished at the space would be the one moment it was needed. `#` is a
+    /// single slug and the date keywords bring their own words with them, so both stop at the first
+    /// space as before.
     public static func active(in text: String, caretAt caret: Int) -> CaptureCompletion? {
         let characters = Array(text)
         guard caret <= characters.count, caret > 0 else { return nil }
 
-        var start = caret
-        while start > 0, !characters[start - 1].isWhitespace {
-            start -= 1
+        var wordEnd = caret
+
+        for wordsBack in 0...extraNameWords {
+            var start = wordEnd
+            while start > 0, !characters[start - 1].isWhitespace {
+                start -= 1
+            }
+            guard start < wordEnd else { return nil }
+
+            let span = String(characters[start..<caret])
+            if let trigger = trigger(startingWith: span) {
+                guard wordsBack == 0 || trigger == .person || trigger == .project else { return nil }
+                return CaptureCompletion(
+                    trigger: trigger,
+                    query: String(span.dropFirst(trigger.prefix.count)),
+                    start: start
+                )
+            }
+
+            // Step back over the space to the word before. Not over a newline: the grammar is the
+            // first line's, and a `>` two paragraphs up is not what this line is about.
+            var previous = start
+            while previous > 0, characters[previous - 1].isWhitespace, !characters[previous - 1].isNewline {
+                previous -= 1
+            }
+            guard previous > 0, previous < start else { return nil }
+            wordEnd = previous
         }
-        guard start < caret else { return nil }
 
-        let word = String(characters[start..<caret])
+        return nil
+    }
 
-        // Keywords before sigils: `due:` starts with a letter, so a sigil test would never see it.
-        for trigger in [Trigger.dueDate, .followDate] where word.lowercased().hasPrefix(trigger.prefix) {
-            return CaptureCompletion(
-                trigger: trigger,
-                query: String(word.dropFirst(trigger.prefix.count)),
-                start: start
-            )
+    /// The trigger a stretch of text begins with, if any.
+    ///
+    /// Keywords before sigils: `due:` starts with a letter, so a sigil test would never see it.
+    private static func trigger(startingWith span: String) -> Trigger? {
+        for trigger in [Trigger.dueDate, .followDate] where span.lowercased().hasPrefix(trigger.prefix) {
+            return trigger
         }
 
-        for trigger in [Trigger.tag, .person, .project] where word.hasPrefix(trigger.prefix) {
-            return CaptureCompletion(
-                trigger: trigger,
-                query: String(word.dropFirst()),
-                start: start
-            )
+        for trigger in [Trigger.tag, .person, .project] where span.hasPrefix(trigger.prefix) {
+            return trigger
         }
 
         return nil

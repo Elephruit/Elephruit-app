@@ -148,11 +148,11 @@ public final class QuickJotController {
     /// Returns whether anything was saved, so the caller can decide what to do next. On failure the
     /// panel stays open with the text intact — losing someone's sentence because the store was busy
     /// would be the worst possible response to a recoverable error.
+    /// Whether there is anything to save is decided by ``CaptureService``, which returns `nil` for a
+    /// capture with nothing in it. Deciding it here as well would mean a second parse that does not
+    /// know which projects exist, and so a second opinion about what the text means.
     @discardableResult
     public func save() -> Bool {
-        let draft = CaptureParser.parse(text)
-        guard !draft.isEmpty else { return false }
-
         do {
             guard try services.captureText(text) != nil else { return false }
             hideAfterSaving()
