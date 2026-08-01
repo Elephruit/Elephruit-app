@@ -354,10 +354,6 @@ struct FloatingCard: ViewModifier {
 struct MiniTimerView: View {
     @Environment(\.services) private var services
 
-    /// Read here rather than left to ``ElephruitDesign/View/calmAnimation(_:value:)``, because the
-    /// one animation on this surface is asked for imperatively — see the width below.
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     let controller: MiniTimerController
 
     /// Whether the window controls are showing.
@@ -373,19 +369,6 @@ struct MiniTimerView: View {
     /// The dots are a button. Pressing them shows the controls, pressing them again hides the
     /// controls, and nothing else on this surface touches them.
     @State private var isMenuOpen = false
-
-    /// The width the row wants, once it has measured itself.
-    ///
-    /// ### Why the card is given a width rather than taking the window's
-    /// Because this is the thing that animates, and the window must not be. A window that grows
-    /// while something slides open exposes, on every frame of the slide, a strip it has not drawn
-    /// yet — and it is the growing that does it: shrinking a window never uncovers anything, which
-    /// is exactly why closing the menu was smooth while opening it stuttered, and why both looked
-    /// fine to every reading of the code.
-    ///
-    /// So the window is set to its final size in one step, before the animation, and the card slides
-    /// out inside it. Nothing is uncovered by the movement, because the room was already there.
-    @State private var cardWidth: CGFloat?
 
     /// The gap the card keeps from the window's edge, for its shadow to fall into.
     ///
@@ -421,17 +404,24 @@ struct MiniTimerView: View {
         // pointer never moves out from under it.
         HStack(spacing: Theme.Spacing.small) {
             if isMenuOpen {
-                // ### Why nothing here animates
-                // Because the window does, and two animations of the same widening — one of the
-                // contents against SwiftUI's clock, one of the window against Core Animation's —
-                // beat against each other. What that looked like was the pill lurching down and back
-                // up as it opened, because the contents are centred in a window that was a frame
-                // behind them and the mismatch showed as vertical drift.
+                // ### Why the width does not animate, and only this does
+                // The width is the window's, and a window cannot be animated here without something
+                // outside SwiftUI's control having to agree about when the animation is over. Three
+                // ways of arranging that agreement have now been tried — animating the window itself,
+                // waiting a fixed time, and asking the animation to report back — and each one traded
+                // the previous problem for a worse one: a slide that stuttered as the window
+                // uncovered undrawn strips of itself, then a drawer that would not shut when the
+                // wait was cancelled, then a click that did nothing at all until the deferred work
+                // was finally serviced. What they have in common is that the geometry was made to
+                // depend on something arriving later.
                 //
-                // So the contents take their final size at once and the *window* is what travels.
-                // The controls are revealed by its left edge sliding out past them, which is one
-                // motion, on one clock, and needs nothing here to help it.
+                // Nothing arrives later now. The row measures itself during the same update as the
+                // click, the window is set to that size in the same update, and the press is over.
+                // The softening is opacity, which is not geometry: it animates or it does not, and
+                // either way the size is already right. The one thing this surface cannot afford is
+                // to be uncertain about how wide it is.
                 windowControls
+                    .transition(.opacity.animation(Theme.Motion.appearance))
             }
 
             menuButton
@@ -450,10 +440,12 @@ struct MiniTimerView: View {
         .padding(.vertical, Theme.Spacing.small)
         .padding(.horizontal, Theme.Spacing.medium)
         .fixedSize()
-        // ### Why the size is reported rather than measured from outside
+        // ### Why the size is reported from in here rather than measured from outside
         // The panel is sized by hand, and asking the hosting view how big it wants to be got the
         // answer for the *previous* contents every time — see `contentSizeChanged(to:)`. This says
-        // how big it actually is, at the moment it is that big, and the window is animated to match.
+        // how big the row is, at the moment it is that big, and the window is set to match within
+        // the same update. Measured: the report is synchronous with the click, so the window has
+        // finished resizing before the press has finished being handled.
         //
         // It has to sit exactly here: below the `.fixedSize()`, so what it measures is the width the
         // row *wants*, and above the frame that fills the window, so it is not reading back the
@@ -469,64 +461,20 @@ struct MiniTimerView: View {
                         // ``shadowRoom`` rather than from two spellings of the same token, because a
                         // window one point smaller than what is drawn in it does not look like a
                         // sizing mistake — it looks like the card has no bottom.
-                        // ### Why the width is set a turn later, and asked to animate here
-                        // Two things, and they pull the same way.
-                        //
-                        // `.animation(_:value:)` on the frame does not animate this. The width is
-                        // set from a layout callback, and a state change made during an update
-                        // arrives with no transaction for the modifier to attach to — so the card
-                        // jumped and only the window moved, which was measurably a single frame from
-                        // one width to the other. Asking for the animation at the point of the
-                        // change gives it the transaction it needs.
-                        //
-                        // And writing to view state *during* a layout pass is the pattern SwiftUI
-                        // warns about, so it is not done: the write hops to the next turn of the
-                        // main actor, where it is an ordinary change like any other. It costs a
-                        // frame before the slide begins and nothing else — measured afterwards, the
-                        // card travels its whole width in nineteen even steps each way.
                         controller.contentSizeChanged(
                             to: CGSize(
                                 width: size.width + 2 * Self.shadowRoom,
                                 height: size.height + 2 * Self.shadowRoom
                             )
                         )
-
-                        Task { @MainActor in
-                            withAnimation(
-                                Theme.Motion.respectingReduceMotion(
-                                    Theme.Motion.standard,
-                                    reduceMotion: reduceMotion
-                                ),
-                                completionCriteria: .removed
-                            ) {
-                                cardWidth = size.width
-                            } completion: {
-                                // The window gives back the room it no longer needs at the moment
-                                // the card stops wanting it, rather than after a length of time
-                                // chosen to be longer than the card takes. A guessed delay is a
-                                // guess that can be wrong in both directions: too short crops the
-                                // card mid-slide, and too long — or cancelled by one of the size
-                                // reports the running clock produces as its digits change width —
-                                // leaves the window standing open around a card that has already
-                                // closed, which is a drawer that will not shut.
-                                controller.contentSettled()
-                            }
-                        }
                     }
             }
         }
-        // ### What actually moves, and why the row does not
-        // This width is the animation — the one thing on the whole surface that travels. The row
-        // inside is at its final size from the first frame and held against the right, so opening
-        // reveals the controls being asked for while the clock and the Stop button stay exactly
-        // where they were, and nothing inside has to be laid out again as the card passes over it.
-        // The card is clipped to its own shape, so what the widening uncovers is cut by the curve
-        // rather than spilling past it.
-        .frame(width: cardWidth, alignment: .trailing)
         .modifier(FloatingCard(tint: tint, depth: .panel))
         .padding(Self.shadowRoom)
-        // The card is narrower than the window for as long as it is opening, so it has to be told
-        // which edge to keep. The right one: it is the edge that never moves.
+        // Held against the right, which is the edge that never moves. The window is the card's own
+        // size, so there is normally nothing for this to do — but a window that is briefly larger
+        // than its contents must not centre them, or the pill would drift sideways as it resized.
         .frame(maxWidth: .infinity, alignment: .trailing)
         .accessibilityIdentifier(AccessibilityID.Time.miniTimer)
     }
