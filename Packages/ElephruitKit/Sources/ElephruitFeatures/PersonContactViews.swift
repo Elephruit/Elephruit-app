@@ -116,7 +116,7 @@ private struct ContactDetailRow: View {
                 .foregroundStyle(detail.affinity.color)
                 .frame(width: 120, alignment: .leading)
 
-            Text(detail.value)
+            Text(detail.displayValue)
                 .font(Theme.Text.rowSubtitle)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
@@ -137,7 +137,7 @@ private struct ContactDetailRow: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(
             "\(detail.affinity.displayName) \(detail.kind.displayName.lowercased()), "
-                + "\(detail.displayLabel), \(detail.value)"
+                + "\(detail.displayLabel), \(detail.displayValue)"
         )
     }
 
