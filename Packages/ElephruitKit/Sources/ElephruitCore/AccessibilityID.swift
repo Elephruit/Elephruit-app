@@ -200,6 +200,9 @@ public enum AccessibilityID {
         public static let meetingBrief = "people.meetingBrief"
         public static let groupActionPreview = "people.groupActionPreview"
 
+        // Adding somebody by hand.
+        public static let newPersonSheet = "people.newPersonSheet"
+
         // The command bar.
         public static let commandBar = "people.commandBar"
         public static let commandField = "people.commandField"

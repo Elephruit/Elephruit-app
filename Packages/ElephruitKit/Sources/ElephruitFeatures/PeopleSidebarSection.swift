@@ -79,7 +79,7 @@ struct PeopleSidebarSection: View {
                 Spacer()
 
                 Button {
-                    navigation.isPeopleCommandBarVisible = true
+                    navigation.isNewPersonVisible = true
                 } label: {
                     Image(systemName: "plus")
                 }

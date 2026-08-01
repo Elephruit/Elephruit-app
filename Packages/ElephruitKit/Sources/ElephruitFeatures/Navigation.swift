@@ -344,6 +344,12 @@ public final class NavigationModel {
     /// the first word turned out to be.
     public var isPeopleCommandBarVisible = false
 
+    /// The plain form for adding somebody by hand.
+    ///
+    /// Separate from the bar above, and reached from the plus button, because "add a person" is a
+    /// thing people expect to answer with fields rather than with a sentence. See ``NewPersonSheet``.
+    public var isNewPersonVisible = false
+
     /// The full tag list, reached from the sidebar's bounded disclosure group.
     public var isTagBrowserVisible = false
 

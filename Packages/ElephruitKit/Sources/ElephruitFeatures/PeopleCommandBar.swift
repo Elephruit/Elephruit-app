@@ -88,6 +88,9 @@ struct PeopleCommandBarView: View {
                 .focused($isFocused)
                 .onChange(of: text) { _, newValue in reparse(newValue) }
                 .onSubmit { runHighlighted() }
+                // Escape has to reach the sheet even though the field owns the keyboard, which is
+                // the whole reason this sits on the field and not on the container around it.
+                .onExitCommand { dismiss() }
                 .accessibilityIdentifier(AccessibilityID.People.commandField)
                 .accessibilityLabel("Command bar")
                 .accessibilityValue(parsed?.summary ?? "")
@@ -164,6 +167,26 @@ struct PeopleCommandBarView: View {
     }
 
     private var hints: some View {
+        HStack(spacing: Theme.Spacing.small) {
+            exampleChips
+
+            Divider().frame(height: 16)
+
+            // The way out, said in the place a way out is looked for. A bar that acts on Return has
+            // to be as easy to leave as it is to open, or opening it by accident is a trap.
+            Button("Close", action: dismiss.callAsFunction)
+                .buttonStyle(.plain)
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .keyboardShortcut(.cancelAction)
+                .accessibilityIdentifier("people.commandBar.close")
+
+            KeyHint("esc")
+        }
+        .padding(.trailing, Theme.Spacing.medium)
+    }
+
+    private var exampleChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Theme.Spacing.medium) {
                 ForEach(Self.examples, id: \.self) { example in
