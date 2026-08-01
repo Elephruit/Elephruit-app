@@ -61,7 +61,13 @@ struct UpcomingAgendaView: View {
             }
             .listStyle(.inset)
             .alternatingRowBackgrounds(.disabled)
+            .scrollContentBackground(.hidden)
             .background { linkedDeletionDialog }
+            // The same capped, centred column the rest of Tasks uses. Upcoming is the one view a
+            // person scrolls a long way through, so a row whose date is a foot from its title is the
+            // most costly here.
+            .frame(maxWidth: Theme.Size.editorMaxWidth)
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -148,15 +154,30 @@ struct UpcomingAgendaView: View {
         }
     }
 
+    /// A day gets the large-number form; a week or a month keeps a title.
+    ///
+    /// The distinction is what the band *is*. A day is a landmark you are scrolling to find, and a
+    /// numeral is what makes it findable on the way past. A week further out is a bucket, and giving
+    /// a bucket a big number would be pointing at the Monday as though it meant something.
     @ViewBuilder
     private func header(for group: AgendaGroup) -> some View {
         switch group.span {
         case .day(let date):
-            SectionHeader(dayTitle(date), count: group.entries.isEmpty ? nil : group.entries.count)
+            TaskDayHeader(
+                date: date,
+                calendar: services?.dateProvider.calendar ?? .current,
+                isToday: services.map { $0.dateProvider.calendar.isDate($0.dateProvider.now, inSameDayAs: date) } ?? false
+            )
         case .week(let start):
-            SectionHeader("Week of " + start.formatted(.dateTime.day().month(.abbreviated)), count: group.entries.count)
+            TaskSectionHeader(
+                title: "Week of " + start.formatted(.dateTime.day().month(.abbreviated)),
+                count: group.entries.count
+            )
         case .month(let start):
-            SectionHeader(start.formatted(.dateTime.month(.wide).year()), count: group.entries.count)
+            TaskSectionHeader(
+                title: start.formatted(.dateTime.month(.wide).year()),
+                count: group.entries.count
+            )
         }
     }
 

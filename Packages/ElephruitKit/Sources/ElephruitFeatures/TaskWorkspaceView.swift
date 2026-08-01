@@ -65,7 +65,12 @@ struct TaskWorkspaceView: View {
         } else if sections.isEmpty, flatTasks.isEmpty, draftSectionID == nil {
             emptyState
         } else {
+            // The column is capped and centred for the ordinary reason a column of text is: a task
+            // title dragged out to 1400 points puts its own metadata a foot away from itself. The
+            // bottom bar rides inside this frame, so it stays under the rows it acts on.
             list
+                .frame(maxWidth: Theme.Size.editorMaxWidth)
+                .frame(maxWidth: .infinity)
         }
     }
 
@@ -79,13 +84,14 @@ struct TaskWorkspaceView: View {
 
             ForEach(sections) { section in
                 Section {
-                    ForEach(tasks(in: section), id: \.id) { task in
+                    ForEach(visibleTasks(in: section), id: \.id) { task in
                         row(for: task)
                     }
                     .onMove { offsets, destination in
                         move(in: section, from: offsets, to: destination)
                     }
 
+                    showMoreRow(for: section)
                     inlineDraft(for: section)
                 } header: {
                     header(for: section)
@@ -94,6 +100,15 @@ struct TaskWorkspaceView: View {
         }
         .listStyle(.inset)
         .alternatingRowBackgrounds(.disabled)
+        // ### Why the list gives up its chrome
+        // A separator between every row, an alternating fill behind every other one, and a grey
+        // panel behind all of them are three different ways of saying "these are separate things"
+        // to somebody who can already see that they are separate things. What is left doing the
+        // work is the one thing that was always doing it: the space between rows.
+        //
+        // The column is capped and centred for the ordinary reason a column of text is: a task
+        // title dragged out to 1400 points puts its own metadata a foot away from itself.
+        .scrollContentBackground(.hidden)
         .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
         // Return on the selection, which is the way through the list without the mouse. A focused
         // field inside the open card consumes Return before this sees it, so the guard is belt and
@@ -127,6 +142,18 @@ struct TaskWorkspaceView: View {
             onClose: { editingTaskID = nil }
         )
         .tag(task.id)
+        .listRowSeparator(.hidden)
+        // ### Why the selection is ours rather than the system's
+        // macOS draws a solid accent fill behind a selected row, which is right for a row and wrong
+        // for a row that can become a card: a white card sitting inside a saturated blue bar reads
+        // as two objects, one of them broken. A quiet tint of the same accent says the same thing
+        // and lets the card sit on it.
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                .fill(navigation.selectedItemIDs.contains(task.id)
+                    ? Theme.Colors.selection.opacity(0.16)
+                    : Color.clear)
+        )
         // ### The three ways in
         // A click on a row that is already selected, Return on the selection, or a double-click.
         // The first is the one people find by accident and then keep using; the second is the one
@@ -221,21 +248,30 @@ struct TaskWorkspaceView: View {
         }
     }
 
+    /// A glyph, a title, and a rule out to the edge.
+    ///
+    /// ### Why not the shared `SectionHeader`
+    /// Because that one is built for a form: small caps, a count, and nothing else, which is right
+    /// above a group of fields and wrong above a group of *things*. A list of tasks under a project
+    /// wants the project — its icon, its colour, its name at reading weight — because the header is
+    /// the answer to "what am I looking at" rather than a label on a region. The hairline carries the
+    /// eye across the gap and gives the group an edge without a box.
     @ViewBuilder
     private func header(for section: TaskSectionGroup) -> some View {
         switch section.heading {
         case .today(let part):
-            SectionHeader(part.title, count: section.taskIDs.count)
+            TaskSectionHeader(title: part.title, count: section.taskIDs.count)
         case .container(_, let title, let symbolName, let colorName):
-            HStack(spacing: Theme.Spacing.tight) {
-                Image(systemName: symbolName)
-                    .foregroundStyle(Theme.Palette.color(named: colorName))
-                SectionHeader(title, count: section.taskIDs.count)
-            }
+            TaskSectionHeader(
+                title: title,
+                symbolName: symbolName,
+                tint: Theme.Palette.color(named: colorName),
+                count: section.taskIDs.count
+            )
         case .unfiled:
-            SectionHeader("No project", count: section.taskIDs.count)
+            TaskSectionHeader(title: "No project", symbolName: "tray", count: section.taskIDs.count)
         case .day(let date):
-            SectionHeader(dayTitle(date), count: section.taskIDs.count)
+            TaskSectionHeader(title: dayTitle(date), count: section.taskIDs.count)
         case .none:
             EmptyView()
         }
@@ -556,6 +592,47 @@ struct TaskWorkspaceView: View {
     /// drawing the list quadratic in the number of sections for no reason.
     private func tasks(in section: TaskSectionGroup) -> [Item] {
         section.taskIDs.compactMap { tasksByID[$0] }
+    }
+
+    /// How much of a long section is drawn before it offers the rest.
+    ///
+    /// ### Why a section truncates at all
+    /// Because a view that groups by container is answering "what is in each of these", and a
+    /// project with sixty tasks in it answers that question in the first five and then buries the
+    /// next project under fifty-five rows nobody is reading. Five is enough to know what a project
+    /// is *about*; opening the project itself is where you go to work through it.
+    ///
+    /// Only ever container sections. Today has three sections and every row in them is there because
+    /// the user or the calendar put it there, so hiding any of them would hide the plan.
+    private static let sectionRowLimit = 5
+
+    @State private var expandedSectionIDs: Set<String> = []
+
+    private func truncates(_ section: TaskSectionGroup) -> Bool {
+        guard case .container = section.heading else { return false }
+        return section.taskIDs.count > Self.sectionRowLimit
+            && !expandedSectionIDs.contains(section.id)
+    }
+
+    private func visibleTasks(in section: TaskSectionGroup) -> [Item] {
+        let all = tasks(in: section)
+        guard truncates(section) else { return all }
+        return Array(all.prefix(Self.sectionRowLimit))
+    }
+
+    @ViewBuilder
+    private func showMoreRow(for section: TaskSectionGroup) -> some View {
+        if truncates(section) {
+            let hidden = section.taskIDs.count - Self.sectionRowLimit
+            Button("Show \(hidden) more") { expandedSectionIDs.insert(section.id) }
+                .buttonStyle(.plain)
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .frame(minHeight: Theme.Size.rowHeight)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .accessibilityIdentifier("tasks.showMore.\(section.id)")
+        }
     }
 
     // MARK: - Actions

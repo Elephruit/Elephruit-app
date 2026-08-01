@@ -397,12 +397,20 @@ struct TodayTaskRow: View {
 
             completionControl
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                titleLine
-                if !metadata.isEmpty { metadataLine }
-            }
+            titleLine
 
             Spacer(minLength: Theme.Spacing.small)
+
+            // ### Why this is the same shape a task row in Tasks has
+            // It is the same object. Today drew it with its facts on a second line and the Tasks
+            // list drew it with them on a second line of its own design, which is redesign issue #8:
+            // one thing, two pictures, and a reader who has to learn both. The facts are now on the
+            // trailing edge in both places, off the same rule — only what is currently true — with
+            // the same completion control at the head of the row.
+            //
+            // What stays different is what is genuinely different: a time gutter for work pinned to
+            // an hour, the reason the task is here today, and the actions this page offers on hover.
+            if !metadata.isEmpty { metadataLine }
 
             // Focus reveals them too. A control that only exists under a pointer is a control
             // somebody navigating by keyboard cannot know about, let alone reach.
@@ -447,33 +455,10 @@ struct TodayTaskRow: View {
             .frame(width: TodayMetrics.timeGutterWidth, alignment: .leading)
     }
 
+    /// The same control the Tasks list and the open card draw. Three copies of one circle is three
+    /// chances for a flagged task to look different depending on which screen it is on.
     private var completionControl: some View {
-        Button { actions.toggleCompletion(item) } label: {
-            Image(systemName: symbolName)
-                .font(.system(size: 13))
-                .rowTint(controlColor)
-                .contentTransition(.symbolEffect(.replace))
-        }
-        .buttonStyle(.plain)
-        .calmAnimation(value: item.status)
-        .accessibilityLabel(item.status == .completed ? "Mark incomplete" : "Mark complete")
-        .accessibilityIdentifier("today.task.toggle.\(item.id.uuidString)")
-    }
-
-    private var symbolName: String {
-        switch item.status {
-        case .completed: "checkmark.circle.fill"
-        case .cancelled: "xmark.circle"
-        default: item.isFlagged ? "circle.dotted.circle" : "circle"
-        }
-    }
-
-    private var controlColor: Color {
-        switch item.status {
-        case .completed: Theme.Colors.completed
-        case .cancelled: Theme.Colors.tertiaryText
-        default: Theme.Colors.secondaryText
-        }
+        TaskCompletionControl(task: item) { actions.toggleCompletion(item) }
     }
 
     private var titleLine: some View {
@@ -512,6 +497,7 @@ struct TodayTaskRow: View {
                 .modifier(TodayMetadataTint(color: piece.color))
             }
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private struct Piece: Identifiable {
