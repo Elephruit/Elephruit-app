@@ -53,7 +53,7 @@ The deprecated `NSCalendarsUsageDescription` is deliberately not used, and the f
 
 | Capability | Entitlement | Usage string | Default | Gate | If denied | Test that proves the negative |
 |---|---|---|---|---|---|---|
-| **Calendar read** | `personal-information.calendars` | `NSCalendarsFullAccessUsageDescription` | **Off** | Settings toggle, `calendar.isEnabled` | Explained state with "Open System Settings"; Today and Upcoming still work | `CalendarWriteSafetyTests` bans 11 write symbols in source; `.writeOnly` maps to `.denied` |
+| **Calendar read** | `personal-information.calendars` | `NSCalendarsFullAccessUsageDescription` | **Off** | Settings toggle, `calendar.isEnabled` | Explained state with "Open System Settings"; Today still works, without the schedule | `CalendarWriteSafetyTests` bans 11 write symbols in source; `.writeOnly` maps to `.denied` |
 | **Calendar write** | — | — | — | — | — | **Never.** The protocol has no write method and `EKEventStore` never escapes the actor |
 | **Global hotkey** | **none** | **none** | Proposed ⌘⇧J, unbound on collision | Settings | Command left unbound, reason shown | Registration failure is surfaced, not swallowed. ADR 0008 |
 | **App Intent capture** | none | none | On | — | — | `openAppWhenRun = false` — never steals focus |
