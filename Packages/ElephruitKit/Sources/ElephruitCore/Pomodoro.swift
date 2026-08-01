@@ -256,9 +256,17 @@ public struct PomodoroSession: Sendable, Hashable {
     }
 
     /// Where this is in the set — round three of four — for the line under the clock.
+    ///
+    /// A break belongs to the round it *follows*, not the one it precedes. Somebody resting after
+    /// their fourth block has finished the set, and telling them they are on round one would be the
+    /// counter congratulating them for work they have not started.
     public var roundDescription: String {
-        let position = (completedFocusRounds % plan.roundsBeforeLongBreak) + (phase == .focus ? 1 : 0)
-        let clamped = min(max(1, position), plan.roundsBeforeLongBreak)
-        return "Round \(clamped) of \(plan.roundsBeforeLongBreak)"
+        let rounds = plan.roundsBeforeLongBreak
+        let position: Int = if phase == .focus {
+            (completedFocusRounds % rounds) + 1
+        } else {
+            ((max(1, completedFocusRounds) - 1) % rounds) + 1
+        }
+        return "Round \(min(max(1, position), rounds)) of \(rounds)"
     }
 }

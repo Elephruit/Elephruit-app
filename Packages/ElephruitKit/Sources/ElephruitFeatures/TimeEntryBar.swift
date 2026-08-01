@@ -340,6 +340,8 @@ struct TimeEntryBar: View {
             services.perform {
                 try services.timeEntries.addManual(
                     item: subject,
+                    project: nil,
+                    people: [],
                     description: draft.description,
                     startedAt: manualStart,
                     endedAt: manualEnd,
