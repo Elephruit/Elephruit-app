@@ -36,7 +36,14 @@ struct CaptureSuggestionSource {
     var services: AppServices?
 
     /// The project and person names the parser is working from. Refreshed with the library.
-    var vocabulary: CaptureVocabulary = .empty
+    ///
+    /// No default, deliberately. It had one — ``CaptureVocabulary/empty`` — and the composer built
+    /// this without passing anything, so the picker, the destination list and the `@` and `>`
+    /// completions all reported an empty library in a library that was not. Nothing failed; the type
+    /// answered every question truthfully about the names it had been given, which were none. A
+    /// default value here is a way of saying "not knowing which people exist is a reasonable state
+    /// for this to be in", and it never is: this type's entire purpose is knowing.
+    var vocabulary: CaptureVocabulary
 
     /// Existing tag slugs, whole or matching.
     ///
