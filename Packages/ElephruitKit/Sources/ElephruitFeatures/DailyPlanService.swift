@@ -57,7 +57,9 @@ public final class DailyPlanService {
     /// Throws only what the store throws. A missing calendar, a person with no profile, or a day
     /// with nothing in it are all ordinary and produce an ordinary, empty-ish plan.
     public func plan(for date: Date, filters: TodayFilters = .standard) throws(AppError) -> DayPlan {
-        try plan(for: date, filters: filters, sources: try sources(filters: filters))
+        var sources = try sources(filters: filters)
+        sources.dailyNotes = notes(from: date, count: 1, reusing: sources)
+        return try plan(for: date, filters: filters, sources: sources)
     }
 
     /// Everything one pass over the library found, shared by every day on screen.
@@ -69,8 +71,15 @@ public final class DailyPlanService {
     /// every open task. A page showing five days did that five times, and a real library is
     /// thousands of rows. One walk, five days.
     private struct LibrarySources {
-        var openTasks: [Item] = []
-        var resolvedTasks: [Item] = []
+        /// Open tasks that could belong to *some* day, with their facts already derived.
+        ///
+        /// Both halves matter. Narrowing first is what keeps this small; deriving once is what keeps
+        /// it cheap. See ``couldAppearOnSomeDay(_:)`` and the note on ``sources(filters:)``.
+        var candidates: [(item: Item, facts: TaskFacts)] = []
+
+        /// Work finished or abandoned inside the window, likewise already derived.
+        var resolved: [(item: Item, facts: TaskFacts)] = []
+
         var celebrations: [Celebration] = []
 
         /// What is prepared for, and who is linked to, every meeting in the window — keyed by the
@@ -81,41 +90,176 @@ public final class DailyPlanService {
         /// one screen.
         var meetings: [String: MeetingContext] = [:]
 
-        /// People by identifier, so a roster built from four directions reads each record once.
-        var people: [UUID: Item] = [:]
+        /// The day's own note, by day key, for every day in the window.
+        var dailyNotes: [String: Item] = [:]
+
+        /// Which task belongs to which meeting, for the whole window.
+        var meetingTaskIDs: [UUID: (id: String, title: String)] = [:]
+
+        /// The window the daily notes were read for, so a different window re-reads them.
+        var noteWindow: ClosedRange<Date>?
     }
 
+    /// What the last library pass found, and what it was true of.
+    ///
+    /// ### Why this is cached and the plans are not
+    /// Because filters change what is *shown* and never what is *read*. Hiding meetings does not
+    /// make the tasks different; it makes them not drawn. So a filter toggle used to re-fetch every
+    /// open task, every person and every meeting item to arrive at the same answer, and at fifteen
+    /// hundred tasks that is a quarter of a second of pure waste per click.
+    ///
+    /// Keyed on the two counters that say the underlying records actually moved — the library's own
+    /// ``AppServices/changeToken`` and the calendar's ``CalendarService/revision``. Anything else is
+    /// a question about the same records, and the same records give the same answer.
+    private struct CachedSources {
+        var changeToken: Int
+        var calendarRevision: Int
+        var sources: LibrarySources
+    }
+
+    private var cachedSources: CachedSources?
+
     private func sources(filters: TodayFilters) throws(AppError) -> LibrarySources {
+        if let cached = cachedSources,
+           cached.changeToken == services.changeToken,
+           cached.calendarRevision == services.calendar.revision {
+            return cached.sources
+        }
+
+        let fresh = try readSources()
+        cachedSources = CachedSources(
+            changeToken: services.changeToken,
+            calendarRevision: services.calendar.revision,
+            sources: fresh
+        )
+        return fresh
+    }
+
+    /// One pass over the library.
+    ///
+    /// Reads everything the page could need rather than what the current filters happen to want:
+    /// the cost of a fetch nobody draws is one fetch, and keying the cache on the filters as well
+    /// would mean re-reading the library every time somebody changed their mind.
+    ///
+    /// ### Why the tasks are narrowed before their facts are derived
+    /// The rules have to run in Swift over the open tasks — none of them translate to a predicate.
+    /// But `TaskFacts` is not free: deriving one walks the parent chain, both link collections, the
+    /// children, the attachments and the checklist. At fifteen hundred open tasks that is several
+    /// thousand relationship fault-ins, and the page was doing it **once per task per day** — about
+    /// seven and a half thousand times to draw one screen.
+    ///
+    /// The narrowing is what fixes it, and it is safe because it reads only *columns*. A task can
+    /// only reach a day through a deadline, a start date, a commitment, a reminder, a follow-up
+    /// date, a flag, or a meeting it is attached to — every one of which is a stored value that
+    /// costs nothing to test. Of fifteen hundred open tasks, a working week touches a few dozen.
+    private func readSources() throws(AppError) -> LibrarySources {
         var sources = LibrarySources()
 
-        if filters.showsMeetings, services.calendar.isEnabled {
+        if services.calendar.isEnabled {
             // The events already in memory for the loaded window — see `loadCalendar(from:through:)`.
             let identities = services.calendar.events.map(\.identity)
             sources.meetings = try services.eventLinks.meetingContext(for: identities)
+
+            for (key, context) in sources.meetings {
+                guard let event = services.calendar.events.first(where: { $0.identity.storageKey == key })
+                else { continue }
+                for taskID in context.preparation.openPreparationTaskIDs {
+                    sources.meetingTaskIDs[taskID] = (id: event.id, title: event.displayTitle)
+                }
+            }
         }
 
-        if filters.showsTasks {
+        do {
             var open = ItemQuery()
             open.kinds = [.task]
             open.statuses = [.open]
             open.sort = .manual
-            sources.openTasks = try services.items.items(matching: open)
+            let prepared = Set(sources.meetingTaskIDs.keys)
 
-            var resolved = ItemQuery()
-            resolved.kinds = [.task]
-            resolved.statuses = [.completed, .cancelled]
-            resolved.sort = .updatedNewestFirst
+            for task in try services.items.items(matching: open) {
+                guard Self.couldAppearOnSomeDay(task) || prepared.contains(task.id) else { continue }
+                sources.candidates.append((item: task, facts: task.taskFacts()))
+            }
+
+            var resolvedQuery = ItemQuery()
+            resolvedQuery.kinds = [.task]
+            resolvedQuery.statuses = [.completed, .cancelled]
+            resolvedQuery.sort = .updatedNewestFirst
             // Bounded: a logbook of five thousand entries has nothing to say about this week, and
             // the rows that do are the most recent ones by construction.
-            resolved.limit = 200
-            sources.resolvedTasks = try services.items.items(matching: resolved)
+            resolvedQuery.limit = 200
+
+            for task in try services.items.items(matching: resolvedQuery) {
+                // Narrowed on columns before the facts are derived, for the same reason as above.
+                guard task.completedAt != nil || task.cancelledAt != nil else { continue }
+                sources.resolved.append((item: task, facts: task.taskFacts()))
+            }
         }
 
-        if filters.showsPeople {
-            sources.celebrations = try services.persons.allCelebrations()
-        }
+        sources.celebrations = try services.persons.allCelebrations()
 
         return sources
+    }
+
+    /// Whether a task could reach any day at all, decided from stored values alone.
+    ///
+    /// Deliberately generous: it is a *superset* of what the rules will accept, because the rules
+    /// are the thing that decides and this only exists to stop them being asked about work that
+    /// plainly has no date on it. Getting it wrong in the other direction would silently drop work
+    /// from somebody's day, so every route a task has onto a day is listed here — and a task
+    /// attached to a meeting, which has no date of its own, is added by identifier by the caller.
+    private static func couldAppearOnSomeDay(_ task: Item) -> Bool {
+        guard task.status == .open, !task.isSomeday else { return false }
+        return task.dueAt != nil
+            || task.availableFrom != nil
+            || task.todayCommittedOn != nil
+            || task.reminderAt != nil
+            || task.followUpAt != nil
+            || task.isFlagged
+    }
+
+    /// The day's notes for a window, in one fetch.
+    ///
+    /// `ItemQuery.dayKey` is not part of the predicate and not part of the post-filter, so asking for
+    /// one day's note fetches every daily entry in the library. Asking five times fetched them five
+    /// times; a library with a note for every day of a year made that the single most expensive
+    /// thing on the page.
+    /// The window's notes, re-read only when the window has actually moved.
+    private func notes(from first: Date, count: Int, reusing sources: LibrarySources) -> [String: Item] {
+        let start = calendar.startOfDay(for: first)
+        let end = calendar.date(byAdding: .day, value: max(0, count - 1), to: start) ?? start
+
+        if let cached = sources.noteWindow, cached == start...end { return sources.dailyNotes }
+
+        var found = dailyNotes(from: first, count: count)
+        cachedSources?.sources.dailyNotes = found
+        cachedSources?.sources.noteWindow = start...end
+        // Returned rather than read back out of the cache, so a caller with no cache still works.
+        if found.isEmpty { found = [:] }
+        return found
+    }
+
+    private func dailyNotes(from first: Date, count: Int) -> [String: Item] {
+        var query = ItemQuery()
+        query.kinds = [.dailyEntry]
+        query.scope = .active
+
+        guard let entries = try? services.items.items(matching: query) else { return [:] }
+
+        var wanted = Set<String>()
+        var cursor = calendar.startOfDay(for: first)
+        for _ in 0..<max(0, count) {
+            wanted.insert(clock.dayKey(for: cursor))
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+
+        var found: [String: Item] = [:]
+        for entry in entries {
+            guard let key = entry.dayKey, wanted.contains(key), found[key] == nil else { continue }
+            found[key] = entry
+        }
+        return found
     }
 
     private func plan(
@@ -129,13 +273,9 @@ public final class DailyPlanService {
         let isPast = day < calendar.startOfDay(for: now)
 
         let events = filters.showsMeetings ? dayEvents(on: day, filters: filters, sources: sources) : []
-        let meetingTaskIDs = meetingPrepIndex(for: events)
 
         let taskContext = filters.showsTasks
-            ? dayTasks(
-                on: day, now: now, isToday: isToday,
-                meetingTaskIDs: meetingTaskIDs, filters: filters, sources: sources
-            )
+            ? dayTasks(on: day, now: now, isToday: isToday, filters: filters, sources: sources)
             : DayTaskContext()
 
         let celebrations = celebrations(on: day, isToday: isToday, from: sources.celebrations)
@@ -151,7 +291,7 @@ public final class DailyPlanService {
 
         var noteID: UUID?
         var noteExcerpt: String?
-        if filters.showsDailyNote, let entry = try services.people.dailyEntry(for: day, creatingIfNeeded: false) {
+        if filters.showsDailyNote, let entry = sources.dailyNotes[clock.dayKey(for: day)] {
             noteID = entry.id
             noteExcerpt = entry.body.isEmpty ? nil : TextNormalizer.excerpt(from: entry.body)
         }
@@ -216,7 +356,8 @@ public final class DailyPlanService {
         count: Int,
         filters: TodayFilters = .standard
     ) throws(AppError) -> DayWindow {
-        let sources = try sources(filters: filters)
+        var sources = try sources(filters: filters)
+        sources.dailyNotes = notes(from: first, count: count, reusing: sources)
 
         var window = DayWindow()
         var cursor = calendar.startOfDay(for: first)
@@ -235,10 +376,13 @@ public final class DailyPlanService {
         }
 
         var containers: [UUID: Item] = [:]
-        for task in sources.openTasks + sources.resolvedTasks where named.contains(task.id) {
-            window.tasks[task.id] = task
-            let enclosing = task.enclosingContainers()
-            if let container = enclosing.project ?? enclosing.list { containers[container.id] = container }
+        for candidate in sources.candidates + sources.resolved where named.contains(candidate.facts.id) {
+            window.tasks[candidate.facts.id] = candidate.item
+            // From the facts already derived rather than a second walk of the parent chain.
+            if let container = candidate.facts.projectID ?? candidate.facts.listID,
+               let item = try? services.items.item(id: container) {
+                containers[container] = item
+            }
         }
 
         // A preparation task lives on a meeting rather than on the day, so it may not be in either
@@ -358,17 +502,6 @@ public final class DailyPlanService {
         }
     }
 
-    /// Which tasks belong to which meeting, so a preparation task can say what it is for.
-    private func meetingPrepIndex(for events: [DayEvent]) -> [UUID: (id: String, title: String)] {
-        var index: [UUID: (id: String, title: String)] = [:]
-        for event in events {
-            for taskID in event.preparation.openPreparationTaskIDs {
-                index[taskID] = (id: event.id, title: event.event.displayTitle)
-            }
-        }
-        return index
-    }
-
     // MARK: - Tasks
 
     /// What one pass over the task library found for a day.
@@ -387,14 +520,13 @@ public final class DailyPlanService {
         on day: Date,
         now: Date,
         isToday: Bool,
-        meetingTaskIDs: [UUID: (id: String, title: String)],
         filters: TodayFilters,
         sources: LibrarySources
     ) -> DayTaskContext {
         var context = DayTaskContext()
 
-        for task in sources.openTasks {
-            let facts = task.taskFacts()
+        for candidate in sources.candidates {
+            let facts = candidate.facts
             guard !isHidden(facts, by: filters) else { continue }
 
             let reasons = DayTaskRules.reasons(
@@ -402,7 +534,7 @@ public final class DailyPlanService {
                 on: day,
                 now: now,
                 calendar: calendar,
-                meetingTaskIDs: meetingTaskIDs
+                meetingTaskIDs: sources.meetingTaskIDs
             )
             guard !reasons.isEmpty else { continue }
 
@@ -413,16 +545,16 @@ public final class DailyPlanService {
                     pinnedAt: DayTaskRules.pinnedTime(for: facts, on: day, calendar: calendar)
                 )
             )
-            context.titles[facts.id] = task.displayTitle
+            context.titles[facts.id] = candidate.item.displayTitle
 
             if let waitingOn = facts.waitingOnPersonID {
                 context.relatedPeople.append(
-                    (personID: waitingOn, taskID: facts.id, title: task.displayTitle, isWaiting: true)
+                    (personID: waitingOn, taskID: facts.id, title: candidate.item.displayTitle, isWaiting: true)
                 )
             }
             for personID in facts.relatedPersonIDs where personID != facts.waitingOnPersonID {
                 context.relatedPeople.append(
-                    (personID: personID, taskID: facts.id, title: task.displayTitle, isWaiting: false)
+                    (personID: personID, taskID: facts.id, title: candidate.item.displayTitle, isWaiting: false)
                 )
             }
         }
@@ -439,7 +571,15 @@ public final class DailyPlanService {
             }
         }
 
-        context.completedIDs = completedTasks(on: day, filters: filters, from: sources.resolvedTasks)
+        context.completedIDs = sources.resolved
+            .filter { candidate in
+                guard !isHidden(candidate.facts, by: filters) else { return false }
+                guard let resolvedAt = candidate.facts.completedAt ?? candidate.facts.cancelledAt
+                else { return false }
+                return calendar.isDate(resolvedAt, inSameDayAs: day)
+            }
+            .map(\.facts.id)
+
         return context
     }
 
@@ -453,22 +593,6 @@ public final class DailyPlanService {
             if case .followUp = reason { return .followUp(personName: person.displayTitle) }
             return reason
         }
-    }
-
-    private func completedTasks(
-        on day: Date,
-        filters: TodayFilters,
-        from resolved: [Item]
-    ) -> [UUID] {
-        resolved
-            .filter { task in
-                let facts = task.taskFacts()
-                guard !isHidden(facts, by: filters) else { return false }
-                let resolvedAt = facts.completedAt ?? facts.cancelledAt
-                guard let resolvedAt else { return false }
-                return calendar.isDate(resolvedAt, inSameDayAs: day)
-            }
-            .map(\.id)
     }
 
     private func isHidden(_ facts: TaskFacts, by filters: TodayFilters) -> Bool {
@@ -707,10 +831,35 @@ public final class DailyPlanService {
     /// Called by the page before a reload. The caches exist to stop one assembly reading the same
     /// person four times; carrying them across a reload would mean an edit to somebody's role never
     /// appearing.
+    /// Drops anything that is no longer true of the library.
+    ///
+    /// ### Why this is a stamp and not a clear
+    /// It was a clear, called at the start of every assembly so that an edit to somebody's role
+    /// could not be missed. That is the right instinct and the wrong mechanism: it also threw the
+    /// person index away when nothing about people had changed, so re-ticking a filter re-read every
+    /// person in the library to draw the same cards.
+    ///
+    /// ``AppServices/changeToken`` already says *something in the library changed*, which is exactly
+    /// the question being asked. Stamping the caches with it keeps the guarantee — an edit is never
+    /// missed, because any write moves the counter — and makes the case where nothing was written
+    /// free.
     public func invalidateCaches() {
+        guard personCacheToken != services.changeToken else { return }
+        personCacheToken = services.changeToken
         personDetailCache = [:]
         personItems = [:]
         cachedPersonIndex = nil
+    }
+
+    private var personCacheToken: Int?
+
+    /// Forgets everything, including the library pass. For a test that wants a cold read.
+    public func invalidateEverything() {
+        personCacheToken = nil
+        personDetailCache = [:]
+        personItems = [:]
+        cachedPersonIndex = nil
+        cachedSources = nil
     }
 
     // MARK: - The briefing

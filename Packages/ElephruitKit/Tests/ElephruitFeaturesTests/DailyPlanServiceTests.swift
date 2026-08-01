@@ -315,6 +315,10 @@ struct DailyPlanServiceTests {
         #expect(try await plan(services).tasks.map(\.taskID) == [task.id])
 
         _ = try services.tasks.complete(task)
+        // As every mutation in the app does — see `AppServices.noteChange(to:)`. It is what tells the
+        // search index, the sidebar counts and this page that something moved, and the assembler's
+        // library pass is keyed on it for the same reason `ItemListView`'s reload already was.
+        services.noteChange(to: task)
 
         let after = try await plan(services)
         #expect(after.tasks.isEmpty)
@@ -517,6 +521,98 @@ struct DailyPlanServiceTests {
             growth <= 4,
             "five days cost \(five.tally.description) against one day's \(one.tally.description)"
         )
+    }
+
+    /// The one somebody reported: click a filter off, click it back on, wait.
+    ///
+    /// Toggling a filter changes what is *drawn*. It cannot change what is in the library, so it has
+    /// no business reading the library — and it was reading all of it, twice, plus the calendar,
+    /// because the filters were part of the token that drove the load.
+    ///
+    /// A fetch count rather than a duration, for the usual reason: a stopwatch would pass on a fast
+    /// machine with an empty library, which is exactly the condition under which this shipped.
+    @Test("Toggling a filter reads nothing at all")
+    func togglingAFilterDoesNotTouchTheStore() async throws {
+        let audit = FetchAudit()
+        let defaults = UserDefaults(suiteName: "today.tests.\(UUID().uuidString)") ?? .standard
+        let events = [
+            Self.event("Review", id: "review", from: Self.at(10), minutes: 60,
+                       attendees: [EventAttendee(name: "Maya Chen", emailAddress: "maya@northwind.example")])
+        ]
+        let services = AppServices.inMemory(
+            dateProvider: Self.clock,
+            populated: false,
+            calendarProvider: { FixtureCalendarProvider(events: events, authorization: .authorized) },
+            defaults: defaults,
+            audit: audit
+        )
+        _ = await services.calendar.enable()
+
+        _ = try services.persons.createPerson(
+            PersonDraft(
+                fullName: "Maya Chen",
+                emails: [LabelledValue(label: "work", value: "maya@northwind.example")]
+            )
+        )
+        for index in 0..<40 {
+            let task = try services.items.create(ItemDraft(kind: .task, title: "Task \(index)"))
+            try services.tasks.commit(task, to: Self.clock.startOfDay(daysFromToday: index % 5))
+        }
+
+        let model = TodayModel(services: services)
+        await model.reload()
+        let afterFirstPaint = model.assemblyCount
+
+        let toggling = audit.measure {
+            services.todayPreferences.toggleMeetings()
+            model.assemble()
+            services.todayPreferences.toggleMeetings()
+            model.assemble()
+            services.todayPreferences.togglePeople()
+            model.assemble()
+        }
+
+        #expect(
+            toggling.tally.total == 0,
+            "three toggles read the store: \(toggling.tally.description)"
+        )
+        #expect(model.assemblyCount == afterFirstPaint + 3, "each toggle is one rebuild, no more")
+        #expect(services.calendar.revision >= 0)
+    }
+
+    @Test("An assembly that would produce the same answer does not run")
+    func redundantAssembliesAreFree() async throws {
+        // SwiftUI is entitled to re-run a `task(id:)` or an `onChange` more than once for what a
+        // person experienced as one click.
+        let services = await Self.fixture()
+        let model = TodayModel(services: services)
+
+        await model.reload()
+        let after = model.assemblyCount
+
+        for _ in 0..<20 { model.assemble() }
+        #expect(model.assemblyCount == after)
+
+        // Something genuinely changing still gets through.
+        services.todayPreferences.toggleCompleted()
+        model.assemble()
+        #expect(model.assemblyCount == after + 1)
+    }
+
+    @Test("An edit to the library is never missed, however warm the caches are")
+    func cachesNeverHideAnEdit() async throws {
+        let services = await Self.fixture()
+        let model = TodayModel(services: services)
+        await model.reload()
+
+        #expect(model.selectedPlan?.tasks.isEmpty == true)
+
+        let task = try services.items.create(ItemDraft(kind: .task, title: "Something new"))
+        try services.tasks.commitToToday(task)
+        services.noteChange(to: task)
+
+        model.assemble()
+        #expect(model.selectedPlan?.tasks.map(\.taskID) == [task.id])
     }
 
     @Test("Rebuilding the days never asks the calendar again")

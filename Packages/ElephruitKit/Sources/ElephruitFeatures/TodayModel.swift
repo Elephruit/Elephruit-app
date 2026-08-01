@@ -153,13 +153,17 @@ public final class TodayModel {
     /// as long as the page was on screen, which is what made a five-day window take seconds and made
     /// toggling a filter take seconds more.
     ///
-    /// So the window drives the *load* and nothing else does. This changes when the reader moves a
-    /// day, opens the days behind them, asks for another week, or changes what the page shows.
+    /// So the window drives the *load* and nothing else does. It changes when the reader moves a
+    /// day, opens the days behind them, or asks for another week — which are the only things that
+    /// change *which dates* the calendar is being asked about.
+    ///
+    /// The filters are deliberately **not** here. Hiding meetings does not change which days are on
+    /// screen, so it has no business making the app read a calendar again; it used to, and that is
+    /// most of why unticking and reticking a filter cost seconds rather than nothing.
     public struct WindowToken: Equatable {
         var date: Date
         var showsPrevious: Bool
         var futureCount: Int
-        var filters: TodayFilters
         var calendarIsEnabled: Bool
     }
 
@@ -168,7 +172,6 @@ public final class TodayModel {
             date: selectedDate,
             showsPrevious: isShowingPreviousDays,
             futureCount: futureDayCount,
-            filters: services.todayPreferences.filters,
             calendarIsEnabled: services.calendar.isEnabled
         )
     }
@@ -180,10 +183,15 @@ public final class TodayModel {
     public struct SourceToken: Equatable {
         var changeToken: Int
         var calendarRevision: Int
+        var filters: TodayFilters
     }
 
     public var sourceToken: SourceToken {
-        SourceToken(changeToken: services.changeToken, calendarRevision: services.calendar.revision)
+        SourceToken(
+            changeToken: services.changeToken,
+            calendarRevision: services.calendar.revision,
+            filters: services.todayPreferences.filters
+        )
     }
 
     /// Reads the calendar for the window on screen, then assembles it.
@@ -213,9 +221,27 @@ public final class TodayModel {
     ///
     /// Synchronous, and touches no integration. Called when the library changes and when the
     /// calendar reports a *different* answer — never in a way that could ask the calendar again.
-    public func assemble() {
+    /// How many times the days have been rebuilt. Read by a test; nothing else has any use for it.
+    public private(set) var assemblyCount = 0
+
+    /// What the last assembly was true of, so an identical one is free rather than merely fast.
+    ///
+    /// SwiftUI is entitled to re-run a `task(id:)` or an `onChange` more than once for what a person
+    /// experienced as one click, and an assembly that costs a fetch is not something to do twice on
+    /// spec.
+    @ObservationIgnored private var lastAssembled: (window: WindowToken, source: SourceToken)?
+
+    public func assemble(force: Bool = false) {
+        let tokens = (window: windowToken, source: sourceToken)
+        if !force, let last = lastAssembled, last.window == tokens.window, last.source == tokens.source {
+            return
+        }
+        lastAssembled = tokens
+        assemblyCount &+= 1
+
         // The per-assembly caches exist to stop one pass reading the same person four times. Keeping
-        // them across an assembly would mean an edit to somebody's role never appearing.
+        // them across an assembly would mean an edit to somebody's role never appearing. The
+        // *library* pass is not thrown away — it is keyed on the counters that say the records moved.
         services.dailyPlan.invalidateCaches()
 
         do {
