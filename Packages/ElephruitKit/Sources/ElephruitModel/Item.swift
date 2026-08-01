@@ -288,6 +288,44 @@ public final class Item {
     /// per-device setting that re-asks the moment you sit at the other machine.
     public var completionPromptDismissedAt: Date?
 
+    // MARK: Project workspace
+
+    /// The human-readable handle for a work item — `ELE-42`.
+    ///
+    /// Allocated once, on creation or on first entering a project, and never reallocated. See
+    /// ``nextReferenceNumber``.
+    public var referenceKey: String?
+
+    /// The prefix this project's work is numbered under — `ELE`. Only on a `.project`.
+    public var projectKey: String?
+
+    /// The next number to hand out. Only on a `.project`.
+    ///
+    /// **Only ever increases, including across deletions.** A gap in the sequence is the record of
+    /// something deleted, and reusing the number would make a reference written in a March commit
+    /// message start pointing at different work — silently, and in a place nobody would think to
+    /// look for the cause.
+    public var nextReferenceNumber: Int = 1
+
+    /// The board column this work sits in.
+    ///
+    /// A raw identifier rather than a relationship because a work item belongs to its project, not
+    /// to a column: deleting a column must leave the work alone, and a to-one relationship with a
+    /// nullify rule would express that less clearly than the absence of an identifier does.
+    public var workflowStageID: UUID?
+
+    /// Position within the board column, independent of ``sortOrder``, which is position within the
+    /// project. The same work is in two orders at once and both belong to the user.
+    public var boardOrder: Double = 0
+
+    /// A measurable goal's target and where it stands. Only on a `.goal`.
+    public var goalTargetValue: Double?
+    public var goalCurrentValue: Double?
+    public var goalUnit: String?
+
+    /// The version string. Only on a `.release`.
+    public var releaseVersion: String?
+
     // MARK: Relationships
 
     /// The containing item. The one containment hierarchy:
@@ -323,6 +361,45 @@ public final class Item {
     /// Present only for ``ItemKind/meeting``.
     @Relationship(deleteRule: .cascade, inverse: \EventReference.item)
     public var eventReference: EventReference?
+
+    /// Present only for ``ItemKind/bug``.
+    ///
+    /// **Created lazily**, which is a deliberate cost. A bug filed in eight seconds with only a
+    /// title is a bug that got filed, and demanding a full report at that moment is how defects
+    /// stop being reported. The consequence is that a bug can briefly have no record, so anything
+    /// reading severity has to substitute rather than pass the `nil` through — see
+    /// `Item.taskFacts()`.
+    @Relationship(deleteRule: .cascade, inverse: \BugRecord.item)
+    public var bugRecord: BugRecord?
+
+    // The project's own furniture. All cascade: a column, a view, or a rule has no meaning apart
+    // from the project that defines it.
+
+    @Relationship(deleteRule: .cascade, inverse: \WorkflowStage.project)
+    public var workflowStages: [WorkflowStage] = []
+
+    @Relationship(deleteRule: .cascade, inverse: \ProjectViewRecord.project)
+    public var projectViews: [ProjectViewRecord] = []
+
+    @Relationship(deleteRule: .cascade, inverse: \CustomFieldDefinition.project)
+    public var customFieldDefinitions: [CustomFieldDefinition] = []
+
+    @Relationship(deleteRule: .cascade, inverse: \AutomationRule.project)
+    public var automationRules: [AutomationRule] = []
+
+    @Relationship(deleteRule: .cascade, inverse: \ItemComment.item)
+    public var comments: [ItemComment] = []
+
+    /// This item's history.
+    ///
+    /// Cascades, unlike ``timeEntries``, and the difference is the point. "Moved to Done" about an
+    /// item that no longer exists is history with nothing to be history *of*; four hours worked is
+    /// a fact about the past that outlives what it was worked on.
+    @Relationship(deleteRule: .cascade, inverse: \ItemActivity.item)
+    public var activities: [ItemActivity] = []
+
+    @Relationship(deleteRule: .cascade, inverse: \InboxNotification.item)
+    public var notifications: [InboxNotification] = []
 
     /// Time tracked against this item.
     ///
