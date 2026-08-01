@@ -245,7 +245,7 @@ competes.
 
 ### Project
 
-Headings — the section construct — become a real grouping inside a project.
+Headings become a real grouping inside a project.
 
 ```
 │  ◫ Q3 Product Launch                                    ★  ⓘ  │
@@ -260,7 +260,7 @@ Headings — the section construct — become a real grouping inside a project.
 │  ○  Book flights                                              │
 │  ○  Read about the metro                              ✎       │
 │                                                               │
-│  Items to buy                                            ⋯   │
+│  Items to buy                                             ⋯   │
 │  ○  Extra camera battery                    #errand           │
 │  ○  Power adapter                           #errand           │
 │                                                               │

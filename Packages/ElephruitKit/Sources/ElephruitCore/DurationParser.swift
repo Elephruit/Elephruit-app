@@ -4,7 +4,7 @@ import Foundation
 ///
 /// ### Why a typed duration is the whole point
 /// A tracker that only lets you nudge a start time with a stepper makes the commonest correction —
-/// *"that was about an hour and a half"* — into arithmetic. the layout's duration field is the single
+/// *"that was about an hour and a half"* — into arithmetic. A typed duration field is the single
 /// feature that removes it: you type `1:30`, or `1.5`, or `90m`, and the entry becomes that long.
 /// Everything else about correcting time is downstream of being able to say how long it was.
 ///
@@ -27,8 +27,7 @@ import Foundation
 /// A bare `90` is ninety minutes, but a bare `1.5` is ninety minutes too — the same digits mean
 /// different units depending on whether a decimal point is present. That looks inconsistent written
 /// down and is not, because nobody types `1.5` meaning a minute and a half, and nobody types `90`
-/// meaning ninety hours. The rule follows what the input can only have meant, which is the rule
-/// the design spec arrived at as well.
+/// meaning ninety hours. The rule follows what the input can only have meant.
 public enum DurationParser {
     /// The longest duration that can be typed: 999 hours.
     ///
