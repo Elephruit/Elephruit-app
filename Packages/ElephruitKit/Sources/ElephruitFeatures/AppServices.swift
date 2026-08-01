@@ -44,6 +44,19 @@ public final class AppServices {
     /// Tracked time written out to a calendar. Off, and outbound only — see ``TimeCalendarMirror``.
     public let timeMirror: TimeCalendarMirror
 
+    /// The app collapsed to its clock, and whether it currently is.
+    ///
+    /// Built lazily on first use, because an app nobody collapses should never construct a panel.
+    /// Held here rather than per window: collapsing is a statement about the *application*, and two
+    /// windows racing to hide each other would be two mini timers and no way back.
+    ///
+    /// `@ObservationIgnored` because the *reference* never changes and there is nothing to observe
+    /// about it — and because the `@Observable` macro cannot rewrite a `lazy` stored property at
+    /// all. What views actually watch is the controller's own state, and `MiniTimerController` is
+    /// `@Observable` in its own right.
+    @ObservationIgnored
+    public private(set) lazy var miniTimer = MiniTimerController(services: self, defaults: defaults)
+
     /// Where this machine's preferences live.
     ///
     /// Held rather than reached for, so a preview or a test can hand over a throwaway suite and not

@@ -118,6 +118,13 @@ public enum AccessibilityID {
         public static let floatingPause = "time.floating.pause"
         public static let floatingRestart = "time.floating.restart"
         public static let floatingStop = "time.floating.stop"
+        public static let floatingCollapse = "time.floating.collapse"
+
+        // The app, collapsed to the clock.
+        public static let miniTimer = "time.mini"
+        public static let miniTimerPin = "time.mini.pin"
+        public static let miniTimerExpand = "time.mini.expand"
+        public static let miniTimerCompact = "time.mini.compact"
         public static let projectPicker = "time.project"
         public static let peoplePicker = "time.people"
 

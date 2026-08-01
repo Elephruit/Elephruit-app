@@ -110,10 +110,13 @@ public struct RootView: View {
         // ``FloatingTimerView`` — the sidebar row it duplicates is only present while the Time
         // module's sidebar is, and a timer must not vanish because somebody opened Tasks.
         .overlay(alignment: .bottomTrailing) {
-            FloatingTimerView {
-                navigation.select(.time)
-                navigation.timeSurface = .log
-            }
+            FloatingTimerView(
+                onOpen: {
+                    navigation.select(.time)
+                    navigation.timeSurface = .log
+                },
+                onCollapse: { services?.miniTimer.collapse() }
+            )
         }
         .environment(navigation)
         .swipeActionCoordinator(swipes)
