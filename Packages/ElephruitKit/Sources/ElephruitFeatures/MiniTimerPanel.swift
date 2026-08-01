@@ -471,13 +471,10 @@ public final class MiniTimerController {
     public func contentSizeChanged(to size: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
 
-        settling?.cancel()
-        settling = nil
-
         let isFirst = contentSize == nil
         contentSize = size
 
-        // ### Why growing happens now and shrinking happens later
+        // ### Why growing happens now and shrinking waits to be told
         // The card slides; the window does not. A window that grows while something opens inside it
         // uncovers, on every frame, a strip of itself it has not drawn — and only growing does that,
         // which is why closing the menu was smooth and opening it stuttered, and why nothing about
@@ -486,44 +483,40 @@ public final class MiniTimerController {
         // So the room is made **before** the card needs it and taken away **after** it has stopped
         // wanting it. Growing goes through immediately: the card is still its old size, so the strip
         // that appears is transparent, uncovered once rather than ten times, and nothing is drawn
-        // into it until the slide arrives. Shrinking waits for the slide to finish, because a window
-        // that closed in first would crop the card while it was still moving.
-        guard !isFirst, !Self.prefersReducedMotion, let panel, !grows(to: size, from: panel) else {
-            place()
-            return
-        }
+        // into it until the slide arrives. Shrinking waits for ``contentSettled()``, because a
+        // window that closed in first would crop the card while it was still moving.
+        guard isFirst || Self.prefersReducedMotion || grows(to: size, from: panel) else { return }
+        place()
+    }
 
-        settling = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: Self.settleDelay)
-            guard !Task.isCancelled else { return }
-            self?.place()
-        }
+    /// Told when the card has finished moving, so the window can give back room it no longer needs.
+    ///
+    /// ### Why this is a message rather than a delay
+    /// It was a delay: a quarter of a second, chosen to outlast a slide of eighteen hundredths. A
+    /// guessed interval is wrong in both directions. Too short crops the card while it is still
+    /// moving; too long, or cancelled by one of the size reports the running clock produces as its
+    /// digits change width, leaves the window standing open around a card that has already closed —
+    /// a drawer that will not shut, which is exactly what it looked like.
+    ///
+    /// The card knows when it has stopped. Nothing else has to.
+    public func contentSettled() {
+        place()
     }
 
     /// Whether this size needs more room than the window currently has, in either direction.
     ///
     /// Either direction, because the cost of being wrong one way is a strip of empty window nobody
     /// can see, and the cost of being wrong the other is the card cut off while it moves.
-    private func grows(to size: CGSize, from panel: NSPanel) -> Bool {
+    private func grows(to size: CGSize, from panel: MiniTimerPanel?) -> Bool {
+        guard let panel else { return true }
         let current = panel.contentRect(forFrameRect: panel.frame).size
         return size.width > current.width || size.height > current.height
     }
-
-    /// A pending shrink, cancelled by anything that changes the answer before it lands.
-    private var settling: Task<Void, Never>?
-
-    /// Long enough to outlast the card's own slide, which is ``ElephruitDesign/Theme/Motion/standard``
-    /// at 0.18 seconds. Erring long costs a strip of transparent window for a few frames, which
-    /// nobody can see; erring short crops the card mid-movement, which everybody can.
-    private static let settleDelay = Duration.milliseconds(240)
 
     /// Closes the panel and forgets it, for window teardown and tests.
     public func shutDown() {
         if let moveObserver { NotificationCenter.default.removeObserver(moveObserver) }
         moveObserver = nil
-
-        settling?.cancel()
-        settling = nil
 
         panel?.orderOut(nil)
         panel = nil
