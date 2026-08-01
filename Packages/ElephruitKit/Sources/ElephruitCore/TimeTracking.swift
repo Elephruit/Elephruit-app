@@ -122,6 +122,15 @@ public struct TimeEntrySnapshot: Sendable, Hashable, Identifiable {
     public var itemKind: ItemKind?
     public var projectID: UUID?
     public var projectTitle: String?
+
+    /// Whether the project was chosen by the user rather than walked up to from the subject.
+    ///
+    /// ### Why an editor needs to know
+    /// Because filling a project chip from a *derived* answer and then saving would pin it. An entry
+    /// against a task that was silently pinned to that task's project stops following the task if it
+    /// is ever moved — and it would happen to every entry anybody so much as corrects a typo on.
+    public var isProjectExplicit: Bool
+
     public var tagSlugs: [String]
 
     /// Who this stretch was spent with.
@@ -147,10 +156,12 @@ public struct TimeEntrySnapshot: Sendable, Hashable, Identifiable {
         itemKind: ItemKind? = nil,
         projectID: UUID? = nil,
         projectTitle: String? = nil,
+        isProjectExplicit: Bool = false,
         tagSlugs: [String] = [],
         people: [TimeParticipant] = [],
         focusRounds: Int = 0
     ) {
+        self.isProjectExplicit = isProjectExplicit
         self.id = id
         self.startedAt = startedAt
         self.endedAt = endedAt

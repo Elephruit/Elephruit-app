@@ -209,6 +209,7 @@ extension TimeEntry {
             itemKind: item?.kind,
             projectID: project?.id,
             projectTitle: project?.displayTitle,
+            isProjectExplicit: self.project != nil,
             tagSlugs: tagSlugs,
             people: participants,
             focusRounds: focusRounds

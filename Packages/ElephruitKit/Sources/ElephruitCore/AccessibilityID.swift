@@ -109,6 +109,25 @@ public enum AccessibilityID {
         public static let discardButton = "time.discard"
 
         public static let groupingToggle = "time.groupSimilar"
+        public static let projectPicker = "time.project"
+        public static let peoplePicker = "time.people"
+
+        // Focus cycles.
+        public static let focusButton = "time.focus"
+        public static let focusStrip = "time.focus.strip"
+        public static let focusPause = "time.focus.pause"
+        public static let focusSkip = "time.focus.skip"
+        public static let focusEnd = "time.focus.end"
+        public static let focusBanner = "time.focus.banner"
+
+        // Reports.
+        public static let reportRoot = "time.report"
+        public static let reportPeriodPicker = "time.report.period"
+        public static let reportRoundingPicker = "time.report.rounding"
+        public static let reportExportButton = "time.report.export"
+        public static let reportChart = "time.report.chart"
+
+        public static func reportRow(key: String) -> String { "time.report.row.\(key)" }
 
         // Idle.
         public static let idleBanner = "time.idle"
