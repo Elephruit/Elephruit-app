@@ -4,7 +4,7 @@ import ElephruitModel
 import ElephruitPersistence
 import SwiftUI
 
-/// Everything between the title and the buttons of a Quick Jot, wherever it is being shown.
+/// Everything between the edges of a Quick Jot card, wherever it is being shown.
 ///
 /// ### Why this is one view rather than two
 /// Quick Jot has two doors: a floating panel for when Elephruit is not what you are looking at, and
@@ -16,10 +16,18 @@ import SwiftUI
 /// What differs between the two is genuinely only what surrounds this: a panel is a window and a
 /// sheet is not, they save through different objects, and they dismiss differently. All of that is
 /// passed in.
+///
+/// ### The shape of the card
+/// A title, some notes, the chips for whatever has been decided, and a footer saying where it is
+/// going. In that order, because that is the order somebody thinks in: what it is, then what else
+/// there is to say about it, then which shelf it goes on.
+///
+/// The grammar hints stay visible throughout. They are the only thing in the card that teaches the
+/// keyboard path, and a hint that disappears at the first keystroke is a hint nobody has read yet.
 struct CaptureComposer: View {
     @Environment(\.services) private var services
 
-    @Binding var text: String
+    @Binding var composition: QuickJotComposition
 
     /// The most recent failure, if the caller keeps one. A sheet that dismisses on success has
     /// nowhere to show a failure and passes `nil`; the panel stays open and shows it.
@@ -30,9 +38,14 @@ struct CaptureComposer: View {
     var onSave: () -> Void
     var onCancel: () -> Void
 
+    /// Which field has the keyboard. `nil` means neither, which is what a click on a chip leaves
+    /// behind and what the icon menus take.
+    private enum Field: Hashable { case title, notes }
+
     @State private var caret = 0
     @State private var suggestions: [String] = []
     @State private var selection = 0
+    @FocusState private var focus: Field?
 
     /// The project and person names the grammar may spell out without quotes.
     ///
@@ -40,43 +53,75 @@ struct CaptureComposer: View {
     /// user types, and it is consulted for every word of every token.
     @State private var vocabulary: CaptureVocabulary = .empty
 
-    private var draft: CaptureDraft { CaptureParser.parse(text, knowing: vocabulary) }
+    /// Tag colours, so a chip here is the same colour as the same tag in a list.
+    @State private var tagColors: [String: String] = [:]
 
     private var completion: CaptureCompletion? {
-        CaptureCompletion.active(in: text, caretAt: caret)
+        CaptureCompletion.active(in: composition.titleText, caretAt: caret)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-            CaptureTextField(
-                text: $text,
+        VStack(alignment: .leading, spacing: 0) {
+            content
+            Divider()
+            footer
+        }
+        .onChange(of: completion) { refreshSuggestions() }
+        // Keyed on the change token rather than run once, because the panel outlives any single
+        // capture: a project created after it was first opened must still be nameable in it.
+        .task(id: services?.changeToken) {
+            refreshLibraryFacts()
+            // After the names, not before. The suggestion list is drawn from them, and an empty
+            // vocabulary on the first pass is a panel that offers nothing until you type twice.
+            refreshSuggestions()
+        }
+        .onAppear { focus = .title }
+    }
+
+    // MARK: - The card
+
+    /// ### Why nothing sits to the left of the title
+    /// The note/task control started here, as a checkbox in front of the first character. That is
+    /// the conventional place for one, and it was wrong here for a reason the convention does not
+    /// have to answer: where every captured item is a to-do, the box is decoration. Ours is a
+    /// *choice*, and an unlabelled glyph that silently changes what you are creating is the wrong
+    /// way to offer one. See ``CaptureKindToggle``.
+    ///
+    /// It also pushed the caret inward. An empty field showed a symbol, a gap, and then an insertion
+    /// point floating in the middle of the card with the placeholder starting underneath it — so the
+    /// first thing the panel did was make you work out where you were about to type. The title now
+    /// begins at the card's edge, and the choice is in the footer with the other choices, wearing a
+    /// word.
+    private var content: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            CaptureTitleField(
+                composition: $composition,
                 caret: $caret,
                 vocabulary: vocabulary,
+                placeholder: composition.draft.kind == .task ? "New To-Do" : "New Note",
                 onSubmit: onSave,
                 onCancel: onCancel,
+                onMoveToNotes: { focus = .notes },
                 onMove: { direction in moveSelection(direction) },
-                onAccept: { acceptSuggestion() }
+                onAccept: { acceptSuggestion() },
+                onRemoveLastChip: { removeLastChip() }
             )
-            .frame(minHeight: 78, maxHeight: 130)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                    .fill(Theme.Colors.contentBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                    .strokeBorder(Theme.Colors.separator)
-            )
+            .frame(height: 26)
+            .focused($focus, equals: .title)
             .accessibilityIdentifier(AccessibilityID.QuickCapture.textField)
             .accessibilityLabel("What would you like to capture?")
 
+            CaptureNotesField(text: $composition.notesText, onCancel: onCancel)
+                .focused($focus, equals: .notes)
+
             if !suggestions.isEmpty {
                 suggestionList
-            } else if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                interpretation
             }
 
-            // Always. See ``CaptureGrammarHints`` for why this does not disappear at the first
-            // keystroke the way it used to.
+            if !composition.draft.isEmpty {
+                CaptureChipRow(draft: $composition.draft, tagColors: tagColors)
+            }
+
             CaptureGrammarHints(hints: CaptureParser.grammarHints)
 
             if let error {
@@ -85,90 +130,8 @@ struct CaptureComposer: View {
                     .foregroundStyle(Theme.Colors.unresolvedLink)
                     .lineLimit(2)
             }
-
-            Divider()
-
-            footer
         }
-        .task(id: completion) { await refreshSuggestions() }
-        // Keyed on the change token rather than run once, because the panel outlives any single
-        // capture: a project created after it was first opened must still be nameable in it.
-        .task(id: services?.changeToken) { refreshVocabulary() }
-    }
-
-    private func refreshVocabulary() {
-        guard let services else { return }
-        vocabulary = (try? services.capture.vocabulary()) ?? .empty
-    }
-
-    // MARK: - Interpretation
-
-    /// What the parser made of the text, shown before it is committed.
-    ///
-    /// The point of showing it is that the grammar becomes learnable by using it: a mistyped
-    /// `!tomorow` is visible here rather than silently becoming three words of a title.
-    private var interpretation: some View {
-        let parsed = draft
-
-        return HStack(spacing: Theme.Spacing.small) {
-            Label(parsed.kind.displayName, systemImage: parsed.kind.symbolName)
-                .foregroundStyle(Theme.Colors.secondaryText)
-
-            if !parsed.tagSlugs.isEmpty {
-                TagChipRow(slugs: parsed.tagSlugs, limit: 3)
-            }
-
-            if let project = parsed.projectHint {
-                let resolved = resolvedProject(named: project)
-                Label(project, systemImage: "square.stack.3d.up")
-                    .foregroundStyle(resolved == nil ? Theme.Colors.unresolvedLink : Theme.Colors.secondaryText)
-                    .help(
-                        resolved == nil
-                            ? "No project with this name — the capture will go to the Inbox"
-                            : project
-                    )
-            }
-
-            if let due = parsed.dueInterpretation {
-                Label(due.summary, systemImage: "calendar")
-                    .foregroundStyle(Theme.Colors.secondaryText)
-            }
-
-            // Deliberately a different glyph from the deadline. The two dates mean opposite things
-            // and a shared icon would be the interface conflating what the grammar separates.
-            if let follow = parsed.followDate {
-                Label(follow.summary, systemImage: "arrow.trianglehead.counterclockwise")
-                    .foregroundStyle(Theme.Colors.secondaryText)
-            }
-
-            if let priority = parsed.priority, priority != .normal {
-                Label(priority.displayName, systemImage: "flag")
-                    .foregroundStyle(Theme.Colors.secondaryText)
-            }
-
-            if parsed.url != nil {
-                Image(systemName: "link")
-                    .foregroundStyle(Theme.Colors.secondaryText)
-            }
-
-            Spacer()
-        }
-        .font(Theme.Text.metadata)
-        .lineLimit(1)
-        .accessibilityIdentifier(AccessibilityID.QuickCapture.interpretation)
-        .accessibilityLabel(interpretationDescription(parsed))
-    }
-
-    private func interpretationDescription(_ parsed: CaptureDraft) -> String {
-        var parts = ["Will create a \(parsed.kind.displayName.lowercased())"]
-        if !parsed.tagSlugs.isEmpty { parts.append("tagged \(parsed.tagSlugs.joined(separator: ", "))") }
-        if let project = parsed.projectHint { parts.append("in \(project)") }
-        if let due = parsed.dueInterpretation { parts.append("due \(due.summary)") }
-        if let follow = parsed.followDate { parts.append("coming back \(follow.summary)") }
-        if let priority = parsed.priority, priority != .normal {
-            parts.append("\(priority.displayName.lowercased()) priority")
-        }
-        return parts.joined(separator: ", ")
+        .padding(Theme.Spacing.large)
     }
 
     // MARK: - Completions
@@ -206,15 +169,20 @@ struct CaptureComposer: View {
     @discardableResult
     private func acceptSuggestion() -> Bool {
         guard let completion, suggestions.indices.contains(selection) else { return false }
-        let applied = completion.applying(suggestions[selection], to: text, caretAt: caret)
-        text = applied.text
+        let applied = completion.applying(suggestions[selection], to: composition.titleText, caretAt: caret)
+        composition.titleText = applied.text
         caret = applied.caret
         suggestions = []
         return true
     }
 
-    private func refreshSuggestions() async {
-        guard let completion, let services else {
+    /// What the caret is part-way through naming.
+    ///
+    /// Every lookup goes through ``CaptureSuggestionSource``, which is also what the icon menus use,
+    /// so the list under the field and the list in the popover cannot come to disagree about which
+    /// people there are.
+    private func refreshSuggestions() {
+        guard let completion else {
             suggestions = []
             return
         }
@@ -224,22 +192,13 @@ struct CaptureComposer: View {
 
         switch completion.trigger {
         case .tag:
-            let slugs = ((try? services.tags.allTags()) ?? [])
-                .map(\.slug)
-                .filter { query.isEmpty || $0.hasPrefix(query.lowercased()) }
-            suggestions = Array(slugs.prefix(6))
+            suggestions = source.tagSlugs(matching: query, limit: 6)
 
-        case .person, .project:
-            // The same index-backed lookup that already backs `[[` completion in the editor.
-            let titles = await services.search.titleSuggestions(prefix: query, limit: 12)
-            let kinds: Set<ItemKind> = completion.trigger == .person
-                ? [.person]
-                : [.project, .area, .goal]
-            let matches = titles
-                .compactMap { try? services.items.item(id: $0.id) }
-                .filter { kinds.contains($0.kind) }
-                .map(\.title)
-            suggestions = Array(matches.prefix(6))
+        case .person:
+            suggestions = source.people(matching: query, limit: 6)
+
+        case .project:
+            suggestions = source.containers(matching: query, limit: 6)
 
         case .dueDate, .followDate:
             let examples = NaturalDateParser.recognisedExamples
@@ -248,15 +207,53 @@ struct CaptureComposer: View {
         }
     }
 
+    // MARK: - Chips
+
+    /// Backspace against the left edge of an empty title takes back the last thing decided.
+    ///
+    /// The words are deliberately **not** put back. Somebody pressing Backspace where there is
+    /// nothing to delete is reaching for the last thing they did, not asking for `due:friday` to
+    /// reappear in the middle of a sentence they have since finished writing.
+    private func removeLastChip() -> Bool {
+        var draft = composition.draft
+
+        if let priority = draft.priority, priority.symbolName != nil {
+            draft.setPriority(nil)
+        } else if draft.dueDate != nil {
+            draft.setDue(nil)
+        } else if draft.followDate != nil {
+            draft.setFollow(nil)
+        } else if let last = draft.personHints.last {
+            draft.removePerson(last)
+        } else if let last = draft.tagSlugs.last {
+            draft.removeTag(last)
+        } else {
+            return false
+        }
+
+        composition.draft = draft
+        return true
+    }
+
     // MARK: - Footer
 
     private var footer: some View {
-        HStack {
-            Text(suggestions.isEmpty ? "Saved to Inbox unless a project is named." : "Tab accepts · ↑↓ chooses")
-                .font(Theme.Text.metadata)
-                .foregroundStyle(Theme.Colors.tertiaryText)
+        HStack(spacing: Theme.Spacing.medium) {
+            CaptureKindToggle(draft: $composition.draft)
+
+            CaptureDestinationButton(
+                draft: $composition.draft,
+                source: source,
+                onBeforeChoosing: settleWhatWasTyped
+            )
 
             Spacer()
+
+            CaptureActionRow(
+                draft: $composition.draft,
+                source: source,
+                onBeforeChoosing: settleWhatWasTyped
+            )
 
             Button("Cancel", action: onCancel)
                 .keyboardShortcut(.cancelAction)
@@ -265,26 +262,39 @@ struct CaptureComposer: View {
             Button("Save", action: onSave)
                 .keyboardShortcut(.return, modifiers: .command)
                 .buttonStyle(.borderedProminent)
-                .disabled(draft.isEmpty || isSaving)
+                .disabled(composition.isEmpty || isSaving)
                 .accessibilityIdentifier(AccessibilityID.QuickCapture.saveButton)
         }
+        .padding(.horizontal, Theme.Spacing.large)
+        .padding(.vertical, Theme.Spacing.medium)
+        .background(Theme.Colors.subtleFill)
     }
 
-    /// Only for the live interpretation line — resolution for the *save* happens in the service.
-    private func resolvedProject(named hint: String) -> Item? {
-        guard let services else { return nil }
-        return try? services.capture.resolveContainer(named: hint)
+    private var source: CaptureSuggestionSource {
+        CaptureSuggestionSource(services: services)
     }
-}
 
-/// The title strip both doors share.
-struct CaptureComposerHeader: View {
-    var body: some View {
-        HStack {
-            Label("Quick Jot", systemImage: "square.and.pencil")
-                .font(.system(.headline, design: .default, weight: .medium))
-            Spacer()
-            KeyHint("⌘", "↩")
-        }
+    /// Turns anything typed but unsettled into a chip, before a click adds one of its own.
+    ///
+    /// Without this, `due:friday` left sitting in the sentence would be lifted later and would
+    /// overwrite a date picked from the menu afterwards — because a lift is treated as the more
+    /// recent act, and by the clock it would be. Settling first puts the two in the order they
+    /// actually happened.
+    private func settleWhatWasTyped() {
+        composition.flush(knowing: vocabulary)
+        suggestions = []
+    }
+
+    // MARK: - What the library knows
+
+    private func refreshLibraryFacts() {
+        guard let services else { return }
+        vocabulary = (try? services.capture.vocabulary()) ?? .empty
+        tagColors = Dictionary(
+            ((try? services.tags.allTags()) ?? []).compactMap { tag in
+                tag.colorName.map { (tag.slug, $0) }
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
     }
 }

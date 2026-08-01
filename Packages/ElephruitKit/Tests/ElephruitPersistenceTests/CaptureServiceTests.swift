@@ -201,6 +201,24 @@ struct CaptureServiceTests {
         #expect(try fixture.items.items(matching: .everything()).isEmpty)
     }
 
+    /// The draft path deliberately does **not** repeat the check above, and that asymmetry is easy to
+    /// mistake for an oversight and "fix", so it is pinned here.
+    ///
+    /// A caller holding a `CaptureDraft` has usually already decided there is something in it — the
+    /// text path builds one by parsing and checks on the way. A composer that assembles a draft from
+    /// chips and fields has not, so `AppServices.captureDraft` checks before calling this. Adding a
+    /// second guard here would make an empty draft indistinguishable from a failed one at a layer
+    /// that has no way to tell the caller which it was.
+    @Test("An empty draft is written, because refusing it is the caller's job")
+    func emptyDraftIsNotTheServicesToRefuse() throws {
+        let fixture = try StoreFixture()
+        let service = makeService(fixture)
+
+        let item = try service.capture(CaptureDraft())
+        #expect(item.title.isEmpty)
+        #expect(try fixture.items.items(matching: .everything()).count == 1)
+    }
+
     // MARK: - Names with spaces
 
     /// The bug this addresses, end to end: `>Elephruit App` filed under a project called
