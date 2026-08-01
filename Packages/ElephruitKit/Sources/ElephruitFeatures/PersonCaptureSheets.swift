@@ -22,10 +22,10 @@ enum PersonNoteCategory: String, CaseIterable, Sendable, Hashable {
 
     var tint: Color {
         switch self {
-        case .general: .blue
+        case .general: Theme.Palette.blue.color
         case .personal: Theme.Colors.personalDetail
         case .work: Theme.Colors.workDetail
-        case .idea: .orange
+        case .idea: Theme.Palette.orange.color
         }
     }
 
@@ -277,7 +277,7 @@ struct LogInteractionSheet: View {
                         title: "Tasks",
                         detail: "Next steps from this interaction",
                         symbol: "checkmark.circle.fill",
-                        tint: .blue,
+                        tint: Theme.Palette.blue.color,
                         text: $draft.followUps,
                         field: .followUps,
                         prompt: "One task per line"
@@ -304,7 +304,7 @@ struct LogInteractionSheet: View {
         HStack(spacing: Theme.Spacing.medium) {
             Image(systemName: draft.kind.symbolName)
                 .font(.system(size: 23, weight: .semibold))
-                .foregroundStyle(.purple)
+                .foregroundStyle(Theme.Palette.purple.color)
                 .frame(width: 44, height: 44)
                 .background(Theme.Colors.captureAccent.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
 
