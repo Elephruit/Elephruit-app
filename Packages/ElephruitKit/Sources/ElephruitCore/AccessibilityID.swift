@@ -122,6 +122,7 @@ public enum AccessibilityID {
 
         // The app, collapsed to the clock.
         public static let miniTimer = "time.mini"
+        public static let miniTimerMenu = "time.mini.menu"
         public static let miniTimerPin = "time.mini.pin"
         public static let miniTimerExpand = "time.mini.expand"
         public static let miniTimerCompact = "time.mini.compact"
