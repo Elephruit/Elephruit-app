@@ -78,20 +78,6 @@ struct LiveDuration: View {
     }
 }
 
-// MARK: - Measure
-
-extension View {
-    /// Caps a log row at the module's measure and keeps it left-aligned.
-    ///
-    /// The same reason the tracker is capped: a row whose description sits at the far left and whose
-    /// total sits at the far right of a wide screen has to be read across two feet of nothing, and
-    /// joining the two by eye is the only thing anybody does with a log.
-    func measuredRow() -> some View {
-        frame(maxWidth: TimeView.measure, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
 // MARK: - Day header
 
 /// The header over one day of the log, and what that day came to.
@@ -150,6 +136,12 @@ struct TimeEntryGroupRow: View {
     let group: TimeEntryGroup
     let isExpanded: Bool
     let isEditing: Bool
+
+    /// Whether the keyboard is on this row.
+    ///
+    /// The controls appear on hover *or* here, so the pointer and the keyboard reach the same set of
+    /// actions. Hiding them behind hover alone made every correction in this log a mouse-only one.
+    var isCurrent: Bool = false
 
     let onToggleExpanded: () -> Void
     let onResume: () -> Void
@@ -253,34 +245,57 @@ struct TimeEntryGroupRow: View {
             // Because a double-click is not an affordance. Every entry in this log can be corrected
             // in place — the subject, the people, the tags, the clock times — and none of that is
             // worth having if the only way to reach it is a gesture nobody is told about. A pencil
-            // on hover costs nothing when the pointer is elsewhere and answers the question the
-            // moment it arrives. The double-click still works, and so does the context menu.
-            Button(action: onEdit) {
-                Image(systemName: "pencil")
-            }
-            .buttonStyle(.plain)
-            .rowForeground(.secondary)
-            .opacity(isHovering ? 1 : 0)
-            .help("Edit this entry")
-            .accessibilityLabel("Edit")
-            .accessibilityIdentifier(AccessibilityID.Time.editRowButton)
+            // costs nothing when the pointer is elsewhere and answers the question the moment it
+            // arrives. The double-click still works, and so does the context menu.
+            //
+            // ### And why deleting is here rather than only in the context menu
+            // Because a context menu is the one place a right-click-averse user never looks, and
+            // "remove this" is not an advanced operation on a log of guesses about yesterday. It is
+            // the last control in the cluster, quiet rather than red, and what it does is offered
+            // straight back — see `TimeView.delete(_:describing:)`.
+            // The cluster fades as one. Three controls appearing separately as the pointer crossed
+            // them would be three events where there is one, and the row would visibly reflow.
+            HStack(spacing: Theme.Spacing.small) {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                }
+                .buttonStyle(.plain)
+                .rowForeground(.secondary)
+                .help("Edit this entry")
+                .accessibilityLabel("Edit")
+                .accessibilityIdentifier(AccessibilityID.Time.editRowButton)
 
-            Button(action: onResume) {
-                Image(systemName: "play.circle")
+                Button(action: onResume) {
+                    Image(systemName: "play.circle")
+                }
+                .buttonStyle(.plain)
+                .rowForeground(.secondary)
+                .help("Continue this")
+                .accessibilityLabel("Continue")
+
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.plain)
+                .rowForeground(.secondary)
+                .help(group.isSingle ? "Delete this entry" : "Delete all \(group.count) of these")
+                .accessibilityLabel(group.isSingle ? "Delete" : "Delete all \(group.count)")
+                .accessibilityIdentifier(AccessibilityID.Time.deleteRowButton)
             }
-            .buttonStyle(.plain)
-            .rowForeground(.secondary)
-            .help("Continue this")
-            .accessibilityLabel("Continue")
+            // Held in the layout while hidden, so nothing shifts when the pointer arrives, and
+            // never hidden from VoiceOver or from the keyboard — an `opacity(0)` control that is
+            // still in the focus order is a focus stop nobody can see, which is worse than either
+            // showing it or removing it.
+            .opacity(isHovering || isCurrent ? 1 : 0)
+            .accessibilityHidden(false)
         }
         .frame(minHeight: Theme.Size.rowHeightExpanded)
         .contentShape(.rect)
         .onHover { isHovering = $0 }
         .calmAnimation(value: isHovering)
         .onTapGesture(count: 2, perform: onEdit)
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityDescription)
-        .accessibilityAddTraits(.isButton)
     }
 
     /// The second line: everything true of the row that is not its title.
@@ -376,8 +391,13 @@ struct TimeEntryGroupRow: View {
 struct TimeEntryRow: View {
     @Environment(\.services) private var services
 
+    @State private var isHovering = false
+
     let entry: TimeEntrySnapshot
     let isEditing: Bool
+
+    /// Whether the keyboard is on this row — see ``TimeEntryGroupRow/isCurrent``.
+    var isCurrent: Bool = false
 
     let onEdit: () -> Void
     let onCommit: (TimeEntryEdit) -> Void
@@ -431,14 +451,38 @@ struct TimeEntryRow: View {
                 countsSeconds: entry.isRunning
             )
             .rowForeground(.secondary)
+            .frame(width: 64, alignment: .trailing)
+
+            // The same two controls the group row carries, in the same place, so a stretch inside an
+            // expanded group is corrected the way the row above it is rather than by remembering
+            // that this one needs a right-click.
+            HStack(spacing: Theme.Spacing.small) {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                }
+                .buttonStyle(.plain)
+                .rowForeground(.secondary)
+                .help("Edit this stretch")
+                .accessibilityLabel("Edit")
+
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.plain)
+                .rowForeground(.secondary)
+                .help("Delete this stretch")
+                .accessibilityLabel("Delete")
+            }
+            .opacity(isHovering || isCurrent ? 1 : 0)
         }
         .padding(.leading, Theme.Spacing.section)
         .frame(minHeight: Theme.Size.rowHeight)
         .contentShape(.rect)
+        .onHover { isHovering = $0 }
+        .calmAnimation(value: isHovering)
         .onTapGesture(count: 2, perform: onEdit)
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("\(timeRange), \(TimeFormatting.spelled(entry.duration()))")
-        .accessibilityAddTraits(.isButton)
     }
 
     private var timeRange: String {
