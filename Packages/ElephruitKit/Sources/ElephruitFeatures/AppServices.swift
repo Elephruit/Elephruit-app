@@ -130,6 +130,7 @@ public final class AppServices {
     public private(set) var recentlyViewedPeople: [UUID] = []
 
     public func noteViewed(person: Item) {
+        guard recentlyViewedPeople.first != person.id else { return }
         recentlyViewedPeople.removeAll { $0 == person.id }
         recentlyViewedPeople.insert(person.id, at: 0)
         if recentlyViewedPeople.count > 12 {
