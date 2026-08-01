@@ -106,6 +106,15 @@ public struct RootView: View {
                 shellWithBanner
             }
         }
+        // Above every screen in the window, in the corner nothing else uses. See
+        // ``FloatingTimerView`` — the sidebar row it duplicates is only present while the Time
+        // module's sidebar is, and a timer must not vanish because somebody opened Tasks.
+        .overlay(alignment: .bottomTrailing) {
+            FloatingTimerView {
+                navigation.select(.time)
+                navigation.timeSurface = .log
+            }
+        }
         .environment(navigation)
         .swipeActionCoordinator(swipes)
         // Changing what is selected puts away anything a row was offering. The actions were about
