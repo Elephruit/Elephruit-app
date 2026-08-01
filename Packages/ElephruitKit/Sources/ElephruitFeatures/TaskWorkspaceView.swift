@@ -28,6 +28,14 @@ struct TaskWorkspaceView: View {
     @State private var draftTitle = ""
     @State private var draftSectionID: String?
     @State private var pendingLinkedDeletion: Item?
+
+    /// The one task whose row is currently a card.
+    ///
+    /// One rather than a set, deliberately. Two cards open at once would be two editors competing
+    /// for Escape and for the debounced write, and the reason to open one is to work on it — which
+    /// is a thing you do to one task at a time.
+    @State private var editingTaskID: UUID?
+
     @FocusState private var isDraftFocused: Bool
 
     var body: some View {
@@ -36,6 +44,10 @@ struct TaskWorkspaceView: View {
             .navigationSubtitle(subtitle)
             .toolbar { toolbarContent }
             .task(id: reloadToken) { reload() }
+            // A card is open *in a list*. Changing which list you are looking at closes it, because
+            // the row it was is no longer on screen and an editor with no row under it is a detail
+            // pane by another name.
+            .onChange(of: navigation.selection) { _, _ in editingTaskID = nil }
             .background { linkedDeletionDialog }
             // ⌫ on the selection, which is what somebody tries before they find any menu.
             .onDeleteCommand { trashSelection() }
@@ -83,6 +95,24 @@ struct TaskWorkspaceView: View {
         .listStyle(.inset)
         .alternatingRowBackgrounds(.disabled)
         .safeAreaInset(edge: .bottom, spacing: 0) { batchBar }
+        // Return on the selection, which is the way through the list without the mouse. A focused
+        // field inside the open card consumes Return before this sees it, so the guard is belt and
+        // braces rather than the mechanism.
+        .onKeyPress(.return) {
+            guard editingTaskID == nil,
+                  navigation.selectedItemIDs.count == 1,
+                  let id = navigation.selectedItemIDs.first,
+                  let task = tasksByID[id]
+            else { return .ignored }
+            open(task)
+            return .handled
+        }
+        // Arrowing away from an open card closes it, on the same terms as clicking another row: the
+        // card is an editor for the selected task, so a card for a task that is no longer selected
+        // is a second answer to "which one am I looking at".
+        .onChange(of: navigation.selectedItemIDs) { _, selection in
+            if let id = editingTaskID, !selection.contains(id) { editingTaskID = nil }
+        }
     }
 
     private func row(for task: Item) -> some View {
@@ -90,9 +120,29 @@ struct TaskWorkspaceView: View {
             task: task,
             showsContainer: showsContainer,
             isSelected: navigation.selectedItemIDs.contains(task.id),
-            onToggle: { toggle(task) }
+            isEditing: editingTaskID == task.id,
+            navigation: navigation,
+            onToggle: { toggle(task) },
+            onChange: reload,
+            onClose: { editingTaskID = nil }
         )
         .tag(task.id)
+        // ### The three ways in
+        // A click on a row that is already selected, Return on the selection, or a double-click.
+        // The first is the one people find by accident and then keep using; the second is the one
+        // that makes the list usable without the mouse; the third is what everybody tries first.
+        //
+        // A single click on an *unselected* row deliberately only selects it. Opening on first click
+        // would mean arrowing through a list left a trail of cards behind it, and the list would
+        // stop being something you can scan.
+        .onTapGesture {
+            if navigation.selectedItemIDs == [task.id] {
+                open(task)
+            } else {
+                navigation.selectedItemIDs = [task.id]
+            }
+        }
+        .onTapGesture(count: 2) { open(task) }
         .contextMenu { TaskContextMenu(task: task, navigation: navigation, onChange: reload) }
         // Every one of these is on the context menu too, and reachable from the keyboard. A gesture
         // is a shortcut for something that must already be possible without it.
@@ -512,6 +562,16 @@ struct TaskWorkspaceView: View {
         navigation.selectedItemIDs = []
         pendingLinkedDeletion = targets.first { $0.syncState != .local }
         reload()
+    }
+
+    /// Opens a task's card, closing whichever one was open.
+    ///
+    /// Closing the previous one is what makes "clicking another row closes this one" true without a
+    /// dismissal gesture: the click that opens the next card is the same click that closes this one,
+    /// and `TaskCard` flushes its pending write on the way out.
+    private func open(_ task: Item) {
+        navigation.selectedItemIDs = [task.id]
+        editingTaskID = task.id
     }
 
     private func toggle(_ task: Item) {

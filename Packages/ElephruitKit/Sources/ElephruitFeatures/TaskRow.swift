@@ -28,9 +28,37 @@ struct TaskRow: View {
     /// Whether the row is the one the detail pane is showing.
     var isSelected = false
 
+    /// Whether this row is currently the open card.
+    ///
+    /// ### Why a row and a card are one view rather than two
+    /// Because they are one object in two states, and the list has to be able to tell that. Two
+    /// sibling views swapped by the parent would mean the row's identity changed at the moment of
+    /// opening — and `List` reads identity to decide what to animate, what stays selected, and what
+    /// a drag is carrying. Swapping the *body* keeps the row the same row, which is what makes the
+    /// rows below simply move down.
+    ///
+    /// The same shape ``TimeEntryGroupRow`` uses for the tracker's editable rows.
+    var isEditing = false
+
+    let navigation: NavigationModel
+
     var onToggle: () -> Void
 
+    /// Called after the card writes something the list should redraw for.
+    var onChange: () -> Void = {}
+
+    /// Called when the card asks to close.
+    var onClose: () -> Void = {}
+
     var body: some View {
+        if isEditing {
+            TaskCard(task: task, navigation: navigation, onChange: onChange, onClose: onClose)
+        } else {
+            summary
+        }
+    }
+
+    private var summary: some View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
             completionControl
 
@@ -55,38 +83,13 @@ struct TaskRow: View {
 
     // MARK: - Completion
 
-    /// A restrained control, sized to the text rather than to a fingertip.
+    /// The same control the card draws, so it neither moves nor changes size on opening.
     ///
     /// The satisfying part of ticking something off is that it happens immediately; an animation
     /// that delays the next action is the opposite of satisfying. So the fill changes with the
-    /// standard motion and nothing waits for it.
+    /// standard motion and nothing waits for it. See ``TaskCompletionControl``.
     private var completionControl: some View {
-        Button(action: onToggle) {
-            Image(systemName: symbolName)
-                .font(.system(size: 13))
-                .rowTint(controlColor)
-                .contentTransition(.symbolEffect(.replace))
-        }
-        .buttonStyle(.plain)
-        .calmAnimation(value: task.status)
-        .accessibilityLabel(task.status == .completed ? "Mark incomplete" : "Mark complete")
-        .accessibilityIdentifier("task.toggle.\(task.id.uuidString)")
-    }
-
-    private var symbolName: String {
-        switch task.status {
-        case .completed: "checkmark.circle.fill"
-        case .cancelled: "xmark.circle"
-        default: task.isFlagged ? "circle.dotted.circle" : "circle"
-        }
-    }
-
-    private var controlColor: Color {
-        switch task.status {
-        case .completed: Theme.Colors.completed
-        case .cancelled: Theme.Colors.tertiaryText
-        default: Theme.Colors.secondaryText
-        }
+        TaskCompletionControl(task: task, onToggle: onToggle)
     }
 
     // MARK: - Title

@@ -116,6 +116,7 @@ struct UpcomingAgendaView: View {
                     task: task,
                     showsContainer: true,
                     isSelected: navigation.selectedItemIDs.contains(task.id),
+                    navigation: navigation,
                     onToggle: { toggle(task) }
                 )
             }
@@ -280,7 +281,13 @@ struct TodayPlanningSection: View {
         Section {
             ForEach(suggestions, id: \.id) { task in
                 HStack(spacing: Theme.Spacing.small) {
-                    TaskRow(task: task, showsContainer: true, isSelected: false, onToggle: { complete(task) })
+                    TaskRow(
+                        task: task,
+                        showsContainer: true,
+                        isSelected: false,
+                        navigation: navigation,
+                        onToggle: { complete(task) }
+                    )
 
                     Button("Today") { commit(task) }
                         .buttonStyle(.borderless)
