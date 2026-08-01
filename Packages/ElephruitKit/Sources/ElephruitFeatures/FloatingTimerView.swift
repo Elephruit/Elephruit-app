@@ -368,6 +368,14 @@ struct MiniTimerView: View {
     /// The pending open or close, so the next hover can cancel it.
     @State private var menuTask: Task<Void, Never>?
 
+    /// The gap the card keeps from the window's edge, for its shadow to fall into.
+    ///
+    /// Named rather than written twice, because it is measured in two places — once as padding and
+    /// once as the difference between the card's size and the window's — and two spellings of it
+    /// that drift apart produce a window smaller than the thing drawn in it, which does not look
+    /// like a sizing mistake at all. It looks like the card has no bottom.
+    private static let shadowRoom = Theme.Spacing.small
+
     /// Long enough that a pointer crossing the dots on its way somewhere else does not open them,
     /// short enough that a pointer that stopped on them is not left waiting.
     private static let openDelay = Duration.milliseconds(180)
@@ -444,13 +452,16 @@ struct MiniTimerView: View {
             GeometryReader { proxy in
                 Color.clear
                     .onChange(of: proxy.size, initial: true) { _, size in
-                        // The reader is inside the padding that holds the card off the window edge,
-                        // so that padding is added back: what the panel is being told is how big its
-                        // *window* has to be, not how big the card is.
+                        // The reader is inside the room the card keeps from the window's edge, so
+                        // that room is added back here: what the panel is being told is how big its
+                        // *window* has to be, not how big the card is. Both sides of that come from
+                        // ``shadowRoom`` rather than from two spellings of the same token, because a
+                        // window one point smaller than what is drawn in it does not look like a
+                        // sizing mistake — it looks like the card has no bottom.
                         controller.contentSizeChanged(
                             to: CGSize(
-                                width: size.width + 2 * Theme.Spacing.small,
-                                height: size.height + 2 * Theme.Spacing.small
+                                width: size.width + 2 * Self.shadowRoom,
+                                height: size.height + 2 * Self.shadowRoom
                             )
                         )
                     }
@@ -465,7 +476,7 @@ struct MiniTimerView: View {
         // whole way rather than sliding open with a square edge.
         .frame(maxWidth: .infinity, alignment: .trailing)
         .modifier(FloatingCard(tint: tint, depth: .panel))
-        .padding(Theme.Spacing.small)
+        .padding(Self.shadowRoom)
         // Only *leaving* the pill is the pill's business. Arriving anywhere on it means nothing,
         // which is the whole point of the dots; but once the menu is open the pointer has to be
         // free to travel from the dots to the buttons without the thing closing under it.
