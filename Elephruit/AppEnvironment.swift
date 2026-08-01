@@ -273,7 +273,24 @@ final class AppEnvironment {
 
         hotKeyResults[.newEvent] = eventResult
 
-        for outcome in [result, eventResult] {
+        // Starting to time something, from anywhere.
+        //
+        // A third global shortcut on the same terms as the other two, and the one with the strongest
+        // claim of the three: a timer is wanted *at the moment work begins*, which is by definition a
+        // moment somebody is looking at the work rather than at this app. Every second spent
+        // switching to Elephruit to press Start is a second the entry is already wrong by, and the
+        // reason people give up on time tracking is that the cost of starting exceeds the value of
+        // the number. See ``QuickLogController``.
+        let timerResult = hotKeys.register(
+            .quickLog,
+            binding: services.shortcuts.binding(for: .quickLog)
+        ) { [weak services] in
+            services?.quickLog.show()
+        }
+
+        hotKeyResults[.quickLog] = timerResult
+
+        for outcome in [result, eventResult, timerResult] {
             if let explanation = outcome.explanation {
                 Diagnostics.shell.info("Global shortcut not taken: \(explanation, privacy: .public)")
             }

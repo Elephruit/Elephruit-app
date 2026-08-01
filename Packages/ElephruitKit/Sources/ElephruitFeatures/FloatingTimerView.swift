@@ -272,10 +272,50 @@ struct FloatingTimerView: View {
 /// Shared so the overlaid widget and the panel cannot drift apart, and so the "one of each" rule
 /// `decorationDoesNotAccumulate` enforces is satisfied in a single place rather than twice.
 struct FloatingCard: ViewModifier {
+    /// How far off the surface behind it the card is meant to read.
+    ///
+    /// ### Why this is not one value
+    /// Because the two cards have different amounts of room, and the difference is not a matter of
+    /// taste. Overlaid on a window there is a whole screen behind the shadow and sixteen points of
+    /// padding for it to fall into. Inside the panel there are **eight**, and the window is the size
+    /// of its contents — so a shadow reaching fourteen points below the card was cut off square by
+    /// the edge of the window and drew a grey smear under the pill rather than depth. It also moved
+    /// as the panel resized, which is a shadow drawing attention to itself: the exact opposite of
+    /// the job.
+    enum Depth {
+        /// Floating over a window's content.
+        case overlay
+        /// A window of its own, with only its padding to cast into.
+        case panel
+
+        var radius: CGFloat {
+            switch self {
+            case .overlay: 10
+            case .panel: 3
+            }
+        }
+
+        var offset: CGFloat {
+            switch self {
+            case .overlay: 4
+            case .panel: 1
+            }
+        }
+
+        var opacity: Double {
+            switch self {
+            case .overlay: 0.18
+            case .panel: 0.12
+            }
+        }
+    }
+
     let tint: Color
 
-    /// `false` inside the mini panel, which supplies all three itself.
+    /// `false` inside the embedded copy, whose surrounding panel supplies all three itself.
     var isEnabled = true
+
+    var depth: Depth = .overlay
 
     func body(content: Content) -> some View {
         if isEnabled {
@@ -284,11 +324,16 @@ struct FloatingCard: ViewModifier {
                     RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                         .fill(Theme.Colors.contentBackground)
                 )
+                // Clipped to its own shape, so contents wider than the card are cut by the card's
+                // rounded edge rather than spilling past it. That is what turns the panel's opening
+                // into a reveal: the row inside is at its full width throughout, and the card
+                // widening is what lets you see it.
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                         .strokeBorder(tint.opacity(0.35))
                 }
-                .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
+                .shadow(color: .black.opacity(depth.opacity), radius: depth.radius, y: depth.offset)
         } else {
             content
         }
@@ -312,24 +357,26 @@ struct MiniTimerView: View {
     let controller: MiniTimerController
 
     /// Whether the window controls are showing.
+    ///
+    /// ### Why only a click changes this
+    /// It used to open on hover after a beat as well, and close on its own a grace period after the
+    /// pointer left. Both are gone, and the reason is that a *click* could not then mean one thing.
+    /// Resting on the dots for a fifth of a second opened the drawer, so a click that arrived after
+    /// that closed it again and a click that beat it opened it — the same gesture, on the same
+    /// control, doing opposite things depending on how fast the hand was. Then the auto-close would
+    /// fire on its own somewhere in the middle of that and change the answer again.
+    ///
+    /// The dots are a button. Pressing them shows the controls, pressing them again hides the
+    /// controls, and nothing else on this surface touches them.
     @State private var isMenuOpen = false
 
-    /// Whether they are showing because somebody clicked the dots rather than hovered them.
+    /// The gap the card keeps from the window's edge, for its shadow to fall into.
     ///
-    /// Clicked open, they stay open until clicked shut. A menu that evaporated the moment the
-    /// pointer wandered off would be one you have to keep re-opening to press two things in it.
-    @State private var isMenuPinned = false
-
-    /// The pending open or close, so the next hover can cancel it.
-    @State private var menuTask: Task<Void, Never>?
-
-    /// Long enough that a pointer crossing the dots on its way somewhere else does not open them,
-    /// short enough that a pointer that stopped on them is not left waiting.
-    private static let openDelay = Duration.milliseconds(180)
-
-    /// The grace after the pointer leaves. Covers the gap between the pill and whatever the pointer
-    /// clipped on the way past, so a hand that overshoots by two points does not lose the menu.
-    private static let closeDelay = Duration.milliseconds(320)
+    /// Named rather than written twice, because it is measured in two places — once as padding and
+    /// once as the difference between the card's size and the window's — and two spellings of it
+    /// that drift apart produce a window smaller than the thing drawn in it, which does not look
+    /// like a sizing mistake at all. It looks like the card has no bottom.
+    private static let shadowRoom = Theme.Spacing.small
 
     /// Red while tracking, amber while paused, quiet when neither — so the panel says which of the
     /// three it is before any of the words are read.
@@ -357,8 +404,24 @@ struct MiniTimerView: View {
         // pointer never moves out from under it.
         HStack(spacing: Theme.Spacing.small) {
             if isMenuOpen {
+                // ### Why the width does not animate, and only this does
+                // The width is the window's, and a window cannot be animated here without something
+                // outside SwiftUI's control having to agree about when the animation is over. Three
+                // ways of arranging that agreement have now been tried — animating the window itself,
+                // waiting a fixed time, and asking the animation to report back — and each one traded
+                // the previous problem for a worse one: a slide that stuttered as the window
+                // uncovered undrawn strips of itself, then a drawer that would not shut when the
+                // wait was cancelled, then a click that did nothing at all until the deferred work
+                // was finally serviced. What they have in common is that the geometry was made to
+                // depend on something arriving later.
+                //
+                // Nothing arrives later now. The row measures itself during the same update as the
+                // click, the window is set to that size in the same update, and the press is over.
+                // The softening is opacity, which is not geometry: it animates or it does not, and
+                // either way the size is already right. The one thing this surface cannot afford is
+                // to be uncertain about how wide it is.
                 windowControls
-                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+                    .transition(.opacity.animation(Theme.Motion.appearance))
             }
 
             menuButton
@@ -376,20 +439,43 @@ struct MiniTimerView: View {
         }
         .padding(.vertical, Theme.Spacing.small)
         .padding(.horizontal, Theme.Spacing.medium)
-        .modifier(FloatingCard(tint: tint))
-        .padding(Theme.Spacing.small)
         .fixedSize()
-        // Only *leaving* the pill is the pill's business. Arriving anywhere on it means nothing,
-        // which is the whole point of the dots; but once the menu is open the pointer has to be
-        // free to travel from the dots to the buttons without the thing closing under it.
-        .onHover { inside in
-            if !inside { scheduleClose() }
+        // ### Why the size is reported from in here rather than measured from outside
+        // The panel is sized by hand, and asking the hosting view how big it wants to be got the
+        // answer for the *previous* contents every time — see `contentSizeChanged(to:)`. This says
+        // how big the row is, at the moment it is that big, and the window is set to match within
+        // the same update. Measured: the report is synchronous with the click, so the window has
+        // finished resizing before the press has finished being handled.
+        //
+        // It has to sit exactly here: below the `.fixedSize()`, so what it measures is the width the
+        // row *wants*, and above the frame that fills the window, so it is not reading back the
+        // width of the window it is inside — which the window is being sized from, and which would
+        // therefore settle at whatever width it happened to start at.
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onChange(of: proxy.size, initial: true) { _, size in
+                        // The reader is inside the room the card keeps from the window's edge, so
+                        // that room is added back here: what the panel is being told is how big its
+                        // *window* has to be, not how big the card is. Both sides of that come from
+                        // ``shadowRoom`` rather than from two spellings of the same token, because a
+                        // window one point smaller than what is drawn in it does not look like a
+                        // sizing mistake — it looks like the card has no bottom.
+                        controller.contentSizeChanged(
+                            to: CGSize(
+                                width: size.width + 2 * Self.shadowRoom,
+                                height: size.height + 2 * Self.shadowRoom
+                            )
+                        )
+                    }
+            }
         }
-        .calmAnimation(value: isMenuOpen)
-        // The panel is sized by hand, so it has to be told when the contents change shape.
-        .onChange(of: isMenuOpen) { _, _ in controller.contentSizeChanged() }
-        .onChange(of: controller.isCompact) { _, _ in controller.contentSizeChanged() }
-        .onDisappear { menuTask?.cancel() }
+        .modifier(FloatingCard(tint: tint, depth: .panel))
+        .padding(Self.shadowRoom)
+        // Held against the right, which is the edge that never moves. The window is the card's own
+        // size, so there is normally nothing for this to do — but a window that is briefly larger
+        // than its contents must not centre them, or the pill would drift sideways as it resized.
+        .frame(maxWidth: .infinity, alignment: .trailing)
         .accessibilityIdentifier(AccessibilityID.Time.miniTimer)
     }
 
@@ -398,10 +484,10 @@ struct MiniTimerView: View {
     /// ### Why it is three dots and not one of the buttons
     /// Because it has to be legible as *there is more here* without being a fourth thing competing
     /// with Pause, Restart and Stop — and the vertical ellipsis is the one mark that says exactly
-    /// that and nothing else. Hovering it opens the menu after a beat; clicking it opens the menu
-    /// and leaves it open, for the times you want to change the width *and* pin it.
+    /// that and nothing else. Pressing it shows the controls and pressing it again hides them; see
+    /// ``isMenuOpen`` for why hovering no longer does anything at all.
     private var menuButton: some View {
-        Button(action: toggleMenu) {
+        Button { isMenuOpen.toggle() } label: {
             // Turned on its side rather than named vertically, because SF Symbols has no vertical
             // ellipsis to name — and the rotation is exact, so nothing is lost by asking for it.
             Image(systemName: "ellipsis")
@@ -412,58 +498,10 @@ struct MiniTimerView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(isMenuOpen ? Theme.Colors.primaryText : Theme.Colors.secondaryText)
-        .onHover { inside in
-            if inside { scheduleOpen() } else { cancelPendingOpen() }
-        }
         .help("Size, keep on top, and back to Elephruit")
         .accessibilityLabel("Window options")
+        .accessibilityValue(isMenuOpen ? "showing" : "hidden")
         .accessibilityIdentifier(AccessibilityID.Time.miniTimerMenu)
-    }
-
-    // MARK: - Opening and closing
-
-    /// Opens after a beat, unless the pointer has moved on by then.
-    private func scheduleOpen() {
-        guard !isMenuOpen else { return }
-
-        menuTask?.cancel()
-        menuTask = Task { @MainActor in
-            try? await Task.sleep(for: Self.openDelay)
-            guard !Task.isCancelled else { return }
-            isMenuOpen = true
-        }
-    }
-
-    /// Drops a pending open when the pointer leaves the dots again.
-    ///
-    /// Without this the delay only moves the problem: a pointer crossing the dots on its way to Stop
-    /// asked for nothing, and would still have the menu arrive on top of it a fifth of a second later.
-    private func cancelPendingOpen() {
-        guard !isMenuOpen else { return }
-        menuTask?.cancel()
-    }
-
-    /// Closes after a grace, unless it was clicked open or the pointer comes back.
-    private func scheduleClose() {
-        menuTask?.cancel()
-        guard isMenuOpen, !isMenuPinned else { return }
-
-        menuTask = Task { @MainActor in
-            try? await Task.sleep(for: Self.closeDelay)
-            guard !Task.isCancelled else { return }
-            isMenuOpen = false
-        }
-    }
-
-    /// A click is the deliberate version of the hover: it opens immediately and stays.
-    ///
-    /// Clicking an already-open menu shuts it, whether it was opened by a click or by resting on the
-    /// dots — the dots are the control for the menu, and a control that only works one way is a
-    /// control somebody presses twice wondering why nothing happened.
-    private func toggleMenu() {
-        menuTask?.cancel()
-        isMenuPinned = !isMenuOpen
-        isMenuOpen = isMenuPinned
     }
 
     /// Shuts the menu outright, for the one control on it that puts the panel away.
@@ -471,8 +509,6 @@ struct MiniTimerView: View {
     /// The panel is hidden rather than destroyed, so without this a menu left open — or worse,
     /// clicked open — would still be open the next time somebody collapsed the app.
     private func closeMenu() {
-        menuTask?.cancel()
-        isMenuPinned = false
         isMenuOpen = false
     }
 
@@ -495,9 +531,14 @@ struct MiniTimerView: View {
             Button {
                 controller.isCompact.toggle()
             } label: {
+                // A button shows what pressing it will do, not what state it is in — the rule the
+                // start/stop button on an item already follows. Compact, this widens: arrows apart.
+                // Wide, this narrows: arrows together. They were the other way round, so the one
+                // control on the panel whose meaning is carried entirely by its glyph was saying the
+                // opposite of what it did.
                 Image(systemName: controller.isCompact
-                    ? "arrow.right.and.line.vertical.and.arrow.left"
-                    : "arrow.left.and.line.vertical.and.arrow.right")
+                    ? "arrow.left.and.line.vertical.and.arrow.right"
+                    : "arrow.right.and.line.vertical.and.arrow.left")
                     .font(Theme.Text.metadata)
                     .frame(width: 22, height: 22)
                     .contentShape(.rect)

@@ -14,10 +14,11 @@ public struct ShortcutSettingsSection: View {
 
     /// The commands offered to the whole system, in the order they appear.
     ///
-    /// Two, and both create something. A global shortcut is worth the collision risk only when the
-    /// thing it does is wanted *while you are in another application*, which is true of capturing a
-    /// thought and of putting a meeting in the calendar and true of almost nothing else.
-    private static let globalCommands: [ShortcutCommand] = [.quickCapture, .newEvent]
+    /// Three, and all three create something. A global shortcut is worth the collision risk only
+    /// when the thing it does is wanted *while you are in another application* — which is true of
+    /// capturing a thought, of putting a meeting in the calendar, of starting the clock on work as
+    /// it begins, and true of almost nothing else.
+    private static let globalCommands: [ShortcutCommand] = [.quickCapture, .quickLog, .newEvent]
 
     public init(
         registry: ShortcutRegistry,
@@ -59,8 +60,8 @@ public struct ShortcutSettingsSection: View {
             Text("Shortcuts")
         } footer: {
             Text(
-                "Quick Jot and New Event work from any app. Elephruit asks the system for these "
-                    + "keys and does not require the Accessibility permission."
+                "Quick Jot, Quick Log and New Event work from any app. Elephruit asks the system "
+                    + "for these keys and does not require the Accessibility permission."
             )
             .font(Theme.Text.metadata)
             .foregroundStyle(Theme.Colors.tertiaryText)
