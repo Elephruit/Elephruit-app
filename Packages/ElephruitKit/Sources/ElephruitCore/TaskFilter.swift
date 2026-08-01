@@ -80,6 +80,48 @@ public enum TaskRule: Sendable, Hashable, Codable {
     /// Matched against the folded title and notes.
     case text(String)
 
+    // MARK: Project workspace
+    //
+    // These are rules, not a second filter engine, and that is the decision worth defending. A
+    // board column, a table, a bug list and a saved smart list all ask the same question of the
+    // same facts. Two engines would be two copies of every subtlety — and it means "every critical
+    // bug across the whole library" is something the existing smart-list editor can already build.
+
+    /// Which kinds of work — task, bug, feature.
+    case kind(Set<ItemKind>)
+
+    /// Sitting in one specific board column.
+    case workflowStage(UUID)
+
+    /// Sitting in any column of these categories. Survives a column being renamed or replaced,
+    /// which `workflowStage` does not.
+    case stageCategory(Set<WorkflowStageCategory>)
+
+    case assignee(UUID)
+
+    /// Nobody has taken it.
+    case unassigned
+
+    case blocked(Bool)
+
+    case milestone(UUID)
+    case release(UUID)
+
+    /// **Never matches an item with no severity.** A rule asking for critical bugs that swept in
+    /// every task in the project would be worse than useless: it would look like it worked.
+    case severity(Set<BugSeverity>)
+
+    case regression(Bool)
+
+    case hasEstimate(Bool)
+
+    /// Tracked time has passed the estimate.
+    case overEstimate
+
+    /// A custom field holds this value. Compared against ``MetadataValue/comparableString``, not the
+    /// display string, so the match does not depend on the reader's locale.
+    case customField(name: String, equals: String)
+
     /// A rule this build does not understand, preserved so editing a smart list written by a newer
     /// version does not destroy it.
     case unrecognised(name: String)
@@ -147,6 +189,34 @@ public enum TaskRule: Sendable, Hashable, Codable {
             value ? "Has subtasks" : "Has no subtasks"
         case .text(let text):
             "Mentions “\(text)”"
+
+        case .kind(let kinds):
+            "Type is " + kinds.map(\.displayName).sorted().formatted(.list(type: .or))
+        case .workflowStage:
+            "In a particular stage"
+        case .stageCategory(let categories):
+            "Stage is " + categories.map(\.displayName).sorted().formatted(.list(type: .or))
+        case .assignee:
+            "Assigned to a particular person"
+        case .unassigned:
+            "Nobody assigned"
+        case .blocked(let value):
+            value ? "Blocked" : "Not blocked"
+        case .milestone:
+            "Aimed at a particular milestone"
+        case .release:
+            "Part of a particular release"
+        case .severity(let severities):
+            "Severity is " + severities.map(\.displayName).sorted().formatted(.list(type: .or))
+        case .regression(let value):
+            value ? "Is a regression" : "Is not a regression"
+        case .hasEstimate(let value):
+            value ? "Has an estimate" : "Has no estimate"
+        case .overEstimate:
+            "Over its estimate"
+        case .customField(let name, let value):
+            "\(name) is “\(value)”"
+
         case .unrecognised(let name):
             "Unknown condition (\(name))"
         }
@@ -311,6 +381,38 @@ public struct TaskFilter: Sendable, Hashable, Codable {
             let folded = TextNormalizer.foldedForMatching(text)
             return folded.isEmpty || facts.searchText.contains(folded)
 
+        case .kind(let kinds):
+            return kinds.contains(facts.kind)
+        case .workflowStage(let id):
+            return facts.workflowStageID == id
+        case .stageCategory(let categories):
+            guard let category = facts.stageCategory else { return false }
+            return categories.contains(category)
+        case .assignee(let id):
+            return facts.assigneeID == id
+        case .unassigned:
+            return facts.assigneeID == nil
+        case .blocked(let value):
+            return facts.isBlocked == value
+        case .milestone(let id):
+            return facts.milestoneID == id
+        case .release(let id):
+            return facts.releaseID == id
+        case .severity(let severities):
+            // No severity is not a match, ever. See the case's own note: a rule asking for critical
+            // bugs must not quietly return every task in the project.
+            guard let severity = facts.severity else { return false }
+            return severities.contains(severity)
+        case .regression(let value):
+            return facts.isRegression == value
+        case .hasEstimate(let value):
+            return (facts.estimateMinutes != nil) == value
+        case .overEstimate:
+            guard let estimate = facts.estimateMinutes, estimate > 0 else { return false }
+            return facts.trackedMinutes > estimate
+        case .customField(let name, let value):
+            return facts.customFields[name]?.comparableString == value
+
         case .unrecognised:
             return false
         }
@@ -461,6 +563,7 @@ public struct BuiltInSmartList: Sendable, Hashable, Identifiable {
 extension TaskRule {
     private enum CodingKeys: String, CodingKey {
         case name, states, value, days, id, slug, text, priorities, source, syncStates
+        case kinds, categories, severities, field
     }
 
     private var discriminator: String {
@@ -495,6 +598,19 @@ extension TaskRule {
         case .repeating: "repeating"
         case .hasSubtasks: "hasSubtasks"
         case .text: "text"
+        case .kind: "kind"
+        case .workflowStage: "workflowStage"
+        case .stageCategory: "stageCategory"
+        case .assignee: "assignee"
+        case .unassigned: "unassigned"
+        case .blocked: "blocked"
+        case .milestone: "milestone"
+        case .release: "release"
+        case .severity: "severity"
+        case .regression: "regression"
+        case .hasEstimate: "hasEstimate"
+        case .overEstimate: "overEstimate"
+        case .customField: "customField"
         case .unrecognised(let name): name
         }
     }
@@ -510,15 +626,26 @@ extension TaskRule {
             try container.encode(values.map(\.rawValue).sorted(), forKey: .priorities)
         case .syncState(let states):
             try container.encode(states.map(\.rawValue).sorted(), forKey: .syncStates)
+        case .kind(let kinds):
+            try container.encode(kinds.map(\.rawValue).sorted(), forKey: .kinds)
+        case .stageCategory(let categories):
+            try container.encode(categories.map(\.rawValue).sorted(), forKey: .categories)
+        case .severity(let severities):
+            try container.encode(severities.map(\.rawValue).sorted(), forKey: .severities)
+        case .customField(let name, let value):
+            try container.encode(name, forKey: .field)
+            try container.encode(value, forKey: .value)
         case .flagged(let value), .hasDeadline(let value), .hasStartDate(let value),
              .hasReminder(let value), .hasAttachments(let value), .repeating(let value),
-             .hasSubtasks(let value):
+             .hasSubtasks(let value), .blocked(let value), .regression(let value),
+             .hasEstimate(let value):
             try container.encode(value, forKey: .value)
         case .deadlineWithin(let days), .startsWithin(let days),
              .completedWithin(let days), .createdWithin(let days):
             try container.encode(days, forKey: .days)
         case .area(let id), .project(let id), .list(let id), .section(let id),
-             .relatedPerson(let id), .waitingOnPerson(let id):
+             .relatedPerson(let id), .waitingOnPerson(let id), .workflowStage(let id),
+             .assignee(let id), .milestone(let id), .release(let id):
             try container.encode(id, forKey: .id)
         case .tag(let slug):
             try container.encode(slug, forKey: .slug)
@@ -527,7 +654,7 @@ extension TaskRule {
         case .source(let kind):
             try container.encode(kind.rawValue, forKey: .source)
         case .committedToToday, .waiting, .overdue, .hasNoDate, .unfiled,
-             .linkedToAnyPerson, .syncNeedsAttention, .unrecognised:
+             .linkedToAnyPerson, .syncNeedsAttention, .unassigned, .overEstimate, .unrecognised:
             break
         }
     }
@@ -557,6 +684,27 @@ extension TaskRule {
         case "hasAttachments": self = .hasAttachments(try bool())
         case "repeating": self = .repeating(try bool())
         case "hasSubtasks": self = .hasSubtasks(try bool())
+        case "blocked": self = .blocked(try bool())
+        case "regression": self = .regression(try bool())
+        case "hasEstimate": self = .hasEstimate(try bool())
+        case "unassigned": self = .unassigned
+        case "overEstimate": self = .overEstimate
+        case "kind":
+            let raws = try container.decodeIfPresent([String].self, forKey: .kinds) ?? []
+            self = .kind(Set(raws.compactMap(ItemKind.init(rawValue:))))
+        case "stageCategory":
+            let raws = try container.decodeIfPresent([String].self, forKey: .categories) ?? []
+            self = .stageCategory(Set(raws.compactMap(WorkflowStageCategory.init(rawValue:))))
+        case "severity":
+            let raws = try container.decodeIfPresent([String].self, forKey: .severities) ?? []
+            self = .severity(Set(raws.compactMap(BugSeverity.init(rawValue:))))
+        case "customField":
+            guard let field = try container.decodeIfPresent(String.self, forKey: .field) else {
+                self = .unrecognised(name: name)
+                return
+            }
+            let value = try container.decodeIfPresent(String.self, forKey: .value) ?? ""
+            self = .customField(name: field, equals: value)
         case "deadlineWithin": self = .deadlineWithin(days: try days())
         case "startsWithin": self = .startsWithin(days: try days())
         case "completedWithin": self = .completedWithin(days: try days())
@@ -575,7 +723,8 @@ extension TaskRule {
         case "source":
             let raw = try container.decodeIfPresent(String.self, forKey: .source) ?? ""
             self = SourceKind(rawValue: raw).map { TaskRule.source($0) } ?? .unrecognised(name: name)
-        case "area", "project", "list", "section", "relatedPerson", "waitingOnPerson":
+        case "area", "project", "list", "section", "relatedPerson", "waitingOnPerson",
+             "workflowStage", "assignee", "milestone", "release":
             guard let id = try identifier() else { self = .unrecognised(name: name); return }
             self = switch name {
             case "area": .area(id)
@@ -583,6 +732,10 @@ extension TaskRule {
             case "list": .list(id)
             case "section": .section(id)
             case "relatedPerson": .relatedPerson(id)
+            case "workflowStage": .workflowStage(id)
+            case "assignee": .assignee(id)
+            case "milestone": .milestone(id)
+            case "release": .release(id)
             default: .waitingOnPerson(id)
             }
         default:
