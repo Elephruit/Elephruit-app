@@ -76,9 +76,55 @@ struct ModuleLayoutTests {
     func contactListStaysCompact() {
         let bounds = AppModule.people.shellLayout.primary
 
-        #expect(bounds.ideal == 300)
-        #expect(bounds.maximum == 380)
+        #expect(bounds.ideal == 280)
+        #expect(bounds.maximum == 340)
         #expect(bounds.ideal < AppModule.people.shellLayout.detail.width.ideal)
+    }
+
+    /// The complaint this answers: the list was excessively wide, the profile was cramped, and the
+    /// pane on the far right took a permanent slice of both.
+    @Test("A person's profile is the column that takes the spare width")
+    func theProfileIsTheFlexibleColumn() {
+        let layout = AppModule.people.shellLayout
+
+        // No ceiling, which is what makes it the column the shell settles last and hands the
+        // remainder to. Every other column in the module is firmly bounded.
+        #expect(layout.detail.width.maximum == nil)
+        #expect(layout.primary.maximum != nil)
+        #expect(layout.inspector.width.maximum != nil)
+
+        let wide = layout.widths(
+            windowWidth: 2400,
+            sidebarWidth: 208,
+            userWantsInspector: true,
+            hasSelection: true
+        )
+
+        let profile = wide.detail ?? 0
+        #expect(wide.primary <= layout.primary.maximum ?? 0)
+        #expect(profile > wide.primary * 3, "the list is claiming room the profile needs")
+        #expect(profile > (wide.inspector ?? 0) * 3)
+        #expect(wide.total == 2400, "a column short of the window leaves a strip of nothing")
+    }
+
+    @Test("The inspector does not open itself every time a name is clicked")
+    func theInspectorIsContextual() {
+        let inspector = AppModule.people.shellLayout.inspector
+
+        // It hides when nothing is selected *and* declines to reappear on the next selection. Both
+        // are needed: `hidesWhenNothingSelected` alone made every click reopen a pane the user had
+        // closed twenty names ago, which is a fourth column with a dismiss button.
+        #expect(inspector.hidesWhenNothingSelected)
+        #expect(inspector.opensAfterSelection == false)
+        #expect(inspector.shouldOpenAfterSelection() == false)
+
+        // And it is not offered at all until the profile already has room. Below this the
+        // arithmetic can satisfy every minimum and still leave the main content the narrowest
+        // thing on the screen.
+        #expect(
+            inspector.isVisible(userWants: true, hasSelection: true, windowWidth: 1200) == false
+        )
+        #expect(inspector.isVisible(userWants: true, hasSelection: true, windowWidth: 1400))
     }
 
     @Test("Every module's widths are independent")
@@ -982,12 +1028,18 @@ struct RoomToSpareTests {
 
 @Suite("Room to spare, per module")
 struct RoomToSpareByModuleTests {
-    /// Every document module, in a wide window, with nothing stored. Each should reach its own
-    /// declared list ceiling — the number the module chose — rather than sitting at its ideal with
-    /// the slack piled behind the detail pane.
+    /// Every document module whose detail pane has a ceiling, in a wide window, with nothing stored.
+    /// Each should reach its own declared list ceiling — the number the module chose — rather than
+    /// sitting at its ideal with the slack piled behind the detail pane.
+    ///
+    /// People is absent, and deliberately. The rule exists because *something* has to absorb the
+    /// remainder when every column has a maximum, and a list growing to a bound it chose is better
+    /// than a strip of nothing beside a divider. People's profile column has no maximum, so it
+    /// absorbs the remainder by construction and the list has no reason to grow at all — which is
+    /// the better answer, and the one `theProfileIsTheFlexibleColumn` holds instead.
     @Test(
         "Each document module fills its list to its own ceiling",
-        arguments: [AppModule.notes, .tasks, .people, .projects, .bookmarks, .archive, .trash]
+        arguments: [AppModule.notes, .tasks, .projects, .bookmarks, .archive, .trash]
     )
     func eachModuleReachesItsCeiling(module: AppModule) throws {
         let layout = module.shellLayout
