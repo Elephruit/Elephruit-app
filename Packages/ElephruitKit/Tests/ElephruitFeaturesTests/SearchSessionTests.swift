@@ -214,4 +214,109 @@ struct SearchSessionTests {
         #expect(session.lastError != nil)
         #expect(session.results.isEmpty)
     }
+
+    // MARK: - Keyboard traversal
+
+    /// Three results the traversal tests can walk, in a known on-screen order.
+    private func sessionWithResults() async -> SearchSessionModel {
+        let engine = ScriptedSearchEngine()
+        engine.responses["launch"] = [
+            result("Launch plan", kind: .note, score: 3),
+            result("Launch checklist", kind: .note, score: 2),
+            result("Launch the thing", kind: .task, score: 1),
+        ]
+        let session = makeSession(engine)
+        session.text = "launch"
+        await settle(session)
+        return session
+    }
+
+    @Test("The first press down lands on the best match, so one keystroke reaches it")
+    func firstDownHighlightsFirstResult() async {
+        let session = await sessionWithResults()
+        #expect(session.highlightedID == nil)
+
+        let landed = session.moveHighlight(by: 1)
+
+        #expect(landed?.id == session.orderedResults.first?.id)
+        #expect(session.highlightedResult?.id == session.orderedResults.first?.id)
+    }
+
+    @Test("The first press up lands on the last result")
+    func firstUpHighlightsLastResult() async {
+        let session = await sessionWithResults()
+
+        let landed = session.moveHighlight(by: -1)
+
+        #expect(landed?.id == session.orderedResults.last?.id)
+    }
+
+    @Test("The highlight walks the flattened order, across the group boundary")
+    func highlightWalksAcrossGroups() async {
+        let session = await sessionWithResults()
+        let ordered = session.orderedResults
+        #expect(ordered.count == 3)
+
+        session.moveHighlight(by: 1)
+        session.moveHighlight(by: 1)
+        session.moveHighlight(by: 1)
+
+        // The third result is a task and the first two are notes, so arriving there at all means the
+        // traversal crossed a section header rather than stopping at the end of the first group.
+        #expect(session.highlightedID == ordered[2].id)
+        #expect(ordered[2].item.kind == .task)
+    }
+
+    @Test("The highlight clamps at both ends rather than wrapping and losing the user's place")
+    func highlightClamps() async {
+        let session = await sessionWithResults()
+        let ordered = session.orderedResults
+
+        for _ in 0..<10 { session.moveHighlight(by: 1) }
+        #expect(session.highlightedID == ordered.last?.id)
+
+        for _ in 0..<10 { session.moveHighlight(by: -1) }
+        #expect(session.highlightedID == ordered.first?.id)
+    }
+
+    @Test("A highlight is dropped when the results it pointed into are replaced")
+    func highlightIsDroppedWhenResultsChange() async throws {
+        let engine = ScriptedSearchEngine()
+        engine.responses["launch"] = [result("Launch plan")]
+        engine.responses["migration"] = [result("Migration runbook")]
+        let session = makeSession(engine)
+
+        session.text = "launch"
+        await settle(session)
+        session.moveHighlight(by: 1)
+        #expect(session.highlightedID != nil)
+
+        session.text = "migration"
+        await settle(session)
+
+        // Otherwise the next arrow press starts from a row that is no longer on screen.
+        #expect(session.highlightedID == nil)
+        #expect(session.highlightedResult == nil)
+    }
+
+    @Test("Moving the highlight with nothing to move through does nothing rather than crashing")
+    func highlightWithNoResults() async {
+        let engine = ScriptedSearchEngine()
+        let session = makeSession(engine)
+        session.text = "nothing here"
+        await settle(session)
+
+        #expect(session.moveHighlight(by: 1) == nil)
+        #expect(session.highlightedID == nil)
+    }
+
+    @Test("Clearing the session clears the highlight with it")
+    func clearDropsHighlight() async {
+        let session = await sessionWithResults()
+        session.moveHighlight(by: 1)
+
+        session.clear()
+
+        #expect(session.highlightedID == nil)
+    }
 }

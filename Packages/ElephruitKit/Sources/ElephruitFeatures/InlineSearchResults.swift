@@ -18,6 +18,9 @@ struct InlineSearchResults: View {
 
     let session: SearchSessionModel
     let listTitle: String
+    /// Show this result, without taking focus away from the results.
+    let onHighlight: (SearchResult) -> Void
+    /// Show this result *and* move into it.
     let onOpen: (SearchResult) -> Void
     let onSave: () -> Void
 
@@ -117,26 +120,30 @@ struct InlineSearchResults: View {
             EmptyStateView(
                 symbolName: "magnifyingglass",
                 headline: "No matches",
-                message: "Nothing matches \(session.explanation).",
+                // `explanation` is a subtitle fragment — "matching “pricing”" — written to sit under
+                // the field. Interpolated after a verb it read "Nothing matches matching “pricing”."
+                message: "Nothing in your library is \(session.explanation).",
                 tone: .noResults
             )
         }
     }
 
+    /// The results, as a list the keyboard can walk.
+    ///
+    /// A `List` with a selection binding, rather than a stack of `Button`s. Buttons are reachable
+    /// only by clicking: the arrow keys had nothing to move between, so a search could be typed from
+    /// the keyboard and then only finished with the mouse. The binding is the session's highlight, so
+    /// the same value serves the arrow keys, the click, and the row that draws itself as current.
     private var resultsList: some View {
-        List {
+        List(selection: highlightBinding) {
             ForEach(session.groups) { group in
                 Section {
                     ForEach(group.results) { result in
-                        Button {
-                            onOpen(result)
-                        } label: {
-                            SearchResultRow(
-                                result: result,
-                                dateProvider: services?.dateProvider ?? SystemDateProvider()
-                            )
-                        }
-                        .buttonStyle(.plain)
+                        SearchResultRow(
+                            result: result,
+                            dateProvider: services?.dateProvider ?? SystemDateProvider()
+                        )
+                        .tag(result.id)
                     }
                 } header: {
                     SectionHeader(group.kind.pluralDisplayName, count: group.results.count)
@@ -145,6 +152,30 @@ struct InlineSearchResults: View {
         }
         .listStyle(.inset)
         .alternatingRowBackgrounds(.disabled)
+        // Return opens what the arrows landed on and hands focus to the detail pane. Selecting a row
+        // already shows it there; this is the step that lets the reader stop being a searcher.
+        .onKeyPress(.return) {
+            guard let result = session.highlightedResult else { return .ignored }
+            onOpen(result)
+            return .handled
+        }
+    }
+
+    /// Selection in, highlight out.
+    ///
+    /// Setting the highlight is deliberately *not* the same as opening: a click or an arrow moves the
+    /// highlight and shows the item, and only Return or a double click moves focus. Otherwise the
+    /// second arrow press would be delivered to the detail pane the first one had jumped to.
+    private var highlightBinding: Binding<UUID?> {
+        Binding(
+            get: { session.highlightedID },
+            set: { id in
+                session.highlight(id)
+                if let id, let result = session.orderedResults.first(where: { $0.id == id }) {
+                    onHighlight(result)
+                }
+            }
+        )
     }
 }
 

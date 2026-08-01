@@ -61,6 +61,14 @@ public struct ItemListView: View {
                 Text(navigation.selection.title).tag(SearchScope.thisList)
             }
             .searchFocused($isSearchFieldFocused)
+            // Return in the field opens whatever the traversal is on, so a search begun and walked
+            // from the keyboard can also be finished from it. `onSubmit(of: .search)` rather than
+            // `onKeyPress`: the field lives in the toolbar, which is not in this view's responder
+            // chain, and a key handler here never sees a keystroke typed into it.
+            .onSubmit(of: .search) {
+                guard let result = session?.highlightedResult else { return }
+                open(result)
+            }
             .toolbar { toolbarContent }
             .task { makeSessionIfNeeded() }
             .task(id: reloadToken) { await reload() }
@@ -86,6 +94,7 @@ public struct ItemListView: View {
             InlineSearchResults(
                 session: session,
                 listTitle: navigation.selection.title,
+                onHighlight: preview,
                 onOpen: open,
                 onSave: { pendingSavedSearchName = defaultSavedSearchName(for: session) }
             )
@@ -521,6 +530,16 @@ public struct ItemListView: View {
         navigation.selectItem(result.item.id)
         navigation.focus(.detail)
     }
+
+    /// Shows a result without leaving the results.
+    ///
+    /// What the arrow keys do. ``open(_:)`` is what Return does, and the difference between them is
+    /// the whole reason arrowing through results works: moving focus on every keystroke would
+    /// deliver the *next* arrow press to the detail pane.
+    private func preview(_ result: SearchResult) {
+        navigation.selectItem(result.item.id)
+    }
+
 
     /// A name proposed from what was typed, so the common case is one Return.
     private func defaultSavedSearchName(for session: SearchSessionModel) -> String {
