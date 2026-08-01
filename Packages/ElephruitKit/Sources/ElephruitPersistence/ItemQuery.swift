@@ -70,22 +70,24 @@ public struct ItemQuery: Sendable, Hashable {
     /// Restrict to children of a particular item.
     public var parentID: UUID?
 
-    /// `true` restricts to items with no parent — the basis of the Inbox.
+    /// `true` restricts to items with no parent.
+    ///
+    /// Used for sibling ordering at the top level. The Inbox no longer builds itself out of this and
+    /// two neighbours — see ``unprocessedCapturesOnly``.
     public var hasNoParent: Bool?
 
-    /// `true` restricts to items carrying no tags. A tag is a home, so a tagged item has been filed.
-    public var requiresNoTags = false
-
-    /// `true` restricts to items not filed under any container.
+    /// `true` restricts to unprocessed captures — the Inbox, asked as one question.
     ///
-    /// Since content is filed by link rather than by containment, a filing is now one of the ways an
-    /// item acquires a home — and without this an item filed under a project would stay in the Inbox
-    /// forever, which is worse than the behaviour it replaced.
-    public var requiresNoFiling = false
-
-    /// `true` restricts to kinds that can meaningfully sit in the Inbox — see
-    /// ``ItemKind/appearsInInbox``.
-    public var inboxEligibleKindsOnly = false
+    /// ### Why one flag replaced four
+    /// It was `hasNoParent`, `requiresNoTags`, `requiresNoFiling` and `inboxEligibleKindsOnly`,
+    /// spelled out here and spelled out a second time inside `CountsWorker.inboxCount()` under a
+    /// comment reading "must match `ItemQuery.inbox()` exactly, or the badge and the list disagree."
+    /// Four clauses kept in step by a comment is four clauses that will not be, and the fifth clause
+    /// — that a reminder synchronised with a list already has a home — would have had to be added in
+    /// both places or the badge really would have said four hundred over an empty list.
+    ///
+    /// Both now ask ``ElephruitModel/Item/isUnprocessedCapture``, which is one sentence in one file.
+    public var unprocessedCapturesOnly = false
 
     /// Whether structural kinds — headings — may appear.
     ///
@@ -122,15 +124,16 @@ public struct ItemQuery: Sendable, Hashable {
 extension ItemQuery {
     /// Unprocessed captures: active, unfiled, untagged, and not a container.
     ///
-    /// An item leaves the Inbox by acquiring a home — a container or a tag. Kinds that are never
-    /// "processed" are excluded outright by ``ItemKind/appearsInInbox``: a top-level project is not an
-    /// unprocessed capture, and a person never becomes one.
+    /// An item leaves the Inbox by acquiring a home — a container, a filing, a tag, or the list in
+    /// another application it is being kept in step with. Kinds that are never "processed" are
+    /// excluded outright by ``ItemKind/appearsInInbox``: a top-level project is not an unprocessed
+    /// capture, and a person never becomes one.
+    ///
+    /// The rule itself lives on ``ElephruitModel/Item/isUnprocessedCapture``, so the list and the
+    /// badge over it cannot disagree.
     public static func inbox() -> ItemQuery {
         var query = ItemQuery()
-        query.hasNoParent = true
-        query.requiresNoTags = true
-        query.requiresNoFiling = true
-        query.inboxEligibleKindsOnly = true
+        query.unprocessedCapturesOnly = true
         query.sort = .createdNewestFirst
         return query
     }
@@ -228,9 +231,7 @@ extension ItemQuery {
             || isFavorite != nil
             || isPinned != nil
             || notDeferredAfter != nil
-            || requiresNoTags
-            || requiresNoFiling
-            || inboxEligibleKindsOnly
+            || unprocessedCapturesOnly
             || (text?.isEmpty == false)
     }
 
@@ -355,16 +356,8 @@ extension ItemQuery {
             }
         }
 
-        if inboxEligibleKindsOnly {
-            result = result.filter { $0.kind.appearsInInbox }
-        }
-
-        if requiresNoTags {
-            result = result.filter { $0.tags.isEmpty }
-        }
-
-        if requiresNoFiling {
-            result = result.filter { $0.filedUnderContainers().isEmpty }
+        if unprocessedCapturesOnly {
+            result = result.filter(\.isUnprocessedCapture)
         }
 
         if !tagSlugs.isEmpty {

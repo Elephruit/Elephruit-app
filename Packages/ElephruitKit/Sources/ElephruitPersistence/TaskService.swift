@@ -258,6 +258,28 @@ public final class TaskService {
         try mutate(task) { $0.isFlagged = isFlagged }
     }
 
+    /// Puts a synchronised task into the Inbox for triage, or takes it back out.
+    ///
+    /// ### Why this needs an action at all
+    /// The Inbox is defined by absences — no container, no filing, no tags — and a reminder kept in
+    /// step with a list in Apple Reminders is filed *there*, which is why it is not in the Inbox by
+    /// default. See ``ElephruitModel/Item/hasHome``. But "I want to deal with that one here" is a
+    /// real thing to want, and the only way to say it in a vocabulary made of absences would be to
+    /// break the link — which would stop the reminder syncing, on somebody's phone, as a side effect
+    /// of them wanting to think about it.
+    ///
+    /// So it is one date, set by this, and it changes nothing else: the link is untouched, the
+    /// reminder is untouched, and the task keeps syncing while it sits in the Inbox. Filing it
+    /// anywhere real clears it, because a task in a project is not an unprocessed capture whatever
+    /// anybody meant last week.
+    ///
+    /// A no-op on a task that is not synchronised: an ordinary local capture with no home is already
+    /// in the Inbox, and one *with* a home should be moved rather than marked.
+    public func setInInbox(_ isInInbox: Bool, on task: Item) throws(AppError) {
+        guard task.isKeptInStepWithAnExternalList else { return }
+        try mutate(task) { $0.inboxedAt = isInInbox ? self.dateProvider.now : nil }
+    }
+
     public func setPriority(_ priority: Priority, on task: Item) throws(AppError) {
         try mutate(task) { $0.priority = priority }
     }

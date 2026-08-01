@@ -134,8 +134,49 @@ extension Item {
     ///
     /// A home is a container, a filing, or a tag — any one of the three. The Inbox means
     /// *unprocessed*, not *unparented*, which is why a tagged capture leaves it.
+    ///
+    /// ### And a list in somebody else's app is a home
+    /// This is the fourth answer, and its absence is what flooded the Inbox.
+    ///
+    /// The Inbox was defined entirely by absences: no parent, no tags, no filing. A reminder brought
+    /// in from Apple Reminders has all three of those absences the instant it is created — see
+    /// `ReminderSyncEngine.importReminder(_:into:)`, which creates a task with no parent and files it
+    /// nowhere, because there is nowhere honest to put it. So nothing *routed* imported reminders
+    /// into the Inbox. They matched its definition by construction, and connecting an account with
+    /// four hundred reminders in it produced four hundred rows of triage the user had already done
+    /// in another app.
+    ///
+    /// But those reminders are filed. They are filed in the list they came from, which is the list
+    /// the user ticked in Settings, and which the app is keeping them in step with. Counting that as
+    /// a home is not a special case bolted onto the Inbox; it is the same sentence the other three
+    /// clauses say, about a container that happens to live in another application.
+    ///
+    /// Both halves are required. `.systemStore` alone would catch a task somebody deliberately
+    /// unlinked — that one lives only here now and has genuinely never been filed. A link alone
+    /// would catch a task captured *here* and then exported to a list, which was an Inbox capture
+    /// before the export and has not been processed by being copied somewhere.
     public var hasHome: Bool {
-        parent != nil || !tags.isEmpty || !filedUnderContainers().isEmpty
+        if parent != nil || !tags.isEmpty || !filedUnderContainers().isEmpty { return true }
+        return isKeptInStepWithAnExternalList && inboxedAt == nil
+    }
+
+    /// Whether this item arrived from a synchronised source and is still being kept in step with it.
+    ///
+    /// The pair, not either half — see ``hasHome``.
+    public var isKeptInStepWithAnExternalList: Bool {
+        source.kind == .systemStore && externalIdentifier != nil
+    }
+
+    /// Whether this item is an unprocessed capture: the Inbox, in one place.
+    ///
+    /// ### Why this is a property of the item rather than three clauses in a query
+    /// Because it was three clauses in a query *and* three clauses in a count, and the count carried
+    /// a comment reading "must match `ItemQuery.inbox()` exactly, or the badge and the list disagree
+    /// — and a badge that says 3 over a list of 2 reads as a bug in the app, not in the query."
+    /// A comment is not a mechanism. This is: both callers ask the same question of the same object,
+    /// so the badge cannot say three over a list of two, and the rule can be changed once.
+    public var isUnprocessedCapture: Bool {
+        kind.appearsInInbox && !hasHome
     }
 
     /// The containers above this item, each identified by what it is rather than by how far up it
