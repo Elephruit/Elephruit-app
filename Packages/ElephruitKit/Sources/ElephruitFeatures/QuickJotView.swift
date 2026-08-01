@@ -138,7 +138,7 @@ struct QuickJotView: View {
             CaptureComposerHeader()
 
             CaptureComposer(
-                text: $controller.text,
+                text: $controller.composition.titleText,
                 error: controller.lastError,
                 onSave: { controller.save() },
                 onCancel: { controller.hide() }

@@ -1,6 +1,7 @@
 import ElephruitCore
 import ElephruitFeatures
 import ElephruitModel
+import ElephruitPersistence
 import Foundation
 import Testing
 
@@ -182,63 +183,124 @@ struct QuickJotControllerTests {
         return (QuickJotController(services: services), services)
     }
 
-    @Test("Saving captures what was typed and clears the field")
+    @Test("Saving captures what was composed and clears everything")
     func savingCaptures() throws {
         let (controller, services) = makeController()
-        controller.text = "Renew the studio insurance #admin"
+        controller.composition.titleText = "Renew the studio insurance #admin"
+        controller.composition.notesText = "The excess went up again"
 
         #expect(controller.save())
-        #expect(controller.text.isEmpty)
+        #expect(controller.composition.titleText.isEmpty)
+        #expect(controller.composition.notesText.isEmpty)
+        #expect(controller.composition.draft.isEmpty)
 
-        let items = try services.items.items(matching: .everything())
-        #expect(items.contains { $0.title == "Renew the studio insurance" })
+        let item = try #require(
+            try services.items.items(matching: .everything())
+                .first { $0.title == "Renew the studio insurance" }
+        )
+        #expect(item.body == "The excess went up again")
+        #expect(item.tags.contains { $0.slug == "admin" })
     }
 
-    @Test("An empty field saves nothing")
+    @Test("An empty composition saves nothing")
     func emptySavesNothing() throws {
         let (controller, services) = makeController()
-        controller.text = "   \n  "
+        controller.composition.titleText = "   "
+        controller.composition.notesText = "  "
 
         #expect(controller.save() == false)
         #expect(try services.items.items(matching: .everything()).isEmpty)
     }
 
-    /// Closing is not discarding. Someone who dismissed by accident should find their sentence
-    /// still there — which is the whole reason the text lives on the controller rather than in the
-    /// view that gets destroyed with the panel.
-    @Test("Hiding keeps the text")
-    func hidingKeepsTheText() {
-        let (controller, _) = makeController()
-        controller.text = "half a thought"
+    /// Chips are not a reason to write a row. An untitled deadline in the Inbox is a puzzle, not a
+    /// capture.
+    @Test("Chips with nothing written save nothing")
+    func chipsAloneSaveNothing() throws {
+        let (controller, services) = makeController()
+        controller.composition.draft.setDue(DateInterpretation(day: .tomorrow))
+        controller.composition.draft.addTag("admin")
 
-        controller.hide()
-        #expect(controller.text == "half a thought")
+        #expect(controller.save() == false)
+        #expect(try services.items.items(matching: .everything()).isEmpty)
     }
 
-    @Test("A successful save is the only thing that clears the field")
+    /// Closing is not discarding. Someone who dismissed by accident should find their sentence still
+    /// there — which is the whole reason this lives on the controller rather than in the view that
+    /// gets destroyed with the panel. There is more at stake now than a sentence: the chips took
+    /// trips through menus to assemble.
+    @Test("Hiding keeps the text and the chips")
+    func hidingKeepsEverything() {
+        let (controller, _) = makeController()
+        controller.composition.titleText = "half a thought"
+        controller.composition.draft.addTag("admin")
+
+        controller.hide()
+        #expect(controller.composition.titleText == "half a thought")
+        #expect(controller.composition.draft.tagSlugs == ["admin"])
+    }
+
+    @Test("A successful save is the only thing that clears the panel")
     func onlySavingClears() {
         let (controller, _) = makeController()
-        controller.text = "something"
+        controller.composition.titleText = "something"
         controller.hide()
         controller.hide()
-        #expect(controller.text == "something")
+        #expect(controller.composition.titleText == "something")
 
         _ = controller.save()
-        #expect(controller.text.isEmpty)
+        #expect(controller.composition.titleText.isEmpty)
     }
 
+    /// The end-to-end promise: a line typed straight into the title still means everything it meant
+    /// before any of this existed, even though not one of its tokens was terminated by a space.
     @Test("The grammar applies through the panel as it does everywhere else")
     func grammarApplies() throws {
         let (controller, services) = makeController()
-        controller.text = "- Call the framer #errand due:tomorrow !high"
+        controller.composition.titleText = "- Call the framer #errand due:tomorrow !high"
 
         #expect(controller.save())
 
         let item = try #require(try services.items.items(matching: .everything()).first)
+        #expect(item.title == "Call the framer")
         #expect(item.kind == .task)
         #expect(item.dueAt != nil)
         #expect(item.priority == .high)
         #expect(item.tags.contains { $0.slug == "errand" })
+    }
+
+    /// Saving flushes first, so a token the user finished but never terminated becomes a chip on the
+    /// way past rather than being left as words in the title.
+    @Test("An unterminated token is still understood at the moment of saving")
+    func savingFlushesFirst() throws {
+        let (controller, services) = makeController()
+        controller.composition.titleText = "Prep the deck due:friday"
+
+        #expect(controller.save())
+
+        let item = try #require(try services.items.items(matching: .everything()).first)
+        #expect(item.title == "Prep the deck")
+        #expect(item.dueAt != nil)
+    }
+
+    /// Chips placed by hand and tokens typed into the sentence are not competing accounts of one
+    /// thing — they have to arrive together, resolved against the real library.
+    @Test("What was clicked and what was typed both reach the saved item")
+    func clickedAndTypedBothLand() throws {
+        let (controller, services) = makeController()
+        let project = try services.items.create(ItemDraft(kind: .project, title: "Q3 Launch"))
+
+        controller.composition.draft.addTag("urgent")
+        controller.composition.draft.setProject(project.title)
+        controller.composition.titleText = "Call the framer #errand @Sarah"
+
+        #expect(controller.save())
+
+        let item = try #require(
+            try services.items.items(matching: .everything()).first { $0.title == "Call the framer" }
+        )
+        #expect(item.parent?.id == project.id)
+        #expect(item.tags.map(\.slug).sorted() == ["errand", "urgent"])
+        #expect(try services.items.items(matching: .everything()).contains { $0.title == "Sarah" })
     }
 }
 
