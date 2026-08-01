@@ -270,8 +270,15 @@ struct CaptureComposer: View {
         .background(Theme.Colors.subtleFill)
     }
 
+    /// ### Why the vocabulary is handed over rather than fetched again
+    /// The source answers "which people are there" out of the names the parser is working from, and
+    /// those names live here — read once when the library changes, because that is when they change.
+    /// Built without them it holds ``CaptureVocabulary/empty``, and every question asked of it is
+    /// answered honestly and wrongly: no people in the picker, no projects in the destination list,
+    /// and no completions behind `@` or `>`, in a library full of both. Tags carried on working,
+    /// which is why this could be missed — they are read from the store on the spot.
     private var source: CaptureSuggestionSource {
-        CaptureSuggestionSource(services: services)
+        CaptureSuggestionSource(services: services, vocabulary: vocabulary)
     }
 
     /// Turns anything typed but unsettled into a chip, before a click adds one of its own.
