@@ -106,7 +106,7 @@ public struct FactAttribute: RawRepresentable, Codable, Sendable, Hashable {
         case .foodAndDrink: "fork.knife"
         case .family: "figure.2.and.child.holdinghands"
         case .interest: "star"
-        case .conversationTopic: "bubble.left.and.questionmark.bubble.right"
+        case .conversationTopic: "questionmark.bubble"
         case .quickFact: "sparkles"
         case .observedAge: "birthday.cake"
         case .schoolGrade: "graduationcap"

@@ -40,6 +40,12 @@ final class ScriptedSearchEngine: SearchEngine {
     func indexDidChange(for item: Item) async {}
     func removeFromIndex(id: UUID) async {}
     func invalidateIndex() async {}
+
+    /// Nothing here indexes, so there is nothing to report. Stated rather than defaulted on the
+    /// protocol: a default implementation would let a real engine forget to answer and still compile.
+    func indexStatistics() async -> (items: Int, terms: Int, isWarm: Bool) {
+        (items: 0, terms: 0, isWarm: false)
+    }
 }
 
 @MainActor

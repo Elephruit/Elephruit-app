@@ -225,7 +225,7 @@ private struct MonthCell: View {
 
         return Text(day.formatted(style))
             .font(.system(size: 11, weight: isToday ? .bold : .regular))
-            .foregroundStyle(isToday ? Color.white : Theme.Colors.primaryText)
+            .foregroundStyle(isToday ? Theme.Colors.onAccent : Theme.Colors.primaryText)
             .frame(minWidth: 17, minHeight: 17)
             .background {
                 if isToday { Circle().fill(Theme.Colors.currentTime) }

@@ -448,6 +448,13 @@ public struct RootView: View {
     /// names a module this build does not have, is not something to raise an alert about while
     /// somebody is opening their library.
     private func restoreNavigation() {
+        defer {
+            // After the restore, so that `-ElephruitStartModule` is an override of where the window
+            // was left rather than a competitor to it. See ``DesignReviewLaunch``.
+            DesignReviewLaunch.applyStart(to: navigation)
+            DesignReviewLaunch.applySelection(to: navigation, using: services)
+        }
+
         guard !storedNavigationState.isEmpty,
               let state = NavigationModel.RestorationState(encoded: storedNavigationState)
         else { return }
@@ -586,16 +593,27 @@ public struct RootView: View {
     /// the old width in place. It is short enough to read as the module arriving rather than as the
     /// window rearranging itself afterwards.
     private func applyModuleLayout() async {
-        let module = navigation.activeModule
-        let available = windowWidth
-
         // A drag detector that saw the old module's widths would read the snap as a preference.
         widthRecorder.expectShellMove(of: [.primary, .detail])
 
-        pinnedWidths = [
-            .primary: moduleLayout.width(of: .primary, in: module, available: available),
-            .detail: moduleLayout.width(of: .detail, in: module, available: available),
-        ]
+        // Pinned to what the *shell* worked out, not to what the store remembers.
+        //
+        // These two answers are not the same, and the difference is the whole of a bug. The store
+        // knows one column's remembered width, or the module's ideal where there is none. The shell
+        // knows what every column should be *given the window* — which columns fit, what each is
+        // entitled to, and where any spare width goes. Pinning the store's answer therefore snapped
+        // the list back to its ideal and threw the spare room away: a Notes list declared a maximum
+        // of 480, was computed at 480 for a 1710-point window, and was then pinned to 340 by this
+        // line, with the remaining 140 points going to a detail pane whose editor caps its own
+        // measure at 720 and could not use them.
+        //
+        // `shellWidths` already reads the store — it passes it into `widths(…)` as `stored:` — so
+        // nothing is forgotten by going through it. What is gained is that there is one calculation
+        // rather than two that agree until they do not.
+        let widths = shellWidths
+        var pinned: [ModuleShellLayout.Column: CGFloat] = [.primary: widths.primary]
+        if let detail = widths.detail { pinned[.detail] = detail }
+        pinnedWidths = pinned
 
         try? await Task.sleep(for: .milliseconds(50))
         guard !Task.isCancelled else { return }

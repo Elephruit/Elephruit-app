@@ -38,17 +38,42 @@ public struct ItemRow<Item: ContentItem>: View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
             leadingGlyph
 
+            // ### Why the metadata is stacked rather than strung out beside the title
+            // It used to sit on the title's own line — tags, then a priority mark, then a date — and
+            // between them they took a fixed 150-odd points off a column that is about 330 wide in
+            // practice. The title got what was left, which is why a list of notes read "A note with
+            // a title lo…", "Migration runb…", "Positionin…". The thing the row exists to identify
+            // was the thing with no room.
+            //
+            // Widening the column was tried first and is the better fix in principle; AppKit's split
+            // view does not reliably grant the middle column the width the shell asks for, and that
+            // is recorded as remaining work rather than papered over here.
+            //
+            // What is within this view's gift is what it spends the width *on*. Only two things now
+            // share the title's line: the title, and the one date — which is short, fixed, and the
+            // field a person scans a list by. Everything else drops to the second line, which had
+            // room to spare and now carries the tags at its trailing edge, under the date, so the
+            // right-hand edge reads as one column of metadata rather than two ragged ones.
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                titleLine
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
+                    titleLine
+                    Spacer(minLength: Theme.Spacing.small)
+                    titleLineAccessories
+                }
 
-                if !secondaryParts.isEmpty {
-                    secondaryLine
+                if hasSecondLine {
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
+                        if !secondaryParts.isEmpty {
+                            secondaryLine
+                        }
+                        Spacer(minLength: Theme.Spacing.small)
+                        if !item.tagSlugs.isEmpty {
+                            TagChipRow(slugs: item.tagSlugs, limit: 2)
+                                .layoutPriority(1)
+                        }
+                    }
                 }
             }
-
-            Spacer(minLength: Theme.Spacing.small)
-
-            trailingAccessories
         }
         .padding(.vertical, Theme.Spacing.tight)
         .frame(minHeight: Theme.Size.rowHeight)
@@ -166,13 +191,23 @@ public struct ItemRow<Item: ContentItem>: View {
     /// runs out of room — the ellipsis — and a date does not. Without it SwiftUI divides the
     /// shortfall between them and compresses both, which is how "Yesterday" became three stacked
     /// syllables in a narrow column.
-    @ViewBuilder
-    private var trailingAccessories: some View {
-        HStack(spacing: Theme.Spacing.small) {
-            if !item.tagSlugs.isEmpty {
-                TagChipRow(slugs: item.tagSlugs, limit: 2)
-            }
+    /// Whether there is a second line to draw at all.
+    ///
+    /// A row with a bare title and no tags stays one line tall, which is what keeps a dense list
+    /// dense. Nothing is reserved for something that might be there.
+    private var hasSecondLine: Bool {
+        !secondaryParts.isEmpty || !item.tagSlugs.isEmpty
+    }
 
+    /// What shares the title's line: the priority mark and the one date, and nothing else.
+    ///
+    /// `layoutPriority(1)` states the order things give way in: a title has somewhere to put the
+    /// shortfall — the ellipsis — and a date does not. Without it SwiftUI divides the shortfall
+    /// between them and compresses both, which is how "Yesterday" became three stacked syllables in
+    /// a narrow column.
+    @ViewBuilder
+    private var titleLineAccessories: some View {
+        HStack(spacing: Theme.Spacing.small) {
             if let symbol = item.priority.symbolName, item.isActionable {
                 Image(systemName: symbol)
                     .font(Theme.Text.metadata)
@@ -180,8 +215,12 @@ public struct ItemRow<Item: ContentItem>: View {
                     .accessibilityHidden(true)
             }
 
-            if let dueAt = item.dueAt {
-                DueDateLabel(date: dueAt, dateProvider: dateProvider, isActionable: item.isActionable)
+            if let rowDate = RowDate.resolve(for: item) {
+                RowDateLabel(
+                    resolved: rowDate,
+                    dateProvider: dateProvider,
+                    isActionable: item.isActionable
+                )
             }
         }
         .layoutPriority(1)
@@ -217,6 +256,23 @@ public struct DueDateLabel: View {
     }
 
     private var relativeText: String {
+        RelativeDay.text(for: date, using: dateProvider)
+    }
+
+    private var color: Color {
+        guard isActionable else { return Theme.Colors.tertiaryText }
+        if dateProvider.isOverdue(date) { return Theme.Colors.overdue }
+        if dateProvider.isToday(date) { return Theme.Colors.dueToday }
+        return Theme.Colors.secondaryText
+    }
+}
+
+/// How a day is written in a list row.
+///
+/// Shared rather than duplicated, because two labels formatting the same day two ways is how a list
+/// ends up saying "Yesterday" in one column and "31 Jul" in another about the same afternoon.
+public enum RelativeDay {
+    public static func text(for date: Date, using dateProvider: any DateProvider) -> String {
         if dateProvider.isToday(date) { return "Today" }
         if dateProvider.calendar.isDate(date, inSameDayAs: dateProvider.startOfDay(daysFromToday: 1)) {
             return "Tomorrow"
@@ -226,11 +282,54 @@ public struct DueDateLabel: View {
         }
         return date.formatted(.dateTime.day().month(.abbreviated))
     }
+}
 
+/// The one date on a list row, whatever that date turns out to mean.
+///
+/// See ``RowDate`` for the rule about which date is shown. This draws it: a deadline in the urgency
+/// colours, anything else quietly and with the word that says what it is.
+public struct RowDateLabel: View {
+    private let resolved: RowDate.Resolved
+    private let dateProvider: any DateProvider
+    private let isActionable: Bool
+
+    public init(
+        resolved: RowDate.Resolved,
+        dateProvider: any DateProvider,
+        isActionable: Bool = true
+    ) {
+        self.resolved = resolved
+        self.dateProvider = dateProvider
+        self.isActionable = isActionable
+    }
+
+    public var body: some View {
+        Text(text)
+            .font(Theme.Text.metadata)
+            .rowTint(color)
+            .monospacedDigit()
+            .lineLimit(1)
+            // Kept whole. A date has nowhere to put an ellipsis, which is why the trailing cluster
+            // carries the layout priority and the title is the thing that truncates.
+            .fixedSize(horizontal: true, vertical: false)
+            .accessibilityHidden(true)
+    }
+
+    private var text: String {
+        let day = RelativeDay.text(for: resolved.date, using: dateProvider)
+        guard let prefix = resolved.role.prefix else { return day }
+        return "\(prefix) \(day)"
+    }
+
+    /// Urgency for a deadline; a quiet grey for everything else.
+    ///
+    /// A date that is merely *past* is not late. "Edited Yesterday" in red would be the interface
+    /// inventing an obligation nobody made, and it is the mistake a single shared colour rule for
+    /// every date in a row would produce.
     private var color: Color {
-        guard isActionable else { return Theme.Colors.tertiaryText }
-        if dateProvider.isOverdue(date) { return Theme.Colors.overdue }
-        if dateProvider.isToday(date) { return Theme.Colors.dueToday }
+        guard resolved.role.showsUrgency, isActionable else { return Theme.Colors.tertiaryText }
+        if dateProvider.isOverdue(resolved.date) { return Theme.Colors.overdue }
+        if dateProvider.isToday(resolved.date) { return Theme.Colors.dueToday }
         return Theme.Colors.secondaryText
     }
 }
@@ -275,7 +374,7 @@ public struct TagChip: View {
     /// more than which colour the user gave it.
     private var foreground: AnyShapeStyle {
         if prominence == .increased { return AnyShapeStyle(.primary) }
-        return AnyShapeStyle(isSelected ? Color.white : tint)
+        return AnyShapeStyle(isSelected ? Theme.Colors.onAccent : tint)
     }
 
     private var background: AnyShapeStyle {
