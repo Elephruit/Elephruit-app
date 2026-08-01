@@ -166,6 +166,12 @@ public final class MiniTimerController {
 
     /// Whether the panel stays above other applications.
     ///
+    /// **On unless the user says otherwise.** The whole reason to collapse the app to its clock is
+    /// to keep the clock while you work in something else, and a timer that disappears behind the
+    /// window you switch to has failed at the one thing it was left on screen to do — you find out
+    /// it is still running when the day's total is wrong. Off by default made every person who
+    /// wanted the obvious behaviour discover a toggle first.
+    ///
     /// Remembered across collapses — somebody who wants it on top wants it on top every time, and
     /// making them say so twice is the kind of small forgetting that makes a feature feel unfinished.
     public var isPinned: Bool {
@@ -218,8 +224,16 @@ public final class MiniTimerController {
     /// on a different screen, or after the Dock has moved.
     private var contentSize: NSSize?
 
-    /// The frame this object last set, so a move notification can tell a drag from its own work.
+    /// The frame this object last sent the panel to, so a move notification can tell a drag from its
+    /// own work.
     private var placedFrame: NSRect?
+
+    /// Set while the window is animating to a new frame.
+    ///
+    /// An animation is a stream of move notifications for frames that match nothing, so without this
+    /// the panel would read its own resize as the user dragging it and rewrite the anchor from a
+    /// half-finished position.
+    private var isAnimatingFrame = false
 
     private var moveObserver: (any NSObjectProtocol)?
 
@@ -236,7 +250,10 @@ public final class MiniTimerController {
     public init(services: AppServices, defaults: UserDefaults = .standard) {
         self.services = services
         self.defaults = defaults
-        self.isPinned = defaults.bool(forKey: Self.pinnedKey)
+        // `object(forKey:)` rather than `bool(forKey:)`, because those are three states and not two:
+        // never chosen, chosen on, chosen off. Only the first defaults to pinned — somebody who
+        // deliberately turned it off must not have it turned back on by a change of default.
+        self.isPinned = defaults.object(forKey: Self.pinnedKey) as? Bool ?? true
         self.isCompact = defaults.bool(forKey: Self.compactKey)
     }
 
@@ -304,7 +321,9 @@ public final class MiniTimerController {
     /// what used to let one bad measurement become the starting point for every placement after it.
     ///
     /// The arithmetic itself is in ``MiniTimerPlacement``, where it can be asserted.
-    private func place() {
+    ///
+    /// - Parameter animated: whether the left edge travels to its new position or arrives there.
+    private func place(animated: Bool = false) {
         guard let panel, let screen = panel.screen ?? NSScreen.main else { return }
 
         let placement = MiniTimerPlacement(
@@ -326,10 +345,44 @@ public final class MiniTimerController {
         // being moved.
         anchor = CGPoint(x: frame.maxX, y: frame.minY)
 
-        guard frame != panel.frame else { return }
-
+        // Compared against where it was last *sent* rather than where it is now, so a resize that
+        // arrives mid-animation does not restart the animation it is already running.
+        guard frame != placedFrame else { return }
         placedFrame = frame
-        panel.setFrame(frame, display: true)
+
+        guard animated, !Self.prefersReducedMotion else {
+            panel.setFrame(frame, display: true)
+            return
+        }
+
+        // ### Why the window animates rather than the contents
+        // Because only one of them can. The contents animating their width inside a window that is
+        // being resized to match them is two animations of the same widening on two clocks, and what
+        // that looked like was the pill lurching downwards and back as it opened: the contents are
+        // centred in the window, the window was a frame behind them, and the mismatch showed up as
+        // vertical drift on a surface whose height never changed at all.
+        //
+        // So the contents take their final size at once and the window is the only thing that
+        // travels. Core Animation interpolates the frame on the window server, which is as smooth as
+        // this can be made, and the controls are revealed by the left edge sliding out past them.
+        isAnimatingFrame = true
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Self.resizeDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(frame, display: true)
+        } completionHandler: { [weak self] in
+            MainActor.assumeIsolated { self?.isAnimatingFrame = false }
+        }
+    }
+
+    /// Matches ``ElephruitDesign/Theme/Motion/standard``, which is what every other state change the
+    /// user is watching uses. A window is not a reason to invent a second tempo.
+    private static let resizeDuration: TimeInterval = 0.18
+
+    /// Read from the workspace rather than the SwiftUI environment, because this is a window being
+    /// moved rather than a view being drawn — and the setting means the same thing to both.
+    private static var prefersReducedMotion: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 
     /// Follows the window when the user drags it, and only then.
@@ -348,7 +401,9 @@ public final class MiniTimerController {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, let panel = self.panel, panel.frame != self.placedFrame else { return }
+                guard let self, !self.isAnimatingFrame,
+                      let panel = self.panel, panel.frame != self.placedFrame
+                else { return }
                 self.anchor = NSPoint(x: panel.frame.maxX, y: panel.frame.minY)
             }
         }
@@ -421,8 +476,13 @@ public final class MiniTimerController {
     /// controls appear, which *is* the animation, and nothing anywhere has to be timed.
     public func contentSizeChanged(to size: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
+
+        // The first measurement is the panel arriving at its real size from the placeholder, which is
+        // not a change anybody asked to watch. Every one after it is the pill opening or closing
+        // under the pointer, which is.
+        let isFirst = contentSize == nil
         contentSize = size
-        place()
+        place(animated: !isFirst)
     }
 
     /// Closes the panel and forgets it, for window teardown and tests.

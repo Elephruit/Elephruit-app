@@ -272,10 +272,50 @@ struct FloatingTimerView: View {
 /// Shared so the overlaid widget and the panel cannot drift apart, and so the "one of each" rule
 /// `decorationDoesNotAccumulate` enforces is satisfied in a single place rather than twice.
 struct FloatingCard: ViewModifier {
+    /// How far off the surface behind it the card is meant to read.
+    ///
+    /// ### Why this is not one value
+    /// Because the two cards have different amounts of room, and the difference is not a matter of
+    /// taste. Overlaid on a window there is a whole screen behind the shadow and sixteen points of
+    /// padding for it to fall into. Inside the panel there are **eight**, and the window is the size
+    /// of its contents — so a shadow reaching fourteen points below the card was cut off square by
+    /// the edge of the window and drew a grey smear under the pill rather than depth. It also moved
+    /// as the panel resized, which is a shadow drawing attention to itself: the exact opposite of
+    /// the job.
+    enum Depth {
+        /// Floating over a window's content.
+        case overlay
+        /// A window of its own, with only its padding to cast into.
+        case panel
+
+        var radius: CGFloat {
+            switch self {
+            case .overlay: 10
+            case .panel: 3
+            }
+        }
+
+        var offset: CGFloat {
+            switch self {
+            case .overlay: 4
+            case .panel: 1
+            }
+        }
+
+        var opacity: Double {
+            switch self {
+            case .overlay: 0.18
+            case .panel: 0.12
+            }
+        }
+    }
+
     let tint: Color
 
-    /// `false` inside the mini panel, which supplies all three itself.
+    /// `false` inside the embedded copy, whose surrounding panel supplies all three itself.
     var isEnabled = true
+
+    var depth: Depth = .overlay
 
     func body(content: Content) -> some View {
         if isEnabled {
@@ -284,11 +324,16 @@ struct FloatingCard: ViewModifier {
                     RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                         .fill(Theme.Colors.contentBackground)
                 )
+                // Clipped to its own shape, so contents wider than the card are cut by the card's
+                // rounded edge rather than spilling past it. That is what turns the panel's opening
+                // into a reveal: the row inside is at its full width throughout, and the card
+                // widening is what lets you see it.
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                         .strokeBorder(tint.opacity(0.35))
                 }
-                .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
+                .shadow(color: .black.opacity(depth.opacity), radius: depth.radius, y: depth.offset)
         } else {
             content
         }
@@ -357,8 +402,17 @@ struct MiniTimerView: View {
         // pointer never moves out from under it.
         HStack(spacing: Theme.Spacing.small) {
             if isMenuOpen {
+                // ### Why nothing here animates
+                // Because the window does, and two animations of the same widening — one of the
+                // contents against SwiftUI's clock, one of the window against Core Animation's —
+                // beat against each other. What that looked like was the pill lurching down and back
+                // up as it opened, because the contents are centred in a window that was a frame
+                // behind them and the mismatch showed as vertical drift.
+                //
+                // So the contents take their final size at once and the *window* is what travels.
+                // The controls are revealed by its left edge sliding out past them, which is one
+                // motion, on one clock, and needs nothing here to help it.
                 windowControls
-                    .transition(.opacity.combined(with: .move(edge: .trailing)))
             }
 
             menuButton
@@ -376,33 +430,47 @@ struct MiniTimerView: View {
         }
         .padding(.vertical, Theme.Spacing.small)
         .padding(.horizontal, Theme.Spacing.medium)
-        .modifier(FloatingCard(tint: tint))
-        .padding(Theme.Spacing.small)
         .fixedSize()
+        // ### Why the size is reported rather than measured from outside
+        // The panel is sized by hand, and asking the hosting view how big it wants to be got the
+        // answer for the *previous* contents every time — see `contentSizeChanged(to:)`. This says
+        // how big it actually is, at the moment it is that big, and the window is animated to match.
+        //
+        // It has to sit exactly here: below the `.fixedSize()`, so what it measures is the width the
+        // row *wants*, and above the frame that fills the window, so it is not reading back the
+        // width of the window it is inside — which the window is being sized from, and which would
+        // therefore settle at whatever width it happened to start at.
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onChange(of: proxy.size, initial: true) { _, size in
+                        // The reader is inside the padding that holds the card off the window edge,
+                        // so that padding is added back: what the panel is being told is how big its
+                        // *window* has to be, not how big the card is.
+                        controller.contentSizeChanged(
+                            to: CGSize(
+                                width: size.width + 2 * Theme.Spacing.small,
+                                height: size.height + 2 * Theme.Spacing.small
+                            )
+                        )
+                    }
+            }
+        }
+        // ### Why the row fills the card and is held against its right
+        // Because the card has to be the full width of the window at every moment of the animation,
+        // and the row does not. While the window slides open the row is wider than the space there
+        // is for it: pinned right, what the opening edge reveals is the controls being asked for,
+        // and what stays put is the clock and the Stop button — which must never be the things that
+        // get cut off. The card, being the width of the window, keeps both of its rounded ends the
+        // whole way rather than sliding open with a square edge.
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .modifier(FloatingCard(tint: tint, depth: .panel))
+        .padding(Theme.Spacing.small)
         // Only *leaving* the pill is the pill's business. Arriving anywhere on it means nothing,
         // which is the whole point of the dots; but once the menu is open the pointer has to be
         // free to travel from the dots to the buttons without the thing closing under it.
         .onHover { inside in
             if !inside { scheduleClose() }
-        }
-        .calmAnimation(value: isMenuOpen)
-        // Both changes of shape animate, and for the same reason: the panel's right edge is pinned,
-        // so every one of them is the left edge travelling. A width that jumped would read as the
-        // window being replaced rather than as it opening up.
-        .calmAnimation(value: controller.isCompact)
-        .background {
-            // ### Why the size is reported rather than measured from outside
-            // The panel is sized by hand, and asking the hosting view how big it wants to be got the
-            // answer for the *previous* contents every time — see `contentSizeChanged(to:)`. This
-            // says how big it actually is, at the moment it is that big, including every step of an
-            // animation. The window then tracks it frame by frame, which is what makes the left edge
-            // slide rather than snap.
-            GeometryReader { proxy in
-                Color.clear
-                    .onChange(of: proxy.size, initial: true) { _, size in
-                        controller.contentSizeChanged(to: size)
-                    }
-            }
         }
         .onDisappear { menuTask?.cancel() }
         .accessibilityIdentifier(AccessibilityID.Time.miniTimer)
