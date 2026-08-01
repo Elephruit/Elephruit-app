@@ -73,7 +73,7 @@ public struct ShortcutSettingsSection: View {
         case .registered:
             Label("Working everywhere", systemImage: "checkmark.circle")
                 .labelStyle(.iconOnly)
-                .foregroundStyle(.green)
+                .foregroundStyle(Theme.Palette.green.color)
                 .help("This shortcut works from any application.")
         case .alreadyClaimed, .unsupportedKey:
             Label("Not available", systemImage: "exclamationmark.circle")
