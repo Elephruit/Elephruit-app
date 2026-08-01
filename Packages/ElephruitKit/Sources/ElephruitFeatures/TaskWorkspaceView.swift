@@ -219,6 +219,21 @@ struct TaskWorkspaceView: View {
                     .focused($isDraftFocused)
                     .onSubmit { commitDraft(in: section) }
                     .onExitCommand { closeDraft() }
+                    // ### Why losing focus has to close it
+                    // Escape closed the draft and Return committed it, and both need the field to
+                    // still have focus. Clicking anywhere else — another row, another module, the
+                    // desktop — took the focus away and left the row behind: an empty circle and the
+                    // grey word "New task", sitting in a section it does not belong to, with no
+                    // control on it and no way to get rid of it. It looked like a task that could
+                    // not be deleted, because it looked like a task.
+                    //
+                    // Whatever was typed is kept: if the draft has text, losing focus commits it
+                    // rather than discarding it, on the same terms as Return. Only an empty draft
+                    // disappears, and an empty draft is not something anybody can lose.
+                    .onChange(of: isDraftFocused) { _, hasFocus in
+                        guard !hasFocus, draftSectionID == section.id else { return }
+                        commitDraft(in: section)
+                    }
                     .accessibilityIdentifier("tasks.inlineDraft")
             }
             .padding(.vertical, Theme.Spacing.tight)

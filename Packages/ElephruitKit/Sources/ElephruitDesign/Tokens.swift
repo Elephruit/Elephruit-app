@@ -44,7 +44,16 @@ extension Theme {
     public enum Size {
         /// The leading glyph column in a list row. Fixed, so titles align down the list even
         /// when their symbols differ in width.
-        public static let rowGlyph: CGFloat = 16
+        ///
+        /// Twenty, not sixteen. A fixed frame narrower than the glyph inside it does not shrink the
+        /// glyph — it centres it and lets it hang over both edges, where the row's own bounds cut it
+        /// off. At sixteen the narrow symbols were fine and the wide ones were not: the speech
+        /// bubbles on an interaction and the calendar on an event both lost a slice of their left
+        /// side, and only in the modules that use them, which is why it read as those icons being
+        /// broken rather than as the column being too narrow.
+        ///
+        /// Twenty clears the widest symbol the row vocabulary uses at the body text size.
+        public static let rowGlyph: CGFloat = 20
 
         /// Minimum height of a list row. Comfortable to click without being airy.
         public static let rowHeight: CGFloat = 28
