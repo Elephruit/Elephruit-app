@@ -66,60 +66,69 @@ struct CaptureComposer: View {
             Divider()
             footer
         }
-        .task(id: completion) { await refreshSuggestions() }
+        .onChange(of: completion) { refreshSuggestions() }
         // Keyed on the change token rather than run once, because the panel outlives any single
         // capture: a project created after it was first opened must still be nameable in it.
-        .task(id: services?.changeToken) { refreshLibraryFacts() }
+        .task(id: services?.changeToken) {
+            refreshLibraryFacts()
+            // After the names, not before. The suggestion list is drawn from them, and an empty
+            // vocabulary on the first pass is a panel that offers nothing until you type twice.
+            refreshSuggestions()
+        }
         .onAppear { focus = .title }
     }
 
     // MARK: - The card
 
+    /// ### Why nothing sits to the left of the title
+    /// The note/task control started here, as a checkbox in front of the first character. That is
+    /// the conventional place for one, and it was wrong here for a reason the convention does not
+    /// have to answer: where every captured item is a to-do, the box is decoration. Ours is a
+    /// *choice*, and an unlabelled glyph that silently changes what you are creating is the wrong
+    /// way to offer one. See ``CaptureKindToggle``.
+    ///
+    /// It also pushed the caret inward. An empty field showed a symbol, a gap, and then an insertion
+    /// point floating in the middle of the card with the placeholder starting underneath it — so the
+    /// first thing the panel did was make you work out where you were about to type. The title now
+    /// begins at the card's edge, and the choice is in the footer with the other choices, wearing a
+    /// word.
     private var content: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
-                CaptureKindToggle(draft: $composition.draft)
-
-                CaptureTitleField(
-                    composition: $composition,
-                    caret: $caret,
-                    vocabulary: vocabulary,
-                    placeholder: composition.draft.kind == .task ? "New To-Do" : "New Note",
-                    onSubmit: onSave,
-                    onCancel: onCancel,
-                    onMoveToNotes: { focus = .notes },
-                    onMove: { direction in moveSelection(direction) },
-                    onAccept: { acceptSuggestion() },
-                    onRemoveLastChip: { removeLastChip() }
-                )
-                .frame(height: 24)
-                .focused($focus, equals: .title)
-                .accessibilityIdentifier(AccessibilityID.QuickCapture.textField)
-                .accessibilityLabel("What would you like to capture?")
-            }
+            CaptureTitleField(
+                composition: $composition,
+                caret: $caret,
+                vocabulary: vocabulary,
+                placeholder: composition.draft.kind == .task ? "New To-Do" : "New Note",
+                onSubmit: onSave,
+                onCancel: onCancel,
+                onMoveToNotes: { focus = .notes },
+                onMove: { direction in moveSelection(direction) },
+                onAccept: { acceptSuggestion() },
+                onRemoveLastChip: { removeLastChip() }
+            )
+            .frame(height: 26)
+            .focused($focus, equals: .title)
+            .accessibilityIdentifier(AccessibilityID.QuickCapture.textField)
+            .accessibilityLabel("What would you like to capture?")
 
             CaptureNotesField(text: $composition.notesText, onCancel: onCancel)
                 .focused($focus, equals: .notes)
-                .padding(.leading, 24)
 
             if !suggestions.isEmpty {
-                suggestionList.padding(.leading, 24)
+                suggestionList
             }
 
             if !composition.draft.isEmpty {
                 CaptureChipRow(draft: $composition.draft, tagColors: tagColors)
-                    .padding(.leading, 24)
             }
 
             CaptureGrammarHints(hints: CaptureParser.grammarHints)
-                .padding(.leading, 24)
 
             if let error {
                 Label(error.summary, systemImage: "exclamationmark.triangle")
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.unresolvedLink)
                     .lineLimit(2)
-                    .padding(.leading, 24)
             }
         }
         .padding(Theme.Spacing.large)
@@ -172,7 +181,7 @@ struct CaptureComposer: View {
     /// Every lookup goes through ``CaptureSuggestionSource``, which is also what the icon menus use,
     /// so the list under the field and the list in the popover cannot come to disagree about which
     /// people there are.
-    private func refreshSuggestions() async {
+    private func refreshSuggestions() {
         guard let completion else {
             suggestions = []
             return
@@ -186,14 +195,10 @@ struct CaptureComposer: View {
             suggestions = source.tagSlugs(matching: query, limit: 6)
 
         case .person:
-            suggestions = await source.titles(matching: query, kinds: [.person], limit: 6)
+            suggestions = source.people(matching: query, limit: 6)
 
         case .project:
-            suggestions = await source.titles(
-                matching: query,
-                kinds: CaptureSuggestionSource.containerKinds,
-                limit: 6
-            )
+            suggestions = source.containers(matching: query, limit: 6)
 
         case .dueDate, .followDate:
             let examples = NaturalDateParser.recognisedExamples
@@ -234,6 +239,8 @@ struct CaptureComposer: View {
 
     private var footer: some View {
         HStack(spacing: Theme.Spacing.medium) {
+            CaptureKindToggle(draft: $composition.draft)
+
             CaptureDestinationButton(
                 draft: $composition.draft,
                 source: source,

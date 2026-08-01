@@ -124,17 +124,28 @@ struct CaptureChipRow: View {
     }
 }
 
-/// The checkbox that says whether this is a task.
+/// Whether this is a task or a note.
 ///
-/// ### Why a checkbox rather than a segmented control
-/// Because it is the thing it stands for. A to-do in this app is drawn with a box you tick, so a box
-/// in front of the title says "this will be one of those" without needing a label, and a note is the
-/// absence of one rather than a second option competing for the same space. It is also where the eye
-/// already is: immediately left of the first character somebody is about to type.
+/// ### Why it says the word, and why it is in the footer
+/// It was a bare checkbox in front of the title, borrowed from task managers that put one there.
+/// That copied the shape and missed the reason. In an app that makes nothing but to-dos, the box in
+/// front of the title is *decoration* — a picture of what you are already doing, which needs no
+/// label because there is no alternative. Ours is a **choice** between two kinds of thing, and an
+/// unlabelled glyph that silently changes what you are about to create is the wrong way to offer
+/// one: the only way to learn what it does is to click it and notice afterwards.
 ///
-/// Setting a date, a priority or a project ticks it on the user's behalf, because a note in this app
-/// can hold none of those. That happens in ``QuickJotDraft``, where the decision is recorded, so it
-/// happens identically whether the date arrived from this row or from the sentence.
+/// Putting it in front of the title also pushed the caret inward. An empty panel showed a symbol, a
+/// gap, and then an insertion point floating in from the left edge with the placeholder starting
+/// underneath it — so the first thing the card did was make you work out where you were about to
+/// type. The title now starts at the card's edge, where a title starts.
+///
+/// So it sits in the footer with the other decisions, wearing a word. The glyph stays, because the
+/// tick-box is what a task looks like everywhere else in the app, but it is now a label rather than a
+/// riddle.
+///
+/// Setting a date, a priority or a project switches it to Task on the user's behalf, because a note
+/// in this app can hold none of those. That happens in ``QuickJotDraft``, where the decision is
+/// recorded, so it happens identically whether the date came from an icon or from the sentence.
 struct CaptureKindToggle: View {
     @Binding var draft: QuickJotDraft
 
@@ -144,10 +155,10 @@ struct CaptureKindToggle: View {
         Button {
             draft.choose(isTask ? .note : .task)
         } label: {
-            Image(systemName: isTask ? "square" : "text.alignleft")
-                .font(.system(size: 13, weight: .light))
-                .foregroundStyle(isTask ? Theme.Colors.secondaryText : Theme.Colors.tertiaryText)
-                .frame(width: 16, height: 16)
+            Label(isTask ? "Task" : "Note", systemImage: isTask ? "checkmark.square" : "text.alignleft")
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .lineLimit(1)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

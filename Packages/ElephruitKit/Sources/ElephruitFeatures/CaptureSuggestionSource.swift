@@ -4,72 +4,107 @@ import ElephruitModel
 import ElephruitPersistence
 import SwiftUI
 
-/// The one place the Quick Jot card asks the library what exists.
+/// The one place the Quick Jot card asks what exists to be named.
 ///
-/// ### Why this is a type rather than four call sites
+/// ### Why this is a type rather than six call sites
 /// The inline `@` completion and the person picker are answering the same question — *which people
-/// are there whose names start with this* — and there is no version of this app where they should
-/// answer it differently. Two lookups written separately drift: one of them starts filtering out
-/// archived people, or stops folding accents, or gets a limit raised, and for a while nobody notices
-/// because you have to use both in the same minute to see it.
+/// are there* — and there is no version of this app where they should answer it differently. Two
+/// lookups written separately drift: one starts folding accents, or gets a limit raised, and nobody
+/// notices, because you have to use both in the same minute to see it.
 ///
-/// The lookups are also the only part of the panel that touches storage, so keeping them together is
-/// what keeps everything else a pure function of what has been typed.
+/// ### Why not the search index
+/// It was the index, and that was wrong twice.
+///
+/// The first fault is plain. `SearchIndexStore.titles(prefix:)` returns nothing for an empty query,
+/// deliberately — an index is for finding, and finding nothing in particular is not a question. So
+/// the person picker, which opens before anybody has typed a letter, opened empty every time. A
+/// picker whose whole job is to show you the list cannot begin by asking you to guess what is in it.
+///
+/// The second is subtler and worse. It made "which people are in this library" depend on whether
+/// those people had been *indexed*, which is a fact about a background task rather than about the
+/// library. Somebody created a moment ago, or somebody whose indexing failed quietly a month ago, is
+/// a person you can see in the sidebar and cannot mention.
+///
+/// The store already has the answer, and the panel already has it in hand. ``CaptureVocabulary`` is
+/// fetched when the panel opens because the *parser* needs it — it is how `>Q3 Launch` is read as one
+/// name rather than as "Q3" followed by a word — so the names are in memory whether or not anything
+/// asks for them. Filtering them costs nothing, and it cannot disagree with what the parser will do,
+/// which is the property that matters most here: a picker offering "Q3 Launch" beside a grammar that
+/// files under "Q3" would be two answers to one question.
 @MainActor
 struct CaptureSuggestionSource {
     var services: AppServices?
 
-    /// Existing tag slugs beginning with `query`.
+    /// The project and person names the parser is working from. Refreshed with the library.
+    var vocabulary: CaptureVocabulary = .empty
+
+    /// Existing tag slugs, whole or matching.
     ///
-    /// Synchronous, and reads them all. That is right here and would not be right for items: the
-    /// whole tag table is small by construction — it is the vocabulary one person has invented for
-    /// themselves — and a menu cannot await.
+    /// Reads them all, which is right here and would be wrong for items: the tag table is small by
+    /// construction — it is the vocabulary one person has invented for themselves — and it is the
+    /// only one of the three lists that is not already in memory.
     func tagSlugs(matching query: String, limit: Int = 8) -> [String] {
-        let folded = query.lowercased()
-        let slugs = ((try? services?.tags.allTags()) ?? [])
-            .map(\.slug)
-            .filter { folded.isEmpty || $0.contains(folded) }
-        return Array(slugs.prefix(limit))
+        let slugs = ((try? services?.tags.allTags()) ?? []).map(\.slug)
+        return matches(for: query, in: slugs, limit: limit)
     }
 
-    /// Titles of items of the given kinds whose names begin with `query`.
+    func people(matching query: String, limit: Int = 8) -> [String] {
+        matches(for: query, in: vocabulary.people, limit: limit)
+    }
+
+    /// Projects, areas and goals — everything `>` and the destination button mean by a place to file
+    /// something.
+    func containers(matching query: String, limit: Int = 8) -> [String] {
+        matches(for: query, in: vocabulary.projects, limit: limit)
+    }
+
+    /// Names beginning with the query first, then names merely containing it.
     ///
-    /// Goes through the search index rather than a store query, because "every person in the library"
-    /// is a question with an unbounded answer and a menu only ever shows eight of them. Reading the
-    /// whole table to display a handful is the shape of a stall that only appears once somebody has
-    /// been using the app for a year.
-    func titles(matching query: String, kinds: Set<ItemKind>, limit: Int = 8) async -> [String] {
-        guard let services else { return [] }
+    /// Two passes rather than one, because they are different strengths of evidence and mixing them
+    /// buries the obvious answer. Typing `sar` should offer Sarah ahead of anybody with "sar" in the
+    /// middle of a surname — but it should still offer them, because a search that only matches the
+    /// start of a name is one you have to know the answer to use.
+    ///
+    /// An empty query lists everything, up to the limit. That is what a picker is for.
+    private func matches(for query: String, in names: [String], limit: Int) -> [String] {
+        let folded = TextNormalizer.foldedForMatching(query)
+        let sorted = names.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
 
-        let suggestions = await services.search.titleSuggestions(prefix: query, limit: limit * 3)
-        let matches = suggestions
-            .compactMap { try? services.items.item(id: $0.id) }
-            .filter { kinds.contains($0.kind) }
-            .map(\.title)
+        guard !folded.isEmpty else { return Array(sorted.prefix(limit)) }
 
-        return Array(matches.prefix(limit))
+        let prefixed = sorted.filter { TextNormalizer.foldedForMatching($0).hasPrefix(folded) }
+        let contained = sorted.filter {
+            let name = TextNormalizer.foldedForMatching($0)
+            return !name.hasPrefix(folded) && name.contains(folded)
+        }
+
+        return Array((prefixed + contained).prefix(limit))
     }
-
-    /// The kinds `>` and the destination picker mean by "a place to file this".
-    static let containerKinds: Set<ItemKind> = [.project, .area, .goal]
 }
 
-/// A search field and a list of what it found, for the pickers that need more than a menu.
+/// A search field and the list of what it found.
 ///
-/// A popover rather than a `Menu` for people and projects, and a `Menu` for tags, which is not an
-/// inconsistency: a tag list is a closed vocabulary of a few dozen that somebody invented and can
-/// recognise, and people and projects are an open list that has to be searched. Putting a search
-/// field in a menu is possible and is worse than either.
+/// ### Why a popover here and a menu for tags
+/// Not an inconsistency. A tag list is a closed vocabulary of a few dozen that somebody invented and
+/// will recognise on sight, which is what a menu is for. People and projects are an open list that
+/// grows past what anybody can scan, and needs a search field — which is a thing you cannot put in a
+/// menu without the result being worse than either.
+///
+/// It opens with the list already showing. A picker that starts by asking what you are looking for is
+/// no better than the field you clicked it from.
 struct CaptureSearchPicker: View {
     let prompt: String
     let symbolName: String
-    /// Runs on every keystroke and on first appearance.
-    let search: (String) async -> [String]
+    /// What to say when the library holds none of these at all — a different situation from a search
+    /// that found nothing, and one that deserves a sentence about how to make the first one.
+    let emptyLibraryMessage: String
+    let search: (String) -> [String]
     let choose: (String) -> Void
 
     @State private var query = ""
-    @State private var results: [String] = []
     @FocusState private var isSearching: Bool
+
+    private var results: [String] { search(query) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
@@ -79,28 +114,35 @@ struct CaptureSearchPicker: View {
                 .onSubmit { if let first = results.first { choose(first) } }
 
             if results.isEmpty {
-                Text(query.isEmpty ? "Start typing a name" : "Nothing by that name")
+                Text(query.isEmpty ? emptyLibraryMessage : "Nothing by that name")
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.tertiaryText)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.vertical, Theme.Spacing.tight)
             } else {
-                ForEach(results, id: \.self) { title in
-                    Button {
-                        choose(title)
-                    } label: {
-                        Label(title, systemImage: symbolName)
-                            .font(Theme.Text.metadata)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(results, id: \.self) { title in
+                            Button {
+                                choose(title)
+                            } label: {
+                                Label(title, systemImage: symbolName)
+                                    .font(Theme.Text.metadata)
+                                    .lineLimit(1)
+                                    .padding(.vertical, 3)
+                                    .padding(.horizontal, Theme.Spacing.tight)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .buttonStyle(.plain)
                 }
+                .frame(maxHeight: 180)
             }
         }
         .padding(Theme.Spacing.medium)
         .frame(width: 240)
-        .task(id: query) { results = await search(query) }
         .onAppear { isSearching = true }
     }
 }

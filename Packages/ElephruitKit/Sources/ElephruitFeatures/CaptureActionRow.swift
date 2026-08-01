@@ -67,7 +67,7 @@ struct CaptureActionRow: View {
     /// is both the way to do it and the thing this menu is teaching.
     private var tagButton: some View {
         Menu {
-            let slugs = source.tagSlugs(matching: "", limit: 40)
+            let slugs = source.tagSlugs(matching: "", limit: 60)
             if slugs.isEmpty {
                 Text("No tags yet — type # to make one")
             } else {
@@ -103,7 +103,8 @@ struct CaptureActionRow: View {
             CaptureSearchPicker(
                 prompt: "Who?",
                 symbolName: "person",
-                search: { await source.titles(matching: $0, kinds: [.person]) }
+                emptyLibraryMessage: "Nobody here yet — type @ to mention somebody new",
+                search: { source.people(matching: $0) }
             ) { name in
                 draft.addPerson(name)
                 dismiss()
@@ -289,9 +290,8 @@ struct CaptureDestinationButton: View {
                 CaptureSearchPicker(
                     prompt: "Which project?",
                     symbolName: "square.stack.3d.up",
-                    search: {
-                        await source.titles(matching: $0, kinds: CaptureSuggestionSource.containerKinds)
-                    }
+                    emptyLibraryMessage: "No projects yet — this will go to the Inbox",
+                    search: { source.containers(matching: $0) }
                 ) { title in
                     draft.setProject(title)
                     isPresented = false
