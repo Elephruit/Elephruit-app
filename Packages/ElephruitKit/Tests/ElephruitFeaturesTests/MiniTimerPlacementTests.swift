@@ -119,3 +119,38 @@ struct MiniTimerPlacementTests {
         #expect(sideDock.area.contains(frame))
     }
 }
+
+/// What the collapsed timer remembers between sittings.
+@MainActor
+@Suite("Mini timer preferences")
+struct MiniTimerPreferenceTests {
+    private func makeDefaults() throws -> UserDefaults {
+        let name = "MiniTimerTests-\(UUID().uuidString)"
+        return try #require(UserDefaults(suiteName: name))
+    }
+
+    /// The point of collapsing the app to its clock is to keep the clock while working in something
+    /// else. A timer that falls behind the window you switch to has failed at the one job it was
+    /// left on screen for, and you find out it was still running when the day's total is wrong.
+    @Test("It floats above other windows unless the user has said otherwise")
+    func pinnedByDefault() throws {
+        let defaults = try makeDefaults()
+        let controller = MiniTimerController(services: .inMemory(populated: false), defaults: defaults)
+
+        #expect(controller.isPinned)
+    }
+
+    /// Three states, not two: never chosen, chosen on, chosen off. Only the first takes the default,
+    /// or changing that default would reach into the preferences of everybody who had already turned
+    /// the thing off and turn it back on.
+    @Test("Turning it off is remembered, and the default does not undo it")
+    func turningItOffSticks() throws {
+        let defaults = try makeDefaults()
+
+        let first = MiniTimerController(services: .inMemory(populated: false), defaults: defaults)
+        first.isPinned = false
+
+        let second = MiniTimerController(services: .inMemory(populated: false), defaults: defaults)
+        #expect(second.isPinned == false)
+    }
+}
