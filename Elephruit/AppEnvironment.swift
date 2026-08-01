@@ -82,6 +82,16 @@ final class AppEnvironment {
         let useFixtureCalendar = isDevelopmentMode
             && ProcessInfo.processInfo.arguments.contains("-ElephruitUseFixtureCalendar")
 
+        // A synthetic Reminders store, on the same terms as the other two.
+        //
+        // `FixtureRemindersProvider` documents this flag and nothing read it, so the one integration
+        // in this app that *writes* was the one that could not be exercised end to end without
+        // pointing it at somebody's real reminders. It reports `.notRequested` to begin with, so
+        // linking it walks the whole path — prompt, grant, list discovery, first import — rather
+        // than starting halfway along it.
+        let useFixtureReminders = isDevelopmentMode
+            && ProcessInfo.processInfo.arguments.contains("-ElephruitUseFixtureReminders")
+
         do {
             let location = useTemporaryStore
                 ? StoreLocation.temporary(name: "UITests")
@@ -104,12 +114,18 @@ final class AppEnvironment {
             }
             let calendarProvider = useFixtureCalendar ? makeFixtureCalendar : nil
 
+            let makeFixtureReminders: @Sendable () -> any RemindersProviding = {
+                FixtureRemindersProvider(authorization: .notRequested)
+            }
+            let remindersProvider = useFixtureReminders ? makeFixtureReminders : nil
+
             let services = AppServices(
                 stack: stack,
                 dateProvider: SystemDateProvider(),
                 isDevelopmentMode: isDevelopmentMode,
                 contactsProvider: contactsProvider,
-                calendarProvider: calendarProvider
+                calendarProvider: calendarProvider,
+                remindersProvider: remindersProvider
             )
 
             if useFixtureContacts {
@@ -117,6 +133,9 @@ final class AppEnvironment {
             }
             if useFixtureCalendar {
                 Diagnostics.features.info("Using a synthetic calendar; no real events are read or written")
+            }
+            if useFixtureReminders {
+                Diagnostics.features.info("Using a synthetic Reminders store; no real reminders are read or written")
             }
 
             // An intent firing in this process now uses the container that is already open, rather

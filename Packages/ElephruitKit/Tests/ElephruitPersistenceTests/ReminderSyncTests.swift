@@ -573,3 +573,213 @@ struct ReminderProviderResolutionTests {
         #expect(try fixture.store.requireItem(id: task.id).title == "Send the invoice")
     }
 }
+
+// MARK: - Bringing in reminders nobody has linked yet
+
+/// A pass over a freshly connected account has to *import*, not just reconcile.
+///
+/// `reconcile()` walked the tasks that were already linked and did nothing else, so an account with
+/// nothing linked yet — which is every account, the first time — reported "Everything is in step"
+/// and imported not one reminder. The two pieces needed to do it, `unlinkedReminders(inLists:)` and
+/// `importReminder(_:)`, were both written and neither was reachable from the app.
+@Suite("Importing on a sync pass")
+@MainActor
+struct ReminderInitialImportTests {
+    private func listIDs(_ fixture: SyncFixture) async -> [String] {
+        await fixture.reminders.lists().map(\.id)
+    }
+
+    @Test("A pass over a chosen list brings its reminders in as tasks")
+    func passImportsFromChosenLists() async throws {
+        let fixture = try SyncFixture()
+        let lists = await listIDs(fixture)
+
+        let report = await fixture.engine.reconcile(importingFrom: lists)
+
+        #expect(report.imported > 0)
+        #expect(report.failures.isEmpty)
+
+        let tasks = try fixture.store.items.items(matching: {
+            var query = ItemQuery(); query.kinds = [.task]; query.scope = .all; return query
+        }())
+        #expect(tasks.contains { $0.externalIdentifier != nil })
+    }
+
+    @Test("Running the same pass again imports nothing a second time")
+    func importIsIdempotent() async throws {
+        let fixture = try SyncFixture()
+        let lists = await listIDs(fixture)
+
+        let first = await fixture.engine.reconcile(importingFrom: lists)
+        let second = await fixture.engine.reconcile(importingFrom: lists)
+
+        #expect(first.imported > 0)
+        // The duplicate-prevention rule: a reminder already linked to a task is not a new reminder.
+        #expect(second.imported == 0)
+        #expect(second.failures.isEmpty)
+    }
+
+    @Test("A pass with no chosen lists imports nothing, however many reminders exist")
+    func noListsMeansNoImport() async throws {
+        let fixture = try SyncFixture()
+
+        let report = await fixture.engine.reconcile(importingFrom: [])
+
+        // Empty must mean "none", never "all". This is the whole of the promise that nothing leaves
+        // Reminders without being asked for.
+        #expect(report.imported == 0)
+    }
+
+    @Test("A list the user did not choose is left alone")
+    func onlyChosenListsAreImported() async throws {
+        let fixture = try SyncFixture()
+        let lists = await fixture.reminders.lists()
+        let chosen = try #require(lists.first)
+
+        let report = await fixture.engine.reconcile(importingFrom: [chosen.id])
+        #expect(report.imported > 0)
+
+        let imported = try fixture.store.items.items(matching: {
+            var query = ItemQuery(); query.kinds = [.task]; query.scope = .all; return query
+        }()).filter { $0.externalIdentifier != nil }
+
+        // Every task that arrived came from the one list that was ticked.
+        for task in imported {
+            let identifier = try #require(task.externalIdentifier)
+            let remote = try #require(await fixture.reminders.reminder(withIdentifier: identifier))
+            #expect(remote.listID == chosen.id)
+        }
+    }
+
+    @Test("Access that cannot read imports nothing and does not claim to have synced")
+    func deniedAccessImportsNothing() async throws {
+        let fixture = try SyncFixture(authorization: .denied)
+        let lists = await listIDs(fixture)
+
+        let report = await fixture.engine.reconcile(importingFrom: lists)
+
+        #expect(report.imported == 0)
+        #expect(report.examined == 0)
+    }
+}
+
+// MARK: - Settling
+
+/// A clock that moves whenever it is read, which is what a wall clock does.
+///
+/// The suite's usual `TickingDateProvider` only advances when a test says so, and that is precisely
+/// what hid the bug below: `ItemRepository.update` reads `now` *after* the mutation closure has run,
+/// so a stamp recorded inside the closure and the `updatedAt` written after it come from two reads
+/// of the clock. Under a frozen clock those two reads return the same instant and the stamp matches;
+/// under a real one the second is later, every pass sees a local edit that never happened, and the
+/// sync pushes forever. The suite was green while the running app looped.
+private final class WallClock: DateProvider, @unchecked Sendable {
+    private let lock = NSLock()
+    private var current = Date(timeIntervalSince1970: 1_700_000_000)
+
+    var now: Date {
+        lock.lock()
+        defer { lock.unlock() }
+        current += 0.001
+        return current
+    }
+
+    var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        return calendar
+    }
+}
+
+@Suite("A sync that settles")
+@MainActor
+struct ReminderSyncSettlingTests {
+    @Test("Repeated passes stop writing once everything is in step")
+    func repeatedPassesSettle() async throws {
+        let clock = WallClock()
+        let store = try StoreFixture(dateProvider: clock)
+        let tasks = TaskService(items: store.items, context: store.context, dateProvider: clock)
+        let provider = FixtureRemindersProvider(authorization: .authorized)
+        let engine = ReminderSyncEngine(
+            items: store.items,
+            tasks: tasks,
+            context: store.context,
+            dateProvider: clock,
+            provider: provider
+        )
+        let lists = await provider.lists().map(\.id)
+
+        let first = await engine.reconcile(importingFrom: lists)
+        #expect(first.imported > 0)
+
+        // The pass after an import must be quiet. It was not: each one pushed every imported task
+        // back to Reminders unchanged, and because a push makes EventKit post a store-changed
+        // notification — which schedules another pass — the two never stopped handing work to each
+        // other once syncing was automatic.
+        let second = await engine.reconcile(importingFrom: lists)
+        #expect(second.pushed == 0, "a pass with no local edit must not push")
+        #expect(second.imported == 0)
+        #expect(!second.changedAnything, "the sync does not settle")
+
+        let third = await engine.reconcile(importingFrom: lists)
+        #expect(!third.changedAnything)
+    }
+
+    /// The case the app actually hit: one list, whose reminders carry an alarm and a recurrence.
+    @Test("Reminders carrying fields the app cannot represent still settle")
+    func lossyRemindersSettle() async throws {
+        let clock = WallClock()
+        let store = try StoreFixture(dateProvider: clock)
+        let tasks = TaskService(items: store.items, context: store.context, dateProvider: clock)
+        let provider = FixtureRemindersProvider(authorization: .authorized)
+        let engine = ReminderSyncEngine(
+            items: store.items,
+            tasks: tasks,
+            context: store.context,
+            dateProvider: clock,
+            provider: provider
+        )
+
+        let first = await engine.reconcile(importingFrom: ["list-personal"])
+        #expect(first.imported == 2)
+        #expect(first.conflicted == 0, "a freshly imported reminder cannot already disagree with itself")
+
+        let second = await engine.reconcile(importingFrom: ["list-personal"])
+        #expect(second.conflicted == 0)
+        #expect(!second.changedAnything)
+    }
+
+    @Test("A real local edit still pushes, exactly once")
+    func localEditPushesOnceAndThenSettles() async throws {
+        let clock = WallClock()
+        let store = try StoreFixture(dateProvider: clock)
+        let tasks = TaskService(items: store.items, context: store.context, dateProvider: clock)
+        let provider = FixtureRemindersProvider(authorization: .authorized)
+        let engine = ReminderSyncEngine(
+            items: store.items,
+            tasks: tasks,
+            context: store.context,
+            dateProvider: clock,
+            provider: provider
+        )
+        let lists = await provider.lists().map(\.id)
+
+        _ = await engine.reconcile(importingFrom: lists)
+        _ = await engine.reconcile(importingFrom: lists)
+
+        let linked = try store.items.items(matching: {
+            var query = ItemQuery(); query.kinds = [.task]; query.scope = .all; return query
+        }()).filter { $0.externalIdentifier != nil && !$0.isCompleted }
+        let task = try #require(linked.first)
+
+        try store.items.update(task) { $0.title = "Renamed here" }
+
+        let pushing = await engine.reconcile(importingFrom: lists)
+        #expect(pushing.pushed == 1)
+
+        // And then quiet again — the stamp recorded by the push has to match what the write left.
+        let after = await engine.reconcile(importingFrom: lists)
+        #expect(after.pushed == 0)
+        #expect(!after.changedAnything)
+    }
+}
