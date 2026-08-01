@@ -112,6 +112,46 @@ which is the case that matters; the banner says what happened when they come bac
 settings row that says exactly which events post and which do not, and a test that no notification
 body ever contains a subject title — the same guarantee the calendar mirror already keeps.
 
+### The clock starts from wherever the work is
+
+`⌘⇧L` — Quick Log — opens a floating panel that **has already started a timer**.
+`ElephruitFeatures/QuickLogPanel.swift` and `QuickLogView.swift`, registered as a global hotkey
+beside Quick Jot and New Event in `AppEnvironment.registerGlobalShortcuts(for:)`.
+
+The argument for a third global shortcut, after two had to earn theirs: a timer is wanted **at the
+moment work begins**, and that moment is by definition one where somebody is looking at the work
+rather than at this app. Every second spent switching to Elephruit and finding Start is a second the
+entry is already wrong by, and the reason people abandon time tracking is that the cost of starting
+exceeds the value of the number it produces. The panel is `.nonactivatingPanel` for the same reason
+Quick Jot's is, plus one of its own: beginning to time a phone call must not switch you out of the
+application the call is about.
+
+It is not a second way to track time. `QuickLogController.startTimerIfIdle()` calls the same
+`switchTo(item: nil)` the tracker card's Start button calls, and the panel draws the same
+`TimeSubjectPicker`, `TimeProjectPicker`, `TimePeoplePicker` and `TimeTagPicker` writing through the
+same `setSubject`/`setProject`/`setPeople`/`setTags`. Two doors into one room, which is what
+`CaptureComposer` already established for Quick Jot after the panel and the sheet drifted apart.
+
+Four behaviours are the design, and `QuickLogTests` pins each one:
+
+1. **The clock starts before anything is named.** Requiring a name first is the friction the whole
+   arrangement exists to remove — the same reason the tracker card has two states rather than two
+   modes.
+2. **Pressing the keys twice starts one timer.** A global shortcut is pressed by reflex, and often
+   twice.
+3. **A timer already running is adopted, not switched away from.** Pressing a shortcut is not a
+   decision to end the work you are in the middle of. The header reads *Already timing* rather than
+   *Timing now*, because a window that took credit for a clock it did not start would be lying about
+   what the press did.
+4. **Closing is not stopping.** Escape and Done both write the name typed so far onto the entry and
+   leave the clock running; the menu bar goes on showing it. Stop and Discard are labelled buttons.
+   Discard exists because a shortcut hit by accident otherwise leaves a stray entry to be hunted down
+   later, which is a worse tax than the mistake was.
+
+There is no Pause here. Pause belongs to work already under way, the floating widget and the Time
+screen both offer it, and a fourth button would be one more decision at the moment whose point is to
+have made none.
+
 ---
 
 ## What is deliberately not there
@@ -134,7 +174,16 @@ body ever contains a subject title — the same guarantee the calendar mirror al
 
 - **Not reviewed on screen.** Every claim above is from the source and the tests. The module has not
   been looked at in either appearance, and the report chart in particular has never been drawn with
-  real data in front of a person.
+  real data in front of a person. **The Quick Log panel is in the same position** — its layout,
+  its width, and whether its pickers' popovers behave inside a non-activating panel are all
+  unverified by eye. The panel's *behaviour* is covered by `QuickLogTests`, which needs no window;
+  its appearance is not, and a floating panel is exactly the kind of surface where a hosting view
+  that has not settled its size opens in the wrong place. See `MiniTimerController.show()`, which
+  sizes itself twice for that reason and had to.
+- **The hotkey itself has not been pressed in a signed, sandboxed build.** ADR 0008 §5 requires
+  that, and it applies to `⌘⇧L` exactly as it applied to `⌘⇧J`: Debug behaviour under Xcode is not
+  representative of `RegisterEventHotKey`, and a refusal is only visible in Settings once a real
+  registration has been attempted.
 - **`Color.<name>` literals survive elsewhere.** `coloursComeFromTheDesignSystem` scans for
   constructors like `Color(red:)` and does not catch `Color.pink`. The pink child cards were one
   instance; `PersonCaptureSheets`, `PersonWorkspaceView`, `CalendarTimeGrid`, and

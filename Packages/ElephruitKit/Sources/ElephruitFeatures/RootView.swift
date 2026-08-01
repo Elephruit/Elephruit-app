@@ -561,6 +561,9 @@ public struct RootView: View {
             PaletteCommand(id: "start-timer", title: "Start Timer", category: .create, symbolName: "play.circle", command: .toggleTimer, in: registry) {
                 services?.timer.switchTo(item: nil)
             },
+            PaletteCommand(id: "quick-log", title: "Quick Log", category: .create, symbolName: "record.circle", command: .quickLog, in: registry) {
+                services?.quickLog.show()
+            },
             PaletteCommand(id: "stop-timer", title: "Stop Timer", category: .create, symbolName: "stop.circle") {
                 services?.timer.stop()
             },
