@@ -386,9 +386,24 @@ struct MiniTimerView: View {
             if !inside { scheduleClose() }
         }
         .calmAnimation(value: isMenuOpen)
-        // The panel is sized by hand, so it has to be told when the contents change shape.
-        .onChange(of: isMenuOpen) { _, _ in controller.contentSizeChanged() }
-        .onChange(of: controller.isCompact) { _, _ in controller.contentSizeChanged() }
+        // Both changes of shape animate, and for the same reason: the panel's right edge is pinned,
+        // so every one of them is the left edge travelling. A width that jumped would read as the
+        // window being replaced rather than as it opening up.
+        .calmAnimation(value: controller.isCompact)
+        .background {
+            // ### Why the size is reported rather than measured from outside
+            // The panel is sized by hand, and asking the hosting view how big it wants to be got the
+            // answer for the *previous* contents every time — see `contentSizeChanged(to:)`. This
+            // says how big it actually is, at the moment it is that big, including every step of an
+            // animation. The window then tracks it frame by frame, which is what makes the left edge
+            // slide rather than snap.
+            GeometryReader { proxy in
+                Color.clear
+                    .onChange(of: proxy.size, initial: true) { _, size in
+                        controller.contentSizeChanged(to: size)
+                    }
+            }
+        }
         .onDisappear { menuTask?.cancel() }
         .accessibilityIdentifier(AccessibilityID.Time.miniTimer)
     }

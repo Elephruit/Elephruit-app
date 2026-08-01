@@ -76,6 +76,83 @@ final class MiniTimerPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+/// Where the collapsed timer goes: a pure function of where it is pinned, how big it wants to be,
+/// and the screen it is on.
+///
+/// ### Why this is not simply four lines inside the controller
+/// It was, and the four lines were wrong in a way nobody could see by reading them. The failures
+/// this arithmetic produces are a window off the edge of the screen, a window underneath the Dock,
+/// and a window that has walked away from the corner it was left in — none of which is visible in
+/// a diff, all of which are obvious and infuriating to whoever it happens to. Pulled out here, the
+/// rules can be *asserted*: see `MiniTimerPlacementTests`, which states each of them once.
+struct MiniTimerPlacement: Hashable {
+    /// The room the panel may use: the screen minus the menu bar and the Dock's reserved band.
+    var area: CGRect
+
+    /// How far above that reserved band the Dock is actually drawn.
+    /// See ``MiniTimerController/dockOverhang(on:)``.
+    var dockOverhang: CGFloat
+
+    /// The least the panel will ever sit from an edge, however it got there.
+    ///
+    /// Smaller than the margin it opens at, on purpose: opening in the corner is a matter of taste,
+    /// and being reachable is not — so a panel dragged near an edge is left where it was put rather
+    /// than nudged back to the opening margin.
+    static let minimumInset: CGFloat = 8
+
+    /// Floors, so a measurement of nothing cannot produce a window nobody can see.
+    ///
+    /// Not hypothetical: an earlier version sized the panel from a hosting view that had never been
+    /// laid out, whose answer is **zero**, and collapsing the app left an invisible window behind
+    /// with no way back into it except the menu.
+    static let minimumSize = CGSize(width: 200, height: 48)
+
+    /// The lowest the bottom edge may sit: clear of the Dock as drawn, not merely as reserved.
+    var floor: CGFloat {
+        area.minY + Self.minimumInset + dockOverhang
+    }
+
+    /// The size the panel may actually be, given the room there is between that floor and the edges.
+    ///
+    /// Bounded so that a long description cannot produce a panel with a side nobody can reach.
+    func size(fitting wanted: CGSize) -> CGSize {
+        CGSize(
+            width: min(max(wanted.width, Self.minimumSize.width), area.width - 2 * Self.minimumInset),
+            height: min(max(wanted.height, Self.minimumSize.height), area.maxY - Self.minimumInset - floor)
+        )
+    }
+
+    /// Where a panel of this size hangs from this anchor.
+    ///
+    /// The anchor is the **bottom-right** corner, so the origin is derived from it and the size: a
+    /// width that changes moves the left edge and can move nothing else. That is the whole rule this
+    /// window has to keep, because every control on it is against the right and a surface that walks
+    /// its own buttons out from under an arriving pointer is worse than one that cannot resize.
+    ///
+    /// The floor has the last word over the ceiling. A clamp that let the top bound win could push
+    /// the panel back underneath the very thing this calculation exists to clear — which is what the
+    /// previous one did whenever the panel was measured taller than it really was.
+    func frame(of size: CGSize, hangingFrom anchor: CGPoint) -> CGRect {
+        var origin = CGPoint(x: anchor.x - size.width, y: anchor.y)
+
+        origin.x = min(origin.x, area.maxX - size.width - Self.minimumInset)
+        origin.x = max(origin.x, area.minX + Self.minimumInset)
+
+        let ceiling = max(floor, area.maxY - size.height - Self.minimumInset)
+        origin.y = min(max(origin.y, floor), ceiling)
+
+        return CGRect(origin: origin, size: size)
+    }
+
+    /// Where it hangs from the first time: the lower right, clear of the corner and the Dock.
+    ///
+    /// Only the first time. After that the panel remembers where it was dragged to, because a window
+    /// that jumps back to a corner every time it opens is one nobody bothers moving.
+    func defaultAnchor(openingInset: CGFloat) -> CGPoint {
+        CGPoint(x: area.maxX - openingInset, y: area.minY + openingInset + dockOverhang)
+    }
+}
+
 /// Owns the mini panel, and the fact of being collapsed.
 ///
 /// ### Why the controller rather than the view holds "collapsed"
@@ -105,10 +182,11 @@ public final class MiniTimerController {
     /// passing, not what it is being spent on. But a description runs to whatever length somebody
     /// typed, and a panel that is three hundred points wide because of a sentence you already know
     /// is in the way. So the name is the default and this is the opt-out, remembered like the pin.
+    /// Nothing resizes the panel from here. The view is about to lay itself out at a different
+    /// width, and it will say so — which is the only account of the size this object trusts.
     public var isCompact: Bool {
         didSet {
             defaults.set(isCompact, forKey: Self.compactKey)
-            resizeToFit()
         }
     }
 
@@ -117,11 +195,34 @@ public final class MiniTimerController {
 
     private var panel: MiniTimerPanel?
 
-    /// Kept so the panel can be resized when the contents change shape.
+    /// The corner the panel hangs from: its **bottom-right**, in screen coordinates.
     ///
-    /// A window does not follow its SwiftUI contents on its own once its size has been set by hand,
-    /// and toggling compact changes the width by about a hundred and eighty points.
-    private var hosting: NSView?
+    /// ### Why the position is held rather than read back off the window
+    /// Because the rule for this panel is that its right edge does not move. Gaining the window
+    /// controls, losing the description, a longer thing being timed — all of them are changes to the
+    /// left edge and to nothing else. Every control on the pill is against the right, and a surface
+    /// that walks its own buttons out from under the pointer that arrived to press one is worse than
+    /// one that cannot resize at all.
+    ///
+    /// Deriving that edge from `panel.frame` at the moment of each resize is what this replaces, and
+    /// it is why the panel drifted: the frame is whatever the last resize left behind, so one
+    /// placement made against a stale measurement became the anchor for the next, and the error
+    /// accumulated across every widening and narrowing until the panel had walked off the screen.
+    /// An anchor cannot accumulate error, because nothing computes it — it is set once, moved only
+    /// when the user moves the window, and every size is fitted to it.
+    private var anchor: NSPoint?
+
+    /// The size the view last measured itself at. See ``contentSizeChanged(to:)``.
+    ///
+    /// Held so the panel can be re-placed without waiting for the contents to change shape again —
+    /// on a different screen, or after the Dock has moved.
+    private var contentSize: NSSize?
+
+    /// The frame this object last set, so a move notification can tell a drag from its own work.
+    private var placedFrame: NSRect?
+
+    private var moveObserver: (any NSObjectProtocol)?
+
     private let services: AppServices
     private let defaults: UserDefaults
 
@@ -169,6 +270,12 @@ public final class MiniTimerController {
     private func show() {
         if let panel {
             panel.isPinned = isPinned
+            // Re-placed on every appearance rather than only when the panel is built. A remembered
+            // position is a convenience and not a promise: the screen it was last on may be gone,
+            // may be a different size, or may have grown a Dock along the edge it was sitting over.
+            // Opening somewhere the user cannot reach it is the one failure this window cannot
+            // recover from, because it *is* the way back into the app.
+            place()
             panel.orderFront(nil)
             return
         }
@@ -180,94 +287,73 @@ public final class MiniTimerController {
 
         let panel = MiniTimerPanel(content: hosting)
         panel.isPinned = isPinned
-
-        self.hosting = hosting
         self.panel = panel
 
-        sizeToFit(panel)
-        positionInLowerRight(panel)
-
+        observeMovement(of: panel)
+        place()
         panel.orderFront(nil)
-
-        // ### Why it is sized twice
-        // SwiftUI has not finished deciding how wide it wants to be at the moment the panel is
-        // built: `fittingSize` after one layout pass is an underestimate, and the window then grows
-        // to fit *after* it has been positioned — rightwards, off the edge of the screen, taking
-        // every control but the first with it. One turn of the run loop later the answer is settled,
-        // and re-fitting against the right edge puts it back where it belongs.
-        DispatchQueue.main.async { [weak self] in self?.resizeToFit() }
     }
 
-    /// Makes the panel exactly as big as its contents want to be.
-    ///
-    /// ### Why the layout pass is not optional
-    /// `fittingSize` on a hosting view that has never been laid out is **zero**, and a panel set to
-    /// zero is a panel nobody can see — which is exactly what happened: collapsing hid the app and
-    /// left an invisible window behind, with no way back except the menu. The floor is belt and
-    /// braces for the same failure arriving another way.
-    private func sizeToFit(_ panel: MiniTimerPanel) {
-        guard let hosting else { return }
-        hosting.layoutSubtreeIfNeeded()
+    // MARK: - Where it sits
 
-        let wanted = hosting.fittingSize
-        panel.setContentSize(
-            NSSize(
-                width: max(wanted.width, 200),
-                height: max(wanted.height, 48)
-            )
+    /// Puts the panel where the anchor says, at the size the contents last measured.
+    ///
+    /// Everything hangs off the anchor, which is why the right edge holds still: the origin is
+    /// *derived* from it and the width, so a width that changes moves the left edge and can move
+    /// nothing else. Nothing here reads the current frame and computes a new one from it, which is
+    /// what used to let one bad measurement become the starting point for every placement after it.
+    ///
+    /// The arithmetic itself is in ``MiniTimerPlacement``, where it can be asserted.
+    private func place() {
+        guard let panel, let screen = panel.screen ?? NSScreen.main else { return }
+
+        let placement = MiniTimerPlacement(
+            area: screen.visibleFrame,
+            dockOverhang: Self.dockOverhang(on: screen)
         )
-    }
 
-    /// Re-sizes in place, keeping the panel's right edge where it was.
-    ///
-    /// Anchored on the right because that is the edge the clock and the buttons are against, and a
-    /// panel that grew leftwards from a fixed left edge would walk its own controls out from under
-    /// the pointer that just pressed one.
-    private func resizeToFit() {
-        guard let panel else { return }
-        let right = panel.frame.maxX
-        let bottom = panel.frame.minY
-
-        sizeToFit(panel)
-        panel.setFrameOrigin(NSPoint(x: right - panel.frame.width, y: bottom))
-        clampOnScreen(panel)
-    }
-
-    /// Drags the panel back inside the screen if it has grown past an edge.
-    ///
-    /// Growing is the case that matters — a panel widened by a long description or by leaving
-    /// compact mode extends to the *right*, which is where the screen ends and where every one of
-    /// its buttons lives.
-    private func clampOnScreen(_ panel: NSPanel) {
-        guard let area = (panel.screen ?? NSScreen.main)?.visibleFrame else { return }
-        let inset: CGFloat = 8
-
-        var origin = panel.frame.origin
-        origin.x = min(origin.x, area.maxX - panel.frame.width - inset)
-        origin.x = max(origin.x, area.minX + inset)
-        origin.y = max(origin.y, area.minY + inset)
-        origin.y = min(origin.y, area.maxY - panel.frame.height - inset)
-
-        panel.setFrameOrigin(origin)
-    }
-
-    /// Opens where the widget it replaces was: the lower-right of the screen it is on.
-    ///
-    /// Only the first time. After that the panel remembers where it was dragged to, because a window
-    /// that jumps back to a corner every time it opens is one nobody bothers moving.
-    private func positionInLowerRight(_ panel: NSPanel) {
-        guard let screen = NSScreen.main else { return }
-
-        // `visibleFrame` rather than `frame`, so the Dock and the menu bar are already excluded.
-        // Using the full frame put the panel behind the Dock, where half of it was unreachable.
-        let area = screen.visibleFrame
-        panel.setFrameOrigin(
-            NSPoint(
-                x: area.maxX - panel.frame.width - Self.edgeInset,
-                y: area.minY + Self.edgeInset + dockOverhang(on: screen)
-            )
+        let content = placement.size(fitting: contentSize ?? Self.placeholderSize)
+        let frameSize = panel.frameRect(forContentRect: CGRect(origin: .zero, size: content)).size
+        let frame = placement.frame(
+            of: frameSize,
+            hangingFrom: anchor ?? placement.defaultAnchor(openingInset: Self.edgeInset)
         )
+
+        // Whatever the clamp had to do is now where the panel lives, so the anchor is brought into
+        // line with it — before the early return, so that a placement which changed nothing still
+        // records where the panel is. Without this, a panel pulled back on screen would spring to
+        // its old corner the next time its contents changed shape, which is a panel that fights
+        // being moved.
+        anchor = CGPoint(x: frame.maxX, y: frame.minY)
+
+        guard frame != panel.frame else { return }
+
+        placedFrame = frame
+        panel.setFrame(frame, display: true)
     }
+
+    /// Follows the window when the user drags it, and only then.
+    ///
+    /// The anchor is the whole of this panel's position, so something has to write to it when the
+    /// person moves the window by hand — otherwise the next change of shape would yank the pill back
+    /// to wherever it was last placed, which reads as the app refusing to be put somewhere.
+    ///
+    /// Frames this object set are ignored by comparison rather than by a flag, because the move
+    /// notification is not guaranteed to arrive inside the call that caused it, and a flag that has
+    /// already been cleared by then would let the panel treat its own placement as a drag.
+    private func observeMovement(of panel: MiniTimerPanel) {
+        moveObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification,
+            object: panel,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let panel = self.panel, panel.frame != self.placedFrame else { return }
+                self.anchor = NSPoint(x: panel.frame.maxX, y: panel.frame.minY)
+            }
+        }
+    }
+
 
     /// How far above its own reserved band the Dock's tray is actually drawn.
     ///
@@ -285,7 +371,7 @@ public final class MiniTimerController {
     /// push the panel into the middle of the screen. And it is added only when the Dock is along the
     /// bottom edge — the one this corner shares with it — which is what comparing the three insets
     /// establishes without asking the Dock anything the sandbox will not answer.
-    private func dockOverhang(on screen: NSScreen) -> CGFloat {
+    static func dockOverhang(on screen: NSScreen) -> CGFloat {
         let bottom = screen.visibleFrame.minY - screen.frame.minY
         let left = screen.visibleFrame.minX - screen.frame.minX
         let right = screen.frame.maxX - screen.visibleFrame.maxX
@@ -297,6 +383,14 @@ public final class MiniTimerController {
     /// The margin the panel keeps from the edges of the screen when it first opens.
     private static let edgeInset: CGFloat = 24
 
+    /// What the panel is sized to before the view has measured itself.
+    ///
+    /// On screen only for the frame between the window appearing and SwiftUI laying its contents
+    /// out. It is a placeholder rather than a guess anybody relies on: the anchor puts its right
+    /// edge exactly where the real one will be, so the correction that follows moves the left edge
+    /// and nothing else.
+    private static let placeholderSize = NSSize(width: 320, height: 64)
+
     /// See ``dockOverhang(on:)``.
     ///
     /// Measured against a Dock reserving 64 points and drawing something closer to a hundred: the
@@ -305,37 +399,40 @@ public final class MiniTimerController {
     /// than it strictly had to; erring low costs the whole point of the panel.
     private static let dockGlassOverhang: CGFloat = 32
 
-    /// Re-fits the panel to contents that have changed shape.
+    /// Told by the view how big it has laid itself out to be.
     ///
-    /// Called by the view when its hover state changes, because the window controls appear and
-    /// disappear rather than sitting there invisibly reserving room — which on a panel this small is
-    /// the difference between a tidy pill and a pill with a hole in it.
+    /// ### Why the view says, rather than the panel asking
+    /// Because asking was wrong, twice, in the same way both times. `NSHostingView.fittingSize` is
+    /// SwiftUI answering *how big would you like to be*, and that answer is only true once it has
+    /// laid the new contents out. Asking during the update that changed them — which is exactly when
+    /// a panel sized by hand wants to ask — returns the size of what was there before, so the window
+    /// was set to the width of a pill without the controls it had just gained.
     ///
-    /// ### Why it fits twice, the second time a turn later
-    /// This is the same failure `show()` documents, arriving by the other door, and it was worse
-    /// here because nothing came along afterwards to correct it. `fittingSize` asks SwiftUI how big
-    /// it wants to be, and asking *during the update that changed what is in it* gets the answer for
-    /// what was in it before: the controls had not been laid out yet, so the panel was set to the
-    /// width of a pill that did not have them.
+    /// What that looks like is worth writing down, because it does not look like a sizing bug. The
+    /// root of this view is `.fixedSize()`, so contents too big for the window are not compressed
+    /// into it: they overflow and are clipped **centred**. The whole pill therefore appears to jump
+    /// sideways by half the missing width and lose an end, which reads as the panel moving rather
+    /// than as the window being too small — and the wrong frame it left behind then became the
+    /// starting point for the next placement.
     ///
-    /// What that looked like is worth recording, because it does not look like a sizing bug. The
-    /// root of this view is `.fixedSize()`, so contents too big for the window are not compressed —
-    /// they overflow it and are clipped, **centred**. So the whole pill appeared to jump leftwards
-    /// by half the missing width and lose its right-hand end, which reads as the panel moving rather
-    /// than as the window being too small. One turn later the answer is settled, and because both
-    /// fits anchor the right edge the correction is invisible: the panel grows leftwards, which is
-    /// the direction it has to grow, since every control the pointer is on the way to is on the
-    /// right.
-    public func contentSizeChanged() {
-        resizeToFit()
-        DispatchQueue.main.async { [weak self] in self?.resizeToFit() }
+    /// A `GeometryReader` behind the card measures what SwiftUI actually laid out, at the moment it
+    /// laid it out, and reports every intermediate size along an animation. So the window follows
+    /// its contents frame by frame rather than guessing once: the left edge slides out as the
+    /// controls appear, which *is* the animation, and nothing anywhere has to be timed.
+    public func contentSizeChanged(to size: CGSize) {
+        guard size.width > 0, size.height > 0 else { return }
+        contentSize = size
+        place()
     }
 
     /// Closes the panel and forgets it, for window teardown and tests.
     public func shutDown() {
+        if let moveObserver { NotificationCenter.default.removeObserver(moveObserver) }
+        moveObserver = nil
+
         panel?.orderOut(nil)
         panel = nil
-        hosting = nil
+        placedFrame = nil
         hiddenWindows = []
         isCollapsed = false
     }
