@@ -453,9 +453,22 @@ public struct EmptyStateView: View {
                 }
             }
 
+            // ### Why this is a real button
+            // It used to be `.borderless`, which on macOS is accent-coloured text and nothing else:
+            // no border, no hover, no pressed state, and a hit target the width of the words. On a
+            // screen that is otherwise empty, the one thing there is to do was drawn as a caption —
+            // "Ask Again" under a padlock, "Add Time…" under a stopwatch — and it was not obvious
+            // that either could be clicked at all.
+            //
+            // An empty state's action is its primary action by construction: there is nothing else
+            // on the screen to compete with. So it is the prominent style, at the large control
+            // size, and it is the default button, which makes Return do the obvious thing for
+            // somebody who arrived here without a mouse.
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .keyboardShortcut(.defaultAction)
                     .padding(.top, Theme.Spacing.tight)
             }
         }
