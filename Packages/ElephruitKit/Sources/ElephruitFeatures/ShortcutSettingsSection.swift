@@ -43,7 +43,7 @@ public struct ShortcutSettingsSection: View {
                 }
 
                 if let explanation = globalResults[command]?.explanation {
-                    Label(explanation, systemImage: "keyboard.badge.exclamationmark")
+                    Label(explanation, systemImage: "exclamationmark.triangle")
                         .font(Theme.Text.metadata)
                         .foregroundStyle(Theme.Colors.unresolvedLink)
                         .fixedSize(horizontal: false, vertical: true)
