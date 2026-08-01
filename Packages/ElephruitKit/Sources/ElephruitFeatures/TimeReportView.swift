@@ -32,6 +32,13 @@ struct TimeReportView: View {
     @State private var reloadTick = 0
     @State private var exportProblem: String?
 
+    /// The day the pointer is over, and so the day the tooltip is about.
+    @State private var hoveredDay: Date?
+
+    /// What colour each breakdown row is drawn in. Resolved off the render path — see
+    /// ``resolveSeriesColors()``.
+    @State private var seriesColors: [String: Color] = [:]
+
     init(navigation: NavigationModel) {
         self.navigation = navigation
     }
@@ -79,6 +86,10 @@ struct TimeReportView: View {
         .navigationSubtitle(period.displayName)
         .toolbar { toolbarContent }
         .task(id: reloadToken) { reload() }
+        // Keyed on the grouping as well as the entries, because which rows exist — and therefore
+        // which ranks they hold and what colour each takes — changes the moment somebody switches
+        // from Project to Person.
+        .task(id: "\(reloadToken)|\(grouping.rawValue)") { resolveSeriesColors() }
         .alert("The report could not be written", isPresented: exportProblemBinding) {
             Button("OK") { exportProblem = nil }
         } message: {
@@ -246,19 +257,21 @@ struct TimeReportView: View {
     /// the period every time you asked what a row contained.
     private var chart: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            SectionHeader("By day")
+            HStack(alignment: .firstTextBaseline) {
+                SectionHeader("By day")
 
-            Chart(dailyBars) { bar in
-                BarMark(
-                    // `unit: .day` is what makes this a bar per day rather than a hairline at an
-                    // instant. Without it a `BarMark` on a continuous date axis has no width of its
-                    // own and gets a default one, which in a week-wide plot is a thread — two
-                    // three-pixel lines in an acre of grid, which is what the chart was.
-                    x: .value("Day", bar.day, unit: .day),
-                    y: .value("Hours", bar.hours)
-                )
-                .foregroundStyle(Theme.Colors.selection)
-                .cornerRadius(Theme.Radius.small)
+                Spacer()
+
+                if isStacked {
+                    Text("Coloured by \(grouping.displayName.lowercased())")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.tertiaryText)
+                }
+            }
+
+            Chart {
+                bars
+                hoverMark
             }
             .chartYAxisLabel("hours")
             .chartYAxis {
@@ -287,10 +300,97 @@ struct TimeReportView: View {
                 }
             }
             .frame(height: 180)
+            // ### Why the whole plot is the target and not each bar
+            // Because a day with nothing on it has no bar to hover, and "what did I do on Wednesday"
+            // is a question whose answer is sometimes *nothing*. Hit-testing the plot and resolving
+            // the pointer's x to a calendar day means every day in the period answers, including the
+            // empty ones — and it means the pointer does not have to find a three-point-tall bar on
+            // a quiet Tuesday.
+            .chartOverlay { proxy in
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(.clear)
+                        .contentShape(.rect)
+                        .onContinuousHover { phase in
+                            switch phase {
+                            case .active(let location):
+                                hoveredDay = day(at: location, proxy: proxy, geometry: geometry)
+                            case .ended:
+                                hoveredDay = nil
+                            }
+                        }
+                }
+            }
+            .calmAnimation(Theme.Motion.appearance, value: hoveredDay)
             .accessibilityIdentifier(AccessibilityID.Time.reportChart)
             .accessibilityLabel("Daily totals across \(period.displayName)")
             .accessibilityValue(chartDescription)
         }
+    }
+
+    /// The bars themselves.
+    ///
+    /// Its own `@ChartContentBuilder` rather than inline, and not for tidiness: with the marks, the
+    /// rule mark, the annotation and six chart modifiers in one expression, the type checker gave up
+    /// — "unable to type-check this expression in reasonable time". Charts builders nest generic
+    /// types deeply enough that splitting them is a practical requirement rather than a style
+    /// preference.
+    @ChartContentBuilder
+    private var bars: some ChartContent {
+        ForEach(dailyBars) { bar in
+            ForEach(bar.segments) { segment in
+                BarMark(
+                    // `unit: .day` is what makes this a bar per day rather than a hairline at an
+                    // instant. Without it a `BarMark` on a continuous date axis has no width of its
+                    // own and gets a default one, which in a week-wide plot is a thread.
+                    x: .value("Day", bar.day, unit: .day),
+                    y: .value("Hours", segment.hours)
+                )
+                .foregroundStyle(segment.color)
+                // Dimmed rather than hidden while another day is hovered: the shape of the week has
+                // to stay readable, and a chart that empties as the pointer crosses it is answering
+                // a question nobody asked.
+                .opacity(hoveredDay == nil || hoveredDay == bar.day ? 1 : 0.35)
+                .cornerRadius(Theme.Radius.small)
+                .accessibilityLabel(bar.day.formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                .accessibilityValue(bar.accessibilityValue)
+            }
+        }
+    }
+
+    /// The line and the tooltip under the pointer, when there is one.
+    @ChartContentBuilder
+    private var hoverMark: some ChartContent {
+        if let hoveredDay, let bar = dailyBars.first(where: { $0.day == hoveredDay }) {
+            RuleMark(x: .value("Day", hoveredDay, unit: .day))
+                .foregroundStyle(Theme.Colors.separator)
+                .annotation(
+                    position: .top,
+                    alignment: .center,
+                    spacing: Theme.Spacing.small,
+                    // Kept inside the plot, so hovering the first or last day of a period does not
+                    // put the tooltip half off the side of the window.
+                    overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                ) {
+                    DayTooltip(bar: bar)
+                }
+        }
+    }
+
+    /// The calendar day under the pointer, or `nil` when it is outside the plot.
+    private func day(at location: CGPoint, proxy: ChartProxy, geometry: GeometryProxy) -> Date? {
+        guard let services, let plotFrame = proxy.plotFrame else { return nil }
+
+        let plot = geometry[plotFrame]
+        guard plot.contains(location) else { return nil }
+
+        guard let date: Date = proxy.value(atX: location.x - plot.origin.x) else { return nil }
+        let day = services.dateProvider.calendar.startOfDay(for: date)
+
+        // Only a day the period actually holds. Charts will happily resolve an x just past the last
+        // bar into the day after the period ends, and a tooltip for a day that is not on screen is
+        // a tooltip about nothing.
+        return dailyBars.contains { $0.day == day } ? day : nil
     }
 
     /// One bar per calendar day in the period, including the days with nothing on them.
@@ -304,6 +404,18 @@ struct TimeReportView: View {
     /// Filled here rather than in ``ElephruitCore/TimeReporting``, which the export and the log's
     /// summary also read. A row of zero belongs in a picture of a week and does not belong in a
     /// spreadsheet of what was tracked.
+    /// Whether the bars are cut into coloured segments, or drawn as one block each.
+    ///
+    /// ### The two cases where they are not
+    /// Grouping *by day* would colour a day's bar by the day it is, which is a colour that says the
+    /// x-axis again. And under `.tag` or `.person` an hour counts in full under each — see
+    /// ``ElephruitCore/TimeReporting/dailyBreakdown(entries:grouping:range:calendar:now:)`` — so
+    /// stacking the cells would build a Tuesday taller than Tuesday. The table below says so in
+    /// words; the chart cannot, so it declines to stack rather than draw a bar that is wrong.
+    private var isStacked: Bool {
+        grouping != .day && !grouping.rowsCanOverlap
+    }
+
     private var dailyBars: [DailyBar] {
         guard let services else { return [] }
 
@@ -326,18 +438,116 @@ struct TimeReportView: View {
             totals[calendar.startOfDay(for: date)] = row.total
         }
 
+        // The cells, gathered per day and largest first, so the tallest segment of every bar sits at
+        // the bottom and the eye can compare across days without re-reading the legend.
+        var cellsByDay: [String: [TimeDayCell]] = [:]
+        if isStacked {
+            for cell in TimeReporting.dailyBreakdown(
+                entries: entries,
+                grouping: grouping,
+                range: range,
+                calendar: calendar,
+                now: services.dateProvider.now
+            ) {
+                cellsByDay[cell.dayKey, default: []].append(cell)
+            }
+        }
+
         var bars: [DailyBar] = []
         var day = calendar.startOfDay(for: range.lowerBound)
 
         // Bounded, so a custom period of ten years cannot ask for four thousand bars. Past this the
         // chart is a smear anyway and the breakdown below is the surface that answers.
         while day < range.upperBound, bars.count < 400 {
-            bars.append(DailyBar(day: day, hours: (totals[day] ?? 0) / 3_600))
+            let total = totals[day] ?? 0
+            bars.append(
+                DailyBar(
+                    day: day,
+                    hours: total / 3_600,
+                    segments: segments(forDayStarting: day, total: total, cells: cellsByDay, calendar: calendar)
+                )
+            )
             guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
             day = next
         }
 
         return bars
+    }
+
+    /// One day's bar, cut into the coloured pieces it is made of.
+    ///
+    /// ### Why the pieces are scaled to the day's rounded total
+    /// Because the bar's height has to be the same number the tile above it and the table below it
+    /// report, and those are rounded — see the note on `TimeReporting.report`. The cells are exact,
+    /// deliberately: rounding a cell would round the same minute once for every day it touched. So
+    /// the shares come from the exact cells and the height comes from the rounded total, and under
+    /// the default *exact* rounding the two are simply equal.
+    private func segments(
+        forDayStarting day: Date,
+        total: TimeInterval,
+        cells: [String: [TimeDayCell]],
+        calendar: Calendar
+    ) -> [DailySegment] {
+        guard total > 0 else { return [] }
+
+        let components = calendar.dateComponents([.year, .month, .day], from: day)
+        let key = DayKey.string(
+            year: components.year ?? 0,
+            month: components.month ?? 0,
+            day: components.day ?? 0
+        )
+
+        let dayCells = (cells[key] ?? []).sorted { $0.total > $1.total }
+        let exact = dayCells.reduce(0) { $0 + $1.total }
+
+        guard isStacked, !dayCells.isEmpty, exact > 0 else {
+            return [
+                DailySegment(
+                    rowKey: "\u{1}total",
+                    title: "Tracked",
+                    hours: total / 3_600,
+                    color: Theme.Colors.selection
+                )
+            ]
+        }
+
+        return dayCells.map { cell in
+            DailySegment(
+                rowKey: cell.rowKey,
+                title: cell.title,
+                hours: (cell.total / exact) * total / 3_600,
+                color: seriesColors[cell.rowKey] ?? Theme.Colors.selection
+            )
+        }
+    }
+
+    /// The colour each breakdown row is drawn in, resolved once per reload.
+    ///
+    /// ### Why this is stored rather than computed in `body`
+    /// Because a project's own tint lives on the item, and reading it means touching the store —
+    /// which a view may not do while rendering. That is criterion A1-1 and `FetchAudit` is what
+    /// proves it. Resolved when the entries or the grouping change, which is exactly when the answer
+    /// can differ, and read from a dictionary while drawing.
+    private func resolveSeriesColors() {
+        guard let services, isStacked else {
+            seriesColors = [:]
+            return
+        }
+
+        // Ranked by the report's own ordering — largest first — so the biggest slice of the chart is
+        // the same colour as the top row of the table under it.
+        var resolved: [String: Color] = [:]
+        for (rank, row) in report.rows.enumerated() {
+            let colorName = row.itemID.flatMap { id in
+                (try? services.items.item(id: id))??.colorName
+            }
+            resolved[row.key] = ReportSeriesPalette.color(
+                colorName: colorName,
+                rank: rank,
+                isUnassigned: ReportSeriesPalette.isUnassignedKey(row.key)
+            )
+        }
+        seriesColors = resolved
     }
 
     /// How many days the period covers, which is what decides how the axis is laboured.
@@ -536,9 +746,121 @@ struct TimeReportView: View {
 /// One day of the period, whether or not anything was tracked on it.
 struct DailyBar: Identifiable, Hashable {
     var day: Date
+
+    /// The day's total, which is what the bar's height is.
     var hours: Double
 
+    /// The coloured pieces it is made of. One piece when the grouping cannot be stacked, and none at
+    /// all on a day with nothing on it.
+    var segments: [DailySegment] = []
+
     var id: Date { day }
+
+    var isEmpty: Bool { hours <= 0 }
+
+    /// What VoiceOver reads for this bar, so a day is answerable without a pointer.
+    ///
+    /// The tooltip is a hover affordance and hover is not available to everybody. This carries the
+    /// same facts through the accessibility tree, which is where a keyboard or a screen reader can
+    /// reach them.
+    var accessibilityValue: String {
+        guard !isEmpty else { return "Nothing tracked" }
+
+        var parts = [TimeFormatting.spelled(hours * 3_600)]
+        if segments.count > 1 {
+            parts.append(contentsOf: segments.prefix(3).map {
+                "\($0.title), \(TimeFormatting.short($0.hours * 3_600))"
+            })
+        }
+        return parts.joined(separator: ", ")
+    }
+}
+
+/// One coloured piece of a day's bar.
+struct DailySegment: Identifiable, Hashable {
+    var rowKey: String
+    var title: String
+    var hours: Double
+    var color: Color
+
+    var id: String { rowKey }
+}
+
+/// What one day held, shown while the pointer is over it.
+///
+/// ### Why the tooltip repeats the breakdown rather than only the total
+/// Because the total is already the bar's height, and a tooltip that says what the picture has just
+/// said is a delay followed by nothing — the standard this app holds its own sidebar tooltips to.
+/// What a stacked bar cannot say is *which* colour was which and how much each was worth, and that
+/// is precisely what somebody points at a segment to find out.
+struct DayTooltip: View {
+    let bar: DailyBar
+
+    /// Enough to answer the question, few enough that the tooltip does not become the chart.
+    private static let visibleSegments = 4
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
+                Text(bar.day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
+                    .font(Theme.Text.sectionHeader)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+
+                Spacer(minLength: Theme.Spacing.medium)
+
+                Text(bar.isEmpty ? "—" : TimeFormatting.short(bar.hours * 3_600))
+                    .font(Theme.Text.rowTitleEmphasised)
+                    .monospacedDigit()
+            }
+
+            if bar.isEmpty {
+                Text("Nothing tracked")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+            } else if bar.segments.count > 1 {
+                ForEach(bar.segments.prefix(Self.visibleSegments)) { segment in
+                    HStack(spacing: Theme.Spacing.tight) {
+                        // The same colour the segment is drawn in, which is the whole point: the
+                        // swatch is what joins the name to the piece of the bar under the pointer.
+                        Circle()
+                            .fill(segment.color)
+                            .frame(width: 7, height: 7)
+
+                        Text(segment.title)
+                            .font(Theme.Text.metadata)
+                            .lineLimit(1)
+
+                        Spacer(minLength: Theme.Spacing.medium)
+
+                        Text(TimeFormatting.short(segment.hours * 3_600))
+                            .font(Theme.Text.metadata)
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                    }
+                }
+
+                if bar.segments.count > Self.visibleSegments {
+                    Text("and \(bar.segments.count - Self.visibleSegments) more")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.tertiaryText)
+                }
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.medium)
+        .padding(.vertical, Theme.Spacing.small)
+        .frame(minWidth: 160, alignment: .leading)
+        .fixedSize()
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                .strokeBorder(Theme.Colors.separator)
+        }
+        // The pointer is the thing asking; the tooltip must never be the thing it hits, or moving
+        // one pixel further would dismiss the tooltip it just summoned.
+        .allowsHitTesting(false)
+        // Read through the bars' own accessibility values instead — see `DailyBar`.
+        .accessibilityHidden(true)
+    }
 }
 
 /// How the daily chart's x-axis is stepped and labelled for a period of a given length.
