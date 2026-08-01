@@ -46,7 +46,9 @@ struct ContactImportReviewView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            Text("Review before adding")
+            // The title has to agree with the buttons. Calling this "Review before adding" when
+            // there is nothing to add sets up a task the sheet then refuses to let anybody do.
+            Text(model.plan?.hasPendingAdditions == false ? "Nothing new to add" : "Review before adding")
                 .font(Theme.Text.title)
 
             if let plan = model.plan {
@@ -209,7 +211,49 @@ struct ContactImportReviewView: View {
 
     // MARK: - Footer
 
+    /// ### Two screens, not one
+    /// When there is something to add, this is a review: a count of what is ticked, Cancel to
+    /// abandon it, and a prominent Add.
+    ///
+    /// When there is nothing to add — every contact on the Mac is already linked, which is what
+    /// somebody reconnecting an existing library sees — it is not a review. There is no decision to
+    /// make and nothing to abandon, and the pairing of "Cancel" with a greyed-out "Add Contacts to
+    /// People" reads as a task that has gone wrong. It is a confirmation that everything is already
+    /// in, and the only button it needs is **Done**.
+    @ViewBuilder
     private var footer: some View {
+        if let plan = model.plan, !plan.hasPendingAdditions {
+            nothingToAddFooter(plan)
+        } else {
+            reviewFooter
+        }
+    }
+
+    private func nothingToAddFooter(_ plan: ContactImportPlan) -> some View {
+        HStack(spacing: Theme.Spacing.small) {
+            Label(
+                plan.alreadyLinkedCount > 0
+                    ? "Everything on this Mac is already in People."
+                    : "There is nothing here to add.",
+                systemImage: plan.alreadyLinkedCount > 0 ? "checkmark.circle.fill" : "tray"
+            )
+            .font(Theme.Text.rowSubtitle)
+            .foregroundStyle(
+                plan.alreadyLinkedCount > 0 ? Theme.Colors.completed : Theme.Colors.secondaryText
+            )
+
+            Spacer()
+
+            // Done, not Cancel. Nothing has been started, so there is nothing to call off — and it
+            // is the default action, so Return and Escape both close a sheet that has no other job.
+            Button("Done", action: onCancel)
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(Theme.Spacing.medium)
+    }
+
+    private var reviewFooter: some View {
         HStack {
             if let plan = model.plan {
                 VStack(alignment: .leading, spacing: 0) {

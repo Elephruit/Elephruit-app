@@ -587,7 +587,7 @@ public enum TaskEntryParser {
                     kind: .unsupported,
                     display: all[index].text,
                     range: all[index].range,
-                    explanation: "No date was recognised after this."
+                    explanation: "No date was recognized after this."
                 )
             )
             return 1

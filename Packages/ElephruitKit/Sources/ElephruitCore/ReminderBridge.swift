@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// One of the user's Reminders lists, as this app needs to see it.
@@ -120,19 +121,57 @@ extension ReminderSnapshot {
     /// arrive later than the change itself. Comparing a hash of exactly the mapped fields answers the
     /// only question that matters — *has anything I care about changed since I last looked* — and
     /// gives the same answer on every machine.
+    /// ### Why this is not `Hasher`
+    /// It was, and the value is **persisted** — `ReminderLinkState.lastSyncedFingerprint` is stored
+    /// on the task and compared against a freshly computed one on the next pass, possibly weeks and
+    /// several launches later.
+    ///
+    /// Swift seeds `Hasher` randomly per process. The same reminder therefore fingerprinted
+    /// differently on every launch, so after every restart *every* linked task looked as though it
+    /// had been changed in Reminders. Paired with a local edit that is what produces a conflict, and
+    /// on its own it silently re-adopts the remote over local state. The comment that used to sit
+    /// here claimed the hash "gives the same answer on every machine", which is the one thing
+    /// `Hasher` guarantees it does not.
+    ///
+    /// SHA-256 over a canonical string gives the same answer in every process, on every machine, and
+    /// after every upgrade. CryptoKit is a system framework, so this adds no dependency.
+    ///
+    /// The `v2:` prefix marks a fingerprint as one of these. Anything without it was written by the
+    /// old scheme and cannot be compared against anything — see `ReminderReconciliation.decide`,
+    /// which treats those as a baseline to be re-established rather than as evidence of a change.
     public var fingerprint: String {
-        var hasher = Hasher()
-        hasher.combine(title)
-        hasher.combine(notes ?? "")
-        hasher.combine(startComponents?.description ?? "")
-        hasher.combine(dueComponents?.description ?? "")
-        hasher.combine(isCompleted)
-        hasher.combine(completionDate?.timeIntervalSinceReferenceDate ?? -1)
-        hasher.combine(priority)
-        hasher.combine(alarmDates.map(\.timeIntervalSinceReferenceDate).sorted())
-        hasher.combine(hasRecurrence)
-        hasher.combine(listID)
-        return String(hasher.finalize(), radix: 16)
+        let alarms: String = alarmDates
+            .map(\.timeIntervalSinceReferenceDate)
+            .sorted()
+            .map { String($0) }
+            .joined(separator: ",")
+
+        let canonical: String = [
+            title,
+            notes ?? "",
+            startComponents?.description ?? "",
+            dueComponents?.description ?? "",
+            String(isCompleted),
+            String(completionDate?.timeIntervalSinceReferenceDate ?? -1),
+            String(priority),
+            alarms,
+            String(hasRecurrence),
+            listID,
+        ].joined(separator: "\u{1F}")
+
+        let digest = SHA256.hash(data: Data(canonical.utf8))
+        return Self.fingerprintPrefix + digest.prefix(8).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Marks a fingerprint as one this build knows how to compare.
+    public static let fingerprintPrefix = "v2:"
+
+    /// Whether a stored fingerprint can be compared against a freshly computed one.
+    ///
+    /// A value written by the pre-`v2` scheme cannot: it was a randomly seeded hash and means
+    /// nothing outside the process that produced it.
+    public static func isComparable(_ storedFingerprint: String) -> Bool {
+        storedFingerprint.hasPrefix(fingerprintPrefix)
     }
 }
 
@@ -299,6 +338,17 @@ public enum ReminderMergeDecision: Sendable, Hashable {
 
     /// The list refuses writes, so local changes cannot be sent.
     case remoteReadOnly
+
+    /// The stored fingerprint predates the comparable scheme, so the two sides cannot be compared.
+    ///
+    /// Record today's fingerprint and change nothing else. Not `unchanged`, because that would also
+    /// re-stamp the local side and swallow an edit the user is waiting to push; not `adoptRemote` or
+    /// `conflict`, because neither is a claim the evidence supports — a pre-`v2` fingerprint was a
+    /// randomly seeded hash and never meant anything outside the process that wrote it.
+    ///
+    /// Nothing is lost by this. A remote change made before the upgrade was already invisible, and
+    /// every change after it is caught normally from the next pass onwards.
+    case establishBaseline
 }
 
 /// Decides what a sync pass should do, without doing any of it.
@@ -317,6 +367,11 @@ public enum ReminderReconciliation {
         localUpdatedAt: Date
     ) -> ReminderMergeDecision {
         guard let remote else { return .remoteMissing }
+
+        // A fingerprint from the old scheme cannot be compared against a new one. Saying so is the
+        // only honest answer; guessing produces either a false conflict on every linked task after
+        // the upgrade, or a silent re-adopt over local state.
+        guard ReminderSnapshot.isComparable(link.lastSyncedFingerprint) else { return .establishBaseline }
 
         let remoteMoved = remote.fingerprint != link.lastSyncedFingerprint
         // Strictly greater: a task written *by* the last sync has exactly that stamp and must not be
@@ -338,7 +393,7 @@ public enum ReminderReconciliation {
     /// The sync state a decision leaves the task in.
     public static func state(after decision: ReminderMergeDecision) -> TaskSyncState {
         switch decision {
-        case .unchanged, .adoptRemote, .pushLocal: .linked
+        case .unchanged, .adoptRemote, .pushLocal, .establishBaseline: .linked
         case .conflict: .conflicted
         case .remoteMissing: .externalMissing
         case .remoteReadOnly: .externalReadOnly

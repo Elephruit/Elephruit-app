@@ -122,7 +122,9 @@ public struct ContactImportProposal: Sendable, Hashable, Identifiable {
         var parts: [String] = []
         if !contact.organizationName.isEmpty { parts.append(contact.organizationName) }
         if let email = contact.emailAddresses.first?.value { parts.append(email) }
-        else if let phone = contact.phoneNumbers.first?.value { parts.append(phone) }
+        else if let phone = contact.phoneNumbers.first?.value {
+            parts.append(PhoneNumberFormatting.display(phone))
+        }
         if let container = contact.containerName { parts.append(container) }
         return parts.joined(separator: " · ")
     }
@@ -174,6 +176,17 @@ public struct ContactImportPlan: Sendable {
 
     /// Whether the primary button should do anything.
     public var isRunnable: Bool { selectedActionableCount > 0 }
+
+    /// Whether there is anything here that *could* be added, whatever is currently ticked.
+    ///
+    /// Distinct from ``isRunnable``, and the distinction is the difference between two very
+    /// different screens. Nothing ticked out of two hundred addable contacts is a review in
+    /// progress. Nothing addable at all — every contact already linked — is not a review: there is
+    /// no decision to make, and offering "Cancel" against a greyed-out "Add Contacts to People"
+    /// asks the user to abandon a task they were never given.
+    public var hasPendingAdditions: Bool {
+        proposals.contains { $0.outcome.changesTheDatabase }
+    }
 
     /// The one-line summary above the list.
     public var headline: String {

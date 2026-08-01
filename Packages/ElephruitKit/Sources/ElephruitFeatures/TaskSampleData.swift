@@ -282,14 +282,40 @@ enum TaskSampleData {
                 source: ItemSource(kind: .systemStore, identifier: externalID)
             )
         )
-        try items.update(task) { subject in
+        // ### The fingerprint has to be the real one
+        // This used to plant the literal string "sample", which can never equal a fingerprint of
+        // anything. Every one of these four rows therefore read as "changed in Reminders" on the
+        // first pass, so the states they exist to demonstrate — in step, read-only, gone — all came
+        // out as conflicts instead, and the fixture flag demonstrated a broken sync rather than a
+        // working one.
+        //
+        // `.conflicted` is the exception: that row is *meant* to disagree, so it keeps a fingerprint
+        // that deliberately does not match. It is a comparable one, so the disagreement is a real
+        // comparison rather than an artefact of the format.
+        let planted = FixtureRemindersProvider.defaultReminders.first { $0.id == externalID }
+        let fingerprint = switch state {
+        case .conflicted:
+            ReminderSnapshot.fingerprintPrefix + "changedelsewhere"
+        default:
+            planted?.fingerprint ?? ReminderSnapshot.fingerprintPrefix + "absent"
+        }
+
+        // A conflict needs *both* sides to have moved. A mismatched fingerprint on its own only says
+        // the reminder changed, which resolves to `.adoptRemote` — so backdating the local stamp is
+        // what makes this row demonstrate a disagreement rather than a quiet remote win.
+        let localStampOffset: TimeInterval = state == .conflicted ? -60 : 0
+
+        // Through `recordSyncMetadata`, for the reason given on it: `update` stamps `updatedAt`
+        // after the closure runs, so a local stamp written inside would be older than the value the
+        // write leaves behind, and the first pass would read a local edit nobody made.
+        try items.recordSyncMetadata(on: task) { subject in
             subject.setReminderLink(
                 ReminderLinkState(
                     externalID: externalID,
                     listID: listID,
-                    lastSyncedFingerprint: "sample",
+                    lastSyncedFingerprint: fingerprint,
                     lastSyncedAt: clock.now,
-                    lastSyncedLocalStamp: clock.now
+                    lastSyncedLocalStamp: subject.updatedAt.addingTimeInterval(localStampOffset)
                 )
             )
             subject.syncState = state

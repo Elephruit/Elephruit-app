@@ -77,6 +77,17 @@ public protocol ItemRepository: AnyObject {
     /// unit. Nothing else is a sanctioned way to change an item.
     func update(_ item: Item, _ mutate: (Item) throws -> Void) throws(AppError)
 
+    /// Writes synchronisation bookkeeping without touching ``Item/updatedAt``.
+    ///
+    /// `updatedAt` answers "when did the user last change this", and the sync engine compares it
+    /// against the stamp it recorded on the previous pass to decide whether there is a local edit to
+    /// push. Recording that stamp through ``update(_:_:)`` makes the answer always yes: `update`
+    /// stamps `updatedAt = now` *after* the closure runs, so the value written inside the closure is
+    /// necessarily older than the one the write leaves behind, and the next pass reads a local edit
+    /// that never happened. Every pass pushed, forever — and because a push makes EventKit post a
+    /// store-changed notification, which schedules another pass, it does not settle on its own.
+    func recordSyncMetadata(on item: Item, _ mutate: (Item) -> Void) throws(AppError)
+
     func moveToTrash(_ item: Item) throws(AppError)
     func restore(_ item: Item) throws(AppError)
     func deletePermanently(_ item: Item) throws(AppError)
@@ -291,6 +302,17 @@ public final class SwiftDataItemRepository: ItemRepository {
         item.refreshSearchText()
 
         try reconcileWikiLinks(for: item)
+        try save()
+    }
+
+    /// Sync bookkeeping, saved without restamping the item.
+    ///
+    /// Deliberately does not validate or reconcile links: it writes the reminder-link state and
+    /// nothing a user could see, so there is nothing for the validator to have an opinion about, and
+    /// running the wiki-link reconciliation on every sync pass over every linked task would be pure
+    /// cost. See the protocol comment for why this cannot go through `update`.
+    public func recordSyncMetadata(on item: Item, _ mutate: (Item) -> Void) throws(AppError) {
+        mutate(item)
         try save()
     }
 

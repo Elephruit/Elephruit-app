@@ -144,7 +144,10 @@ public final class RemindersService {
         isSyncing = true
         defer { isSyncing = false }
 
-        let report = await engine.reconcile()
+        // The lists the user ticked, and only those. The engine has no opinion about which lists
+        // participate and must not acquire one: that choice is the whole of the promise that nothing
+        // is copied out of Reminders without being asked for.
+        let report = await engine.reconcile(importingFrom: participatingListIDs)
         lastReport = report
         return report
     }

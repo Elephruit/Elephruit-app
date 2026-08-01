@@ -176,7 +176,7 @@ enum PeopleSampleData {
             ItemDraft(
                 kind: .task,
                 title: "Send Maya the dog trainer's number",
-                tagSlugs: ["promise"],
+                tagSlugs: [TagConventions.owed],
                 dueAt: clock.calendar.date(byAdding: .day, value: -14, to: today)
             )
         )

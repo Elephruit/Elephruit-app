@@ -63,6 +63,15 @@ public struct RootView: View {
 
     /// Held for the window's lifetime so the observation is not cancelled the moment `task` returns.
     @State private var contactRefresh: ContactRefreshCoordinator?
+    @State private var reminderRefresh: ReminderRefreshCoordinator?
+
+    @Environment(\.scenePhase) private var scenePhase
+
+    /// Hoisted out of the `onChange` that watches it: inlining the optional chain and the `??` into
+    /// a modifier argument pushes this body past the type checker's budget.
+    private var isRemindersEnabled: Bool {
+        services?.reminders.isEnabled ?? false
+    }
 
     /// What the menu bar or an intent has asked for, if anything.
     ///
@@ -178,6 +187,14 @@ public struct RootView: View {
                 let coordinator = ContactRefreshCoordinator(services: services)
                 contactRefresh = coordinator
                 coordinator.start()
+
+                // The same arrangement for Reminders, and for a sharper reason: until this existed
+                // every sync was a control somebody had to press, so a reminder added on a phone
+                // never arrived and linking the integration imported nothing until the user went
+                // looking. `start()` also runs the pass that should happen at launch.
+                let reminderCoordinator = ReminderRefreshCoordinator(services: services)
+                reminderRefresh = reminderCoordinator
+                reminderCoordinator.start()
             }
 
             services?.checkForContainmentRepair()
@@ -370,6 +387,22 @@ public struct RootView: View {
         // profile also moved the calendar's divider — and the calendar had no say in it.
         .task(id: navigation.activeModule) { await applyModuleLayout() }
         .onAppear { wireWidthRecorder() }
+        // Anything that happened in Reminders while the app was in the background arrives when it
+        // comes back. `reconcile()` is idempotent, so a pass that finds nothing writes nothing.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            reminderRefresh?.applicationDidBecomeActive()
+        }
+        // Linking the integration builds the adapter the coordinator needs to watch, and that
+        // adapter did not exist when the coordinator started. Restarting it here is what makes the
+        // first import happen at the moment the user turns Reminders on, rather than at next launch.
+        .onChange(of: isRemindersEnabled) { _, isEnabled in
+            guard isEnabled else {
+                reminderRefresh?.stop()
+                return
+            }
+            reminderRefresh?.start()
+        }
         // Hiding the sidebar makes every other column wider without the window changing size, which
         // is precisely what the drag test mistakes for a preference. Saying so in advance is what
         // stops collapsing the sidebar from rewriting the width of the pane beside it.

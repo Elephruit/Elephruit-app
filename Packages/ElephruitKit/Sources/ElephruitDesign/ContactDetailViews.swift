@@ -43,14 +43,14 @@ public struct ContactDetailLabel: View {
                 .font(Theme.Text.chip)
                 .rowTint(detail.affinity.color)
 
-            Text(detail.value)
+            Text(detail.displayValue)
                 .font(Theme.Text.metadata)
                 .rowForeground(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(detail.displayLabel) \(detail.kind.displayName.lowercased()), \(detail.value)")
+        .accessibilityLabel("\(detail.displayLabel) \(detail.kind.displayName.lowercased()), \(detail.displayValue)")
     }
 }
 

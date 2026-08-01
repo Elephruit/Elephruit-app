@@ -127,6 +127,7 @@ public final class SearchSessionModel {
             // Cancelling leaves stale results on screen for a query that is no longer being run,
             // which would be a lie about what matched.
             results = []
+            highlightedID = nil
             isRunning = false
             hasRun = false
             return
@@ -160,9 +161,15 @@ public final class SearchSessionModel {
             guard mine == generation else { return }
             results = Array(found.prefix(limit))
             lastError = nil
+            // A highlight that survives into a different result set points at a row that is no longer
+            // there, and the next arrow press starts from nowhere.
+            if let highlightedID, !results.contains(where: { $0.id == highlightedID }) {
+                self.highlightedID = nil
+            }
         } catch {
             guard mine == generation else { return }
             results = []
+            highlightedID = nil
             lastError = error
         }
 
@@ -181,6 +188,7 @@ public final class SearchSessionModel {
         runTask = nil
         text = ""
         results = []
+        highlightedID = nil
         isRunning = false
         hasRun = false
         lastError = nil
@@ -213,6 +221,56 @@ public final class SearchSessionModel {
     /// The results in the order they appear on screen, for keyboard traversal.
     public var orderedResults: [SearchResult] {
         groups.flatMap(\.results)
+    }
+
+    // MARK: - Keyboard traversal
+
+    /// The result the keyboard is on.
+    ///
+    /// Separate from whatever the detail pane is showing. Moving through results with the arrow keys
+    /// should change what is highlighted here and what is shown there, and pressing Return should
+    /// move *focus* into the detail — three things that are one thing only if the highlight and the
+    /// selection are the same value, which is how arrowing to the second result used to hand focus
+    /// away and strand the traversal after one step.
+    public private(set) var highlightedID: UUID?
+
+    public var highlightedResult: SearchResult? {
+        guard let highlightedID else { return nil }
+        return orderedResults.first { $0.id == highlightedID }
+    }
+
+    /// Puts the highlight on a specific result — for a click, or for the list's own selection.
+    public func highlight(_ id: UUID?) {
+        highlightedID = id
+    }
+
+    /// Moves the highlight `offset` rows through the flattened result order.
+    ///
+    /// Returns the result now highlighted, or `nil` when there is nothing to move to. Clamps at both
+    /// ends rather than wrapping: a list that jumps from the last row back to the first loses the
+    /// user's place, and there is no scrollbar in a keyboard traversal to tell them it happened.
+    ///
+    /// With nothing highlighted yet, the first press lands on the first row going down and the last
+    /// row going up, so a single Down out of the search field always reaches the best match.
+    @discardableResult
+    public func moveHighlight(by offset: Int) -> SearchResult? {
+        let ordered = orderedResults
+        guard !ordered.isEmpty else {
+            highlightedID = nil
+            return nil
+        }
+
+        guard let current = highlightedID,
+              let index = ordered.firstIndex(where: { $0.id == current })
+        else {
+            let landing = offset >= 0 ? ordered.startIndex : ordered.index(before: ordered.endIndex)
+            highlightedID = ordered[landing].id
+            return ordered[landing]
+        }
+
+        let next = min(max(index + offset, ordered.startIndex), ordered.index(before: ordered.endIndex))
+        highlightedID = ordered[next].id
+        return ordered[next]
     }
 
     /// A one-line summary of what the query means, for the field's subtitle.

@@ -251,8 +251,13 @@ struct PersonTimelineDetailSheet: View {
         [PersonReference(id: personID, name: personName)] + entry.otherPeople.filter { $0.id != personID }
     }
 
+    /// The tags worth showing as chips.
+    ///
+    /// The marker that made this a task owed to somebody is already said in words by the eyebrow
+    /// above, so repeating it as a chip is the same fact twice. Every spelling of the marker is
+    /// dropped — see ``TagConventions/owed``.
     private var visibleTags: [String] {
-        entry.tagSlugs.filter { $0 != "promise" && !$0.hasPrefix("interaction/") }
+        entry.tagSlugs.filter { !TagConventions.marksOwed($0) && !$0.hasPrefix("interaction/") }
     }
 
     private var eyebrow: String {

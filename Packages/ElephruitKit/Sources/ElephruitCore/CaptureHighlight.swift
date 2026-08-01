@@ -48,14 +48,14 @@ public struct CaptureHighlight: Sendable, Hashable {
     /// keystrokes rather than the meaning. The token is a tag; that is the fact worth announcing.
     public var spokenDescription: String {
         switch (standing, kind) {
-        case (.notUnderstood, _): "\(text), not recognised"
+        case (.notUnderstood, _): "\(text), not recognized"
         case (_, .tag): "Tag \(text)"
         case (_, .person): "Person \(text)"
         case (_, .project): "Project \(text)"
         case (_, .dueDate): "Deadline \(text)"
         case (_, .followDate): "Come back to it \(text)"
         case (_, .priority): "Priority \(text)"
-        case (_, .unrecognised): "\(text), not recognised"
+        case (_, .unrecognised): "\(text), not recognized"
         }
     }
 }

@@ -561,6 +561,24 @@ struct AddRelationshipSheet: View {
     @State private var selected: Item?
     @FocusState private var isNameFocused: Bool
 
+    /// How old they are *now*, in whole years. Optional, and free of any range picker.
+    ///
+    /// ### Why one number and not a range
+    /// Adding a child used to mean linking them and then going to find a separate fact sheet, and
+    /// the thing most worth recording about a child — roughly how old they are — was the thing that
+    /// took the second trip. So it belongs here.
+    ///
+    /// What it must not become is a range picker. `AgeEstimate` already knows that "six today" fixes
+    /// a *window* rather than a birthday, and widens that window correctly as time passes — an age
+    /// recorded now shows as "approximately 7–8 years old" two years from now without anybody being
+    /// asked to think about bounds. Asking for the range would be asking the user to do arithmetic
+    /// the app is better at, and to do it about a child whose birthday they have just said they do
+    /// not know.
+    @State private var ageText = ""
+
+    /// Anything else worth keeping, recorded as a quick fact on the new person.
+    @State private var noteText = ""
+
     init(person: Item, initialKind: RelationshipKind = .friend, onFinish: @escaping () -> Void) {
         self.person = person
         self.onFinish = onFinish
@@ -569,7 +587,11 @@ struct AddRelationshipSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-            Text("Link somebody to \(person.displayTitle)")
+            // The title says what was asked for. Arriving from "Add Child" and being told you are
+            // linking "somebody" is the sheet disowning the button that opened it.
+            Text(kind == .child
+                ? "Add a child to \(person.displayTitle)"
+                : "Link somebody to \(person.displayTitle)")
                 .font(Theme.Text.title)
 
             Form {
@@ -585,8 +607,37 @@ struct AddRelationshipSheet: View {
 
                 TextField("Call them (optional)", text: $label)
                     .help("“son” rather than “child” — the app uses your word and never guesses one")
+
+                // Only for a child, and only when this is a new person: an age is a starting point
+                // for somebody the app is meeting for the first time, and re-asking it for an
+                // existing record would invite overwriting what is already known about them.
+                if kind == .child, selected == nil {
+                    TextField("Age now (optional)", text: $ageText)
+                        .help("Whole years. If you are not sure, a close guess is worth more than nothing.")
+
+                    if let years = age {
+                        Text(ageExplanation(years))
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                TextField("Anything worth remembering (optional)", text: $noteText)
+                    .help("Kept as a quick fact on their own record")
             }
             .formStyle(.grouped)
+
+            if kind == .child {
+                // The promise made in the entitlements file, said where it is being relied on.
+                Label(
+                    "Children stay in Elephruit. Nothing here is written to your Apple Contacts.",
+                    systemImage: "lock.shield"
+                )
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.tertiaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            }
 
             if !matches.isEmpty {
                 VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
@@ -667,13 +718,62 @@ struct AddRelationshipSheet: View {
             .map { $0 }
     }
 
+    /// The age typed in, when it is a plausible one.
+    ///
+    /// Nil rather than zero for anything unparseable, so a stray keystroke records nothing instead of
+    /// asserting that somebody is nought. The upper bound is a sanity check on a typo, not a claim
+    /// about how old a child can be.
+    private var age: Int? {
+        let trimmed = ageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let years = Int(trimmed), (0...120).contains(years) else { return nil }
+        return years
+    }
+
+    /// Says what recording an age will actually mean, before it is recorded.
+    ///
+    /// An age is the one field here that does not stay the value it was given — it is stored against
+    /// today's date and read forward as a widening estimate. Somebody typing "6" deserves to know
+    /// that before they press the button, not to discover it a year later.
+    private func ageExplanation(_ years: Int) -> String {
+        "Recorded as \(years) today. Elephruit carries it forward, and shows it as approximate "
+            + "once a birthday could have passed."
+    }
+
     private func link() {
         guard let services else { return }
+        let clock = services.dateProvider
+
         services.perform {
             let other = try selected ?? services.persons.resolveOrCreatePlaceholder(named: trimmedName)
             try services.persons.relate(
                 person, to: other, as: kind, label: label.isEmpty ? nil : label
             )
+
+            // Recorded on the new person, not the parent: it is a fact about them, and it should
+            // still be true if the relationship is later corrected.
+            if kind == .child, selected == nil, let age {
+                try services.persons.record(
+                    ObservationDraft(attribute: .observedAge, value: String(age)),
+                    about: other,
+                    observedOn: clock.now,
+                    confidence: .stated,
+                    sensitivity: .normal,
+                    source: nil
+                )
+            }
+
+            let note = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !note.isEmpty {
+                try services.persons.record(
+                    ObservationDraft(attribute: .quickFact, value: note),
+                    about: other,
+                    observedOn: clock.now,
+                    confidence: .stated,
+                    sensitivity: .normal,
+                    source: nil
+                )
+            }
+
             services.noteChange(to: other)
         }
         onFinish()
