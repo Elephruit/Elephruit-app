@@ -163,7 +163,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .askAbout: "bubble.left.and.questionmark.bubble.right"
+        case .askAbout: "questionmark.bubble"
         case .foodAndDrink: "fork.knife"
         case .family: "figure.2.and.child.holdinghands"
         case .age: "birthday.cake"
