@@ -257,18 +257,53 @@ public final class MiniTimerController {
     /// that jumps back to a corner every time it opens is one nobody bothers moving.
     private func positionInLowerRight(_ panel: NSPanel) {
         guard let screen = NSScreen.main else { return }
-        let inset: CGFloat = 24
 
         // `visibleFrame` rather than `frame`, so the Dock and the menu bar are already excluded.
         // Using the full frame put the panel behind the Dock, where half of it was unreachable.
         let area = screen.visibleFrame
         panel.setFrameOrigin(
             NSPoint(
-                x: area.maxX - panel.frame.width - inset,
-                y: area.minY + inset
+                x: area.maxX - panel.frame.width - Self.edgeInset,
+                y: area.minY + Self.edgeInset + dockOverhang(on: screen)
             )
         )
     }
+
+    /// How far above its own reserved band the Dock's tray is actually drawn.
+    ///
+    /// ### Why `visibleFrame` turned out not to be enough
+    /// `visibleFrame` is a *layout* promise — the rectangle the system will not zoom a window past —
+    /// and the Dock reserves its tile band there and no more. What it *draws* is a floating tray, and
+    /// the tray's padding, its rounded edge, and the gap it leaves from the bottom of the screen all
+    /// stand in space the screen still calls visible. So a panel opened a respectable margin above
+    /// `visibleFrame.minY` opened underneath the Dock, which is the one place the one window meant to
+    /// stay in sight is no use at all.
+    ///
+    /// ### Why a constant, and why only along the bottom
+    /// The overhang is chrome rather than content: it is the same handful of points whether the icons
+    /// are set small or large, so scaling it against the reserved band would only make a large Dock
+    /// push the panel into the middle of the screen. And it is added only when the Dock is along the
+    /// bottom edge — the one this corner shares with it — which is what comparing the three insets
+    /// establishes without asking the Dock anything the sandbox will not answer.
+    private func dockOverhang(on screen: NSScreen) -> CGFloat {
+        let bottom = screen.visibleFrame.minY - screen.frame.minY
+        let left = screen.visibleFrame.minX - screen.frame.minX
+        let right = screen.frame.maxX - screen.visibleFrame.maxX
+
+        guard bottom > left, bottom > right else { return 0 }
+        return Self.dockGlassOverhang
+    }
+
+    /// The margin the panel keeps from the edges of the screen when it first opens.
+    private static let edgeInset: CGFloat = 24
+
+    /// See ``dockOverhang(on:)``.
+    ///
+    /// Measured against a Dock reserving 64 points and drawing something closer to a hundred: the
+    /// tray's own gap from the bottom of the screen, the padding around the tiles, and the row the
+    /// running-app dots sit in. Erring high costs a panel that opens a little further off the corner
+    /// than it strictly had to; erring low costs the whole point of the panel.
+    private static let dockGlassOverhang: CGFloat = 32
 
     /// Re-fits the panel to contents that have changed shape.
     ///

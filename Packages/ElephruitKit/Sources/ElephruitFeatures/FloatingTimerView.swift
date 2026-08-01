@@ -300,8 +300,8 @@ struct FloatingCard: ViewModifier {
 /// What is left of Elephruit when it is collapsed.
 ///
 /// The same three controls as the floating widget, plus the two that only make sense once the app
-/// is away: pin it above everything, and put the app back. Both are revealed on hover, for the
-/// reason the collapse button is — a surface whose whole point is that there is one thing to look at
+/// is away: pin it above everything, and put the app back. They live behind a menu, for the reason
+/// the collapse button is hidden — a surface whose whole point is that there is one thing to look at
 /// cannot also carry five buttons.
 ///
 /// When nothing is running it says so rather than disappearing. A window that vanished the moment a
@@ -311,7 +311,25 @@ struct MiniTimerView: View {
 
     let controller: MiniTimerController
 
-    @State private var isHovering = false
+    /// Whether the window controls are showing.
+    @State private var isMenuOpen = false
+
+    /// Whether they are showing because somebody clicked the dots rather than hovered them.
+    ///
+    /// Clicked open, they stay open until clicked shut. A menu that evaporated the moment the
+    /// pointer wandered off would be one you have to keep re-opening to press two things in it.
+    @State private var isMenuPinned = false
+
+    /// The pending open or close, so the next hover can cancel it.
+    @State private var menuTask: Task<Void, Never>?
+
+    /// Long enough that a pointer crossing the dots on its way somewhere else does not open them,
+    /// short enough that a pointer that stopped on them is not left waiting.
+    private static let openDelay = Duration.milliseconds(180)
+
+    /// The grace after the pointer leaves. Covers the gap between the pill and whatever the pointer
+    /// clipped on the way past, so a hand that overshoots by two points does not lose the menu.
+    private static let closeDelay = Duration.milliseconds(320)
 
     /// Red while tracking, amber while paused, quiet when neither — so the panel says which of the
     /// three it is before any of the words are read.
@@ -322,21 +340,28 @@ struct MiniTimerView: View {
     }
 
     var body: some View {
-        // ### Why the window controls are on the left, and take no room until wanted
-        // Two complaints, one cause. On the right they sat *after* Stop, so a pill whose whole job
+        // ### Why the window controls are on the left, and behind a menu
+        // Three complaints, one cause. On the right they sat *after* Stop, so a pill whose whole job
         // is one clock and three timer buttons ended in a run of six — and holding their place while
         // invisible left a band of nothing on a surface small enough for it to be most of the width.
+        // Revealing them on hover of the whole pill fixed the width and introduced the third: the
+        // panel changed shape every time the pointer passed over it on its way to something else.
         //
-        // Splitting them by what they act on fixes both. The right-hand group acts on the *timer*.
-        // The left-hand group acts on the *window*: how wide, always on top, put it back. They
-        // appear only on hover and are genuinely absent otherwise, so the pill is exactly as wide as
-        // what it is saying. Growing leftwards is what makes that safe — the panel is anchored by
-        // its right edge, so nothing under the pointer moves as they arrive.
+        // Splitting them by what they act on fixes the first two. The right-hand group acts on the
+        // *timer*. The left-hand group acts on the *window*: how wide, always on top, put it back.
+        // The dots fix the third by making the pill's own hover mean nothing — expanding is now
+        // something you aim at, on a target that says so.
+        //
+        // The dots sit *between* the controls and the clock rather than at the leading edge, so the
+        // panel — anchored by its right edge — grows leftwards past them and the thing under the
+        // pointer never moves out from under it.
         HStack(spacing: Theme.Spacing.small) {
-            if isHovering {
+            if isMenuOpen {
                 windowControls
                     .transition(.opacity.combined(with: .move(edge: .trailing)))
             }
+
+            menuButton
 
             FloatingTimerView(
                 onOpen: { controller.expand() },
@@ -354,12 +379,101 @@ struct MiniTimerView: View {
         .modifier(FloatingCard(tint: tint))
         .padding(Theme.Spacing.small)
         .fixedSize()
-        .onHover { isHovering = $0 }
-        .calmAnimation(value: isHovering)
+        // Only *leaving* the pill is the pill's business. Arriving anywhere on it means nothing,
+        // which is the whole point of the dots; but once the menu is open the pointer has to be
+        // free to travel from the dots to the buttons without the thing closing under it.
+        .onHover { inside in
+            if !inside { scheduleClose() }
+        }
+        .calmAnimation(value: isMenuOpen)
         // The panel is sized by hand, so it has to be told when the contents change shape.
-        .onChange(of: isHovering) { _, _ in controller.contentSizeChanged() }
+        .onChange(of: isMenuOpen) { _, _ in controller.contentSizeChanged() }
         .onChange(of: controller.isCompact) { _, _ in controller.contentSizeChanged() }
+        .onDisappear { menuTask?.cancel() }
         .accessibilityIdentifier(AccessibilityID.Time.miniTimer)
+    }
+
+    /// The way in to everything that is not the timer.
+    ///
+    /// ### Why it is three dots and not one of the buttons
+    /// Because it has to be legible as *there is more here* without being a fourth thing competing
+    /// with Pause, Restart and Stop — and the vertical ellipsis is the one mark that says exactly
+    /// that and nothing else. Hovering it opens the menu after a beat; clicking it opens the menu
+    /// and leaves it open, for the times you want to change the width *and* pin it.
+    private var menuButton: some View {
+        Button(action: toggleMenu) {
+            // Turned on its side rather than named vertically, because SF Symbols has no vertical
+            // ellipsis to name — and the rotation is exact, so nothing is lost by asking for it.
+            Image(systemName: "ellipsis")
+                .font(Theme.Text.metadata)
+                .rotationEffect(.degrees(90))
+                .frame(width: 18, height: 22)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isMenuOpen ? Theme.Colors.primaryText : Theme.Colors.secondaryText)
+        .onHover { inside in
+            if inside { scheduleOpen() } else { cancelPendingOpen() }
+        }
+        .help("Size, keep on top, and back to Elephruit")
+        .accessibilityLabel("Window options")
+        .accessibilityIdentifier(AccessibilityID.Time.miniTimerMenu)
+    }
+
+    // MARK: - Opening and closing
+
+    /// Opens after a beat, unless the pointer has moved on by then.
+    private func scheduleOpen() {
+        guard !isMenuOpen else { return }
+
+        menuTask?.cancel()
+        menuTask = Task { @MainActor in
+            try? await Task.sleep(for: Self.openDelay)
+            guard !Task.isCancelled else { return }
+            isMenuOpen = true
+        }
+    }
+
+    /// Drops a pending open when the pointer leaves the dots again.
+    ///
+    /// Without this the delay only moves the problem: a pointer crossing the dots on its way to Stop
+    /// asked for nothing, and would still have the menu arrive on top of it a fifth of a second later.
+    private func cancelPendingOpen() {
+        guard !isMenuOpen else { return }
+        menuTask?.cancel()
+    }
+
+    /// Closes after a grace, unless it was clicked open or the pointer comes back.
+    private func scheduleClose() {
+        menuTask?.cancel()
+        guard isMenuOpen, !isMenuPinned else { return }
+
+        menuTask = Task { @MainActor in
+            try? await Task.sleep(for: Self.closeDelay)
+            guard !Task.isCancelled else { return }
+            isMenuOpen = false
+        }
+    }
+
+    /// A click is the deliberate version of the hover: it opens immediately and stays.
+    ///
+    /// Clicking an already-open menu shuts it, whether it was opened by a click or by resting on the
+    /// dots — the dots are the control for the menu, and a control that only works one way is a
+    /// control somebody presses twice wondering why nothing happened.
+    private func toggleMenu() {
+        menuTask?.cancel()
+        isMenuPinned = !isMenuOpen
+        isMenuOpen = isMenuPinned
+    }
+
+    /// Shuts the menu outright, for the one control on it that puts the panel away.
+    ///
+    /// The panel is hidden rather than destroyed, so without this a menu left open — or worse,
+    /// clicked open — would still be open the next time somebody collapsed the app.
+    private func closeMenu() {
+        menuTask?.cancel()
+        isMenuPinned = false
+        isMenuOpen = false
     }
 
     /// Shown when nothing is being tracked, so the panel still explains itself and still has a way
@@ -414,6 +528,7 @@ struct MiniTimerView: View {
             .accessibilityIdentifier(AccessibilityID.Time.miniTimerPin)
 
             Button {
+                closeMenu()
                 controller.expand()
             } label: {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
