@@ -512,3 +512,64 @@ struct ReminderExportTests {
         #expect(try fixture.store.requireItem(id: task.id).recurrence?.anchor == .completion)
     }
 }
+
+// MARK: - Which adapter the engine is driving
+
+/// The engine must ask for its adapter, not remember one.
+///
+/// `RemindersService` swaps an inert `NoRemindersProvider` for the real one when the user links the
+/// integration, and that happens *after* `AppServices` has built the engine. An engine that captured
+/// the adapter by value spent the rest of that session driving the inert one: `reconcile()` found it
+/// could not read, returned an empty report, and reported no error — so linking Reminders filled in
+/// the list picker and imported nothing, with nothing on screen to say why.
+@Suite("The adapter the engine drives")
+@MainActor
+struct ReminderProviderResolutionTests {
+    /// Stands in for `RemindersService`: something whose adapter changes underneath the engine.
+    @MainActor
+    private final class SwappableProvider {
+        var current: any RemindersProviding = NoRemindersProvider()
+    }
+
+    @Test("An adapter linked after the engine was built is the one the engine uses")
+    func adapterSwappedAfterConstructionIsUsed() async throws {
+        let store = try StoreFixture(dateProvider: TickingDateProvider())
+        let tasks = TaskService(items: store.items, context: store.context, dateProvider: store.dateProvider)
+        let box = SwappableProvider()
+
+        let engine = ReminderSyncEngine(
+            items: store.items,
+            tasks: tasks,
+            context: store.context,
+            dateProvider: store.dateProvider,
+            provider: { box.current }
+        )
+
+        // Nothing is linked yet, exactly as at launch. The pass must be a no-op.
+        let beforeLinking = await engine.reconcile()
+        #expect(beforeLinking.imported == 0)
+        #expect(beforeLinking.examined == 0)
+
+        // The user links Reminders. This is the swap that used to be invisible to the engine.
+        box.current = FixtureRemindersProvider(authorization: .authorized)
+
+        let remote = try #require(await box.current.reminder(withIdentifier: "rem-invoice"))
+        let task = try engine.importReminder(remote)
+
+        // The import reached the store through the *new* adapter, which is the whole point.
+        #expect(try store.requireItem(id: task.id).title == "Send the invoice")
+
+        // And a pass now sees the linked task rather than bailing at the authorisation guard.
+        let afterLinking = await engine.reconcile()
+        #expect(afterLinking.examined >= 1)
+    }
+
+    @Test("An engine given a fixed adapter still uses it, so the fixtures are unaffected")
+    func fixedAdapterStillWorks() async throws {
+        let fixture = try SyncFixture()
+        let remote = try await fixture.snapshot("rem-invoice")
+        let task = try fixture.engine.importReminder(remote)
+
+        #expect(try fixture.store.requireItem(id: task.id).title == "Send the invoice")
+    }
+}

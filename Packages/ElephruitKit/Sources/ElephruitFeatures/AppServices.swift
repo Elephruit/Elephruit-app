@@ -338,12 +338,16 @@ public final class AppServices {
             makeProvider: remindersProvider ?? { EventKitRemindersProvider() }
         )
         self.reminders = reminders
+        // Asked for on every pass, never captured: `reminders.provider` is inert until the user
+        // links the integration, and this engine is built before they can have. Passing the value
+        // here left the engine driving a `NoRemindersProvider` for the whole of the session in
+        // which somebody turned Reminders on.
         self.reminderSync = ReminderSyncEngine(
             items: items,
             tasks: tasks,
             context: context,
             dateProvider: dateProvider,
-            provider: reminders.provider
+            provider: { reminders.provider }
         )
         self.taskEntry = TaskEntryComposer(items: items, tasks: tasks, dateProvider: dateProvider)
 

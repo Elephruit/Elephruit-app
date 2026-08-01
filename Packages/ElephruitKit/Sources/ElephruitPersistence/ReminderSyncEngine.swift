@@ -55,20 +55,59 @@ public final class ReminderSyncEngine {
     private let tasks: TaskService
     private let context: ModelContext
     private let dateProvider: any DateProvider
-    private let provider: any RemindersProviding
+
+    /// The adapter, resolved **per use** rather than captured once.
+    ///
+    /// ### Why this is a closure and not a value
+    /// It was a value, and that was the bug that made linking Reminders appear to do nothing.
+    ///
+    /// `RemindersService` does not hold one adapter for its lifetime. It starts with an inert
+    /// `NoRemindersProvider` — so that an app which never links a reminder never constructs an
+    /// `EKEventStore` and never prompts — and swaps in the real `EventKitRemindersProvider` inside
+    /// `enable()`, when the user turns the integration on. `AppServices` builds this engine during
+    /// its own initialisation, which is *before* any of that can have happened.
+    ///
+    /// So on the launch in which somebody links Reminders, the engine was left holding the inert
+    /// adapter for the rest of the session. `reconcile()` asked it whether it could read, was told
+    /// no, and returned an empty report — no reminders, no error, no explanation. The list picker
+    /// filled in correctly the whole time, because `RemindersService` asks *itself*, so the
+    /// integration looked connected while importing nothing.
+    ///
+    /// Resolving through the service on every call means the engine can never be older than the
+    /// adapter it is meant to be driving.
+    private let resolveProvider: @MainActor () -> any RemindersProviding
+
+    private var provider: any RemindersProviding { resolveProvider() }
 
     public init(
         items: any ItemRepository,
         tasks: TaskService,
         context: ModelContext,
         dateProvider: any DateProvider,
-        provider: any RemindersProviding
+        provider: @escaping @MainActor () -> any RemindersProviding
     ) {
         self.items = items
         self.tasks = tasks
         self.context = context
         self.dateProvider = dateProvider
-        self.provider = provider
+        self.resolveProvider = provider
+    }
+
+    /// For a caller whose adapter genuinely never changes — the fixtures, and the tests over them.
+    public convenience init(
+        items: any ItemRepository,
+        tasks: TaskService,
+        context: ModelContext,
+        dateProvider: any DateProvider,
+        provider: any RemindersProviding
+    ) {
+        self.init(
+            items: items,
+            tasks: tasks,
+            context: context,
+            dateProvider: dateProvider,
+            provider: { provider }
+        )
     }
 
     private var calendar: Calendar { dateProvider.calendar }
