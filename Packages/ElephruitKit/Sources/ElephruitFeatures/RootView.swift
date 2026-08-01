@@ -132,6 +132,9 @@ public struct RootView: View {
         .sheet(isPresented: peopleCommandBarBinding) {
             PeopleCommandBarView(navigation: navigation)
         }
+        .sheet(isPresented: newPersonBinding) {
+            NewPersonSheet(navigation: navigation)
+        }
         .sheet(isPresented: $isExportPresented) {
             ExportSheet()
         }
@@ -536,6 +539,9 @@ public struct RootView: View {
                 navigation.select(.calendar)
                 navigation.isCalendarSearchVisible = true
             },
+            PaletteCommand(id: "new-person", title: "New Person…", category: .create, symbolName: "person.badge.plus") {
+                navigation.isNewPersonVisible = true
+            },
             PaletteCommand(id: "people-bar", title: "People Command Bar", category: .navigate, symbolName: "person.text.rectangle") {
                 navigation.isPeopleCommandBarVisible = true
             },
@@ -707,6 +713,13 @@ public struct RootView: View {
         Binding(
             get: { navigation.isPeopleCommandBarVisible },
             set: { navigation.isPeopleCommandBarVisible = $0 }
+        )
+    }
+
+    private var newPersonBinding: Binding<Bool> {
+        Binding(
+            get: { navigation.isNewPersonVisible },
+            set: { navigation.isNewPersonVisible = $0 }
         )
     }
 
