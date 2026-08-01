@@ -109,6 +109,41 @@ public enum AccessibilityID {
         public static let discardButton = "time.discard"
 
         public static let groupingToggle = "time.groupSimilar"
+        public static let manualSheet = "time.manualSheet"
+        public static let manualAddButton = "time.manualSheet.add"
+        public static let editRowButton = "time.editRow"
+
+        // The floating timer, over every screen in the window.
+        public static let floatingTimer = "time.floating"
+        public static let floatingPause = "time.floating.pause"
+        public static let floatingRestart = "time.floating.restart"
+        public static let floatingStop = "time.floating.stop"
+        public static let floatingCollapse = "time.floating.collapse"
+
+        // The app, collapsed to the clock.
+        public static let miniTimer = "time.mini"
+        public static let miniTimerPin = "time.mini.pin"
+        public static let miniTimerExpand = "time.mini.expand"
+        public static let miniTimerCompact = "time.mini.compact"
+        public static let projectPicker = "time.project"
+        public static let peoplePicker = "time.people"
+
+        // Focus cycles.
+        public static let focusButton = "time.focus"
+        public static let focusStrip = "time.focus.strip"
+        public static let focusPause = "time.focus.pause"
+        public static let focusSkip = "time.focus.skip"
+        public static let focusEnd = "time.focus.end"
+        public static let focusBanner = "time.focus.banner"
+
+        // Reports.
+        public static let reportRoot = "time.report"
+        public static let reportPeriodPicker = "time.report.period"
+        public static let reportRoundingPicker = "time.report.rounding"
+        public static let reportExportButton = "time.report.export"
+        public static let reportChart = "time.report.chart"
+
+        public static func reportRow(key: String) -> String { "time.report.row.\(key)" }
 
         // Idle.
         public static let idleBanner = "time.idle"
@@ -259,6 +294,10 @@ public enum AccessibilityID {
         public static let generalTab = "settings.general"
         public static let editorTab = "settings.editor"
         public static let advancedTab = "settings.advanced"
+        public static let timeTab = "settings.time"
+        public static let calendarTab = "settings.calendar"
+        public static let shortcutsTab = "settings.shortcuts"
+        public static let privacyTab = "settings.privacy"
         public static let rebuildIndexButton = "settings.rebuildIndex"
     }
 }

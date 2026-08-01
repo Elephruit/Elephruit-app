@@ -96,6 +96,8 @@ struct NotesSidebarSection: View {
 /// navigation model now, so choosing a window here *is* choosing what the report covers — the same
 /// arrangement the calendar's view switcher uses.
 struct TimeSidebarSection: View {
+    @Environment(\.services) private var services
+
     let navigation: NavigationModel
 
     @ScaledMetric(relativeTo: .body) private var rowHeight = SidebarMetrics.baseRowHeight
@@ -109,36 +111,65 @@ struct TimeSidebarSection: View {
                     rowHeight: rowHeight
                 )
             }
-        }
 
-        Section("Period") {
-            ForEach(TimeWindow.allCases, id: \.self) { window in
-                ModeRow(
-                    title: window.displayName,
-                    symbolName: window.symbolName,
-                    hint: window.hint,
-                    isOn: navigation.timeWindow == window,
-                    identifier: "sidebar.time.window.\(window.rawValue)",
-                    rowHeight: rowHeight
-                ) {
+            if let running = services?.timer.running {
+                RunningTimerRow(running: running, rowHeight: rowHeight) {
                     navigation.select(.time)
-                    navigation.timeWindow = window
+                    navigation.timeSurface = .log
                 }
             }
         }
 
-        Section("Grouped By") {
-            ForEach(TimeGrouping.allCases, id: \.self) { grouping in
+        Section("View") {
+            ForEach(TimeSurface.allCases, id: \.self) { surface in
                 ModeRow(
-                    title: grouping.displayName,
-                    symbolName: grouping.symbolName,
-                    hint: grouping.hint,
-                    isOn: navigation.timeGrouping == grouping,
-                    identifier: "sidebar.time.grouping.\(grouping.rawValue)",
+                    title: surface.displayName,
+                    symbolName: surface.symbolName,
+                    hint: surface.hint,
+                    isOn: navigation.timeSurface == surface,
+                    identifier: "sidebar.time.surface.\(surface.rawValue)",
                     rowHeight: rowHeight
                 ) {
                     navigation.select(.time)
-                    navigation.timeGrouping = grouping
+                    navigation.timeSurface = surface
+                }
+            }
+        }
+
+        // Both of these belong to the log. Reports carry their own period and grouping, because the
+        // period a report covers is usually a month somebody is invoicing and the period the log
+        // shows is usually today — and one setting serving both means changing it in one place to
+        // answer a question in the other.
+        if navigation.timeSurface == .log {
+            Section("Period") {
+                ForEach(TimeWindow.logWindows, id: \.self) { window in
+                    ModeRow(
+                        title: window.displayName,
+                        symbolName: window.symbolName,
+                        hint: window.hint,
+                        isOn: navigation.timeWindow == window,
+                        identifier: "sidebar.time.window.\(window.rawValue)",
+                        rowHeight: rowHeight
+                    ) {
+                        navigation.select(.time)
+                        navigation.timeWindow = window
+                    }
+                }
+            }
+
+            Section("Grouped By") {
+                ForEach(TimeGrouping.allCases, id: \.self) { grouping in
+                    ModeRow(
+                        title: grouping.displayName,
+                        symbolName: grouping.symbolName,
+                        hint: grouping.hint,
+                        isOn: navigation.timeGrouping == grouping,
+                        identifier: "sidebar.time.grouping.\(grouping.rawValue)",
+                        rowHeight: rowHeight
+                    ) {
+                        navigation.select(.time)
+                        navigation.timeGrouping = grouping
+                    }
                 }
             }
         }
@@ -378,5 +409,53 @@ struct ModeRow: View {
         .accessibilityLabel(title)
         .accessibilityHint(hint)
         .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+
+/// The running timer, in the sidebar, wherever you are in the app.
+///
+/// ### Why the sidebar and not only the tracker
+/// Because the tracker is on one screen and a timer runs while you are on the others. Elephruit
+/// already puts the elapsed time in the menu bar, which covers being in a different *app*; this
+/// covers being in a different part of this one. Toggl keeps a live clock in its own sidebar for
+/// the same reason, and it is the difference between a timer you trust is going and one you keep
+/// navigating back to check.
+///
+/// Clicking it goes to the log rather than stopping anything. A stop control here would be a
+/// destructive action one pixel from a navigation row.
+struct RunningTimerRow: View {
+    let running: RunningTimer
+    let rowHeight: CGFloat
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(spacing: SidebarMetrics.iconGap) {
+                Image(systemName: "record.circle")
+                    .frame(width: SidebarMetrics.iconColumn)
+                    .foregroundStyle(Theme.Colors.destructive)
+                    .symbolEffect(.pulse, options: .repeating)
+
+                Text(running.displayTitle)
+                    .lineLimit(1)
+
+                Spacer(minLength: Theme.Spacing.tight)
+
+                TimelineView(.periodic(from: running.startedAt, by: 1)) { context in
+                    Text(TimeFormatting.stopwatch(running.elapsed(at: context.date)))
+                        .font(Theme.Text.metadata)
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .foregroundStyle(Theme.Colors.destructive)
+                }
+            }
+            .frame(minHeight: rowHeight)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .help("Timing “\(running.displayTitle)” since \(running.startedAt.formatted(date: .omitted, time: .shortened))")
+        .accessibilityLabel("Timer running: \(running.displayTitle)")
+        .accessibilityIdentifier("sidebar.time.running")
     }
 }

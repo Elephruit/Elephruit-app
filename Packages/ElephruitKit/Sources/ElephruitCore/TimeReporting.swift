@@ -22,7 +22,8 @@ public enum TimeReporting {
         grouping: TimeGrouping,
         range: Range<Date>,
         calendar: Calendar,
-        now: Date
+        now: Date,
+        rounding: TimeRounding = .exact
     ) -> TimeReport {
         guard !entries.isEmpty else { return .empty(range: range) }
 
@@ -51,10 +52,15 @@ public enum TimeReporting {
             }
         }
 
+        // ### Why rounding lands on the row and not on the entry
+        // A six-minute unit applied per *entry* bills eight two-minute interruptions as forty-eight
+        // minutes of work, which is not what anybody means by rounding up to the nearest tenth of an
+        // hour. It is the line on the invoice that rounds, so it is the row — and the report's own
+        // total rounds once, independently, rather than by adding rounded rows together.
         return TimeReport(
-            rows: rows.values.sorted(by: ordering(for: grouping)),
-            total: total,
-            billable: billable,
+            rows: rows.values.map { $0.rounded(by: rounding) }.sorted(by: ordering(for: grouping)),
+            total: rounding.apply(total),
+            billable: rounding.apply(billable),
             entryCount: counted,
             range: range
         )
@@ -124,6 +130,26 @@ public enum TimeReporting {
             // different question from "how much time was there" — and is why `TimeReport.total` is
             // computed independently of the rows rather than by adding them up.
             return entry.tagSlugs.map { Slice(key: $0, title: $0, duration: duration) }
+
+        case .person:
+            let duration = clip(entry, to: range, now: now)
+            guard !entry.people.isEmpty else {
+                return [Slice(key: "\u{1}alone", title: "On your own", duration: duration)]
+            }
+            // Counted in full under each person, on exactly the same terms as a tag: an hour spent
+            // with two colleagues is an hour with each of them, not half an hour each. Splitting it
+            // would answer a question nobody asked — how much of each person the hour contained —
+            // and would make one-to-one time look smaller than time in a crowd.
+            return entry.people.map {
+                Slice(key: $0.id.uuidString, title: $0.name, duration: duration, itemID: $0.id)
+            }
+
+        case .kind:
+            let duration = clip(entry, to: range, now: now)
+            guard let kind = entry.itemKind else {
+                return [Slice(key: "\u{1}unassigned", title: "Unfiled", duration: duration)]
+            }
+            return [Slice(key: kind.rawValue, title: kind.pluralDisplayName, duration: duration)]
         }
     }
 
@@ -179,7 +205,7 @@ public enum TimeReporting {
         case .day:
             // Chronological. A daily chart out of date order is not a chart.
             return { $0.key < $1.key }
-        case .item, .project, .tag:
+        case .item, .project, .tag, .person, .kind:
             // Largest first: the question is where the time went, and the answer is the top row.
             return { left, right in
                 left.total == right.total ? left.title < right.title : left.total > right.total
@@ -193,6 +219,14 @@ extension TimeSummaryRow {
         total += duration
         if isBillable { billable += duration }
         entryCount += 1
+    }
+
+    fileprivate func rounded(by rounding: TimeRounding) -> TimeSummaryRow {
+        guard rounding != .exact else { return self }
+        var copy = self
+        copy.total = rounding.apply(total)
+        copy.billable = rounding.apply(billable)
+        return copy
     }
 }
 
@@ -208,6 +242,17 @@ public enum TimeWindow: String, Sendable, Hashable, CaseIterable {
     case thisWeek
     case lastWeek
     case thisMonth
+    case lastMonth
+    case last7Days
+    case last30Days
+    case thisYear
+
+    /// The windows the Time module's own sidebar and picker offer.
+    ///
+    /// A shorter list than `allCases`, deliberately. The log is a place you correct yesterday from,
+    /// and a menu that offers to show a year of it is a menu you have to read before every use. The
+    /// long ranges belong to Reports, which is the surface that can draw one.
+    public static let logWindows: [TimeWindow] = [.today, .yesterday, .thisWeek, .lastWeek, .thisMonth]
 
     public var displayName: String {
         switch self {
@@ -216,6 +261,10 @@ public enum TimeWindow: String, Sendable, Hashable, CaseIterable {
         case .thisWeek: "This Week"
         case .lastWeek: "Last Week"
         case .thisMonth: "This Month"
+        case .lastMonth: "Last Month"
+        case .last7Days: "Last 7 Days"
+        case .last30Days: "Last 30 Days"
+        case .thisYear: "This Year"
         }
     }
 
@@ -226,6 +275,10 @@ public enum TimeWindow: String, Sendable, Hashable, CaseIterable {
         case .thisWeek: "calendar"
         case .lastWeek: "calendar.badge.clock"
         case .thisMonth: "calendar.badge.exclamationmark"
+        case .lastMonth: "calendar.badge.minus"
+        case .last7Days: "7.circle"
+        case .last30Days: "30.circle"
+        case .thisYear: "calendar.circle"
         }
     }
 
@@ -238,16 +291,21 @@ public enum TimeWindow: String, Sendable, Hashable, CaseIterable {
         case .thisWeek: "From the first day of your week, as your calendar defines it."
         case .lastWeek: "The seven days before this week began."
         case .thisMonth: "From the first of the month to now."
+        case .lastMonth: "The whole of the month before this one — what an invoice covers."
+        case .last7Days: "A rolling week ending today, which ignores where your week starts."
+        case .last30Days: "A rolling month ending today."
+        case .thisYear: "From the first of January."
         }
     }
 
     public func range(using dateProvider: any DateProvider) -> Range<Date> {
         let calendar = dateProvider.calendar
         let today = dateProvider.startOfToday
+        let tomorrow = addingDays(1, to: today, calendar: calendar)
 
         switch self {
         case .today:
-            return today..<addingDays(1, to: today, calendar: calendar)
+            return today..<tomorrow
 
         case .yesterday:
             let start = addingDays(-1, to: today, calendar: calendar)
@@ -263,9 +321,27 @@ public enum TimeWindow: String, Sendable, Hashable, CaseIterable {
             return start..<thisWeek
 
         case .thisMonth:
-            let components = calendar.dateComponents([.year, .month], from: today)
-            let start = calendar.date(from: components) ?? today
+            let start = startOfMonth(containing: today, calendar: calendar)
             let end = calendar.date(byAdding: DateComponents(month: 1), to: start) ?? today
+            return start..<end
+
+        case .lastMonth:
+            let thisMonth = startOfMonth(containing: today, calendar: calendar)
+            let start = calendar.date(byAdding: DateComponents(month: -1), to: thisMonth) ?? thisMonth
+            return start..<thisMonth
+
+        case .last7Days:
+            // Rolling and inclusive of today: six days back plus today is seven days, and a "last 7
+            // days" that stopped at midnight would report six.
+            return addingDays(-6, to: today, calendar: calendar)..<tomorrow
+
+        case .last30Days:
+            return addingDays(-29, to: today, calendar: calendar)..<tomorrow
+
+        case .thisYear:
+            let components = calendar.dateComponents([.year], from: today)
+            let start = calendar.date(from: components) ?? today
+            let end = calendar.date(byAdding: DateComponents(year: 1), to: start) ?? today
             return start..<end
         }
     }
@@ -276,7 +352,55 @@ public enum TimeWindow: String, Sendable, Hashable, CaseIterable {
         return addingDays(-offset, to: date, calendar: calendar)
     }
 
+    private func startOfMonth(containing date: Date, calendar: Calendar) -> Date {
+        let components = calendar.dateComponents([.year, .month], from: date)
+        return calendar.date(from: components) ?? date
+    }
+
     private func addingDays(_ days: Int, to date: Date, calendar: Calendar) -> Date {
         calendar.date(byAdding: .day, value: days, to: date) ?? date
+    }
+}
+
+/// The span a report covers: one of the named windows, or two dates somebody picked.
+///
+/// ### Why the custom case carries days rather than a `Range<Date>`
+/// Because a report is asked for in days — *the 3rd to the 17th* — and a range built from two raw
+/// `Date`s carries whatever times of day the pickers happened to hold. Half an afternoon would then
+/// fall outside a report of the day it happened on, which is the kind of missing hour nobody ever
+/// tracks down. Both ends are widened to whole days here, once, so no caller has to remember to.
+public enum TimePeriod: Sendable, Hashable {
+    case window(TimeWindow)
+    case custom(from: Date, through: Date)
+
+    public func range(using dateProvider: any DateProvider) -> Range<Date> {
+        switch self {
+        case .window(let window):
+            return window.range(using: dateProvider)
+
+        case .custom(let from, let through):
+            let calendar = dateProvider.calendar
+            let start = calendar.startOfDay(for: min(from, through))
+            let lastDay = calendar.startOfDay(for: max(from, through))
+            let end = calendar.date(byAdding: .day, value: 1, to: lastDay) ?? lastDay
+            return start..<end
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .window(let window):
+            return window.displayName
+
+        case .custom(let from, let through):
+            let start = min(from, through).formatted(.dateTime.day().month(.abbreviated))
+            let end = max(from, through).formatted(.dateTime.day().month(.abbreviated).year())
+            return "\(start) – \(end)"
+        }
+    }
+
+    public var isCustom: Bool {
+        if case .custom = self { return true }
+        return false
     }
 }

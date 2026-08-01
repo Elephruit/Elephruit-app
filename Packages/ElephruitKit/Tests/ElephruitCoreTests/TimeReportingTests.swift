@@ -11,8 +11,10 @@ struct TimeReportingTests {
         from start: TimeInterval,
         to end: TimeInterval?,
         item: (id: UUID, title: String)? = nil,
+        kind: ItemKind? = nil,
         project: (id: UUID, title: String)? = nil,
         tags: [String] = [],
+        people: [TimeParticipant] = [],
         billable: Bool = false
     ) -> TimeEntrySnapshot {
         TimeEntrySnapshot(
@@ -22,10 +24,16 @@ struct TimeReportingTests {
             isBillable: billable,
             itemID: item?.id,
             itemTitle: item?.title,
+            itemKind: kind,
             projectID: project?.id,
             projectTitle: project?.title,
-            tagSlugs: tags
+            tagSlugs: tags,
+            people: people
         )
+    }
+
+    private func person(_ name: String) -> TimeParticipant {
+        TimeParticipant(id: UUID(), name: name)
     }
 
     private var today: Range<Date> {
@@ -231,6 +239,98 @@ struct TimeReportingTests {
         )
         #expect(report.rows.map(\.title) == ["Untagged"])
     }
+
+    // MARK: - People
+
+    @Test("An hour with two people is an hour with each of them")
+    func peopleCountInFull() {
+        let sarah = person("Sarah")
+        let tom = person("Tom")
+
+        let report = TimeReporting.report(
+            entries: [entry(from: 0, to: 3_600, people: [sarah, tom])],
+            grouping: .person,
+            range: today,
+            calendar: calendar,
+            now: clock.now
+        )
+
+        // Both rows carry the whole hour — splitting it would make one-to-one time look smaller
+        // than time in a crowd — and the report's own total is still one hour.
+        #expect(report.rows.count == 2)
+        #expect(report.rows.allSatisfy { $0.total == 3_600 })
+        #expect(report.total == 3_600)
+    }
+
+    @Test("Time on your own is a row rather than a gap")
+    func soloTimeIsReported() {
+        let report = TimeReporting.report(
+            entries: [entry(from: 0, to: 3_600)],
+            grouping: .person,
+            range: today,
+            calendar: calendar,
+            now: clock.now
+        )
+
+        #expect(report.rows.map(\.title) == ["On your own"])
+    }
+
+    @Test("A person row can be clicked through to the person")
+    func personRowsCarryAnIdentity() {
+        let sarah = person("Sarah")
+        let report = TimeReporting.report(
+            entries: [entry(from: 0, to: 3_600, people: [sarah])],
+            grouping: .person,
+            range: today,
+            calendar: calendar,
+            now: clock.now
+        )
+
+        #expect(report.rows.first?.itemID == sarah.id)
+    }
+
+    // MARK: - Rounding
+
+    @Test("Rounding up lands on the next unit, and exact leaves everything alone")
+    func roundingWorksOnDurations() {
+        #expect(TimeRounding.exact.apply(3_061) == 3_061)
+        #expect(TimeRounding.nearestMinute.apply(3_061) == 3_060)
+        #expect(TimeRounding.upSixMinutes.apply(3_061) == 3_240)
+        #expect(TimeRounding.upFifteenMinutes.apply(3_061) == 3_600)
+    }
+
+    @Test("Nothing rounds up to something")
+    func zeroStaysZero() {
+        // An empty day must not acquire six minutes, or a report of one bills for an hour.
+        for rule in TimeRounding.allCases {
+            #expect(rule.apply(0) == 0)
+        }
+    }
+
+    @Test("The total rounds once rather than by adding rounded rows")
+    func totalRoundsIndependently() throws {
+        // Eight two-minute interruptions on the same task — sixteen minutes of work. Rounded per
+        // entry at a tenth of an hour they would bill as forty-eight minutes; rounded as the one row
+        // they actually are, they bill as eighteen.
+        let task = (id: UUID(), title: "Fix the header")
+        let entries = (0..<8).map { index in
+            entry(from: Double(index) * 600, to: Double(index) * 600 + 120, item: task)
+        }
+
+        let report = TimeReporting.report(
+            entries: entries,
+            grouping: .item,
+            range: today,
+            calendar: calendar,
+            now: clock.now,
+            rounding: .upSixMinutes
+        )
+
+        #expect(report.rows.count == 1)
+        let row = try #require(report.rows.first)
+        #expect(row.total == 18 * 60)
+        #expect(report.total == 18 * 60)
+    }
 }
 
 @Suite("Time windows")
@@ -275,6 +375,42 @@ struct TimeWindowTests {
         let month = TimeWindow.thisMonth.range(using: clock)
         #expect(clock.calendar.component(.day, from: month.lowerBound) == 1)
         #expect(month.contains(clock.startOfToday))
+    }
+
+    // MARK: - Windows
+
+    @Test("A rolling week is seven days including today, not six")
+    func rollingWindowsIncludeToday() {
+        let range = TimeWindow.last7Days.range(using: clock)
+        let days = clock.calendar
+            .dateComponents([.day], from: range.lowerBound, to: range.upperBound)
+            .day
+
+        #expect(days == 7)
+        #expect(range.contains(clock.startOfToday))
+    }
+
+    @Test("A custom period covers whole days at both ends")
+    func customPeriodsCoverWholeDays() {
+        // Two dates picked mid-afternoon must still report the whole of both days, or half an
+        // afternoon falls outside a report of the day it happened on.
+        let from = clock.startOfToday.addingTimeInterval(15 * 3_600)
+        let through = clock.startOfToday.addingTimeInterval(86_400 + 9 * 3_600)
+        let range = TimePeriod.custom(from: from, through: through).range(using: clock)
+
+        #expect(range.lowerBound == clock.startOfToday)
+        #expect(range.upperBound == clock.startOfToday.addingTimeInterval(2 * 86_400))
+    }
+
+    @Test("A backwards custom period is read forwards rather than refused")
+    func customPeriodsAreOrderIndependent() {
+        let early = clock.startOfToday
+        let late = clock.startOfToday.addingTimeInterval(3 * 86_400)
+
+        #expect(
+            TimePeriod.custom(from: late, through: early).range(using: clock)
+                == TimePeriod.custom(from: early, through: late).range(using: clock)
+        )
     }
 }
 

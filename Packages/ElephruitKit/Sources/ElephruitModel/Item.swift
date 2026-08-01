@@ -322,6 +322,28 @@ public final class Item {
     @Relationship(deleteRule: .nullify)
     public var timeEntries: [TimeEntry] = []
 
+    /// Time tracked *with* this person, as opposed to *against* this item.
+    ///
+    /// Only ever populated for ``ItemKind/person``. Its own relationship rather than a second use of
+    /// ``timeEntries`` because the two mean opposite things: an entry filed against a person is time
+    /// spent *on* them — writing their review, preparing their onboarding — and an entry with a
+    /// person present is time spent *with* them. Rolled into one list, "time on Sarah" and "time
+    /// with Sarah" become the same number, and neither is then answerable.
+    ///
+    /// `.nullify` for the reason ``timeEntries`` is: deleting a person must not destroy the record
+    /// of hours worked alongside them.
+    @Relationship(deleteRule: .nullify)
+    public var attendedTimeEntries: [TimeEntry] = []
+
+    /// Time billed to this project by an entry that does not sit inside it.
+    ///
+    /// Empty for almost every item, and that is the design. An entry against a task already belongs
+    /// to that task's project through the parent chain, and deriving it is what makes *time by
+    /// project* answerable without filing anything twice. This carries only the case derivation
+    /// cannot reach: a note, a meeting, or nothing at all, worked on for a project it is not inside.
+    @Relationship(deleteRule: .nullify)
+    public var billedTimeEntries: [TimeEntry] = []
+
     // MARK: Init
 
     /// Everything defaulted, which is both a CloudKit requirement and a convenience:

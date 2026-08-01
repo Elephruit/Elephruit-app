@@ -46,6 +46,22 @@ public struct TimeEntryGroup: Sendable, Hashable, Identifiable {
     /// A group containing the running timer, which is never more than one entry.
     public var isRunning: Bool { entries.contains(where: \.isRunning) }
 
+    /// When the still-running stretch began, or `nil` if everything here is finished.
+    public var runningSince: Date? {
+        entries.first(where: \.isRunning)?.startedAt
+    }
+
+    /// What the finished stretches come to, leaving out anything still running.
+    ///
+    /// ### Why a second total
+    /// ``total`` was measured when the log was built, and for a running entry that number is stale
+    /// the instant it is read — which is how the log came to show `0:00` beside a tracker reading
+    /// `0:25` for the same work. Splitting the settled part out lets a view add the live remainder
+    /// itself, from ``runningSince``, without rebuilding the log every second.
+    public var settledTotal: TimeInterval {
+        entries.filter { !$0.isRunning }.reduce(0) { $0 + $1.duration() }
+    }
+
     /// When the earliest stretch began and the latest one ended — what the row's `9:04 – 11:32`
     /// covers. `nil` while anything in the group is still running.
     public var startedAt: Date? { entries.map(\.startedAt).min() }
@@ -76,6 +92,16 @@ public struct TimeDaySection: Sendable, Hashable, Identifiable {
     public let entryCount: Int
 
     public var id: String { dayKey }
+
+    /// When the day's still-running stretch began, or `nil` if the day is settled.
+    public var runningSince: Date? {
+        groups.compactMap(\.runningSince).min()
+    }
+
+    /// What the day's finished stretches come to. See ``TimeEntryGroup/settledTotal``.
+    public var settledTotal: TimeInterval {
+        groups.reduce(0) { $0 + $1.settledTotal }
+    }
 
     public init(
         dayKey: String,

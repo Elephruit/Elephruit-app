@@ -106,6 +106,18 @@ public struct RootView: View {
                 shellWithBanner
             }
         }
+        // Above every screen in the window, in the corner nothing else uses. See
+        // ``FloatingTimerView`` — the sidebar row it duplicates is only present while the Time
+        // module's sidebar is, and a timer must not vanish because somebody opened Tasks.
+        .overlay(alignment: .bottomTrailing) {
+            FloatingTimerView(
+                onOpen: {
+                    navigation.select(.time)
+                    navigation.timeSurface = .log
+                },
+                onCollapse: { services?.miniTimer.collapse() }
+            )
+        }
         .environment(navigation)
         .swipeActionCoordinator(swipes)
         // Changing what is selected puts away anything a row was offering. The actions were about
@@ -203,7 +215,7 @@ public struct RootView: View {
             services?.checkForAttachmentTidy()
             // Before the index warm, because a timer left running deserves an answer sooner than
             // search deserves to be fast.
-            services?.timer.start()
+            services?.startTimeTracking()
             await services?.warmSearchIndex()
         }
         .sheet(isPresented: repairSheetBinding) {
@@ -303,7 +315,12 @@ public struct RootView: View {
                     // those rules or a list that cannot show them.
                     TaskWorkspaceView(navigation: navigation)
                 } else if navigation.selection == .time {
-                    TimeView(navigation: navigation)
+                    switch navigation.timeSurface {
+                    case .log:
+                        TimeView(navigation: navigation)
+                    case .report:
+                        TimeReportView(navigation: navigation)
+                    }
                 } else if navigation.selection == .calendar {
                     // The calendar replaces the middle column rather than opening beside it, on the
                     // same terms as Time and the People workspace: it *is* that column's contents

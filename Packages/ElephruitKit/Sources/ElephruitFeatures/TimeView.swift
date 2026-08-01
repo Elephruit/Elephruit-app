@@ -31,9 +31,14 @@ public struct TimeView: View {
     /// hides the thing being looked for.
     @AppStorage("time.groupsSimilarEntries") private var groupsSimilarEntries = true
 
-    /// Remembered across launches, because which mode you are in is a fact about how you work —
-    /// somebody who logs yesterday's hours every morning should not switch modes every morning.
-    @AppStorage("time.entryMode") private var storedMode = TimeEntryMode.timer.rawValue
+    /// How totals are rounded. Set in Settings ▸ Time, never applied to a stored entry.
+    @AppStorage("time.rounding") private var storedRounding = TimeRounding.exact.rawValue
+
+    /// How long a working day is meant to be, in hours. Zero turns the progress bar off entirely.
+    @AppStorage("time.dayTargetHours") private var dayTargetHours = 0.0
+
+    /// Whether the sheet for time already spent is up.
+    @State private var isAddingManually = false
 
     @State private var entries: [TimeEntrySnapshot] = []
     @State private var expandedGroups: Set<String> = []
@@ -46,39 +51,30 @@ public struct TimeView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            if let recovery = services?.timer.pendingRecovery {
-                TimerRecoveryBanner(
-                    recovery: recovery,
-                    onChoose: { choice in
-                        services?.timer.resolveRecovery(choice)
-                        reload()
-                    },
-                    onDefer: { services?.timer.deferRecovery() }
+            banners
+
+            // ### Why everything below is measured rather than stretched
+            // On a wide window a full-bleed layout puts the description at the far left and the
+            // total at the far right with two feet of nothing between them, and the eye has to
+            // travel the whole way to join one row up. A measure caps that. It is generous — wide
+            // enough that nothing wraps at a normal window size — and it only bites on the screens
+            // where stretching was doing damage.
+            VStack(spacing: Theme.Spacing.small) {
+                TimeTrackerCard(
+                    onChange: { bump() },
+                    onOpenSubject: { id in navigation.selectItem(id) },
+                    onAddManually: { isAddingManually = true }
                 )
+
+                if let session = services?.timer.pomodoro {
+                    FocusStrip(session: session)
+                }
             }
-
-            if let idle = services?.timer.pendingIdle {
-                IdleTimeBanner(
-                    idle: idle,
-                    onChoose: { choice in
-                        services?.timer.resolveIdle(choice)
-                        bump()
-                    },
-                    onDefer: { services?.timer.deferIdle() }
-                )
-            }
-
-            if let count = services?.timer.reconciledTimerCount, count > 0 {
-                ReconciliationNote(count: count) { services?.timer.acknowledgeReconciliation() }
-            }
-
-            TimeEntryBar(
-                mode: modeBinding,
-                onChange: { bump() },
-                onOpenSubject: { id in navigation.selectItem(id) }
-            )
-
-            Divider()
+            .frame(maxWidth: Self.measure)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, Theme.Spacing.large)
+            .padding(.top, Theme.Spacing.medium)
+            .padding(.bottom, Theme.Spacing.small)
 
             // ### Why the summary disappears rather than reading zero
             // A period with nothing in it used to say so three times on one screen: "Nothing
@@ -90,8 +86,11 @@ public struct TimeView: View {
             // it. A headline zero and a sentence restating it are a summary of nothing, and they
             // push the useful part down the screen. When there is time to report, the summary is
             // the best thing on the page and it comes back.
-            if !report.isEmpty {
+            if showsSummary {
                 summary
+                    .frame(maxWidth: Self.measure)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, Theme.Spacing.large)
 
                 Divider()
             }
@@ -102,19 +101,89 @@ public struct TimeView: View {
         .navigationSubtitle(subtitle)
         .toolbar { toolbarContent }
         .task(id: reloadToken) { reload() }
+        .sheet(isPresented: $isAddingManually) {
+            ManualTimeEntrySheet(onChange: { bump() })
+                .appServicesIfAvailable(services)
+        }
         .accessibilityIdentifier(AccessibilityID.Time.root)
     }
 
+    /// Everything the app has to say about time it is not sure of.
+    ///
+    /// Stacked in the order the questions arrived, and each is dismissible on its own: a morning
+    /// that produced a recovered timer *and* an idle gap is a morning where answering one must not
+    /// bury the other.
+    @ViewBuilder
+    private var banners: some View {
+        if let recovery = services?.timer.pendingRecovery {
+            TimerRecoveryBanner(
+                recovery: recovery,
+                onChoose: { choice in
+                    services?.timer.resolveRecovery(choice)
+                    reload()
+                },
+                onDefer: { services?.timer.deferRecovery() }
+            )
+        }
+
+        if let idle = services?.timer.pendingIdle {
+            IdleTimeBanner(
+                idle: idle,
+                onChoose: { choice in
+                    services?.timer.resolveIdle(choice)
+                    bump()
+                },
+                onDefer: { services?.timer.deferIdle() }
+            )
+        }
+
+        if let count = services?.timer.reconciledTimerCount, count > 0 {
+            ReconciliationNote(count: count) { services?.timer.acknowledgeReconciliation() }
+        }
+
+        if let finished = services?.timer.finishedPhase, let session = services?.timer.pomodoro {
+            FocusPhaseBanner(
+                phase: finished,
+                next: session.phase,
+                isWaiting: session.isPaused,
+                onStartNext: {
+                    services?.timer.beginWaitingPhase()
+                    bump()
+                },
+                onDismiss: { services?.timer.acknowledgeFinishedPhase() }
+            )
+        }
+    }
+
     // MARK: - Summary
+
+    /// The widest the tracker, the summary, and the log are allowed to get.
+    ///
+    /// A measure, in the typographic sense. Long lines are hard to read and long *rows* are hard to
+    /// join up, and the fix is the same for both.
+    static let measure: CGFloat = 1_100
+
+    /// Whether the breakdown above the log earns its space.
+    ///
+    /// ### Why one row is not a summary
+    /// A single bar drawn at a hundred percent of a peak it is also setting says nothing that the
+    /// number above it did not — and full width, it reads as a stray progress indicator rather than
+    /// a chart. That is exactly what a day of untracked-against work produced: one row, "No item",
+    /// a bar right across the window. The headline facts stay; the chart waits until there is
+    /// something to compare.
+    private var showsSummary: Bool {
+        report.rows.count > 1
+    }
 
     private var summary: some View {
         TimeSummaryView(
             report: report,
             grouping: grouping,
+            dayTarget: dayTargetHours > 0 ? dayTargetHours * 3_600 : nil,
+            isSingleDay: window == .today || window == .yesterday,
             onOpen: { id in navigation.selectItem(id) }
         )
-        .padding(.horizontal, Theme.Spacing.medium)
-        .padding(.vertical, Theme.Spacing.small)
+        .padding(.vertical, Theme.Spacing.medium)
     }
 
     private var report: TimeReport {
@@ -124,7 +193,8 @@ public struct TimeView: View {
             grouping: grouping,
             range: window.range(using: services.dateProvider),
             calendar: services.dateProvider.calendar,
-            now: services.dateProvider.now
+            now: services.dateProvider.now,
+            rounding: TimeRounding(rawValue: storedRounding) ?? .exact
         )
     }
 
@@ -151,10 +221,10 @@ public struct TimeView: View {
             EmptyStateView(
                 symbolName: "timer",
                 headline: "No time tracked \(window.displayName.lowercased())",
-                message: "Say what you are doing in the bar above and press play, "
-                    + "or switch it to Manual to record time you have already spent.",
-                actionTitle: "Add Time…",
-                action: { mode = .manual }
+                message: "Press Start above the moment you begin something. "
+                    + "You can name it, file it, and tag it while the clock is running.",
+                actionTitle: "Add Time by Hand…",
+                action: { isAddingManually = true }
             )
         } else {
             List {
@@ -162,15 +232,18 @@ public struct TimeView: View {
                     Section {
                         ForEach(section.groups) { group in
                             groupRow(group)
+                                .measuredRow()
 
                             if expandedGroups.contains(group.id), !group.isSingle {
                                 ForEach(group.entries) { entry in
                                     entryRow(entry)
+                                        .measuredRow()
                                 }
                             }
                         }
                     } header: {
                         TimeDayHeader(section: section)
+                            .measuredRow()
                     }
                 }
             }
@@ -226,8 +299,10 @@ public struct TimeView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem {
+            // The log's own windows only. The long ranges belong to Reports, which is the surface
+            // that can draw a year without becoming a list nobody can correct anything from.
             Picker("Period", selection: windowBinding) {
-                ForEach(TimeWindow.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                ForEach(TimeWindow.logWindows, id: \.self) { Text($0.displayName).tag($0) }
             }
             .pickerStyle(.menu)
             .accessibilityIdentifier(AccessibilityID.Time.windowPicker)
@@ -242,30 +317,29 @@ public struct TimeView: View {
         }
 
         ToolbarItem {
-            Toggle(isOn: $groupsSimilarEntries) {
-                Label("Group Similar", systemImage: "rectangle.stack")
+            // A menu rather than a bare `Toggle`, which rendered as an unlabelled filled circle —
+            // a control whose only clue to what it does is whether it looks pressed.
+            Menu {
+                Toggle("Collapse Alike Entries", isOn: $groupsSimilarEntries)
+                    .accessibilityIdentifier(AccessibilityID.Time.groupingToggle)
+            } label: {
+                Label("Display", systemImage: "slider.horizontal.3")
             }
-            .help("Collapse entries that share a description, subject and tags")
-            .accessibilityIdentifier(AccessibilityID.Time.groupingToggle)
+            .help("How the log is shown")
         }
 
         ToolbarItem {
-            Button("Add Time", systemImage: "plus") { mode = .manual }
+            Button("Add Time", systemImage: "plus") { isAddingManually = true }
                 .help("Record time you have already spent")
                 .accessibilityIdentifier(AccessibilityID.Time.addEntryButton)
         }
-    }
 
-    private var modeBinding: Binding<TimeEntryMode> {
-        Binding(
-            get: { TimeEntryMode(rawValue: storedMode) ?? .timer },
-            set: { storedMode = $0.rawValue }
-        )
-    }
-
-    private var mode: TimeEntryMode {
-        get { modeBinding.wrappedValue }
-        nonmutating set { modeBinding.wrappedValue = newValue }
+        ToolbarItem {
+            Button("Reports", systemImage: "chart.bar.xaxis") {
+                navigation.timeSurface = .report
+            }
+            .help("Totals over any period, ready to export")
+        }
     }
 
     private var windowBinding: Binding<TimeWindow> {
@@ -318,7 +392,8 @@ public struct TimeView: View {
 
     private func duplicate(_ snapshot: TimeEntrySnapshot) {
         guard let services, let entry = try? services.timeEntries.entry(id: snapshot.id) else { return }
-        services.perform { try services.timeEntries.duplicate(entry) }
+        let copy = try? services.timeEntries.duplicate(entry)
+        copy.map { services.mirrorTime(entryID: $0.id) }
         bump()
     }
 
@@ -330,6 +405,9 @@ public struct TimeView: View {
                 try services.timeEntries.delete(entry)
             }
         }
+        // After the delete, not before: the mirror reads the entry to decide, and a soft-deleted one
+        // is what tells it to take the calendar copy back.
+        ids.forEach { services.mirrorTime(entryID: $0) }
         services.timer.refresh()
         bump()
     }
@@ -342,9 +420,11 @@ public struct TimeView: View {
     private func apply(_ edit: TimeEntryEdit, to ids: [UUID]) {
         guard let services else { return }
 
-        let subject = edit.composition.subject.flatMap { reference in
-            (try? services.items.item(id: reference.id)) ?? nil
-        }
+        // Resolved once, outside the loop: a group edit against eight stretches would otherwise
+        // fetch the same subject, project and people eight times over.
+        let subject = resolve(edit.composition.subject, in: services)
+        let project = resolve(edit.composition.project, in: services)
+        let people = edit.composition.people.compactMap { resolve($0, in: services) }
 
         services.perform {
             for id in ids {
@@ -362,57 +442,159 @@ public struct TimeView: View {
                 }
 
                 try services.timeEntries.setTags(edit.composition.tagSlugs, on: entry)
+                try services.timeEntries.setProject(project, on: entry)
+                try services.timeEntries.setPeople(people, on: entry)
             }
         }
 
+        ids.forEach { services.mirrorTime(entryID: $0) }
         services.timer.refresh()
         bump()
+    }
+
+    private func resolve(_ reference: SubjectReference?, in services: AppServices) -> Item? {
+        guard let reference else { return nil }
+        return (try? services.items.item(id: reference.id)) ?? nil
     }
 }
 
 // MARK: - Summary
 
 /// Totals, and where the time went.
+///
+/// ### Why the big number is not alone on its line any more
+/// It was, and the line under it was a single full-width bar — which is what a period with one
+/// subject in it produces, and it reads as a stray progress indicator rather than as a chart of one
+/// row. Beside the total now sit the facts that qualify it: how much is billable, how many stretches
+/// it took, and how many focus blocks were finished. Those are three numbers somebody would
+/// otherwise count by hand off the list below.
 struct TimeSummaryView: View {
     let report: TimeReport
     let grouping: TimeGrouping
+
+    /// A day's worth of work, when one has been set, for the progress bar.
+    var dayTarget: TimeInterval?
+
+    /// Whether the period is a single day, which is the only case a day target means anything in.
+    var isSingleDay: Bool
+
     let onOpen: (UUID) -> Void
 
+    /// How many rows are shown before the rest are summarised as a count.
+    ///
+    /// Six. Enough for a week's projects, short enough that the list below stays the thing on the
+    /// screen — this is a summary, and a summary as long as what it summarises is a second list.
+    private let visibleRows = 6
+
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
-                Text(TimeFormatting.short(report.total))
-                    .font(.system(.largeTitle, design: .rounded, weight: .medium))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            headline
 
-                if report.billable > 0 {
-                    Text("\(TimeFormatting.short(report.billable)) billable")
-                        .font(Theme.Text.rowSubtitle)
-                        .foregroundStyle(Theme.Colors.secondaryText)
-                }
-
-                Spacer()
+            if let dayTarget, isSingleDay {
+                dayProgress(target: dayTarget)
             }
 
-            if report.isEmpty {
-                Text("Nothing tracked in this period.")
-                    .font(Theme.Text.rowSubtitle)
-                    .foregroundStyle(Theme.Colors.secondaryText)
-            } else {
-                ForEach(report.rows.prefix(6)) { row in
-                    TimeSummaryBar(row: row, peak: report.peak, onOpen: onOpen)
-                }
+            if !report.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                    ForEach(report.rows.prefix(visibleRows)) { row in
+                        TimeSummaryBar(row: row, peak: report.peak, onOpen: onOpen)
+                    }
 
-                if report.rows.count > 6 {
-                    Text("and \(report.rows.count - 6) more")
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.tertiaryText)
+                    if report.rows.count > visibleRows {
+                        Text("and \(report.rows.count - visibleRows) more")
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
+                    }
+
+                    if grouping.rowsCanOverlap, report.rows.count > 1 {
+                        // Said rather than left to be discovered in a column that does not add up.
+                        Text("One entry can appear in more than one row, so these need not total \(TimeFormatting.short(report.total)).")
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(TimeFormatting.spelled(report.total)) tracked, grouped by \(grouping.displayName)")
+    }
+
+    private var headline: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
+            Text(TimeFormatting.short(report.total))
+                .font(.system(.largeTitle, design: .rounded, weight: .medium))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+
+            HStack(spacing: Theme.Spacing.small) {
+                if report.billable > 0 {
+                    TimeFactLabel(
+                        symbolName: "dollarsign.circle",
+                        text: "\(TimeFormatting.short(report.billable)) billable"
+                    )
+                }
+
+                TimeFactLabel(
+                    symbolName: "rectangle.stack",
+                    text: report.entryCount == 1 ? "1 entry" : "\(report.entryCount) entries"
+                )
+            }
+
+            Spacer()
+        }
+    }
+
+    /// How much of the day's target has been met.
+    ///
+    /// ### Why this only appears for a single day, and only when asked for
+    /// A target across a week is a different measurement — five days times a daily figure, minus
+    /// whatever the user counts as a working day — and guessing at that is how a tracker starts
+    /// telling somebody they are behind on a Sunday. Off by default for the same reason: nobody
+    /// should be shown a progress bar towards a number they never set.
+    private func dayProgress(target: TimeInterval) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Theme.Colors.subtleFill)
+
+                    Capsule()
+                        .fill(report.total >= target ? Theme.Colors.completed : Theme.Colors.selection)
+                        .frame(width: max(0, min(1, report.total / target)) * proxy.size.width)
+                }
+            }
+            .frame(height: 6)
+
+            Text(targetDescription(target: target))
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.tertiaryText)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(targetDescription(target: target))
+    }
+
+    private func targetDescription(target: TimeInterval) -> String {
+        let remaining = target - report.total
+        guard remaining > 0 else {
+            return "\(TimeFormatting.spelled(report.total)) of \(TimeFormatting.spelled(target)) — done"
+        }
+        return "\(TimeFormatting.spelled(remaining)) left of \(TimeFormatting.spelled(target))"
+    }
+}
+
+/// A small symbol-and-text fact beside the headline total.
+struct TimeFactLabel: View {
+    let symbolName: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.hairline) {
+            Image(systemName: symbolName)
+            Text(text)
+        }
+        .font(Theme.Text.metadata)
+        .foregroundStyle(Theme.Colors.secondaryText)
     }
 }
 
@@ -437,14 +619,22 @@ struct TimeSummaryBar: View {
             }
             .font(Theme.Text.rowSubtitle)
             .lineLimit(1)
-            .frame(width: 160, alignment: .leading)
+            .frame(width: 150, alignment: .leading)
 
             GeometryReader { proxy in
-                RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                    .fill(Theme.Colors.selection.opacity(0.35))
-                    .frame(width: max(2, proxy.size.width * fraction))
+                ZStack(alignment: .leading) {
+                    // A track under every bar, so a short row still reads as a row rather than as an
+                    // empty patch of window. Without it, a chart of one large and five small values
+                    // looks like a chart of one value.
+                    Capsule()
+                        .fill(Theme.Colors.subtleFill)
+
+                    Capsule()
+                        .fill(Theme.Colors.selection.opacity(0.5))
+                        .frame(width: max(3, proxy.size.width * fraction))
+                }
             }
-            .frame(height: 10)
+            .frame(height: 8)
 
             Text(TimeFormatting.short(row.total))
                 .font(Theme.Text.metadata)
