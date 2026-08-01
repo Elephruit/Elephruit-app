@@ -425,17 +425,23 @@ struct TimeReportView: View {
         // below compares the same kind of thing the loop is producing. Resolving each row's key back
         // to a date once is cheaper than formatting a key per day, and it cannot disagree about what
         // "the 3rd" means in a calendar that is not Gregorian.
-        var totals: [Date: TimeInterval] = [:]
-        for row in TimeReporting.report(
+        //
+        // The whole row rather than its total: the day's entry count and its billable share are
+        // already computed here by the same rules the table uses, and the tooltip wants both. Taking
+        // only the total meant the tooltip had to either go without them or count them again.
+        let daily = TimeReporting.report(
             entries: entries,
             grouping: .day,
             range: range,
             calendar: calendar,
             now: services.dateProvider.now,
             rounding: rounding
-        ).rows {
+        )
+
+        var dayRows: [Date: TimeSummaryRow] = [:]
+        for row in daily.rows {
             guard let date = DayKey.date(from: row.key, in: calendar) else { continue }
-            totals[calendar.startOfDay(for: date)] = row.total
+            dayRows[calendar.startOfDay(for: date)] = row
         }
 
         // The cells, gathered per day and largest first, so the tallest segment of every bar sits at
@@ -459,11 +465,18 @@ struct TimeReportView: View {
         // Bounded, so a custom period of ten years cannot ask for four thousand bars. Past this the
         // chart is a smear anyway and the breakdown below is the surface that answers.
         while day < range.upperBound, bars.count < 400 {
-            let total = totals[day] ?? 0
+            let row = dayRows[day]
+            let total = row?.total ?? 0
             bars.append(
                 DailyBar(
                     day: day,
                     hours: total / 3_600,
+                    entryCount: row?.entryCount ?? 0,
+                    billableHours: (row?.billable ?? 0) / 3_600,
+                    // What proportion of the period landed here. The one fact a bar cannot carry:
+                    // the y-axis says how many hours, and nothing on screen says whether that was a
+                    // fifth of the week or most of it.
+                    shareOfPeriod: daily.total > 0 ? total / daily.total : 0,
                     segments: segments(forDayStarting: day, total: total, cells: cellsByDay, calendar: calendar)
                 )
             )
@@ -506,7 +519,10 @@ struct TimeReportView: View {
                     rowKey: "\u{1}total",
                     title: "Tracked",
                     hours: total / 3_600,
-                    color: Theme.Colors.selection
+                    color: Theme.Colors.selection,
+                    // Nothing to name — this is the whole day drawn as one block, and a tooltip line
+                    // reading "Tracked 5:57" under a header reading "5:57" is the same number twice.
+                    isWorthListing: false
                 )
             ]
         }
@@ -516,7 +532,19 @@ struct TimeReportView: View {
                 rowKey: cell.rowKey,
                 title: cell.title,
                 hours: (cell.total / exact) * total / 3_600,
-                color: seriesColors[cell.rowKey] ?? Theme.Colors.selection
+                color: seriesColors[cell.rowKey] ?? Theme.Colors.selection,
+                // ### Why a segment can be listed in the bar and not in the tooltip
+                // Because a timer that has been running for eleven seconds is real time and belongs
+                // in the day's total, and a tooltip line reading "No project — 0:00" is a line that
+                // says nothing while looking like a bug. The screenshot that prompted this had
+                // exactly that: an untitled running timer contributing eleven seconds to Saturday,
+                // listed under the three hours of real work beside it.
+                //
+                // Half a minute is the threshold because the tooltip reports minutes: below it there
+                // is no number to show. The time stays in the bar and in the header total, where it
+                // is accounted for; what it loses is a line of its own at a precision that cannot
+                // express it.
+                isWorthListing: cell.total >= 30
             )
         }
     }
@@ -750,6 +778,15 @@ struct DailyBar: Identifiable, Hashable {
     /// The day's total, which is what the bar's height is.
     var hours: Double
 
+    /// How many entries touched this day. An entry crossing midnight counts on both, because it
+    /// happened on both.
+    var entryCount: Int = 0
+
+    var billableHours: Double = 0
+
+    /// What proportion of the whole period landed on this day, from 0 to 1.
+    var shareOfPeriod: Double = 0
+
     /// The coloured pieces it is made of. One piece when the grouping cannot be stacked, and none at
     /// all on a day with nothing on it.
     var segments: [DailySegment] = []
@@ -757,6 +794,33 @@ struct DailyBar: Identifiable, Hashable {
     var id: Date { day }
 
     var isEmpty: Bool { hours <= 0 }
+
+    /// The pieces worth naming in a tooltip — see ``DailySegment/isWorthListing``.
+    var listedSegments: [DailySegment] {
+        segments.filter(\.isWorthListing)
+    }
+
+    /// The facts that are true of the day whatever it was spent on.
+    ///
+    /// This is what makes a one-project day worth hovering. The breakdown answers "what", and on a
+    /// day with a single project it answers it in one line; these answer "how much of my week was
+    /// this, and how many goes did it take", which the chart cannot show and the table below does
+    /// not break down by day.
+    var facts: [String] {
+        guard !isEmpty else { return [] }
+
+        var parts: [String] = []
+        if entryCount > 0 {
+            parts.append(entryCount == 1 ? "1 entry" : "\(entryCount) entries")
+        }
+        if shareOfPeriod > 0 {
+            parts.append("\(Int((shareOfPeriod * 100).rounded()))% of the period")
+        }
+        if billableHours > 0 {
+            parts.append("\(TimeFormatting.short(billableHours * 3_600)) billable")
+        }
+        return parts
+    }
 
     /// What VoiceOver reads for this bar, so a day is answerable without a pointer.
     ///
@@ -767,11 +831,10 @@ struct DailyBar: Identifiable, Hashable {
         guard !isEmpty else { return "Nothing tracked" }
 
         var parts = [TimeFormatting.spelled(hours * 3_600)]
-        if segments.count > 1 {
-            parts.append(contentsOf: segments.prefix(3).map {
-                "\($0.title), \(TimeFormatting.short($0.hours * 3_600))"
-            })
-        }
+        parts.append(contentsOf: listedSegments.prefix(3).map {
+            "\($0.title), \(TimeFormatting.short($0.hours * 3_600))"
+        })
+        parts.append(contentsOf: facts)
         return parts.joined(separator: ", ")
     }
 }
@@ -783,16 +846,38 @@ struct DailySegment: Identifiable, Hashable {
     var hours: Double
     var color: Color
 
+    /// Whether this piece earns a line in the tooltip.
+    ///
+    /// A piece can be worth drawing and not worth naming: a running timer's first few seconds are
+    /// real time and belong in the day's total, but a line reading `0:00` is a line that says
+    /// nothing while looking like a fault. See where this is decided, in
+    /// `TimeReportView.segments(forDayStarting:total:cells:calendar:)`.
+    var isWorthListing: Bool = true
+
     var id: String { rowKey }
 }
 
 /// What one day held, shown while the pointer is over it.
 ///
-/// ### Why the tooltip repeats the breakdown rather than only the total
-/// Because the total is already the bar's height, and a tooltip that says what the picture has just
-/// said is a delay followed by nothing — the standard this app holds its own sidebar tooltips to.
-/// What a stacked bar cannot say is *which* colour was which and how much each was worth, and that
-/// is precisely what somebody points at a segment to find out.
+/// ### Why every day gets the same three parts
+/// The first version showed the breakdown only when there was more than one row in it, on the
+/// reasoning that naming the single thing a day was spent on repeats the total above it. Pointing at
+/// a real week disproved that twice over.
+///
+/// A day with one project produced a tooltip holding a date and a number — and the number was
+/// already the height of the bar being pointed at, so the whole gesture returned nothing. That is
+/// the standard this app holds its own sidebar tooltips to, and it failed it. The single row is
+/// worth its line precisely because it *names* something: `5:57` is the bar; "No project — 5:57" is
+/// the answer to why.
+///
+/// And a total is not the only thing true of a day. How many goes it took, what share of the period
+/// it was, how much of it was billable — none of those is on the chart, none is broken down by day
+/// in the table underneath, and all three are things somebody hovers a bar to find out. They are the
+/// part that makes a one-project day worth pointing at.
+///
+/// So: the date and the total, then what it went to, then what else is true of it. The same shape
+/// every day, because a tooltip that changes shape as the pointer crosses the chart cannot be read
+/// at a glance — the eye has to find each fact again on every day.
 struct DayTooltip: View {
     let bar: DailyBar
 
@@ -800,47 +885,22 @@ struct DayTooltip: View {
     private static let visibleSegments = 4
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
-                Text(bar.day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
-                    .font(Theme.Text.sectionHeader)
-                    .foregroundStyle(Theme.Colors.secondaryText)
-
-                Spacer(minLength: Theme.Spacing.medium)
-
-                Text(bar.isEmpty ? "—" : TimeFormatting.short(bar.hours * 3_600))
-                    .font(Theme.Text.rowTitleEmphasised)
-                    .monospacedDigit()
-            }
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            headline
 
             if bar.isEmpty {
                 Text("Nothing tracked")
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.tertiaryText)
-            } else if bar.segments.count > 1 {
-                ForEach(bar.segments.prefix(Self.visibleSegments)) { segment in
-                    HStack(spacing: Theme.Spacing.tight) {
-                        // The same colour the segment is drawn in, which is the whole point: the
-                        // swatch is what joins the name to the piece of the bar under the pointer.
-                        Circle()
-                            .fill(segment.color)
-                            .frame(width: 7, height: 7)
-
-                        Text(segment.title)
-                            .font(Theme.Text.metadata)
-                            .lineLimit(1)
-
-                        Spacer(minLength: Theme.Spacing.medium)
-
-                        Text(TimeFormatting.short(segment.hours * 3_600))
-                            .font(Theme.Text.metadata)
-                            .monospacedDigit()
-                            .foregroundStyle(Theme.Colors.secondaryText)
-                    }
+            } else {
+                if !listed.isEmpty {
+                    Divider()
+                    breakdown
                 }
 
-                if bar.segments.count > Self.visibleSegments {
-                    Text("and \(bar.segments.count - Self.visibleSegments) more")
+                if !bar.facts.isEmpty {
+                    Divider()
+                    Text(bar.facts.joined(separator: " · "))
                         .font(Theme.Text.metadata)
                         .foregroundStyle(Theme.Colors.tertiaryText)
                 }
@@ -848,7 +908,7 @@ struct DayTooltip: View {
         }
         .padding(.horizontal, Theme.Spacing.medium)
         .padding(.vertical, Theme.Spacing.small)
-        .frame(minWidth: 160, alignment: .leading)
+        .frame(minWidth: 180, alignment: .leading)
         .fixedSize()
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous))
         .overlay {
@@ -861,6 +921,53 @@ struct DayTooltip: View {
         // Read through the bars' own accessibility values instead — see `DailyBar`.
         .accessibilityHidden(true)
     }
+
+    private var headline: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
+            Text(bar.day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
+                .font(Theme.Text.sectionHeader)
+                .foregroundStyle(Theme.Colors.secondaryText)
+
+            Spacer(minLength: Theme.Spacing.medium)
+
+            Text(bar.isEmpty ? "—" : TimeFormatting.short(bar.hours * 3_600))
+                .font(Theme.Text.rowTitleEmphasised)
+                .monospacedDigit()
+        }
+    }
+
+    private var breakdown: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+            ForEach(listed.prefix(Self.visibleSegments)) { segment in
+                HStack(spacing: Theme.Spacing.tight) {
+                    // The same colour the segment is drawn in, which is the whole point: the swatch
+                    // is what joins the name to the piece of the bar under the pointer.
+                    Circle()
+                        .fill(segment.color)
+                        .frame(width: 7, height: 7)
+
+                    Text(segment.title)
+                        .font(Theme.Text.metadata)
+                        .lineLimit(1)
+
+                    Spacer(minLength: Theme.Spacing.medium)
+
+                    Text(TimeFormatting.short(segment.hours * 3_600))
+                        .font(Theme.Text.metadata)
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                }
+            }
+
+            if listed.count > Self.visibleSegments {
+                Text("and \(listed.count - Self.visibleSegments) more")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+            }
+        }
+    }
+
+    private var listed: [DailySegment] { bar.listedSegments }
 }
 
 /// How the daily chart's x-axis is stepped and labelled for a period of a given length.
