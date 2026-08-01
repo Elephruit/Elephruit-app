@@ -278,6 +278,39 @@ public final class TaskService {
     // MARK: - Marks
 
     /// Parks a task, or brings it back.
+    /// Applies one answer to *when is this for*.
+    ///
+    /// ### The property this exists to make checkable
+    /// **No case here writes a deadline.** Every route sets a start date, a commitment, or Someday —
+    /// three things that can never make a task late — and a deadline is the one date that can. The
+    /// distinction is what the whole scheduling model rests on, and a control that quietly crossed it
+    /// would make everything downstream wrong while looking right.
+    ///
+    /// A day chosen here also un-parks the task, because Someday means "no date, deliberately" and a
+    /// task both parked and scheduled for Thursday is a contradiction somebody would otherwise have
+    /// to resolve on the user's behalf.
+    public func apply(_ choice: TaskWhenChoice, to task: Item) throws(AppError) {
+        switch choice {
+        case .today:
+            try commitToToday(task)
+
+        case .thisEvening:
+            try moveToLaterToday(task)
+
+        case .someday:
+            try setSomeday(true, on: task)
+
+        case .startingOn(let date):
+            try setStartDate(date, on: task)
+            if task.isSomeday { try setSomeday(false, on: task) }
+
+        case .clear:
+            try setStartDate(nil, on: task)
+            try setSomeday(false, on: task)
+            try removeFromToday(task)
+        }
+    }
+
     public func setSomeday(_ isSomeday: Bool, on task: Item) throws(AppError) {
         try mutate(task) { $0.isSomeday = isSomeday }
     }
@@ -345,6 +378,44 @@ public final class TaskService {
     /// Records that this task is something the user owes somebody.
     public func markPromised(_ task: Item, to person: Item) throws(AppError) {
         try items.link(task, to: person, kind: .promisedTo)
+    }
+
+    /// Who is on this task, as a whole set.
+    ///
+    /// ### Why this touches `.mentions` and nothing else
+    /// A task can point at a person in four ways, and three of them mean something specific:
+    /// ``LinkKind/waitingOn`` is the person who has the next move, ``LinkKind/promisedTo`` is
+    /// somebody owed, ``LinkKind/participant`` belongs to meetings. Only ``LinkKind/mentions`` means
+    /// the plain thing — *this involves them* — so only that kind is replaced here.
+    ///
+    /// The alternative, replacing every person link, would mean that adding a second name to a task
+    /// waiting on Ana silently stopped it waiting on Ana. A control that quietly undoes a different
+    /// control is worse than one that does less.
+    ///
+    /// Whole-set rather than add and remove, because the picker hands back a list and diffing it in
+    /// the view would put the "which ones went?" question in the surface rather than in the store.
+    public func setRelatedPeople(_ people: [Item], on task: Item) throws(AppError) {
+        let wanted = Set(people.map(\.id))
+        let existing = task.outgoingLinks.filter { $0.kind == .mentions && $0.target?.kind == .person }
+        let stale = existing.filter { link in
+            guard let id = link.target?.id else { return true }
+            return !wanted.contains(id)
+        }
+
+        if !stale.isEmpty {
+            do {
+                for link in stale { context.delete(link) }
+                try context.save()
+            } catch {
+                throw .writeFailed(path: "mentions", reason: error.localizedDescription)
+            }
+        }
+
+        // `link` is idempotent, so the ones already there cost nothing and the ones that are not are
+        // added. No diff to get wrong.
+        for person in people {
+            try items.link(task, to: person, kind: .mentions)
+        }
     }
 
     private func clearWaitingLinks(on task: Item) throws(AppError) {

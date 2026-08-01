@@ -23,8 +23,9 @@ struct TaskDetailPanels: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-            quickActions
-            scheduling
+            TaskAttributeRow(task: task)
+            marks
+            recurrence
             checklist
             waiting
             syncNotice
@@ -33,36 +34,26 @@ struct TaskDetailPanels: View {
         .padding(.horizontal, Theme.Spacing.large)
     }
 
-    // MARK: - Quick actions
+    // MARK: - Marks
 
-    /// The four things done most often, one click each.
-    private var quickActions: some View {
+    /// The two marks that are not attributes.
+    ///
+    /// ### Why Today and Someday left this row
+    /// They were two toggles beside a *Dates* disclosure holding three more date controls, so the
+    /// question "when is this for" had five answers spread across two regions and one of them could
+    /// contradict another. All five now live in ``WhenPopover``, which is one control that can only
+    /// give one answer.
+    ///
+    /// A flag is genuinely not one of them: it means whatever the user decides, it implies no date
+    /// and no priority, and it is the one mark whose whole value is that it says nothing specific.
+    private var marks: some View {
         HStack(spacing: Theme.Spacing.small) {
-            Toggle(isOn: todayBinding) {
-                Label("Today", systemImage: "sun.horizon")
-            }
-            .help("Choose this for today. It stays chosen until you finish it or take it off.")
-
             Toggle(isOn: flagBinding) {
                 Label("Flag", systemImage: "flag")
             }
             .help("Worth coming back to. Implies no deadline, no priority, and no place in Today.")
 
-            Toggle(isOn: somedayBinding) {
-                Label("Someday", systemImage: "archivebox")
-            }
-            .help("Parked on purpose. It leaves every count and cannot be late.")
-
             Spacer()
-
-            Picker("Priority", selection: priorityBinding) {
-                ForEach(Priority.allCases, id: \.self) { priority in
-                    Text(priority.displayName).tag(priority)
-                }
-            }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .fixedSize()
         }
         .toggleStyle(.button)
         .buttonStyle(.bordered)
@@ -70,72 +61,19 @@ struct TaskDetailPanels: View {
         .labelStyle(.titleAndIcon)
     }
 
-    // MARK: - Scheduling
-
-    /// The three dates, always in this order and never sharing a name.
-    ///
-    /// "Start" and "Deadline" are separate rows with separate labels, because the entire scheduling
-    /// model rests on somebody being able to tell them apart at a glance. The word "Due" appears only
-    /// beside the deadline.
     @ViewBuilder
-    private var scheduling: some View {
-        DetailDisclosure(
-            title: "Dates",
-            count: dateCount,
-            systemImage: "calendar",
-            // Open when the task has a date, closed when it does not — so a plain task is two lines
-            // and a dated one shows what it is committed to without a click.
-            startsExpanded: dateCount > 0
-        ) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                OptionalDateRow(
-                    label: "Start",
-                    hint: "When this becomes worth thinking about. It can never be late.",
-                    symbolName: "play.circle",
-                    date: startBinding
-                )
-
-                OptionalDateRow(
-                    label: "Deadline",
-                    hint: "The date this must be finished by. The only date that can make it overdue.",
-                    symbolName: "flag.pattern.checkered",
-                    date: deadlineBinding
-                )
-
-                OptionalDateRow(
-                    label: "Reminder",
-                    hint: "When to interrupt you. Setting a date above never creates one of these.",
-                    symbolName: "bell",
-                    date: reminderBinding,
-                    includesTime: true
-                )
-
-                if let rule = task.recurrence {
-                    HStack(spacing: Theme.Spacing.small) {
-                        Label(rule.summary, systemImage: "repeat")
-                            .font(Theme.Text.metadata)
-                            .foregroundStyle(Theme.Colors.secondaryText)
-                        Spacer()
-                        Button("Stop Repeating") { act { try $0.items.update(task) { $0.recurrence = nil } } }
-                            .buttonStyle(.borderless)
-                            .font(Theme.Text.metadata)
-                    }
-                }
-
-                if task.reminderOwner == .system {
-                    Label(
-                        "The alarm belongs to Reminders, so Elephruit will not send a second one.",
-                        systemImage: "bell.badge"
-                    )
+    private var recurrence: some View {
+        if let rule = task.recurrence {
+            HStack(spacing: Theme.Spacing.small) {
+                Label(rule.summary, systemImage: "repeat")
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.secondaryText)
-                }
+                Spacer()
+                Button("Stop Repeating") { act { try $0.items.update(task) { $0.recurrence = nil } } }
+                    .buttonStyle(.borderless)
+                    .font(Theme.Text.metadata)
             }
         }
-    }
-
-    private var dateCount: Int {
-        [task.availableFrom, task.dueAt, task.reminderAt].count { $0 != nil }
     }
 
     // MARK: - Checklist
@@ -325,40 +263,8 @@ struct TaskDetailPanels: View {
 
     // MARK: - Bindings
 
-    private var todayBinding: Binding<Bool> {
-        Binding(
-            get: { services.map { task.isCommittedTo(today: $0.dateProvider) } ?? false },
-            set: { newValue in
-                act { newValue ? try $0.tasks.commitToToday(task) : try $0.tasks.removeFromToday(task) }
-            }
-        )
-    }
-
     private var flagBinding: Binding<Bool> {
         Binding(get: { task.isFlagged }, set: { value in act { try $0.tasks.setFlagged(value, on: task) } })
-    }
-
-    private var somedayBinding: Binding<Bool> {
-        Binding(get: { task.isSomeday }, set: { value in act { try $0.tasks.setSomeday(value, on: task) } })
-    }
-
-    private var priorityBinding: Binding<Priority> {
-        Binding(get: { task.priority }, set: { value in act { try $0.tasks.setPriority(value, on: task) } })
-    }
-
-    private var startBinding: Binding<Date?> {
-        Binding(get: { task.availableFrom }, set: { value in act { try $0.tasks.setStartDate(value, on: task) } })
-    }
-
-    private var deadlineBinding: Binding<Date?> {
-        Binding(get: { task.dueAt }, set: { value in act { try $0.tasks.setDeadline(value, on: task) } })
-    }
-
-    private var reminderBinding: Binding<Date?> {
-        Binding(
-            get: { task.reminderAt },
-            set: { value in act { try $0.tasks.setReminder(value, timed: true, on: task) } }
-        )
     }
 
     private var followUpBinding: Binding<Date?> {

@@ -175,16 +175,60 @@ struct TimeProjectPicker: View {
         .accessibilityValue(project?.title ?? "derived from the subject")
         .accessibilityIdentifier(AccessibilityID.Time.projectPicker)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-            popoverContent
+            ProjectPickerContent(
+                chosenID: project?.id,
+                projects: projects,
+                clearTitle: "No project",
+                clearDetail: "Use whatever the subject belongs to",
+                footnote: """
+                    Time against a task already counts towards that task's project. This is for the \
+                    hour that belongs to one it does not sit inside.
+                    """
+            ) { picked in
+                onPick(picked)
+                isPresented = false
+            }
         }
     }
 
-    /// Search at the top, the list in the middle, the way out at the bottom.
-    ///
-    /// The shape every picker in this module now shares. A list you have to leave in order to make
-    /// the thing you were looking for is a list that sends you round the houses; a *Create* pinned
-    /// to the bottom is always in the same place whether the list is empty or fifty long.
-    private var popoverContent: some View {
+    private var chosenTint: Color? {
+        projects.first { $0.id == project?.id }?.tint
+    }
+
+    /// Every live project, with its area and its colour.
+    private func loadProjects() {
+        projects = ProjectChoice.live(in: services)
+    }
+}
+
+/// Search at the top, the list in the middle, the way out at the bottom.
+///
+/// The shape every picker in the app now shares. A list you have to leave in order to make the thing
+/// you were looking for is a list that sends you round the houses; the escape pinned to the bottom is
+/// always in the same place whether the list is empty or fifty long.
+///
+/// Shared between the tracker's project chip and the task card's *Move* button. They differ in what
+/// the empty choice is called and in the sentence at the foot — both parameters — and in nothing
+/// else, which is not enough difference to justify two of these.
+struct ProjectPickerContent: View {
+    let chosenID: UUID?
+    let projects: [ProjectChoice]
+
+    /// What "none of them" is called here. `nil` removes the row, for a surface where a project is
+    /// not optional.
+    var clearTitle: String?
+    var clearDetail: String?
+
+    /// One line at the foot, saying what choosing here does. `nil` for a surface where that is
+    /// obvious.
+    var footnote: String?
+
+    let onPick: (SubjectReference?) -> Void
+
+    @State private var query = ""
+    @FocusState private var isSearchFocused: Bool
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             TextField("Search projects and areas…", text: $query)
                 .textFieldStyle(.roundedBorder)
@@ -195,14 +239,15 @@ struct TimeProjectPicker: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 1) {
-                    ProjectChoiceRow(
-                        title: "No project",
-                        detail: "Use whatever the subject belongs to",
-                        tint: nil,
-                        isChosen: project == nil
-                    ) {
-                        onPick(nil)
-                        isPresented = false
+                    if let clearTitle {
+                        ProjectChoiceRow(
+                            title: clearTitle,
+                            detail: clearDetail,
+                            tint: nil,
+                            isChosen: chosenID == nil
+                        ) {
+                            onPick(nil)
+                        }
                     }
 
                     ForEach(groups, id: \.name) { group in
@@ -220,10 +265,9 @@ struct TimeProjectPicker: View {
                                 title: candidate.title,
                                 detail: nil,
                                 tint: candidate.tint,
-                                isChosen: project?.id == candidate.id
+                                isChosen: chosenID == candidate.id
                             ) {
                                 onPick(SubjectReference(id: candidate.id, title: candidate.title))
-                                isPresented = false
                             }
                         }
                     }
@@ -239,20 +283,18 @@ struct TimeProjectPicker: View {
             }
             .frame(maxHeight: 260)
 
-            Divider()
+            if let footnote {
+                Divider()
 
-            Text("Time against a task already counts towards that task's project. This is for the hour that belongs to one it does not sit inside.")
-                .font(Theme.Text.metadata)
-                .foregroundStyle(Theme.Colors.tertiaryText)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(Theme.Spacing.small)
+                Text(footnote)
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(Theme.Spacing.small)
+            }
         }
         .frame(width: 300)
         .onAppear { isSearchFocused = true }
-    }
-
-    private var chosenTint: Color? {
-        projects.first { $0.id == project?.id }?.tint
     }
 
     private var groups: [(name: String, projects: [ProjectChoice])] {
@@ -267,16 +309,25 @@ struct TimeProjectPicker: View {
                 $0.title.localizedStandardCompare($1.title) == .orderedAscending
             }) }
     }
+}
+
+/// A project as the picker sees it.
+struct ProjectChoice: Identifiable, Hashable {
+    let id: UUID
+    let title: String
+    let areaName: String
+    let tint: Color
 
     /// Every live project, with its area and its colour.
     ///
-    /// Grouped by area because that is how somebody holds their own projects in their head — the
-    /// same reason the design spec groups its project picker by client. A flat alphabetical list of thirty is
-    /// a list you read; twelve under three headings is one you point at.
-    private func loadProjects() {
-        guard let services else { return }
+    /// Grouped by area at the point of display because that is how somebody holds their own projects
+    /// in their head. A flat alphabetical list of thirty is a list you read; twelve under three
+    /// headings is one you point at.
+    @MainActor
+    static func live(in services: AppServices?) -> [ProjectChoice] {
+        guard let services else { return [] }
         let found = (try? services.items.items(matching: .kind(.project))) ?? []
-        projects = found
+        return found
             .filter { $0.status != .cancelled }
             .map { item in
                 ProjectChoice(
@@ -287,14 +338,6 @@ struct TimeProjectPicker: View {
                 )
             }
     }
-}
-
-/// A project as the picker sees it.
-struct ProjectChoice: Identifiable, Hashable {
-    let id: UUID
-    let title: String
-    let areaName: String
-    let tint: Color
 }
 
 /// One row of the project picker.
@@ -383,61 +426,91 @@ struct TimePeoplePicker: View {
         .accessibilityValue(people.isEmpty ? "none" : people.map(\.title).joined(separator: ", "))
         .accessibilityIdentifier(AccessibilityID.Time.peoplePicker)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                if !people.isEmpty {
-                    ElephruitDesign.FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
-                        ForEach(people) { person in
-                            Button {
-                                onChange(people.filter { $0.id != person.id })
-                            } label: {
-                                HStack(spacing: Theme.Spacing.hairline) {
-                                    Text(person.title)
-                                    Image(systemName: "xmark.circle.fill")
-                                }
-                                .font(Theme.Text.metadata)
-                                .padding(.horizontal, Theme.Spacing.small)
-                                .padding(.vertical, 3)
-                                .background(Capsule().fill(Theme.Colors.subtleFill))
-                            }
-                            .buttonStyle(.plain)
-                            .help("Remove \(person.title)")
-                        }
-                    }
-                }
-
-                ItemSearchPopover(
-                    prompt: "Search people…",
-                    emptyHint: "Type two letters to find somebody.",
-                    current: nil,
-                    clearTitle: nil,
-                    openTitle: nil,
-                    onOpen: { _ in },
-                    onPick: { picked in
-                        guard let picked, !people.contains(where: { $0.id == picked.id }) else { return }
-                        onChange(people + [picked])
-                    },
-                    // Only people. The field would otherwise offer every note whose title happens to
-                    // start with the same two letters, and the repository would silently drop the
-                    // one you picked — which reads as the app ignoring you.
-                    kind: .person,
-                    // Stays open, because adding three people to a meeting is one visit rather than
-                    // three, and reopening the popover per person is the friction that stops anybody
-                    // recording the second one.
-                    dismissesOnPick: false
-                )
-
-                Text("Nothing about who you were with is ever written to a calendar.")
-                    .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.tertiaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(Theme.Spacing.medium)
-            .frame(width: 280)
+            PeoplePickerContent(
+                people: people,
+                footnote: "Nothing about who you were with is ever written to a calendar.",
+                onChange: onChange
+            )
         }
     }
 
     /// One name, or a count. Two names rarely fit and never help.
     private var summary: String? {
+        PeoplePickerContent.summary(of: people)
+    }
+}
+
+/// Who is on this, as capsules you can remove plus a field that adds.
+///
+/// Shared between tracked time and the task card. The question is the same both times — *which
+/// people* — and the two differ only in the sentence at the foot, which says what attaching somebody
+/// here does and does not do.
+struct PeoplePickerContent: View {
+    let people: [SubjectReference]
+
+    /// One line saying where these names go. Both surfaces have something worth saying here, and
+    /// they are not the same thing.
+    var footnote: String?
+
+    let onChange: ([SubjectReference]) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            if !people.isEmpty {
+                ElephruitDesign.FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
+                    ForEach(people) { person in
+                        Button {
+                            onChange(people.filter { $0.id != person.id })
+                        } label: {
+                            HStack(spacing: Theme.Spacing.hairline) {
+                                Text(person.title)
+                                Image(systemName: "xmark.circle.fill")
+                            }
+                            .font(Theme.Text.metadata)
+                            .padding(.horizontal, Theme.Spacing.small)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(Theme.Colors.subtleFill))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Remove \(person.title)")
+                    }
+                }
+            }
+
+            ItemSearchPopover(
+                prompt: "Search people…",
+                emptyHint: "Type two letters to find somebody.",
+                current: nil,
+                clearTitle: nil,
+                openTitle: nil,
+                onOpen: { _ in },
+                onPick: { picked in
+                    guard let picked, !people.contains(where: { $0.id == picked.id }) else { return }
+                    onChange(people + [picked])
+                },
+                // Only people. The field would otherwise offer every note whose title happens to
+                // start with the same two letters, and the repository would silently drop the
+                // one you picked — which reads as the app ignoring you.
+                kind: .person,
+                // Stays open, because adding three people is one visit rather than three, and
+                // reopening the popover per person is the friction that stops anybody recording the
+                // second one.
+                dismissesOnPick: false
+            )
+
+            if let footnote {
+                Text(footnote)
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(Theme.Spacing.medium)
+        .frame(width: 280)
+    }
+
+    /// One name, or a count. Two names rarely fit and never help.
+    static func summary(of people: [SubjectReference]) -> String? {
         switch people.count {
         case 0: nil
         case 1: people[0].title
@@ -461,18 +534,14 @@ struct TimeTagPicker: View {
     let onChange: ([String]) -> Void
 
     @State private var isPresented = false
-    @State private var newTag = ""
-    @State private var available: [String] = []
-    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         Button {
-            available = (try? services?.tags.allTags().map(\.slug)) ?? []
             isPresented = true
         } label: {
             TimeChipLabel(
                 symbolName: "tag",
-                title: summary,
+                title: TagPickerContent.summary(of: slugs),
                 isFilled: !slugs.isEmpty
             )
         }
@@ -482,11 +551,31 @@ struct TimeTagPicker: View {
         .accessibilityValue(slugs.isEmpty ? "none" : slugs.joined(separator: ", "))
         .accessibilityIdentifier(AccessibilityID.Time.tagPicker)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-            popoverContent
+            TagPickerContent(slugs: slugs, onChange: onChange)
         }
     }
+}
 
-    private var summary: String? {
+/// A checklist of the tags that exist, plus a field that makes one.
+///
+/// The same shape as the project picker: search at the top, list in the middle, create pinned to the
+/// bottom where it is in the same place whether there are no tags or fifty. Both halves earn their
+/// place — the checklist is what stops a library growing `admin`, `Admin` and `adminstration`, and
+/// the field is what stops the checklist being a wall you have to leave to get past.
+///
+/// Shared by the tracker's tag chip and the task card's *Tags* button. Tags are one vocabulary
+/// across the whole library, so two pickers over them would be two chances to normalise differently.
+struct TagPickerContent: View {
+    @Environment(\.services) private var services
+
+    let slugs: [String]
+    let onChange: ([String]) -> Void
+
+    @State private var newTag = ""
+    @State private var available: [String] = []
+    @FocusState private var isSearchFocused: Bool
+
+    static func summary(of slugs: [String]) -> String? {
         switch slugs.count {
         case 0: nil
         case 1: slugs[0]
@@ -494,9 +583,7 @@ struct TimeTagPicker: View {
         }
     }
 
-    /// The same shape as the project picker: search at the top, list in the middle, create pinned to
-    /// the bottom where it is in the same place whether there are no tags or fifty.
-    private var popoverContent: some View {
+    var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             TextField("Add or filter tags…", text: $newTag)
                 .textFieldStyle(.roundedBorder)
@@ -550,7 +637,10 @@ struct TimeTagPicker: View {
             .disabled(typedSlug.isEmpty)
         }
         .frame(width: 260)
-        .onAppear { isSearchFocused = true }
+        .onAppear {
+            available = (try? services?.tags.allTags().map(\.slug)) ?? []
+            isSearchFocused = true
+        }
     }
 
     /// What the field would create, normalised — so the button names the tag that will exist rather
@@ -599,7 +689,11 @@ struct TimeTagPicker: View {
 /// Shared because the subject picker and the people picker differ in exactly two ways — what kinds
 /// they will accept, and whether picking closes them — and two nearly-identical popovers is two
 /// places for the search to be debounced differently.
-private struct ItemSearchPopover: View {
+///
+/// Internal rather than private now that the task card's *Move* and *People* buttons want the same
+/// field. Nothing about it is specific to tracked time: it is a search field over the library that
+/// hands back a reference, which is what all four surfaces need.
+struct ItemSearchPopover: View {
     @Environment(\.services) private var services
 
     let prompt: String

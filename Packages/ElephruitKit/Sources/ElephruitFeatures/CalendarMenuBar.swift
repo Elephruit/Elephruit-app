@@ -267,20 +267,12 @@ public struct MiniMonthView: View {
     }
 
     private static func days(of month: Date, calendar: Calendar) -> [Date] {
-        guard let interval = calendar.dateInterval(of: .month, for: month) else { return [] }
-        var days: [Date] = []
-        var cursor = interval.start
-        while cursor < interval.end, days.count < 31 {
-            days.append(cursor)
-            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
-            cursor = next
-        }
-        return days
+        MonthGrid<EmptyView>.days(of: month, calendar: calendar)
     }
 
-    private var leadingBlanks: Int {
-        guard let first = density.first?.day else { return 0 }
-        return (calendar.component(.weekday, from: first) - calendar.firstWeekday + 7) % 7
+    /// The density entry for a day, or `nil` — which is what a day outside the month is.
+    private func entry(for day: Date) -> DayDensity? {
+        density.first { calendar.isDate($0.day, inSameDayAs: day) }
     }
 
     public var body: some View {
@@ -289,34 +281,34 @@ public struct MiniMonthView: View {
                 .font(Theme.Text.sectionHeader)
                 .foregroundStyle(Theme.Colors.secondaryText)
 
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(20), spacing: 1), count: 7), spacing: 1) {
-                ForEach(0..<leadingBlanks, id: \.self) { _ in
-                    Color.clear.frame(width: 20, height: 18)
-                }
-
-                ForEach(density) { entry in
-                    Button {
-                        onSelect(entry.day)
-                    } label: {
-                        Text("\(calendar.component(.day, from: entry.day))")
-                            .font(.system(size: 10))
-                            .monospacedDigit()
-                            .frame(width: 20, height: 18)
-                            .background {
-                                if calendar.isDate(entry.day, inSameDayAs: now) {
-                                    Circle().fill(Theme.Colors.currentTime.opacity(0.25))
-                                } else if !entry.isEmpty {
-                                    Circle().fill(Theme.Colors.selection.opacity(0.12 + entry.intensity * 0.3))
-                                }
+            MonthGrid(month: month, calendar: calendar) { day in
+                Button {
+                    onSelect(day)
+                } label: {
+                    Text("\(calendar.component(.day, from: day))")
+                        .font(.system(size: 10))
+                        .monospacedDigit()
+                        .frame(width: 20, height: 18)
+                        .background {
+                            if calendar.isDate(day, inSameDayAs: now) {
+                                Circle().fill(Theme.Colors.currentTime.opacity(0.25))
+                            } else if let entry = entry(for: day), !entry.isEmpty {
+                                Circle().fill(Theme.Colors.selection.opacity(0.12 + entry.intensity * 0.3))
                             }
-                    }
-                    .buttonStyle(.plain)
-                    .help(tooltip(entry))
+                        }
                 }
+                .buttonStyle(.plain)
+                .help(entry(for: day).map(tooltip) ?? dayName(day))
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Mini calendar for \(monthName)")
+    }
+
+    private func dayName(_ day: Date) -> String {
+        var style = Date.FormatStyle().weekday(.wide).day().month(.wide)
+        style.timeZone = calendar.timeZone
+        return day.formatted(style)
     }
 
     private var monthName: String {
