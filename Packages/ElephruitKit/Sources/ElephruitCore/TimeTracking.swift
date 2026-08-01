@@ -23,6 +23,21 @@ public enum TimeEntrySource: String, Codable, Sendable, Hashable, CaseIterable {
     }
 }
 
+/// Somebody a stretch of time was spent with.
+///
+/// A pair rather than an `Item`, for the reason every other value here is one: a view holds this
+/// while drawing and a `PersistentModel` cannot safely be held across a store change. The name is
+/// carried alongside the id so a row can be written without a second fetch per person.
+public struct TimeParticipant: Sendable, Hashable, Identifiable, Codable {
+    public var id: UUID
+    public var name: String
+
+    public init(id: UUID, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
 /// A running timer, as a value.
 ///
 /// The menu bar, the toolbar, and the detail pane all need to know what is running and for how long.
@@ -38,6 +53,18 @@ public struct RunningTimer: Sendable, Hashable, Identifiable {
     public var itemTitle: String?
     public var itemKind: ItemKind?
 
+    /// The project this is billed to when the subject's own parent chain is not the answer.
+    ///
+    /// Usually `nil`, and usually right to be: an entry against a task belongs to that task's
+    /// project, which is what makes *time by project* answerable without filing anything twice. This
+    /// exists for the case that derivation cannot reach — a note, a meeting, or nothing at all,
+    /// worked on for a project it does not sit inside.
+    public var projectID: UUID?
+    public var projectTitle: String?
+
+    /// Who the time was spent with.
+    public var people: [TimeParticipant]
+
     public var tagSlugs: [String]
     public var isBillable: Bool
 
@@ -48,6 +75,9 @@ public struct RunningTimer: Sendable, Hashable, Identifiable {
         itemID: UUID? = nil,
         itemTitle: String? = nil,
         itemKind: ItemKind? = nil,
+        projectID: UUID? = nil,
+        projectTitle: String? = nil,
+        people: [TimeParticipant] = [],
         tagSlugs: [String] = [],
         isBillable: Bool = false
     ) {
@@ -57,6 +87,9 @@ public struct RunningTimer: Sendable, Hashable, Identifiable {
         self.itemID = itemID
         self.itemTitle = itemTitle
         self.itemKind = itemKind
+        self.projectID = projectID
+        self.projectTitle = projectTitle
+        self.people = people
         self.tagSlugs = tagSlugs
         self.isBillable = isBillable
     }
@@ -91,6 +124,17 @@ public struct TimeEntrySnapshot: Sendable, Hashable, Identifiable {
     public var projectTitle: String?
     public var tagSlugs: [String]
 
+    /// Who this stretch was spent with.
+    ///
+    /// Empty for solo work, which is most of it. What earns the field is that *"how much of my week
+    /// went on other people"* is not derivable from anything else here: the subject of an hour spent
+    /// pairing is the task, not the person, and tagging every such entry `with-sarah` by hand is the
+    /// friction that stops anybody answering the question at all.
+    public var people: [TimeParticipant]
+
+    /// How many finished pomodoros this stretch contains. Zero unless it was run as focus rounds.
+    public var focusRounds: Int
+
     public init(
         id: UUID,
         startedAt: Date,
@@ -103,7 +147,9 @@ public struct TimeEntrySnapshot: Sendable, Hashable, Identifiable {
         itemKind: ItemKind? = nil,
         projectID: UUID? = nil,
         projectTitle: String? = nil,
-        tagSlugs: [String] = []
+        tagSlugs: [String] = [],
+        people: [TimeParticipant] = [],
+        focusRounds: Int = 0
     ) {
         self.id = id
         self.startedAt = startedAt
@@ -117,6 +163,8 @@ public struct TimeEntrySnapshot: Sendable, Hashable, Identifiable {
         self.projectID = projectID
         self.projectTitle = projectTitle
         self.tagSlugs = tagSlugs
+        self.people = people
+        self.focusRounds = focusRounds
     }
 
     public var isRunning: Bool { endedAt == nil }
@@ -269,6 +317,8 @@ public enum TimeGrouping: String, Sendable, Hashable, CaseIterable {
     case item
     case project
     case tag
+    case person
+    case kind
 
     public var displayName: String {
         switch self {
@@ -276,6 +326,8 @@ public enum TimeGrouping: String, Sendable, Hashable, CaseIterable {
         case .item: "Item"
         case .project: "Project"
         case .tag: "Tag"
+        case .person: "Person"
+        case .kind: "Type"
         }
     }
 
@@ -285,6 +337,8 @@ public enum TimeGrouping: String, Sendable, Hashable, CaseIterable {
         case .item: "doc.text"
         case .project: "square.stack.3d.up"
         case .tag: "number"
+        case .person: "person.2"
+        case .kind: "square.grid.2x2"
         }
     }
 
@@ -295,7 +349,92 @@ public enum TimeGrouping: String, Sendable, Hashable, CaseIterable {
         case .item: "One row per thing you tracked against."
         case .project: "Rolled up to the project each item belongs to."
         case .tag: "Rolled up by tag, so one entry can count towards several."
+        case .person: "Rolled up by who you were with, so an hour with two people counts under both."
+        case .kind: "Rolled up by what the time was against — a task, a meeting, a conversation."
         }
+    }
+
+    /// Whether one entry can appear in more than one row of this grouping.
+    ///
+    /// True for tags and people, and the consequence is the same for both: the rows sum to more than
+    /// the report's own total, which is correct — *how much time carried this tag* is a different
+    /// question from *how much time was there* — and is why ``TimeReport/total`` is computed
+    /// independently of the rows rather than by adding them up. Surfaced here so a view can say so
+    /// rather than leaving somebody to find it in a total that does not add.
+    public var rowsCanOverlap: Bool {
+        switch self {
+        case .tag, .person: true
+        case .day, .item, .project, .kind: false
+        }
+    }
+}
+
+// MARK: - Rounding
+
+/// How a report rounds the time it reports.
+///
+/// ### Why nothing here touches the store
+/// Rounding is a *presentation* of tracked time, never a rewrite of it. An entry that ran for
+/// fifty-one minutes ran for fifty-one minutes, and a store that quietly held fifty-four because
+/// somebody once invoiced in six-minute units has lost the only number that could ever settle a
+/// dispute. So this applies at the edge — to a report row, an export column, a copied total — and
+/// ``TimeEntry`` never sees it.
+///
+/// The increments are the ones billing actually uses: six minutes is a tenth of an hour, fifteen is
+/// a quarter, and both round *up*, because that is what the convention means and a rounding that
+/// sometimes went down would not be that convention under a different name.
+public enum TimeRounding: String, Sendable, Hashable, CaseIterable, Codable {
+    /// No rounding at all. The default, and right for anybody not invoicing.
+    case exact
+
+    /// To the nearest minute — tidies the seconds off without changing anything material.
+    case nearestMinute
+
+    /// Up to the next five minutes.
+    case upFiveMinutes
+
+    /// Up to the next six minutes — a tenth of an hour, the commonest professional unit.
+    case upSixMinutes
+
+    /// Up to the next fifteen minutes — a quarter hour.
+    case upFifteenMinutes
+
+    /// Up to the next thirty minutes.
+    case upThirtyMinutes
+
+    public var displayName: String {
+        switch self {
+        case .exact: "Exact"
+        case .nearestMinute: "Nearest minute"
+        case .upFiveMinutes: "Up to 5 minutes"
+        case .upSixMinutes: "Up to 6 minutes (0.1 h)"
+        case .upFifteenMinutes: "Up to 15 minutes (0.25 h)"
+        case .upThirtyMinutes: "Up to 30 minutes"
+        }
+    }
+
+    /// The unit rounded to, or `nil` when nothing is rounded.
+    public var increment: TimeInterval? {
+        switch self {
+        case .exact: nil
+        case .nearestMinute: 60
+        case .upFiveMinutes: 5 * 60
+        case .upSixMinutes: 6 * 60
+        case .upFifteenMinutes: 15 * 60
+        case .upThirtyMinutes: 30 * 60
+        }
+    }
+
+    public var roundsUp: Bool { self != .nearestMinute && self != .exact }
+
+    /// Rounds one duration.
+    ///
+    /// Zero stays zero under every rule, including the ones that round up: a row with no time in it
+    /// must not acquire six minutes, or a report of an empty day would bill for an hour.
+    public func apply(_ interval: TimeInterval) -> TimeInterval {
+        guard let increment, interval > 0 else { return max(0, interval) }
+        let units = interval / increment
+        return (roundsUp ? units.rounded(.up) : units.rounded()) * increment
     }
 }
 
