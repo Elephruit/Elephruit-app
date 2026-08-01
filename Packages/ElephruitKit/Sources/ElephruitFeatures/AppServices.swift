@@ -57,6 +57,19 @@ public final class AppServices {
     @ObservationIgnored
     public private(set) lazy var miniTimer = MiniTimerController(services: self, defaults: defaults)
 
+    /// One date's worth of everything, assembled from the records that already exist.
+    ///
+    /// Built lazily and held here rather than per window, on the same terms as ``miniTimer``: two
+    /// windows looking at Today are asking the same library the same question, and the per-assembly
+    /// caches inside it are worth sharing. `@ObservationIgnored` because the reference never changes
+    /// and there is nothing to observe about it — what a page watches is ``changeToken``.
+    @ObservationIgnored
+    public private(set) lazy var dailyPlan = DailyPlanService(services: self)
+
+    /// What the reader has chosen to see on Today, remembered between launches.
+    @ObservationIgnored
+    public private(set) lazy var todayPreferences = TodayPreferences(defaults: defaults)
+
     /// Where this machine's preferences live.
     ///
     /// Held rather than reached for, so a preview or a test can hand over a throwaway suite and not
