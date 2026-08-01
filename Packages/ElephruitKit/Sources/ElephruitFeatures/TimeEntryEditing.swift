@@ -525,31 +525,73 @@ struct TimeEntryEditor: View {
     @State private var durationText = ""
     @FocusState private var isDescriptionFocused: Bool
 
+    /// Whether the end carries a date picker of its own.
+    ///
+    /// Latched rather than derived, and that is the point. It is *set* by an entry that crosses
+    /// midnight, and never cleared while the editor is open: a control that appears when the end
+    /// moves past midnight and vanishes the moment it moves back is a control somebody has to
+    /// re-create an invalid state to reach. Once shown, it stays until the editor closes.
+    @State private var showsEndDate = false
+
+    /// The label column, so every field starts at the same place.
+    ///
+    /// Wide enough for the longest of the three at the standard text size. Fixed rather than
+    /// measured, because there are three of them and a `Grid` inside a `List` row that is itself
+    /// inside a measure is three layout systems negotiating over eleven points.
+    private static let labelWidth: CGFloat = 76
+
+    /// ### Why this is a form and not a strip
+    /// It was a strip: a full-width bordered text field, then a row of chips, then one long row
+    /// holding two date-and-time pickers, an unlabelled duration field, a bare Billable checkbox,
+    /// and both buttons. Nothing in that row said what anything was. The two date pickers each
+    /// carried the full date — repeated, since an entry almost always starts and ends on the same
+    /// day — and the duration field sat between them and the checkbox looking like a third date.
+    ///
+    /// Three labelled rows instead. *What* it was, *what it is filed under*, *when it ran* — which
+    /// is the order somebody reads an entry in, and the order they correct one in. The labels are
+    /// the same quiet uppercase the rest of the app uses for a field name, and they give the fields
+    /// a common left edge, which is most of the difference between a form and a pile of controls.
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            TextField("Description", text: $draft.description)
-                .textFieldStyle(.roundedBorder)
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            TextField("What were you doing?", text: $draft.description)
+                .textFieldStyle(.plain)
+                .font(Theme.Text.rowTitleEmphasised)
                 .focused($isDescriptionFocused)
                 .onSubmit(commit)
+                .padding(.horizontal, Theme.Spacing.small)
+                .padding(.vertical, Theme.Spacing.tight)
+                .background(
+                    Theme.Colors.contentBackground,
+                    in: RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                        .strokeBorder(Theme.Colors.separator)
+                }
 
-            ElephruitDesign.FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
-                TimeSubjectPicker(subject: draft.subject) { draft.subject = $0 }
-                TimeProjectPicker(project: draft.project) { draft.project = $0 }
-                TimePeoplePicker(people: draft.people) { draft.people = $0 }
-                TimeTagPicker(slugs: draft.tagSlugs) { draft.tagSlugs = $0 }
+            field("Filed under") {
+                ElephruitDesign.FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
+                    TimeSubjectPicker(subject: draft.subject) { draft.subject = $0 }
+                    TimeProjectPicker(project: draft.project) { draft.project = $0 }
+                    TimePeoplePicker(people: draft.people) { draft.people = $0 }
+                    TimeTagPicker(slugs: draft.tagSlugs) { draft.tagSlugs = $0 }
+                }
             }
 
-            HStack(spacing: Theme.Spacing.medium) {
+            field("When") {
                 if draftSpan != nil {
                     spanFields
                 } else {
                     Text("Editing \(entryCount) entries — their times stay as they are.")
-                        .font(Theme.Text.metadata)
+                        .font(Theme.Text.rowSubtitle)
                         .rowForeground(.secondary)
                 }
+            }
 
+            HStack(spacing: Theme.Spacing.medium) {
                 Toggle("Billable", isOn: $draft.isBillable)
                     .toggleStyle(.checkbox)
+                    .font(Theme.Text.rowSubtitle)
 
                 Spacer()
 
@@ -565,25 +607,74 @@ struct TimeEntryEditor: View {
         .onAppear(perform: loadDraft)
     }
 
+    /// One labelled row of the form.
+    private func field<Content: View>(
+        _ label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
+            Text(label.uppercased())
+                .font(Theme.Text.sectionHeader)
+                .kerning(Theme.Text.Tracking.caps)
+                .rowForeground(.tertiary)
+                .frame(width: Self.labelWidth, alignment: .leading)
+
+            content()
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// ### Why the date is written once
+    /// Both ends carried a full date picker — `8/ 1/2026, 11:07 AM` twice, forty characters to say
+    /// that a fifty-eight-minute entry happened on one morning. An entry that starts and ends on the
+    /// same day is nearly every entry, so the day is stated once and the two ends are times.
+    ///
+    /// The exception is real and is handled rather than prevented: a session from 23:00 to 01:00 is
+    /// two days, this module goes to some trouble to count it on both, and its end keeps a date
+    /// picker of its own so it can be corrected. The row grows a control in exactly the case that
+    /// needs one.
     @ViewBuilder
     private var spanFields: some View {
-        DatePicker("From", selection: startBinding, displayedComponents: [.hourAndMinute, .date])
+        DatePicker("Date", selection: dayBinding, displayedComponents: .date)
             .datePickerStyle(.compact)
             .labelsHidden()
+            .help("Moves the whole entry to another day, keeping its length")
+            .accessibilityLabel("Date")
+
+        DatePicker("From", selection: startBinding, displayedComponents: .hourAndMinute)
+            .datePickerStyle(.compact)
+            .labelsHidden()
+            .accessibilityLabel("Started at")
+
+        Text("to")
+            .font(Theme.Text.metadata)
+            .rowForeground(.secondary)
 
         if draftSpan?.endedAt != nil {
-            Text("to")
-                .font(Theme.Text.metadata)
-                .rowForeground(.secondary)
-
-            DatePicker("To", selection: endBinding, displayedComponents: [.hourAndMinute, .date])
+            DatePicker("To", selection: endBinding, displayedComponents: .hourAndMinute)
                 .datePickerStyle(.compact)
                 .labelsHidden()
+                .accessibilityLabel("Ended at")
+
+            if showsEndDate {
+                DatePicker("Ending date", selection: endBinding, displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+                    .help("This entry runs past midnight, so its end has a date of its own.")
+                    .accessibilityLabel("Ending date")
+            }
         } else {
-            Text("still running")
-                .font(Theme.Text.metadata)
+            Text("now")
+                .font(Theme.Text.rowSubtitle)
                 .rowForeground(.secondary)
         }
+
+        // Labelled, and last. It is the field this whole module is built around — see
+        // `DurationParser` — and unlabelled between two date pickers it read as a third date.
+        Text("for")
+            .font(Theme.Text.metadata)
+            .rowForeground(.secondary)
 
         TextField("0:00:00", text: $durationText)
             .textFieldStyle(.roundedBorder)
@@ -594,6 +685,50 @@ struct TimeEntryEditor: View {
             .help("Type a length — 1:30, 1.5, or 90m")
             .accessibilityLabel("Duration")
             .accessibilityIdentifier(AccessibilityID.Time.durationField)
+    }
+
+    /// Whether the entry finishes on a later day than it started, which is the only case that needs
+    /// a second date picker.
+    private var endsOnAnotherDay: Bool {
+        guard let span = draftSpan, let endedAt = span.endedAt else { return false }
+        return !calendar.isDate(endedAt, inSameDayAs: span.startedAt)
+    }
+
+    /// Moves the whole entry to another day, keeping its length.
+    ///
+    /// ### Why the date is not simply the start's date
+    /// Because the two ends used to carry a date each and now the day is stated once, so "this was
+    /// actually Tuesday" has one control to say it with. Binding that control to the start alone
+    /// would move the start and leave the end where it was — which for a same-day entry means an end
+    /// before its start, and Save would refuse an edit the user had every reason to think was
+    /// ordinary. Both ends move by the same number of days, which is what moving an entry means.
+    private var dayBinding: Binding<Date> {
+        Binding(
+            get: { draftSpan?.startedAt ?? Date() },
+            set: { newValue in
+                guard var span = draftSpan else { return }
+
+                let days = calendar.dateComponents(
+                    [.day],
+                    from: calendar.startOfDay(for: span.startedAt),
+                    to: calendar.startOfDay(for: newValue)
+                ).day ?? 0
+                guard days != 0 else { return }
+
+                span.startedAt = calendar.date(byAdding: .day, value: days, to: span.startedAt)
+                    ?? span.startedAt
+                if let endedAt = span.endedAt {
+                    span.endedAt = calendar.date(byAdding: .day, value: days, to: endedAt)
+                }
+
+                draftSpan = span
+                syncDurationText()
+            }
+        )
+    }
+
+    private var calendar: Calendar {
+        services?.dateProvider.calendar ?? .current
     }
 
     /// An end before its start is the one edit that would corrupt every report, so Save refuses it
@@ -618,6 +753,9 @@ struct TimeEntryEditor: View {
             get: { draftSpan?.endedAt ?? draftSpan?.startedAt ?? Date() },
             set: { newValue in
                 draftSpan?.endedAt = newValue
+                // An end pushed past midnight earns the date picker it now needs, without waiting
+                // for the editor to be closed and reopened.
+                if endsOnAnotherDay { showsEndDate = true }
                 syncDurationText()
             }
         )
@@ -626,6 +764,7 @@ struct TimeEntryEditor: View {
     private func loadDraft() {
         draft = composition
         draftSpan = span
+        showsEndDate = endsOnAnotherDay
         syncDurationText()
         isDescriptionFocused = true
     }
