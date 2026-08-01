@@ -69,6 +69,49 @@ struct CaptureCompletionTests {
         #expect(completion.query == "Pri")
     }
 
+    // MARK: - Names with spaces
+
+    /// Most projects and most people have a space in their name, so a suggestion list that gave up
+    /// at the space gave up exactly where it was needed.
+    @Test("A name being typed across a space still completes")
+    func namesCompleteAcrossSpaces() throws {
+        let cases: [(String, CaptureCompletion.Trigger, String)] = [
+            ("Plan >Q3 Lau", .project, "Q3 Lau"),
+            ("Ask @Mike Zeh", .person, "Mike Zeh"),
+            ("Ask @Anna Maria del", .person, "Anna Maria del"),
+        ]
+
+        for (text, trigger, query) in cases {
+            let completion = try #require(
+                CaptureCompletion.active(in: text, caretAt: text.count),
+                "no completion for “\(text)”"
+            )
+            #expect(completion.trigger == trigger)
+            #expect(completion.query == query)
+        }
+    }
+
+    /// A tag is one slug and a date keyword brings its own words with it, so neither has any use for
+    /// a query that spans a space — and both would offer suggestions over ordinary prose if they did.
+    @Test("Only the sigils that name things read across a space")
+    func onlyNamesCompleteAcrossSpaces() {
+        #expect(CaptureCompletion.active(in: "Call #work and", caretAt: 14) == nil)
+        #expect(CaptureCompletion.active(in: "Meet due:friday morning", caretAt: 23) == nil)
+    }
+
+    /// Bounded, so an ordinary sentence after a name stops offering suggestions rather than trailing
+    /// them to the end of the line.
+    @Test("The search for a sigil gives up after a few words")
+    func completionGivesUpEventually() {
+        #expect(CaptureCompletion.active(in: "Ask @Mike about the beta", caretAt: 24) == nil)
+    }
+
+    /// The grammar stops at the end of the first line, so the completion has to as well.
+    @Test("A sigil on the line above is not what this line is naming")
+    func completionDoesNotCrossLines() {
+        #expect(CaptureCompletion.active(in: ">Q3\nLaunch", caretAt: 10) == nil)
+    }
+
     // MARK: - Accepting
 
     @Test("Accepting replaces the partial word and leaves the caret after a space")
@@ -109,6 +152,24 @@ struct CaptureCompletionTests {
 
         let draft = CaptureParser.parse(applied?.text ?? "")
         #expect(draft.personHints == ["Priya"])
+    }
+
+    /// The same promise for a name with a space in it, which is where it used to be broken: the
+    /// suggestion inserted `@Mike Zehrer` and the parser then read `@Mike`. It holds because both
+    /// sides are given the same names — the suggestion could not have been offered otherwise.
+    @Test("What completion produces still parses when the name has a space")
+    func acceptedMultiWordTextParses() {
+        let text = "Ask @Mike"
+        let completion = CaptureCompletion.active(in: text, caretAt: text.count)
+        let applied = completion?.applying("Mike Zehrer", to: text, caretAt: text.count)
+        #expect(applied?.text == "Ask @Mike Zehrer ")
+
+        let draft = CaptureParser.parse(
+            applied?.text ?? "",
+            knowing: CaptureVocabulary(people: ["Mike Zehrer"])
+        )
+        #expect(draft.personHints == ["Mike Zehrer"])
+        #expect(draft.title == "Ask")
     }
 }
 

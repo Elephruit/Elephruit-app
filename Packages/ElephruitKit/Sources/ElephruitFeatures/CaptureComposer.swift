@@ -34,7 +34,13 @@ struct CaptureComposer: View {
     @State private var suggestions: [String] = []
     @State private var selection = 0
 
-    private var draft: CaptureDraft { CaptureParser.parse(text) }
+    /// The project and person names the grammar may spell out without quotes.
+    ///
+    /// Held rather than fetched per keystroke: it changes when the library changes, not when the
+    /// user types, and it is consulted for every word of every token.
+    @State private var vocabulary: CaptureVocabulary = .empty
+
+    private var draft: CaptureDraft { CaptureParser.parse(text, knowing: vocabulary) }
 
     private var completion: CaptureCompletion? {
         CaptureCompletion.active(in: text, caretAt: caret)
@@ -45,6 +51,7 @@ struct CaptureComposer: View {
             CaptureTextField(
                 text: $text,
                 caret: $caret,
+                vocabulary: vocabulary,
                 onSubmit: onSave,
                 onCancel: onCancel,
                 onMove: { direction in moveSelection(direction) },
@@ -84,6 +91,14 @@ struct CaptureComposer: View {
             footer
         }
         .task(id: completion) { await refreshSuggestions() }
+        // Keyed on the change token rather than run once, because the panel outlives any single
+        // capture: a project created after it was first opened must still be nameable in it.
+        .task(id: services?.changeToken) { refreshVocabulary() }
+    }
+
+    private func refreshVocabulary() {
+        guard let services else { return }
+        vocabulary = (try? services.capture.vocabulary()) ?? .empty
     }
 
     // MARK: - Interpretation

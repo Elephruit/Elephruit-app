@@ -201,6 +201,53 @@ struct CaptureServiceTests {
         #expect(try fixture.items.items(matching: .everything()).isEmpty)
     }
 
+    // MARK: - Names with spaces
+
+    /// The bug this addresses, end to end: `>Elephruit App` filed under a project called
+    /// "Elephruit" — which resolution's prefix matching made *look* right — and left "App" behind in
+    /// the title, where it read as part of the sentence.
+    @Test("A project whose name has a space is named in full, and leaves nothing in the title")
+    func multiWordProjectsAreNamedInFull() throws {
+        let fixture = try StoreFixture()
+        let project = try fixture.makeProject(title: "Elephruit App")
+        let service = makeService(fixture)
+
+        let item = try #require(try service.capture(text: "- Ship the beta >Elephruit App"))
+
+        #expect(item.parent?.id == project.id)
+        #expect(item.title == "Ship the beta")
+    }
+
+    /// The worse half of the same bug. `@Mike Zehrer` took only "Mike", found no person by that
+    /// name, and so *created* one — leaving two records for one person and the mention on the wrong
+    /// one.
+    @Test("A person whose name has a space is linked, not duplicated")
+    func multiWordPeopleAreNotDuplicated() throws {
+        let fixture = try StoreFixture()
+        let existing = try fixture.items.create(ItemDraft(kind: .person, title: "Mike Zehrer"))
+        let service = makeService(fixture)
+
+        let item = try #require(try service.capture(text: "Ask @Mike Zehrer about the beta"))
+
+        let people = try fixture.items.items(matching: .kind(.person))
+        #expect(people.count == 1, "a second person called “Mike” was created")
+        #expect(existing.incomingLinks.contains { $0.kind == .mentions })
+        #expect(item.title == "Ask about the beta")
+    }
+
+    /// Reading across a space is bounded by what exists, so an unknown name behaves as it always
+    /// did rather than swallowing the sentence.
+    @Test("An unknown name still claims only its first word")
+    func unknownNamesClaimOneWord() throws {
+        let fixture = try StoreFixture()
+        let service = makeService(fixture)
+
+        let item = try #require(try service.capture(text: "- Book it >Everest base camp"))
+
+        #expect(item.parent == nil)
+        #expect(item.title == "Book it base camp")
+    }
+
     @Test("A URL becomes a bookmark carrying its link")
     func urlsBecomeBookmarks() throws {
         let fixture = try StoreFixture()

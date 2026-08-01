@@ -130,6 +130,54 @@ public struct CaptureToken: Sendable, Hashable {
     }
 }
 
+/// The names `>` and `@` may be spelled out in full without quoting.
+///
+/// ### Why the parser is told these rather than looking them up
+/// `>Q3 Launch` is the grammar the hint row has always advertised, and it is not readable by
+/// grammar alone: nothing in `>Q3 Launch slipped` says whether the project is "Q3", "Q3 Launch" or
+/// "Q3 Launch slipped". Only knowing which projects exist can settle it.
+///
+/// Passing the names in rather than fetching them keeps ``CaptureParser`` a pure function of its
+/// inputs — the same text and the same vocabulary always mean the same thing — so the grammar stays
+/// testable without a store, which is the property that made it worth having a parser at all. It is
+/// also what lets the field, the interpretation row and the save path agree: they are given the same
+/// vocabulary, so they cannot disagree about where a name ends.
+public struct CaptureVocabulary: Sendable, Hashable {
+    /// Titles of the things `>` can name — projects, areas and goals.
+    public var projects: [String]
+
+    /// Titles of the people `@` can name.
+    public var people: [String]
+
+    /// The same names folded for comparison. Computed once here rather than on every keystroke,
+    /// because this is consulted for each word of each token as the user types.
+    private let foldedProjects: [String]
+    private let foldedPeople: [String]
+
+    public init(projects: [String] = [], people: [String] = []) {
+        self.projects = projects
+        self.people = people
+        self.foldedProjects = projects.map(TextNormalizer.foldedForMatching)
+        self.foldedPeople = people.map(TextNormalizer.foldedForMatching)
+    }
+
+    /// What the parser is given when nobody knows any names — the behaviour of the grammar on its
+    /// own, which is what the unit tests exercise.
+    public static let empty = CaptureVocabulary()
+
+    /// Whether `phrase` is the beginning of a name of this kind.
+    ///
+    /// A prefix rather than an exact match, so a half-typed `>Q3 Lau` still reads as a project being
+    /// named — which is the state the field is in for most of the time anyone is looking at it.
+    func isStartOfName(_ phrase: String, kind: CaptureToken.Kind) -> Bool {
+        let folded = TextNormalizer.foldedForMatching(phrase)
+        guard !folded.isEmpty else { return false }
+
+        let names = kind == .person ? foldedPeople : foldedProjects
+        return names.contains { $0.hasPrefix(folded) }
+    }
+}
+
 /// Reads Quick Capture's inline grammar.
 ///
 /// The grammar is four sigils, chosen to be typeable without modifiers changing hands
@@ -139,20 +187,26 @@ public struct CaptureToken: Sendable, Hashable {
 /// |---|---|---|
 /// | `#` | tag | `#urgent`, `#work/clients` |
 /// | `>` | project or area | `>Q3 Launch`, `>"Q3 Launch"` |
-/// | `@` | person | `@Sarah` |
+/// | `@` | person | `@Sarah`, `@Sarah Okonjo` |
 /// | `!` | due date | `!tomorrow`, `!+3d`, `!2026-08-14` |
 ///
 /// A leading `- `, `[] `, or `[ ] ` makes the capture a task. A line that is only a URL
 /// becomes a bookmark. Everything the parser does not claim stays in the title, so no
 /// keystroke is ever silently eaten.
+///
+/// Names containing spaces are read whole when the caller supplies a ``CaptureVocabulary``; quoting
+/// them still works and still wins, and remains the way to name something that does not exist yet.
 public enum CaptureParser {
     /// Parses one or more lines. The first line is the title; the remainder is the body.
-    public static func parse(_ input: String) -> CaptureDraft {
+    public static func parse(
+        _ input: String,
+        knowing vocabulary: CaptureVocabulary = .empty
+    ) -> CaptureDraft {
         let lines = input.split(separator: "\n", omittingEmptySubsequences: false)
         let firstLine = lines.first.map(String.init) ?? ""
         let remainder = lines.dropFirst().joined(separator: "\n")
 
-        var draft = parseFirstLine(firstLine)
+        var draft = parseFirstLine(firstLine, knowing: vocabulary)
         draft.originalText = input
         draft.body = remainder.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -164,7 +218,7 @@ public enum CaptureParser {
         return draft
     }
 
-    private static func parseFirstLine(_ line: String) -> CaptureDraft {
+    private static func parseFirstLine(_ line: String, knowing vocabulary: CaptureVocabulary) -> CaptureDraft {
         var draft = CaptureDraft()
         var remaining = Substring(line)
         var base = 0
@@ -210,8 +264,14 @@ public enum CaptureParser {
                 if trimmed.isEmpty {
                     titleWords.append(">")
                 } else if draft.projectHint == nil {
-                    draft.projectHint = trimmed
-                    draft.tokens.append(CaptureToken(kind: .project, text: trimmed, range: token.range))
+                    let name = extendedName(
+                        from: token, kind: .project, in: raw, from: index, knowing: vocabulary
+                    )
+                    index = name.next
+                    draft.projectHint = name.value
+                    draft.tokens.append(
+                        CaptureToken(kind: .project, text: name.value, range: token.range.lowerBound..<name.end)
+                    )
                 } else {
                     titleWords.append(">" + trimmed)
                     draft.unresolvedTokens.append(
@@ -224,8 +284,14 @@ public enum CaptureParser {
                 if trimmed.isEmpty {
                     titleWords.append("@")
                 } else {
-                    draft.personHints.append(trimmed)
-                    draft.tokens.append(CaptureToken(kind: .person, text: trimmed, range: token.range))
+                    let name = extendedName(
+                        from: token, kind: .person, in: raw, from: index, knowing: vocabulary
+                    )
+                    index = name.next
+                    draft.personHints.append(name.value)
+                    draft.tokens.append(
+                        CaptureToken(kind: .person, text: name.value, range: token.range.lowerBound..<name.end)
+                    )
                 }
 
             case .bang:
@@ -264,6 +330,50 @@ public enum CaptureParser {
         }
 
         return draft
+    }
+
+    // MARK: - Names that contain spaces
+
+    /// Extends a `>` or `@` value over the words that follow it, while the longer phrase is still
+    /// the beginning of a name that exists.
+    ///
+    /// The same shape as ``applyDate(role:token:raw:from:draft:titleWords:)``, and for the same
+    /// reason: the tokenizer splits on spaces, and a grammar that made people quote every two-word
+    /// name would be one only its author could use. What differs is the test. A date extends while
+    /// the phrase still parses; a name extends while the phrase is still a name someone has —
+    /// which is the only evidence there is, since `>Q3 Launch slipped` and `>Q3 Launch` are the same
+    /// text as far as punctuation is concerned.
+    ///
+    /// It is never speculative. A word is taken only when the phrase including it still starts a
+    /// real name, so an unknown `>Everest base camp` claims exactly `Everest` and leaves the rest in
+    /// the title — the same thing it did before any of this existed.
+    ///
+    /// Quoted values are returned untouched: `>"Q3"` is the user saying where the name ends, and
+    /// remains how you name something that does not exist yet.
+    private static func extendedName(
+        from token: RawToken,
+        kind: CaptureToken.Kind,
+        in raw: [RawToken],
+        from index: Int,
+        knowing vocabulary: CaptureVocabulary
+    ) -> (value: String, end: Int, next: Int) {
+        let base = token.value.trimmingCharacters(in: .whitespaces)
+        var best = (value: base, end: token.range.upperBound, next: index)
+
+        guard !token.isQuoted, vocabulary.isStartOfName(base, kind: kind) else { return best }
+
+        var phrase = base
+        var next = index
+        while next < raw.count, raw[next].kind == .word {
+            let extended = phrase + " " + raw[next].value
+            guard vocabulary.isStartOfName(extended, kind: kind) else { break }
+
+            phrase = extended
+            best = (value: phrase, end: raw[next].range.upperBound, next: next + 1)
+            next += 1
+        }
+
+        return best
     }
 
     private enum DateRole { case due, follow }
@@ -349,6 +459,8 @@ public enum CaptureParser {
         var literal: String
         /// Character offsets into the original input.
         var range: Range<Int>
+        /// Whether the value was written inside quotes, which is the user stating its extent.
+        var isQuoted: Bool = false
     }
 
     /// The keyword tokens, which unlike the sigils are words followed by a colon.
@@ -381,7 +493,7 @@ public enum CaptureParser {
 
             if isSigil {
                 let afterSigil = input.index(after: index)
-                let (value, next) = readValue(in: input, from: afterSigil)
+                let (value, isQuoted, next) = readValue(in: input, from: afterSigil)
                 offset += 1 + input.distance(from: afterSigil, to: next)
                 index = next
 
@@ -392,7 +504,13 @@ public enum CaptureParser {
                 default: .bang
                 }
                 tokens.append(
-                    RawToken(kind: kind, value: value, literal: String(sigil) + value, range: start..<offset)
+                    RawToken(
+                        kind: kind,
+                        value: value,
+                        literal: String(sigil) + value,
+                        range: start..<offset,
+                        isQuoted: isQuoted
+                    )
                 )
                 continue
             }
@@ -401,7 +519,7 @@ public enum CaptureParser {
 
             if let keyword = keywords.first(where: { word.lowercased().hasPrefix($0.prefix) }) {
                 let valueStart = input.index(index, offsetBy: keyword.prefix.count)
-                let (value, next) = readValue(in: input, from: valueStart)
+                let (value, isQuoted, next) = readValue(in: input, from: valueStart)
                 offset += keyword.prefix.count + input.distance(from: valueStart, to: next)
                 index = next
                 tokens.append(
@@ -409,7 +527,8 @@ public enum CaptureParser {
                         kind: keyword.kind,
                         value: value,
                         literal: keyword.prefix + value,
-                        range: start..<offset
+                        range: start..<offset,
+                        isQuoted: isQuoted
                     )
                 )
                 continue
@@ -426,19 +545,26 @@ public enum CaptureParser {
     }
 
     /// Reads a sigil's value: either a quoted phrase or a run of non-whitespace.
-    private static func readValue(in input: Substring, from start: Substring.Index) -> (String, Substring.Index) {
-        guard start < input.endIndex else { return ("", start) }
+    ///
+    /// Reports which of the two it was, because a quoted value is the user stating where the name
+    /// ends and must not then be extended over the words after it.
+    private static func readValue(
+        in input: Substring,
+        from start: Substring.Index
+    ) -> (value: String, isQuoted: Bool, end: Substring.Index) {
+        guard start < input.endIndex else { return ("", false, start) }
 
         if input[start] == "\"" {
             let contentStart = input.index(after: start)
             if let closing = input[contentStart...].firstIndex(of: "\"") {
-                return (String(input[contentStart..<closing]), input.index(after: closing))
+                return (String(input[contentStart..<closing]), true, input.index(after: closing))
             }
             // Unterminated quote: take the rest of the line rather than dropping it.
-            return (String(input[contentStart...]), input.endIndex)
+            return (String(input[contentStart...]), true, input.endIndex)
         }
 
-        return readPlainWord(in: input, from: start)
+        let (word, end) = readPlainWord(in: input, from: start)
+        return (word, false, end)
     }
 
     private static func readPlainWord(in input: Substring, from start: Substring.Index) -> (String, Substring.Index) {

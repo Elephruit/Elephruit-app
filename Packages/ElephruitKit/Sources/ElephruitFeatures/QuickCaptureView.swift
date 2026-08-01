@@ -47,27 +47,32 @@ public struct QuickCaptureView: View {
 
     // MARK: - Saving
 
-    /// Hands the draft to ``CaptureService``.
+    /// Hands the text to ``CaptureService``.
     ///
     /// The panel deliberately owns none of this. The same call has to work from an App Intent, the
     /// Services menu, and a global hotkey — none of which can construct a view — so the path from
     /// typed text to stored item lives outside the UI entirely.
+    ///
+    /// The text rather than a draft parsed here: reading `>Q3 Launch` as one name needs to know
+    /// which projects exist, and a view that parsed its own copy would be a second opinion about
+    /// that — the kind that agrees for a year and then quietly does not.
     private func save() {
-        let draft = CaptureParser.parse(text)
-        guard let services, !draft.isEmpty, !isSaving else { return }
+        guard let services, !isSaving else { return }
         isSaving = true
         defer { isSaving = false }
 
-        let didSave = services.perform {
-            let created = try services.capture.capture(draft)
-            services.noteChange(to: created)
-            onCapture(created.id)
+        var captured: UUID?
+        let failed = !services.perform {
+            captured = try services.captureText(text)?.id
         }
 
-        if didSave {
-            text = ""
-            dismiss()
-        }
+        // Nothing captured is not a failure — an empty field simply has nothing to save, and
+        // dismissing on it would throw away whatever punctuation the user had started.
+        guard !failed, let captured else { return }
+
+        onCapture(captured)
+        text = ""
+        dismiss()
     }
 }
 
