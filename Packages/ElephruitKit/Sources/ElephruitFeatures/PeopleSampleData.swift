@@ -283,6 +283,25 @@ enum PeopleSampleData {
             try people.addCelebration(to: pepper, kind: .milestone, title: "Adopted", date: adopted)
         }
 
+        // One falling *today*, and one tomorrow.
+        //
+        // Fixed dates would put every celebration months away for most of the year, and a briefing
+        // that can never demonstrate the case it exists for is a briefing nobody has looked at. So
+        // these two are derived from the clock: Today can always show what it does with a birthday
+        // that is happening, and with one close enough to still act on.
+        let todayParts = clock.calendar.dateComponents([.month, .day], from: today)
+        if let month = todayParts.month, let day = todayParts.day,
+           let birthday = PartialDate(year: 1991, month: month, day: day) {
+            try people.addCelebration(to: rosa, kind: .birthday, title: nil, date: birthday)
+        }
+
+        let tomorrow = clock.startOfTomorrow
+        let tomorrowParts = clock.calendar.dateComponents([.month, .day], from: tomorrow)
+        if let month = tomorrowParts.month, let day = tomorrowParts.day,
+           let birthday = PartialDate(month: month, day: day) {
+            try people.addCelebration(to: danielle, kind: .birthday, title: nil, date: birthday)
+        }
+
         // MARK: A duplicate to reconcile
 
         // The same human being, arriving a second time from a different account with a different

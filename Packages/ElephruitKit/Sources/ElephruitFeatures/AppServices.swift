@@ -479,6 +479,10 @@ public final class AppServices {
         dateProvider: any DateProvider = FixedDateProvider.reference,
         populated: Bool = true,
         contactsProvider: (@Sendable () -> any ContactsProviding)? = nil,
+        // On the same terms as the other two, and for the same reason: a test that exercises
+        // anything reading the calendar — a day's plan, most obviously — must be able to hand over a
+        // synthetic one rather than reaching `EKEventStore`.
+        calendarProvider: (@Sendable () -> any CalendarProviding)? = nil,
         remindersProvider: (@Sendable () -> any RemindersProviding)? = nil,
         defaults: UserDefaults = .standard
     ) -> AppServices {
@@ -494,6 +498,7 @@ public final class AppServices {
             dateProvider: dateProvider,
             isDevelopmentMode: true,
             contactsProvider: contactsProvider,
+            calendarProvider: calendarProvider,
             remindersProvider: remindersProvider,
             defaults: defaults
         )

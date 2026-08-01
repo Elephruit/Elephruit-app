@@ -312,6 +312,24 @@ public enum CalendarFixtures {
         events.append(make("Berlin — client visit", identifier: "fixture.trip", start: at(3, 0),
                            minutes: 4 * 24 * 60, calendar: calendars[0], allDay: true))
 
+        // Time claimed and left showing as free, which is what a defended block is — and which the
+        // day's plan must not count as a meeting or as a clash with the review above it.
+        events.append(make("Focus — pricing model", identifier: "fixture.focus", start: at(0, 14),
+                           minutes: 120, calendar: calendars[0], availability: .free))
+
+        // A video call, so Join has something to open. The link is in the URL field, which is where
+        // an organiser's tooling puts it.
+        events.append(make("Roadmap sync", identifier: "fixture.roadmap", start: at(0, 16),
+                           minutes: 45, calendar: calendars[0],
+                           attendees: ["Rosa Iyer", "Theo Brandt", "Ines Duarte"],
+                           url: URL(string: "https://meet.google.com/fixture-roadmap")))
+
+        // Leave, marked unavailable rather than busy — a different thing from a meeting, and the
+        // reason the day's plan reads availability rather than guessing from the title.
+        events.append(make("Out of office", identifier: "fixture.leave", start: at(6, 0),
+                           minutes: 2 * 24 * 60, calendar: calendars[1], allDay: true,
+                           availability: .unavailable))
+
         // An evening event outside working hours.
         events.append(make("Dinner at Aba", identifier: "fixture.dinner", start: at(1, 19),
                            minutes: 120, calendar: calendars[1], location: "Aba"))
@@ -332,6 +350,24 @@ public enum CalendarFixtures {
         return events
     }
 
+    /// The work address the sample library gives these people, so an invitation resolves to a record.
+    ///
+    /// Everybody on a fixture invitation is either somebody `PeopleSampleData` created — in which
+    /// case the address matches and they resolve — or somebody it did not, in which case they stay
+    /// an unlinked attendee. Both cases are worth being able to see.
+    private static func address(for name: String) -> String? {
+        let known = [
+            "Maya Chen": "maya@northwind.example",
+            "Nisha Raman": "nisha@northwind.example",
+            "Rosa Iyer": "rosa@northwind.example",
+            "Theo Brandt": "theo@northwind.example",
+            "Ines Duarte": "ines@northwind.example",
+        ]
+        // Jordan Blake and anybody else deliberately has none: an address on an invitation that the
+        // library has never heard of is the ordinary case, and the page has to draw it honestly.
+        return known[name]
+    }
+
     private static func make(
         _ title: String,
         identifier: String,
@@ -347,6 +383,8 @@ public enum CalendarFixtures {
         recurrence: EventRecurrence? = nil,
         participation: EventParticipation = .accepted,
         status: EventStatus = .confirmed,
+        availability: EventAvailability = .busy,
+        url: URL? = nil,
         timeZone: String? = nil
     ) -> CalendarEventSummary {
         CalendarEventSummary(
@@ -361,11 +399,18 @@ public enum CalendarFixtures {
             accountName: calendar.accountName,
             locationName: location,
             notes: notes,
+            url: url,
             status: status,
             participation: attendees.isEmpty ? .unknown : participation,
+            availability: availability,
             timeZoneIdentifier: timeZone,
             alarms: attendees.isEmpty ? [] : [.minutesBefore(10)],
-            attendees: attendees.map { EventAttendee(name: $0, participation: .accepted) },
+            // Addresses, not just names. A real invitation carries them, and they are what lets an
+            // attendee resolve to somebody in the library by *identity* rather than by their name
+            // folding to the same string as somebody else's — see `DailyPlanService.participants`.
+            attendees: attendees.map {
+                EventAttendee(name: $0, emailAddress: address(for: $0), participation: .accepted)
+            },
             isRecurring: recurring,
             recurrence: recurrence,
             isEditable: calendar.allowsModification,
