@@ -85,7 +85,7 @@ public final class TaskViewService {
     /// Every open task, including subtasks.
     private func openTasks() throws(AppError) -> [Item] {
         var query = ItemQuery()
-        query.kinds = [.task]
+        query.kinds = ItemKind.workItemKindSet
         query.statuses = [.open]
         query.sort = .manual
         return try items.items(matching: query)
@@ -94,7 +94,7 @@ public final class TaskViewService {
     /// Finished and abandoned tasks, newest first.
     private func resolvedTasks(limit: Int) throws(AppError) -> [Item] {
         var query = ItemQuery()
-        query.kinds = [.task]
+        query.kinds = ItemKind.workItemKindSet
         query.statuses = [.completed, .cancelled]
         query.sort = .updatedNewestFirst
         query.limit = limit
@@ -111,7 +111,7 @@ public final class TaskViewService {
 
         case .all:
             var query = ItemQuery()
-            query.kinds = [.task]
+            query.kinds = ItemKind.workItemKindSet
             query.sort = .manual
             return try items.items(matching: query)
 
@@ -401,7 +401,7 @@ public final class TaskViewService {
     /// moves anything.
     public func tasks(matching filter: TaskFilter) throws(AppError) -> [Item] {
         var query = ItemQuery()
-        query.kinds = [.task]
+        query.kinds = ItemKind.workItemKindSet
         query.statuses = filter.includesResolved ? [] : [.open]
         query.sort = .manual
 

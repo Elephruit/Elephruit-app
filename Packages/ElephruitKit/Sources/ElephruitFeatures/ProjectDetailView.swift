@@ -184,7 +184,7 @@ public struct ProjectDetailView: View {
     }
 
     private func headingSection(_ heading: Item) -> some View {
-        let tasks = filtered(heading.children.filter { $0.kind == .task }
+        let tasks = filtered(heading.children.filter { $0.kind.isWorkItem }
             .sorted { $0.sortOrder < $1.sortOrder })
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
@@ -324,12 +324,12 @@ public struct ProjectDetailView: View {
     /// nothing here is owned by this one. Archiving or completing the project leaves every one of
     /// them untouched.
     private var projectNotes: [Item] {
-        project.filedItems().filter { $0.kind != .task && $0.kind != .heading }
+        project.filedItems().filter { !$0.kind.isWorkItem && $0.kind != .heading }
     }
 
     /// Notes that merely mention this project.
     private var relatedNotes: [Item] {
-        project.mentioningItems().filter { $0.kind != .person && $0.kind != .task }
+        project.mentioningItems().filter { $0.kind != .person && !$0.kind.isWorkItem }
     }
 
     private var relatedPeople: [Item] {

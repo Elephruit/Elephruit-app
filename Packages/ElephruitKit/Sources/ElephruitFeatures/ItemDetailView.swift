@@ -102,7 +102,11 @@ public struct ItemDetailView: View {
                 brief: bodyBinding
             )
 
-        case .task:
+        // A bug, a feature and the two planning markers all carry a task's shape here: a title, a
+        // body, dates, and a status. What makes a bug a bug — severity, reproduction steps, the
+        // builds it affects — is drawn by the project workspace's own detail surface, which is where
+        // anybody encounters one. This arm is the fallback for reaching one from search or a link.
+        case .task, .bug, .feature, .milestone, .release:
             TaskDetailView(
                 item: item,
                 navigation: navigation,

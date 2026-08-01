@@ -127,6 +127,27 @@ public struct DetailEmptyState: Sendable, Hashable {
                 message: "Choose a task to see its dates and where it belongs, or press ⌘N to add one."
             )
 
+        case .bug:
+            DetailEmptyState(
+                symbolName: "ant",
+                headline: "No bug selected",
+                message: "Choose a bug to see how to reproduce it and which build it affects."
+            )
+
+        case .feature:
+            DetailEmptyState(
+                symbolName: "sparkles",
+                headline: "No feature selected",
+                message: "Choose a feature to see what it covers and where it stands."
+            )
+
+        case .milestone, .release:
+            DetailEmptyState(
+                symbolName: "flag",
+                headline: "Nothing selected",
+                message: "Choose a milestone or a release to see the work aimed at it."
+            )
+
         case .project:
             DetailEmptyState(
                 symbolName: "square.stack.3d.up",

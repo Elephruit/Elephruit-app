@@ -548,7 +548,7 @@ extension Item {
     /// Direct child tasks that sit outside any heading, in order.
     public func ungroupedTasks() -> [Item] {
         children
-            .filter { $0.kind == .task && $0.deletedAt == nil }
+            .filter { $0.kind.isWorkItem && $0.deletedAt == nil }
             .sorted { $0.sortOrder < $1.sortOrder }
     }
 
@@ -562,9 +562,9 @@ extension Item {
 
         while let next = queue.popLast(), result.count < limit {
             guard next.deletedAt == nil, seen.insert(next.id).inserted else { continue }
-            if next.kind == .task { result.append(next) }
+            if next.kind.isWorkItem { result.append(next) }
             // Descend through headings and tasks alike: a heading holds tasks, a task holds subtasks.
-            if next.kind == .heading || next.kind == .task {
+            if next.kind == .heading || next.kind.isWorkItem {
                 queue.append(contentsOf: next.children)
             }
         }

@@ -114,7 +114,7 @@ public final class PersonWorkspaceService {
     /// Which tags count is ``TagConventions/owed``, so this and the view that hides the marker from a
     /// chip row cannot disagree about it.
     static func isPromise(_ item: Item) -> Bool {
-        item.kind == .task && item.tagSlugs.contains { TagConventions.marksOwed($0) }
+        item.kind.isWorkItem && item.tagSlugs.contains { TagConventions.marksOwed($0) }
     }
 
     static func otherPeople(in item: Item, excluding personID: UUID) -> [PersonReference] {

@@ -104,7 +104,7 @@ extension Item {
             waitingOnPersonID: waitingOnPerson()?.id,
             hasAttachments: !attachments.isEmpty,
             isRepeating: recurrenceData != nil,
-            hasSubtasks: children.contains { $0.kind == .task && $0.deletedAt == nil },
+            hasSubtasks: children.contains { $0.kind.isWorkItem && $0.deletedAt == nil },
             checklistTotal: checklist.total,
             checklistCompleted: checklist.completed,
             source: source.kind,
@@ -218,7 +218,7 @@ extension Item {
 
     /// Whether this item is one the task system manages.
     public var isTaskLike: Bool {
-        kind == .task
+        kind.isWorkItem
     }
 }
 

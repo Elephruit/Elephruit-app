@@ -217,7 +217,7 @@ public enum TimelineGrouping {
             case .everything: true
             case .conversations: entry.kind == .interaction || entry.kind == .meeting
             case .notes: entry.kind == .note || entry.kind == .dailyEntry || entry.kind == .decision
-            case .commitments: entry.kind == .task || entry.isPromise
+            case .commitments: entry.kind.isWorkItem || entry.isPromise
             case .files: entry.attachmentCount > 0
             }
         }

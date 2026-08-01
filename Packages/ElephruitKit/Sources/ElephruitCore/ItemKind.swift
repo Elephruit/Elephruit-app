@@ -79,6 +79,35 @@ public enum ItemKind: String, Codable, Sendable, Hashable, CaseIterable {
     /// Adding a kind costs nothing at the storage layer — `kindRaw` is already a `String`, so this
     /// is not a schema change at all.
     case heading
+
+    /// A defect. A task that additionally carries a `BugRecord` satellite: severity, reproduction
+    /// steps, expected versus actual, environment, and the versions it affects and is fixed in.
+    ///
+    /// A kind rather than a tag because a bug is answerable in ways a task is not — "can you still
+    /// reproduce it", "which build broke it" — and those questions need fields, not a label. A kind
+    /// rather than a separate entity because ADR 0002 holds: a bug is linked, tagged, searched,
+    /// archived and trashed exactly like everything else, and a second entity would need every one
+    /// of those machineries built again.
+    case bug
+
+    /// A unit of new capability, distinguished from a task only by intent.
+    ///
+    /// It earns its own kind because boards and reports read very differently when "shipped three
+    /// features and fixed nine bugs" is separable from "closed twelve items".
+    case feature
+
+    /// A point work is aimed at — "Beta", "Conference demo".
+    ///
+    /// Has a status, because it is reached or it is not, but **does not count as work**: reaching it
+    /// is the consequence of the work rather than a unit of it. A milestone that counted would make
+    /// every project's progress figure include its own summary.
+    case milestone
+
+    /// A shipped version — "1.2".
+    ///
+    /// Separate from ``milestone`` because a release carries a version string that sorts, and
+    /// because bugs point at two of them (affected and fixed) where they point at one milestone.
+    case release
 }
 
 // MARK: - Fields
@@ -202,8 +231,49 @@ extension ItemKind {
         case .heading:
             // A title, an order, and tasks. Nothing else — deliberately.
             [.children]
+
+        case .bug, .feature:
+            // A task's fields minus recurrence. A recurring bug is not a thing: the defect either
+            // still reproduces, in which case it was never fixed, or it is a new one with its own
+            // reproduction steps and its own build.
+            [
+                .body, .tags, .status, .dueDate, .startDate, .deferDate, .priority,
+                .children, .reminder, .planning, .checklist, .externalLink,
+            ]
+
+        case .milestone, .release:
+            // Markers, not work. A date to aim at, a status saying whether it was reached, and
+            // appearance so a roadmap can colour them apart. No priority — a milestone is not more
+            // or less urgent than another milestone, the work aimed at it is.
+            [.body, .tags, .status, .dueDate, .startDate, .appearance]
         }
     }
+
+    /// Whether this kind is a unit of work — something that appears on a board, counts toward
+    /// progress, and flows through the scheduling model.
+    ///
+    /// **This, not `kind == .task`, is the question almost every caller means.** Before the Projects
+    /// workspace there was only one work kind, so the two were the same question and roughly fifteen
+    /// sites asked the narrow one. Under the wider set they are very different: a bug that fails
+    /// `kind == .task` is invisible to every count, to `taskProgress()`, and to Today — it looks
+    /// like work on a board and like nothing at all everywhere else.
+    ///
+    /// A milestone is deliberately excluded even though it has a status. See ``ItemKind/milestone``.
+    public var isWorkItem: Bool {
+        switch self {
+        case .task, .bug, .feature: true
+        default: false
+        }
+    }
+
+    /// The work kinds, in the order pickers and menus should offer them.
+    public static let workItemKinds: [ItemKind] = [.task, .bug, .feature]
+
+    /// The work kinds as a set, for `ItemQuery.kinds` and filter rules.
+    public static let workItemKindSet: Set<ItemKind> = Set(workItemKinds)
+
+    /// The kinds that mark a point work is aimed at rather than being work themselves.
+    public static let planningMarkerKinds: [ItemKind] = [.milestone, .release]
 
     /// Whether this kind participates in the open/completed lifecycle.
     public var supportsStatus: Bool {
@@ -235,12 +305,19 @@ extension ItemKind {
             return childKind == .project || childKind == .goal || childKind == .list
         case .goal:
             return childKind == .project
-        case .project, .list:
-            return childKind == .heading || childKind == .task
+        case .project:
+            // A project holds its structure, its work, and the points that work is aimed at.
+            return childKind == .heading || childKind.isWorkItem
+                || childKind == .milestone || childKind == .release
+        case .list:
+            // A list holds work, but no markers: nobody ships a version of Groceries.
+            return childKind == .heading || childKind.isWorkItem
         case .heading:
-            return childKind == .task
-        case .task:
-            return childKind == .task
+            return childKind.isWorkItem
+        case .task, .bug, .feature:
+            // Subtasks may be any work kind — a feature's breakdown routinely includes the bugs
+            // found while building it.
+            return childKind.isWorkItem
         default:
             return false
         }
@@ -252,7 +329,7 @@ extension ItemKind {
     /// contained".
     public var isWorkBreakdownContainer: Bool {
         switch self {
-        case .area, .goal, .project, .list, .heading, .task: true
+        case .area, .goal, .project, .list, .heading, .task, .bug, .feature: true
         default: false
         }
     }
@@ -284,6 +361,10 @@ extension ItemKind {
         case .heading:
             // Structure, not content.
             false
+        case .milestone, .release:
+            // A marker is created inside a plan, never captured loose, and it has no triage step —
+            // it is already filed by the act of making it.
+            false
         default:
             true
         }
@@ -304,8 +385,11 @@ extension ItemKind {
     ///
     /// A heading is never work, so a project whose only remaining children are empty headings is
     /// finished.
+    ///
+    /// Asks ``isWorkItem`` rather than ``supportsStatus`` because a milestone has a status and is
+    /// still not work — counting it would fold a project's own summary into its progress figure.
     public var countsAsWork: Bool {
-        supportsStatus
+        isWorkItem
     }
 }
 
@@ -331,6 +415,10 @@ extension ItemKind {
         case .decision: "arrow.triangle.branch"
         case .reference: "books.vertical"
         case .heading: "text.append"
+        case .bug: "ant"
+        case .feature: "sparkles"
+        case .milestone: "flag"
+        case .release: "shippingbox"
         }
     }
 
@@ -354,6 +442,10 @@ extension ItemKind {
         case .decision: "Decision"
         case .reference: "Reference"
         case .heading: "Heading"
+        case .bug: "Bug"
+        case .feature: "Feature"
+        case .milestone: "Milestone"
+        case .release: "Release"
         }
     }
 

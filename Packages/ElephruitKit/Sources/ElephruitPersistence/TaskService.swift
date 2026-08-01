@@ -268,7 +268,7 @@ public final class TaskService {
 
     private func nextTodayOrder() throws(AppError) -> Double {
         var query = ItemQuery()
-        query.kinds = [.task]
+        query.kinds = ItemKind.workItemKindSet
         query.statuses = [.open]
         let open = try items.items(matching: query)
         let highest = open.map(\.todayOrder).max() ?? 0
@@ -538,7 +538,7 @@ public final class TaskService {
     /// The reverse door, because the first conversion is often a mistake and the alternative is a
     /// stray task in Anytime that nobody remembers creating.
     public func demoteToChecklistItem(_ subtask: Item) throws(AppError) {
-        guard let parent = subtask.parent, parent.kind == .task else { return }
+        guard let parent = subtask.parent, parent.kind.isWorkItem else { return }
 
         var checklist = parent.checklist
         checklist.items.append(
@@ -573,7 +573,7 @@ public final class TaskService {
     /// Lifts a subtask up one level.
     @discardableResult
     public func outdent(_ task: Item) throws(AppError) -> Bool {
-        guard let parent = task.parent, parent.kind == .task else { return false }
+        guard let parent = task.parent, parent.kind.isWorkItem else { return false }
         try items.setParent(task, to: parent.parent)
         return true
     }

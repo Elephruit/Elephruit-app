@@ -164,6 +164,10 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         switch kind {
         case .task: .tasks
         case .project, .goal: .projects
+        // A bug, a feature, a milestone and a release only ever exist inside a project, so the
+        // module that owns their list is the one that owns the project — not Tasks, even though a
+        // bug and a feature are work by every other measure in this app.
+        case .bug, .feature, .milestone, .release: .projects
         case .area: .areas
         case .person, .organization: .people
         case .bookmark: .bookmarks

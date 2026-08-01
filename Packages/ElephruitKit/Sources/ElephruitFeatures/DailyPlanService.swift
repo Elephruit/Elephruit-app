@@ -171,7 +171,7 @@ public final class DailyPlanService {
 
         do {
             var open = ItemQuery()
-            open.kinds = [.task]
+            open.kinds = ItemKind.workItemKindSet
             open.statuses = [.open]
             open.sort = .manual
             let prepared = Set(sources.meetingTaskIDs.keys)
@@ -182,7 +182,7 @@ public final class DailyPlanService {
             }
 
             var resolvedQuery = ItemQuery()
-            resolvedQuery.kinds = [.task]
+            resolvedQuery.kinds = ItemKind.workItemKindSet
             resolvedQuery.statuses = [.completed, .cancelled]
             resolvedQuery.sort = .updatedNewestFirst
             // Bounded: a logbook of five thousand entries has nothing to say about this week, and

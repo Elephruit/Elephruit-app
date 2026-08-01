@@ -140,7 +140,7 @@ struct TaskDetailView: View {
     }
 
     private var subtaskList: [Item] {
-        item.children.filter { $0.kind == .task && $0.deletedAt == nil }
+        item.children.filter { $0.kind.isWorkItem && $0.deletedAt == nil }
             .sorted { $0.sortOrder < $1.sortOrder }
     }
 
@@ -389,12 +389,12 @@ struct PersonDetailView: View {
     private var openWithThem: [Item] {
         item.visibleBacklinks()
             .compactMap(\.source)
-            .filter { $0.kind == .task && $0.status == .open }
+            .filter { $0.kind.isWorkItem && $0.status == .open }
             .uniqued()
     }
 
     private var mentions: [ItemLink] {
-        item.visibleBacklinks().filter { $0.source?.kind != .task }
+        item.visibleBacklinks().filter { $0.source?.kind.isWorkItem != true }
     }
 
     private func toggle(_ task: Item) {
