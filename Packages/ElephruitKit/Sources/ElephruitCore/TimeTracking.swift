@@ -154,6 +154,17 @@ public enum TimeFormatting {
         return "\(minutes):\(DayKey.padded(seconds))"
     }
 
+    /// `0:04:09` — for a field you can type into.
+    ///
+    /// Always carries the hours, unlike ``stopwatch(_:)``, because this is what a duration field
+    /// shows *and* what it accepts back: a field that reads `4:09` and parses its own contents as
+    /// four hours nine minutes is a field that lengthens an entry every time it is focused.
+    /// ``DurationParser`` reads a colon as `h:mm`, so the written form must never omit the hours.
+    public static func clock(_ interval: TimeInterval) -> String {
+        let total = Int(max(0, interval).rounded(.down))
+        return "\(total / 3_600):\(DayKey.padded((total % 3_600) / 60)):\(DayKey.padded(total % 60))"
+    }
+
     /// `1:04` — for a total. Hours and minutes only.
     public static func short(_ interval: TimeInterval) -> String {
         let totalMinutes = Int((max(0, interval) / 60).rounded())
