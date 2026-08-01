@@ -56,9 +56,21 @@ public struct TimeView: View {
 
             Divider()
 
-            summary
+            // ### Why the summary disappears rather than reading zero
+            // A period with nothing in it used to say so three times on one screen: "Nothing
+            // tracked" in the window subtitle, a large "0:00" over the words "Nothing tracked in
+            // this period.", and then the centred empty state below saying "No time tracked today"
+            // with the instruction and the button.
+            //
+            // Only the last of those is worth the room. It is the one that says what to do about
+            // it. A headline zero and a sentence restating it are a summary of nothing, and they
+            // push the useful part down the screen. When there is time to report, the summary is
+            // the best thing on the page and it comes back.
+            if !report.isEmpty {
+                summary
 
-            Divider()
+                Divider()
+            }
 
             entryList
         }
