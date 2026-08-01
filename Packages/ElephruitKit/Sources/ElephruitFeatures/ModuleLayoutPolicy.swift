@@ -51,22 +51,60 @@ extension AppModule {
             )
 
         case .people:
-            // The widest detail pane in the app, and deliberately. A populated profile carries an
-            // identity header, actions, facts, notes, contact methods, relationships and a history,
-            // and every one of those degrades into a column of wrapped fragments below about 480.
-            // The contact list keeps its own width, which is why it is stated separately here rather
-            // than taken from whatever the profile left over.
+            // A document module whose document is the profile, and the *only* one whose profile is
+            // unbounded.
+            //
+            // ### Why the profile has no maximum any more
+            // Because it had one, and it was the narrowest usable thing on the screen. A populated
+            // profile carries an identity header, a row of actions, structured facts, contact
+            // methods, relationships and a history; every one of those degrades into a column of
+            // wrapped fragments below about 480, and it was capped at 820 while the list beside it
+            // grew to 380 and an inspector took another 420. On a wide window the spare width went
+            // to the list first — a column of names and companies, which is a longer line of the
+            // same two fields — and then stopped, because everything had a ceiling and nothing
+            // absorbed the remainder.
+            //
+            // An unbounded column is what the shell already gives a canvas module: it is settled
+            // after the others have said what they need, and takes what is left. That is the right
+            // description of a profile *in this module*, because the profile is what the module is
+            // for. It caps its own reading measure rather than stretching — see
+            // ``PersonWorkspaceView`` — so "no maximum" means margins grow, not paragraphs.
+            //
+            // The list is narrower and firmly bounded. Two hundred and eighty is a comfortable
+            // avatar, name and company; three hundred and forty is as wide as that can usefully get,
+            // and past it the column is spending the profile's width on whitespace beside a name.
+            //
+            // The minimum is what a 900-point window — the smallest this app opens at — can spare
+            // once the sidebar and the list have theirs. It is not where a profile is *comfortable*;
+            // that is nearer the ideal, and the whole point of removing the maximum is that a
+            // profile reaches it and keeps going.
             ModuleShellLayout(
-                primary: PaneWidth(minimum: 250, ideal: 300, maximum: 380),
+                primary: PaneWidth(minimum: 220, ideal: 280, maximum: 340),
                 detail: DetailPanePolicy(
                     hidesWhenNothingSelected: false,
-                    width: PaneWidth(minimum: 400, ideal: 560, maximum: 820),
-                    compactWindowWidth: 860
+                    width: PaneWidth(minimum: 450, ideal: 680),
+                    // The app's own minimum window. The profile column appears as soon as there is a
+                    // window that can hold it, because a People module with no profile in it is a
+                    // list of names.
+                    compactWindowWidth: 900
                 ),
                 inspector: DetailPanePolicy(
+                    // ### Why selecting somebody no longer opens the inspector
+                    // It did, and that is why the third column read as permanent: `.people` said
+                    // `opensAfterSelection`, so clicking any name reopened a pane the user may have
+                    // closed twenty names ago. A pane that reappears whenever you navigate is not a
+                    // contextual inspector; it is a fourth column with a dismiss button.
+                    //
+                    // It is worth having on demand — ⌥⌘I, or the toolbar — because it answers a
+                    // question the profile does not: what is *scheduled*, what is open, what is
+                    // worth checking. What it no longer does is assume you want it every time.
+                    opensAfterSelection: false,
                     hidesWhenNothingSelected: true,
-                    width: PaneWidth(minimum: 260, ideal: 320, maximum: 420),
-                    compactWindowWidth: 1180
+                    width: PaneWidth(minimum: 260, ideal: 300, maximum: 360),
+                    // Higher than it was. The inspector may only appear once the profile already has
+                    // the room it needs; below this the arithmetic can satisfy every minimum and
+                    // still leave the main content the narrowest thing on screen.
+                    compactWindowWidth: 1280
                 )
             )
 
