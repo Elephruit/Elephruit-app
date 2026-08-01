@@ -133,6 +133,31 @@ public enum LinkKind: String, Codable, Sendable, Hashable, CaseIterable {
     /// This item is a conflicted copy preserved from a sync merge.
     case conflictCopy
 
+    /// That person is the one doing this work.
+    ///
+    /// A link rather than an `assigneeID` column for the same reason ``waitingOn`` is: the person's
+    /// page, their workload, and their meeting brief all find it by the traversal they already do,
+    /// and a stored identifier would be a second place the same fact lived — the first thing to go
+    /// stale when somebody is merged into a duplicate.
+    ///
+    /// **At most one may exist per item**, and that is enforced in `WorkItemService.assign` rather
+    /// than in the schema, because the schema cannot express it and a store that has somehow
+    /// acquired two must still open.
+    case assignee
+
+    /// This item reports the same defect as that one.
+    ///
+    /// The only one of the four that appears in backlinks, because it is the only one where the
+    /// *other* item's page genuinely wants to say "two people reported this".
+    case duplicateOf
+
+    /// This work is aimed at that milestone.
+    case targetsMilestone
+
+    /// This work is part of that release — the version it lands in, or for a bug, the version it
+    /// was found in.
+    case relatesToRelease
+
     /// Whether the link's existence is derived from body text and therefore
     /// regenerated on every save, rather than edited directly by the user.
     public var isDerivedFromText: Bool { self == .wiki }
@@ -141,7 +166,12 @@ public enum LinkKind: String, Codable, Sendable, Hashable, CaseIterable {
     public var appearsInBacklinks: Bool {
         switch self {
         case .wiki, .related, .mentions, .participant, .blockedBy, .filedUnder, .waitingOn, .promisedTo: true
+        case .duplicateOf: true
         case .recurrenceSeries, .conflictCopy: false
+        // Drawn where they mean something — on the card, in the workload lane, on the roadmap — and
+        // listing them again under Backlinks would say "this bug is assigned to Sam" in the section
+        // meant for things that refer to it.
+        case .assignee, .targetsMilestone, .relatesToRelease: false
         }
     }
 
@@ -157,6 +187,10 @@ public enum LinkKind: String, Codable, Sendable, Hashable, CaseIterable {
         case .promisedTo: "Task for"
         case .recurrenceSeries: "Recurrence"
         case .conflictCopy: "Conflicted Copy"
+        case .assignee: "Assigned to"
+        case .duplicateOf: "Duplicate of"
+        case .targetsMilestone: "Milestone"
+        case .relatesToRelease: "Release"
         }
     }
 }
@@ -240,6 +274,23 @@ public enum MetadataValue: Sendable, Hashable, Codable {
         case .number(let value): value.formatted(.number)
         case .flag(let value): value ? "Yes" : "No"
         case .date(let value): formatter(value)
+        }
+    }
+
+    /// A stable string for *comparison* — filter rules, grouping keys, saved views.
+    ///
+    /// Deliberately not ``displayString(formatting:)``. That one is localised and grouped, so a
+    /// custom field holding `1000` renders as `"1,000"`, and a saved filter looking for `1000` stops
+    /// matching it — in a different locale, it stops matching something else. A rule that silently
+    /// finds nothing is worse than one that refuses, because nobody goes looking for the reason.
+    ///
+    /// Dates use ISO-8601 for the same reason: it sorts as text, which is what grouping needs.
+    public var comparableString: String {
+        switch self {
+        case .text(let value): value
+        case .number(let value): String(value)
+        case .flag(let value): value ? "true" : "false"
+        case .date(let value): ISO8601DateFormatter().string(from: value)
         }
     }
 }
