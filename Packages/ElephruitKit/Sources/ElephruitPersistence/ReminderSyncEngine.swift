@@ -337,6 +337,23 @@ public final class ReminderSyncEngine {
             case .unchanged:
                 continue
 
+            case .establishBaseline:
+                // The stored fingerprint was written by the pre-`v2` scheme and cannot be compared.
+                // Record today's, and *keep the existing local stamp* so an edit the user is waiting
+                // to push is still waiting after this pass rather than being swallowed by it.
+                guard let remote else { continue }
+                try? items.recordSyncMetadata(on: task) { subject in
+                    subject.setReminderLink(
+                        ReminderLinkState(
+                            externalID: state.externalID,
+                            listID: state.listID,
+                            lastSyncedFingerprint: remote.fingerprint,
+                            lastSyncedAt: self.dateProvider.now,
+                            lastSyncedLocalStamp: state.lastSyncedLocalStamp
+                        )
+                    )
+                }
+
             case .adoptRemote:
                 guard let remote else { continue }
                 do {
