@@ -271,3 +271,109 @@ struct LinkedDeletionTests {
         #expect(ConflictResolution.allCases.allSatisfy { !$0.explanation.isEmpty })
     }
 }
+
+// MARK: - Fingerprint stability
+
+/// The fingerprint is **persisted** — written onto the task and compared against a freshly computed
+/// one on the next pass, possibly weeks and several launches later. The suite above proves it
+/// notices the right fields. This one proves it survives the trip.
+///
+/// It did not. The fingerprint was built with `Hasher`, which Swift seeds randomly per process, so
+/// every launch produced a different value for an unchanged reminder and every linked task looked as
+/// though somebody had edited it in Reminders. That is invisible to a test that compares two live
+/// computations, which is why the important assertion here is against a recorded literal.
+@Suite("A fingerprint survives being stored")
+struct ReminderFingerprintStabilityTests {
+    private func stored() -> ReminderSnapshot {
+        ReminderSnapshot(
+            id: "rem-1",
+            listID: "list-work",
+            title: "Send the invoice",
+            dueComponents: DateComponents(year: 2026, month: 6, day: 19),
+            priority: 3
+        )
+    }
+
+    /// A value recorded from an earlier process.
+    ///
+    /// Hard-coded on purpose: comparing two live computations passes under a randomly seeded hash as
+    /// happily as under a stable one, so only a literal can fail when the algorithm stops being
+    /// deterministic. If a deliberate change to the mapped fields breaks this, bump
+    /// `fingerprintPrefix` rather than editing the expectation — every stored fingerprint in every
+    /// library has to become incomparable when the algorithm changes, and the prefix is what says so.
+    @Test("The same reminder fingerprints identically in every process")
+    func stableAcrossProcesses() {
+        #expect(stored().fingerprint == "v2:e6d44730ba8fd576")
+    }
+
+    @Test("A fingerprint says which scheme wrote it")
+    func carriesItsVersion() {
+        #expect(ReminderSnapshot.isComparable(stored().fingerprint))
+        // What the old scheme left behind in every existing library: a bare hash, unmarked.
+        #expect(!ReminderSnapshot.isComparable("3f9a2b1c"))
+        #expect(!ReminderSnapshot.isComparable("sample"))
+    }
+}
+
+/// What happens on the first pass after this build reaches a library written by the old one.
+@Suite("Upgrading from an incomparable fingerprint")
+struct LegacyFingerprintUpgradeTests {
+    private var remote: ReminderSnapshot {
+        ReminderSnapshot(id: "rem-1", listID: "list-work", title: "Send the invoice")
+    }
+
+    private func link(fingerprint: String, localStamp: Date) -> ReminderLinkState {
+        ReminderLinkState(
+            externalID: "rem-1",
+            listID: "list-work",
+            lastSyncedFingerprint: fingerprint,
+            lastSyncedAt: now,
+            lastSyncedLocalStamp: localStamp
+        )
+    }
+
+    @Test("A fingerprint from the old scheme is a baseline to re-establish, not a remote change")
+    func legacyFingerprintEstablishesBaseline() {
+        let decision = ReminderReconciliation.decide(
+            link: link(fingerprint: "3f9a2b1c", localStamp: now),
+            remote: remote,
+            localUpdatedAt: now
+        )
+
+        // Reading it as a change would put every linked task in the library into `adoptRemote` or
+        // `conflict` on the first pass after the upgrade, for no reason anybody could see.
+        #expect(decision == .establishBaseline)
+    }
+
+    @Test("A baseline is established even when there is a local edit waiting")
+    func legacyFingerprintWithLocalEdit() {
+        let decision = ReminderReconciliation.decide(
+            link: link(fingerprint: "3f9a2b1c", localStamp: now.addingTimeInterval(-60)),
+            remote: remote,
+            localUpdatedAt: now
+        )
+
+        // The engine keeps the old local stamp when it records the baseline, so this edit is still
+        // waiting to push on the next pass rather than being swallowed by the upgrade.
+        #expect(decision == .establishBaseline)
+    }
+
+    @Test("Once a comparable fingerprint is stored, the normal rules resume")
+    func comparableFingerprintComparesNormally() {
+        let matching = link(fingerprint: remote.fingerprint, localStamp: now)
+        #expect(ReminderReconciliation.decide(link: matching, remote: remote, localUpdatedAt: now) == .unchanged)
+
+        let stale = link(fingerprint: ReminderSnapshot.fingerprintPrefix + "deadbeef", localStamp: now)
+        #expect(ReminderReconciliation.decide(link: stale, remote: remote, localUpdatedAt: now) == .adoptRemote)
+    }
+
+    @Test("A missing reminder is still missing, whatever the fingerprint says")
+    func missingWinsOverBaseline() {
+        let decision = ReminderReconciliation.decide(
+            link: link(fingerprint: "3f9a2b1c", localStamp: now),
+            remote: nil,
+            localUpdatedAt: now
+        )
+        #expect(decision == .remoteMissing)
+    }
+}
