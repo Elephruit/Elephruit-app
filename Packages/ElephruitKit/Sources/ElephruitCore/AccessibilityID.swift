@@ -109,6 +109,9 @@ public enum AccessibilityID {
         public static let discardButton = "time.discard"
 
         public static let groupingToggle = "time.groupSimilar"
+        public static let manualSheet = "time.manualSheet"
+        public static let manualAddButton = "time.manualSheet.add"
+        public static let editRowButton = "time.editRow"
         public static let projectPicker = "time.project"
         public static let peoplePicker = "time.people"
 

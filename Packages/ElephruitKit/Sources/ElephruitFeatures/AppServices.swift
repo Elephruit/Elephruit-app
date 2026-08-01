@@ -789,6 +789,19 @@ extension EnvironmentValues {
 }
 
 extension View {
+    /// Re-injects services into a sheet, which starts a fresh environment of its own.
+    ///
+    /// `nil` passes through untouched rather than crashing: a sheet presented before the library is
+    /// open has nothing to show, and the views inside already handle an absent store.
+    @ViewBuilder
+    public func appServicesIfAvailable(_ services: AppServices?) -> some View {
+        if let services {
+            appServices(services)
+        } else {
+            self
+        }
+    }
+
     public func appServices(_ services: AppServices) -> some View {
         environment(\.services, services)
             .modelContext(services.context)
