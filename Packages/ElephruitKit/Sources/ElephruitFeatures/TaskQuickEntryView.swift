@@ -12,11 +12,21 @@ import SwiftUI
 ///
 /// That is not a stylistic preference. A field that edits itself as you type destroys marked text
 /// mid-composition, breaks undo, loses the insertion point, drops what dictation is still assembling,
-/// and mangles a paste. There is no way to have a self-rewriting field *and* a field that behaves
-/// like a text field, and the second is worth more.
+/// and mangles a paste — five specific failures, each with a specific cause.
 ///
 /// So the tokens are shown *underneath*: "Starts tomorrow", "Reminder at 10:00", "→ Acme". They can
 /// be dismissed individually, which edits the interpretation and still leaves the text alone.
+///
+/// ### Why Quick Jot does the opposite
+/// It lifts a settled token out of the field entirely — see ``CaptureLift``, which names a guard for
+/// each of the five failures above and holds the part of this argument that generalises: *never
+/// rewrite the token the user is still typing*.
+///
+/// What does not generalise is the conclusion. Here the text is the record: "Call Sam about the roof
+/// Thursday" is the user's own sentence, and dismissing the Thursday chip deliberately leaves the
+/// word behind, because they wrote it and will want to read it back. In Quick Jot the sigils are
+/// instructions rather than prose — `due:friday` is a thing you say to the app, not part of a
+/// sentence — and leaving one in the title after it has been obeyed shows the same fact twice.
 struct TaskQuickEntryView: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
