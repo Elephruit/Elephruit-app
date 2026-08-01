@@ -132,7 +132,7 @@ struct TimeEntryGroupRow: View {
         HStack(spacing: Theme.Spacing.small) {
             countBadge
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+            VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: Theme.Spacing.small) {
                     Text(group.displayTitle)
                         .font(Theme.Text.rowTitle)
@@ -146,24 +146,15 @@ struct TimeEntryGroupRow: View {
                     }
                 }
 
-                HStack(spacing: Theme.Spacing.small) {
-                    Text(spanDescription)
-                        .font(Theme.Text.metadata)
-                        .rowForeground(.tertiary)
-                        .monospacedDigit()
-
-                    if let project = group.lead?.projectTitle {
-                        Text(project)
-                            .font(Theme.Text.metadata)
-                            .rowForeground(.tertiary)
-                    }
-
-                    if let source = group.lead?.source, source != .timer, group.isSingle {
-                        Text(source.displayName)
-                            .font(Theme.Text.metadata)
-                            .rowForeground(.tertiary)
-                    }
-                }
+                // ### Why this line is separated rather than spaced
+                // It carries up to five unrelated facts — the span, the project, who was there, how
+                // the entry was made, how many focus blocks it holds — and five things separated
+                // only by a gap read as one run-on phrase. A middle dot is what tells the eye where
+                // one fact ends, and it costs nothing when there is only one of them.
+                Text(metadataLine)
+                    .font(Theme.Text.metadata)
+                    .rowForeground(.tertiary)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: Theme.Spacing.small)
@@ -181,6 +172,9 @@ struct TimeEntryGroupRow: View {
             Text(TimeFormatting.short(group.total))
                 .font(Theme.Text.rowTitle)
                 .monospacedDigit()
+                // Fixed, so the durations form a column: a list of times that starts at a different
+                // x on every row cannot be added up by eye, which is the only reason to read one.
+                .frame(width: 52, alignment: .trailing)
 
             Button(action: onResume) {
                 Image(systemName: "play.circle")
@@ -190,12 +184,35 @@ struct TimeEntryGroupRow: View {
             .help("Continue this")
             .accessibilityLabel("Continue")
         }
-        .frame(minHeight: Theme.Size.rowHeight)
+        .frame(minHeight: Theme.Size.rowHeightExpanded)
         .contentShape(.rect)
         .onTapGesture(count: 2, perform: onEdit)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityDescription)
         .accessibilityAddTraits(.isButton)
+    }
+
+    /// The second line: everything true of the row that is not its title.
+    private var metadataLine: String {
+        var parts = [spanDescription]
+
+        if let project = group.lead?.projectTitle { parts.append(project) }
+
+        if let people = group.lead?.people, !people.isEmpty {
+            parts.append(people.count <= 2
+                ? "with \(people.map(\.name).joined(separator: " and "))"
+                : "with \(people.count) people")
+        }
+
+        if let rounds = group.lead?.focusRounds, rounds > 0 {
+            parts.append(rounds == 1 ? "1 focus block" : "\(rounds) focus blocks")
+        }
+
+        if let source = group.lead?.source, source != .timer, group.isSingle {
+            parts.append(source.displayName)
+        }
+
+        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     /// The count, or the running dot, or nothing.
@@ -246,12 +263,7 @@ struct TimeEntryGroupRow: View {
 
     private var composition: TimeEntryComposition {
         guard let lead = group.lead else { return TimeEntryComposition() }
-        return TimeEntryComposition(
-            description: lead.entryDescription,
-            subject: lead.itemID.map { SubjectReference(id: $0, title: lead.itemTitle ?? "Untitled") },
-            tagSlugs: lead.tagSlugs,
-            isBillable: lead.isBillable
-        )
+        return TimeEntryComposition(lead)
     }
 
     private var accessibilityDescription: String {
@@ -342,12 +354,7 @@ struct TimeEntryRow: View {
     }
 
     private var composition: TimeEntryComposition {
-        TimeEntryComposition(
-            description: entry.entryDescription,
-            subject: entry.itemID.map { SubjectReference(id: $0, title: entry.itemTitle ?? "Untitled") },
-            tagSlugs: entry.tagSlugs,
-            isBillable: entry.isBillable
-        )
+        TimeEntryComposition(entry)
     }
 }
 
@@ -382,14 +389,15 @@ struct TimeEntryEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            HStack(spacing: Theme.Spacing.small) {
-                TextField("Description", text: $draft.description)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($isDescriptionFocused)
-                    .onSubmit(commit)
+            TextField("Description", text: $draft.description)
+                .textFieldStyle(.roundedBorder)
+                .focused($isDescriptionFocused)
+                .onSubmit(commit)
 
+            ElephruitDesign.FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
                 TimeSubjectPicker(subject: draft.subject) { draft.subject = $0 }
-
+                TimeProjectPicker(project: draft.project) { draft.project = $0 }
+                TimePeoplePicker(people: draft.people) { draft.people = $0 }
                 TimeTagPicker(slugs: draft.tagSlugs) { draft.tagSlugs = $0 }
             }
 

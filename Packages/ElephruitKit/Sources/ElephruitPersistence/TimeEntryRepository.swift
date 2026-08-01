@@ -612,6 +612,7 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
                 itemKind: entry.item?.kind,
                 projectID: projectID,
                 projectTitle: projectTitle,
+                isProjectExplicit: entry.project != nil,
                 tagSlugs: entry.tagSlugs,
                 people: entry.participants,
                 focusRounds: entry.focusRounds
