@@ -268,6 +268,49 @@ public enum SchemaV8: VersionedSchema {
     }
 }
 
+/// The ninth schema: what a stretch of tracked time can be tied to.
+///
+/// **No new entities.** Two relationships and three attributes on ``TimeEntry`` — the people who
+/// were there, the project it is billed to when derivation cannot reach one, the count of finished
+/// focus blocks, and the pair of identifiers naming the calendar event this app wrote for it — plus
+/// the two inverses those relationships need on ``Item``. Every one is optional or defaulted, so a
+/// store opened under this version gains nullable columns and two empty join tables and keeps every
+/// byte it had.
+///
+/// ### Why people are a relationship rather than tags
+/// Because the question is *who*, and a tag cannot answer it. A `with-sarah` tag has no identity: it
+/// does not follow a rename, it does not survive a merge of two duplicate contacts, it cannot be
+/// clicked through to the person, and a report grouped by it lists strings rather than people. All
+/// four of those already work for an `Item` of kind `person`, and standing rule R5 in `docs/18` asks
+/// for proof that the existing shape cannot do the job — here the existing shape *is* the person,
+/// and what was missing was a way to point at them.
+///
+/// ### Why `people` is its own relationship rather than reusing `item`
+/// An entry filed against a person is time spent *on* them; an entry with a person present is time
+/// spent *with* them. Preparing somebody's review and pairing with them for an afternoon are not the
+/// same fact, and one list holding both makes neither answerable. See the note on
+/// ``Item/attendedTimeEntries``.
+///
+/// ### Why the mirror identifiers live on the entry
+/// The alternative was a side table mapping entries to events, and it buys nothing: the mapping is
+/// one-to-one, it is written and read on exactly the paths that already hold the entry, and a
+/// separate table would need its own answer to what happens when an entry is deleted. What it
+/// *would* add is a second place for the two to disagree.
+///
+/// ### Why lightweight inference is still right
+/// The same argument as every version since `SchemaV4`, and a weaker case than most: no new entity,
+/// no rename, no type change, no value computed from old data. Nullable columns and additive
+/// relationships are precisely what Core Data's inference exists for, and `RealStoreMigrationTests`
+/// carries a store written before `TimeEntry` existed all the way here. ADR 0005 still reserves the
+/// model-type freeze for the first change that cannot be inferred, and this is not it.
+public enum SchemaV9: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 9) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV8.models
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -280,7 +323,7 @@ public enum SchemaV8: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV8.self]
+        [SchemaV9.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -300,13 +343,13 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV8.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV9.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV8.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV9.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {
-        let version = SchemaV8.versionIdentifier
+        let version = SchemaV9.versionIdentifier
         return "\(version.major).\(version.minor).\(version.patch)"
     }
 }

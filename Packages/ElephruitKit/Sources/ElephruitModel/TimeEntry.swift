@@ -73,6 +73,24 @@ public final class TimeEntry {
     /// rather than a guess.
     public var lastHeartbeatAt: Date?
 
+    /// How many finished focus blocks this stretch contains.
+    ///
+    /// Zero unless the entry was run as pomodoros. Counted rather than inferred from the duration,
+    /// because a block that was cut short is not a block: the number has to mean *blocks you
+    /// finished*, or a streak is something the app awards for leaving a timer on.
+    public var focusRounds: Int = 0
+
+    /// The calendar event written for this entry, if the mirror is on.
+    ///
+    /// Two identifiers rather than one, because an event is only findable given the calendar it is
+    /// in — and because the calendar can be changed in settings, at which point an event written to
+    /// the old one has to be recognisable as belonging somewhere else.
+    ///
+    /// Never read as a source of truth about anything but *which event this app wrote*. See
+    /// ``ElephruitCore/TimeMirroring``.
+    public var mirroredEventIdentifier: String?
+    public var mirroredCalendarIdentifier: String?
+
     public var createdAt: Date = Date()
     public var updatedAt: Date = Date()
 
@@ -90,6 +108,24 @@ public final class TimeEntry {
     /// `.nullify` on delete: deleting an item must not silently destroy a record of hours worked.
     @Relationship(deleteRule: .nullify, inverse: \Item.timeEntries)
     public var item: Item?
+
+    /// The project this is billed to when the subject's own parent chain is not the answer.
+    ///
+    /// Usually `nil`, and usually right to be: ``reportingProject()`` walks up from the subject,
+    /// which is what makes *time by project* answerable without filing anything twice. This is the
+    /// override for what that walk cannot reach — an hour on a note, a meeting, or nothing at all,
+    /// that nonetheless belongs to a project. When set it **wins**, because an explicit answer from
+    /// the user beats a derived one every time.
+    @Relationship(deleteRule: .nullify, inverse: \Item.billedTimeEntries)
+    public var project: Item?
+
+    /// Who was there.
+    ///
+    /// People, always — the relationship is to `Item` because a person *is* one, and nothing else
+    /// belongs here. Whether a non-person can be added is a question for the repository rather than
+    /// the type, on the same terms as every other kind rule in this model.
+    @Relationship(deleteRule: .nullify, inverse: \Item.attendedTimeEntries)
+    public var people: [Item] = []
 
     @Relationship(deleteRule: .nullify)
     public var tags: [Tag] = []
@@ -137,11 +173,23 @@ extension TimeEntry {
         tags.map(\.slug).sorted()
     }
 
+    /// Who was there, as values a view can hold.
+    ///
+    /// Sorted by name so two entries with the same people in a different order group together in the
+    /// log rather than reading as two different afternoons.
+    public var participants: [TimeParticipant] {
+        people
+            .map { TimeParticipant(id: $0.id, name: $0.displayTitle) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
     /// The project a report should file this under.
     ///
     /// An entry against a task belongs to that task's project, which is what makes "time by project"
-    /// answerable without asking the user to tag every entry twice.
+    /// answerable without asking the user to tag every entry twice. An explicit ``project`` beats
+    /// that walk: the user said so, and a derivation cannot outrank an answer.
     public func reportingProject() -> Item? {
+        if let project { return project }
         guard let item else { return nil }
         if item.kind == .project { return item }
         return item.enclosingProject()
@@ -161,18 +209,24 @@ extension TimeEntry {
             itemKind: item?.kind,
             projectID: project?.id,
             projectTitle: project?.displayTitle,
-            tagSlugs: tagSlugs
+            tagSlugs: tagSlugs,
+            people: participants,
+            focusRounds: focusRounds
         )
     }
 
     public func runningSnapshot() -> RunningTimer {
-        RunningTimer(
+        let project = reportingProject()
+        return RunningTimer(
             id: id,
             startedAt: startedAt,
             entryDescription: entryDescription,
             itemID: item?.id,
             itemTitle: item?.displayTitle,
             itemKind: item?.kind,
+            projectID: project?.id,
+            projectTitle: project?.displayTitle,
+            people: participants,
             tagSlugs: tagSlugs,
             isBillable: isBillable
         )
