@@ -69,6 +69,7 @@ struct TodayPersonCard: View {
     let actions: TodayActions
 
     @State private var isHovering = false
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
@@ -84,11 +85,17 @@ struct TodayPersonCard: View {
         }
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
-                .strokeBorder(Theme.Colors.separator.opacity(isHovering ? 1 : 0.4))
+                .strokeBorder(Theme.Colors.separator.opacity(isHovering || isFocused ? 1 : 0.4))
         }
         .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
         .onHover { isHovering = $0 }
         .onTapGesture { open() }
+        .focusable(person.isKnown)
+        .focused($isFocused)
+        .onKeyPress(.return) {
+            open()
+            return .handled
+        }
         .contextMenu { menu }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
@@ -173,7 +180,7 @@ struct TodayPersonCard: View {
 
                 Spacer(minLength: 0)
 
-                if isHovering, let item = model.person(person.personID) {
+                if isHovering || isFocused, let item = model.person(person.personID) {
                     quickControls(item)
                 }
             }

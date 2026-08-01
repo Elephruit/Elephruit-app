@@ -340,6 +340,44 @@ struct DailyPlanServiceTests {
         #expect(second.people.count == first.people.count)
     }
 
+    @Test("Re-reading a window that has not changed is not news")
+    func theCalendarRevisionSettles() async throws {
+        // The loop this closes: Today reloads when the revision changes, and loads the calendar in
+        // order to reload. A counter bumped on every load would mean load, bump, invalidate, load,
+        // for as long as the page was on screen.
+        let services = await Self.fixture(events: [
+            Self.event("Review", id: "review", from: Self.at(10), minutes: 60,
+                       attendees: [EventAttendee(name: "Maya Chen")])
+        ])
+
+        await services.dailyPlan.loadCalendar(from: Self.clock.startOfToday, through: Self.clock.startOfToday)
+        let afterFirst = services.calendar.revision
+
+        await services.dailyPlan.loadCalendar(from: Self.clock.startOfToday, through: Self.clock.startOfToday)
+        #expect(services.calendar.revision == afterFirst, "the same answer twice is one piece of news")
+
+        await services.dailyPlan.loadCalendar(from: Self.clock.startOfToday, through: Self.clock.startOfToday)
+        #expect(services.calendar.revision == afterFirst)
+    }
+
+    @Test("A window that comes back different does say so")
+    func theCalendarRevisionMovesOnRealChange() async throws {
+        let services = await Self.fixture(events: [
+            Self.event("Review", id: "review", from: Self.at(10), minutes: 60,
+                       attendees: [EventAttendee(name: "Maya Chen")])
+        ])
+
+        await services.dailyPlan.loadCalendar(from: Self.clock.startOfToday, through: Self.clock.startOfToday)
+        let before = services.calendar.revision
+
+        // A different window is a different answer, which is exactly the case a page has to hear
+        // about.
+        await services.dailyPlan.loadCalendar(
+            from: Self.clock.startOfDay(daysFromToday: 20), through: Self.clock.startOfDay(daysFromToday: 20)
+        )
+        #expect(services.calendar.revision != before)
+    }
+
     @Test("A person linked by hand and invited by the calendar is still one person")
     func handLinkingDoesNotDuplicateAnAttendee() async throws {
         let event = Self.event(

@@ -192,7 +192,7 @@ struct TodayDayView: View {
         let remaining = plan.untimedTasks.filter { !shown.contains($0.taskID) }
         let isDrafting = draftDay == plan.date
 
-        if !remaining.isEmpty || isDrafting || !plan.isPast, let actions {
+        if !remaining.isEmpty || isDrafting || !(plan.isPast || plan.isEmpty), let actions {
             TodaySection(title: "Tasks", count: remaining.isEmpty ? nil : remaining.count) {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(remaining) { task in
@@ -277,7 +277,10 @@ struct TodayDayView: View {
 
     @ViewBuilder
     private var dailyNote: some View {
-        if services?.todayPreferences.filters.showsDailyNote == true, let actions {
+        // Suppressed on a clear day, where the clear-day view already offers to start one. Two
+        // controls for one thing, eight points apart, is the kind of duplication that makes a page
+        // feel unfinished.
+        if services?.todayPreferences.filters.showsDailyNote == true, !plan.isEmpty, let actions {
             TodayNoteView(plan: plan, actions: actions)
                 .accessibilityIdentifier(AccessibilityID.Today.dailyNote)
         }
@@ -317,30 +320,74 @@ struct TodayCompactDayView: View {
     @FocusState private var isDraftFocused: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            TodayDateRail(plan: plan, isEmphasised: false, isPast: isPast)
-                .frame(width: TodayMetrics.railWidth, alignment: .leading)
-
+        Group {
             if model.isExpanded(plan) {
-                TodayDayView(
-                    plan: plan,
-                    model: model,
-                    navigation: navigation,
-                    draftDay: $draftDay,
-                    draftTitle: $draftTitle,
-                    isDraftFocused: $isDraftFocused
-                )
-                .padding(.leading, -TodayMetrics.railWidth)
+                // The full day draws its own rail, so drawing a second one here would put two dates
+                // side by side. Collapsing is the disclosure control rather than the whole row,
+                // because every row inside an expanded day is something you can click on its own —
+                // and a tap target wrapping all of them would swallow every one of those clicks.
+                VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                    TodayDayView(
+                        plan: plan,
+                        model: model,
+                        navigation: navigation,
+                        draftDay: $draftDay,
+                        draftTitle: $draftTitle,
+                        isDraftFocused: $isDraftFocused
+                    )
+
+                    disclosure
+                        .padding(.leading, TodayMetrics.railWidth)
+                }
             } else {
-                summary
+                collapsed
             }
         }
         .opacity(isPast ? 0.75 : 1)
-        .contentShape(.rect)
-        .onTapGesture { withAnimation(Theme.Motion.standard) { model.toggleExpanded(plan) } }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.Today.day(dayKey))
-        .accessibilityHint(model.isExpanded(plan) ? "Collapse this day" : "Expand this day")
+    }
+
+    /// The collapsed day, which is one control: the whole strip opens it.
+    private var collapsed: some View {
+        Button {
+            withAnimation(Theme.Motion.standard) { model.toggleExpanded(plan) }
+        } label: {
+            HStack(alignment: .top, spacing: 0) {
+                TodayDateRail(plan: plan, isEmphasised: false, isPast: isPast)
+                    .frame(width: TodayMetrics.railWidth, alignment: .leading)
+
+                summary
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint("Open this day")
+    }
+
+    private var disclosure: some View {
+        Button {
+            withAnimation(Theme.Motion.standard) { model.toggleExpanded(plan) }
+        } label: {
+            Label("Collapse", systemImage: "chevron.up")
+                .font(Theme.Text.metadata)
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(Theme.Colors.secondaryText)
+        .accessibilityLabel("Collapse \(plan.date.formatted(.dateTime.weekday(.wide).day().month(.wide)))")
+    }
+
+    private var accessibilityLabel: String {
+        var parts = [plan.date.formatted(.dateTime.weekday(.wide).day().month(.wide))]
+        if plan.briefing.meetingCount > 0 {
+            parts.append(plan.briefing.meetingCount == 1 ? "1 meeting" : "\(plan.briefing.meetingCount) meetings")
+        }
+        if !plan.tasks.isEmpty {
+            parts.append(plan.tasks.count == 1 ? "1 task" : "\(plan.tasks.count) tasks")
+        }
+        if parts.count == 1 { parts.append(isPast ? "nothing recorded" : "clear") }
+        return parts.joined(separator: ", ")
     }
 
     private var dayKey: String {
