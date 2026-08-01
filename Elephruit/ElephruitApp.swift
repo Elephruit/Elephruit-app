@@ -116,6 +116,13 @@ private struct RootWindow: View {
             }
             // Anything an intent left behind while the app was not running, or not frontmost.
             environment.adoptIntentRouting()
+
+            // Development-only review overrides. Both are no-ops unless the matching argument was
+            // passed alongside `-ElephruitDevelopmentMode`; see ``DesignReviewLaunch``.
+            DesignReviewLaunch.applyAppearance()
+            DesignReviewLaunch.applyWindowSize(
+                to: NSApplication.shared.windows.first { $0.canBecomeMain && $0.isVisible }
+            )
         }
     }
 

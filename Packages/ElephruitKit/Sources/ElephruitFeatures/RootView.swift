@@ -431,6 +431,12 @@ public struct RootView: View {
     /// names a module this build does not have, is not something to raise an alert about while
     /// somebody is opening their library.
     private func restoreNavigation() {
+        defer {
+            // After the restore, so that `-ElephruitStartModule` is an override of where the window
+            // was left rather than a competitor to it. See ``DesignReviewLaunch``.
+            DesignReviewLaunch.applyStart(to: navigation)
+        }
+
         guard !storedNavigationState.isEmpty,
               let state = NavigationModel.RestorationState(encoded: storedNavigationState)
         else { return }
