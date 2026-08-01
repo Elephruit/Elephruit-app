@@ -3,275 +3,360 @@ import ElephruitDesign
 import ElephruitModel
 import SwiftUI
 
-/// What the entry bar does when you press its button.
+/// The tracker: one button when nothing is running, and everything about the work once something is.
 ///
-/// One bar with two modes rather than a bar and a separate sheet. The fields are identical — what
-/// you did, what it was against, its tags, whether it is billable — and only the question of *when*
-/// differs: a timer starts now, a manual entry states its own span. Splitting that into two
-/// surfaces means the commonest recovery from forgetting to start a timer begins with finding a
-/// different piece of UI.
-enum TimeEntryMode: String, CaseIterable, Hashable {
-    /// Press to start; press again to stop.
-    case timer
-
-    /// Type a span, press to record it. Nothing runs.
-    case manual
-
-    var symbolName: String {
-        switch self {
-        case .timer: "stopwatch"
-        case .manual: "plus.rectangle"
-        }
-    }
-
-    var displayName: String {
-        switch self {
-        case .timer: "Timer"
-        case .manual: "Manual"
-        }
-    }
-
-    var hint: String {
-        switch self {
-        case .timer: "Start a timer running now."
-        case .manual: "Record time you have already spent."
-        }
-    }
-}
-
-/// The bar at the top of the Time view: what you are doing, and the one button that changes it.
+/// ### Why there is no longer a mode
+/// There was: a *Timer* mode and a *Manual* mode, switched by a menu, sharing one set of fields. It
+/// read as two equally likely things to be doing, and it made both worse. A timer had to be composed
+/// before it could be started — a description, four pickers and, if the mode had been left on
+/// Manual, a pair of date fields — so the fastest way to begin tracking was to fill in a form about
+/// work you had not done yet. That is backwards for the one feature that matters here, which is
+/// starting a timer *before* you know what to call the thing.
 ///
-/// ### Why this is a form rather than a button
-/// The old bar was a Start button that produced an untitled timer with nothing attached, on the
-/// theory that filing it later is easier than filing it first. It is not: an untitled timer is a
-/// row you have to *reconstruct* at the end of the day, from memory, and the memory is the thing
-/// tracking was supposed to replace. the layout's answer — a description field you type into and then
-/// press play — costs a few seconds at the start and saves the reconstruction entirely.
+/// So the surface has two states rather than two modes, and they are not equals:
 ///
-/// The fields stay live while the timer runs, so nothing is lost by starting first anyway: naming
-/// the thing three minutes in writes to the running entry rather than to a draft that has to be
-/// applied afterwards.
-struct TimeEntryBar: View {
+/// - **Nothing running.** One button. It says Start, it is the size of a thing you press without
+///   aiming, and nothing competes with it. Beside it sit the two quiet ways in that are not "begin
+///   work now": continuing something from earlier, and adding time by hand.
+/// - **Something running.** The clock is the largest thing on the screen and the description field
+///   takes focus by itself, because *now* is when you know what to call it. The filing chips arrive
+///   with it: what it is against, whose time it was, how it is tagged.
+///
+/// Filling in details while the clock runs writes straight to the running entry, so nothing is lost
+/// by starting first — which is the whole point.
+///
+/// Adding time by hand is a sheet, deliberately. It is a correction, it is done rarely, and giving
+/// it a permanent third of the tracker taught everybody who opened this screen that guessing at
+/// yesterday is as normal as measuring today.
+struct TimeTrackerCard: View {
     @Environment(\.services) private var services
 
-    /// Owned by the Time view, because the toolbar's *Add Time* switches it too — a mode two
-    /// controls can set cannot live inside one of them.
-    @Binding var mode: TimeEntryMode
-
-    /// Told rather than asked, so the view that owns the list can reload when this bar writes.
+    /// Told rather than asked, so the view that owns the list can reload when this card writes.
     let onChange: () -> Void
     let onOpenSubject: (UUID) -> Void
 
+    /// Opens the sheet for time already spent. Owned by the Time view, because the toolbar opens it
+    /// too — a sheet two controls can present cannot live inside one of them.
+    let onAddManually: () -> Void
+
     @State private var draft = TimeEntryComposition()
     @State private var durationText = ""
-    @State private var manualStart = Date()
-    @State private var manualEnd = Date()
+    @State private var isEditingDuration = false
+    @State private var recentEntries: [RecentEntry] = []
 
-    /// A length typed into the duration field before the timer was started.
-    ///
-    /// Applied the moment it starts, so the timer opens already reading that long. Without this the
-    /// field is a dead control in timer mode, which is worse than either allowing it or removing it.
-    @State private var pendingBackdate: TimeInterval?
     @FocusState private var isDescriptionFocused: Bool
     @FocusState private var isDurationFocused: Bool
 
     private var running: RunningTimer? { services?.timer.running }
+    private var isRunning: Bool { running != nil }
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.small) {
-            modeToggle
-
-            descriptionField
-
-            TimeSubjectPicker(
-                subject: draft.subject,
-                onPick: { subject in
-                    draft.subject = subject
-                    if running != nil {
-                        services?.timer.setSubject(resolvedSubject())
-                        commitChange()
-                    }
-                },
-                onOpen: onOpenSubject
-            )
-
-            TimeTagPicker(
-                slugs: draft.tagSlugs,
-                onChange: { slugs in
-                    draft.tagSlugs = slugs
-                    if running != nil {
-                        services?.timer.setTags(slugs)
-                        commitChange()
-                    }
-                }
-            )
-
-            billableToggle
-
-            Divider()
-                .frame(height: 20)
-
-            if mode == .manual {
-                manualSpanFields
-            }
-
-            durationField
-
-            actionButton
-
-            if running != nil {
-                discardButton
+        Group {
+            if let running {
+                runningState(running)
+            } else {
+                idleState
             }
         }
-        .padding(.horizontal, Theme.Spacing.medium)
-        .padding(.vertical, Theme.Spacing.small)
-        .frame(minHeight: 52)
-        .onAppear(perform: syncFromRunning)
-        .onChange(of: running?.id) { _, _ in syncFromRunning() }
-        .onChange(of: services?.timer.elapsed) { _, _ in syncDurationDisplay() }
-        .onChange(of: mode) { _, _ in
-            prepareManualSpan()
-            syncDurationDisplay()
+        .padding(Theme.Spacing.large)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
+                .fill(Theme.Colors.contentBackground)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
+                .strokeBorder(isRunning ? Theme.Colors.destructive.opacity(0.4) : Theme.Colors.separator)
+        }
+        .calmAnimation(value: isRunning)
+        .onAppear {
+            syncFromRunning()
+            loadRecents()
+        }
+        .onChange(of: running?.id) { _, _ in
+            syncFromRunning()
+            loadRecents()
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.Time.timerBar)
     }
 
-    // MARK: - Mode
+    // MARK: - Nothing running
 
-    /// Hidden while a timer runs.
+    /// One button, and two quiet doors that are not it.
     ///
-    /// Switching to manual mode with a timer going would leave the bar describing two different
-    /// entries at once — the one ticking and the one about to be typed — and no arrangement of the
-    /// fields makes that readable. Stopping first is one click and removes the question.
+    /// The subtitle is the instruction that replaces the whole composing step: you do not have to
+    /// know what this is yet.
+    private var idleState: some View {
+        HStack(spacing: Theme.Spacing.large) {
+            Button(action: start) {
+                Image(systemName: "play.fill")
+                    .font(.title2)
+                    .frame(width: 52, height: 52)
+                    .contentShape(.circle)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.Colors.onAccent)
+            .background(Circle().fill(Theme.Colors.selection))
+            .help("Start timing now")
+            .accessibilityLabel("Start a timer")
+            .accessibilityIdentifier(AccessibilityID.Time.startButton)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Start a timer")
+                    .font(.system(.title3, design: .default, weight: .medium))
+
+                Text("Name it once it is running. Nothing has to be decided first.")
+                    .font(Theme.Text.rowSubtitle)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+
+            Spacer(minLength: Theme.Spacing.small)
+
+            secondaryWays
+        }
+    }
+
+    /// Continuing, and adding by hand. Both quiet, and both a long way from the accent circle.
     @ViewBuilder
-    private var modeToggle: some View {
-        if running == nil {
+    private var secondaryWays: some View {
+        if !recentEntries.isEmpty {
             Menu {
-                ForEach(TimeEntryMode.allCases, id: \.self) { candidate in
-                    Button {
-                        mode = candidate
-                    } label: {
-                        Label(candidate.displayName, systemImage: candidate.symbolName)
-                    }
-                    .help(candidate.hint)
+                ForEach(recentEntries) { recent in
+                    Button(recent.title) { resume(recent.id) }
                 }
             } label: {
-                Image(systemName: mode.symbolName)
+                Label("Continue", systemImage: "arrow.clockwise")
             }
             .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
             .fixedSize()
-            .help(mode.hint)
-            .accessibilityLabel("Entry mode: \(mode.displayName)")
-            .accessibilityIdentifier(AccessibilityID.Time.modeToggle)
-        } else {
+            .font(Theme.Text.rowSubtitle)
+            .help("Pick up something from earlier, with its subject and tags intact")
+        }
+
+        Button(action: onAddManually) {
+            Label("Add by Hand", systemImage: "plus")
+        }
+        .buttonStyle(.borderless)
+        .font(Theme.Text.rowSubtitle)
+        .help("Record time you have already spent")
+        .accessibilityIdentifier(AccessibilityID.Time.addEntryButton)
+    }
+
+    // MARK: - Something running
+
+    /// The clock leads, then what you are doing, then what it is filed under.
+    private func runningState(_ running: RunningTimer) -> some View {
+        // ### The arrangement, and why it is this one
+        // The description takes the whole left because it is the only field typed into every single
+        // time. Everything it is filed under is a compact cluster of glyphs immediately left of the
+        // clock — a toolbar, read as a toolbar — rather than a row of labelled capsules under the
+        // text, which pushed the card to two storeys and made five optional things look like five
+        // required ones. A glyph with nothing in it is just a glyph; the moment it has a value it
+        // takes that value's colour and shows it.
+        HStack(alignment: .center, spacing: Theme.Spacing.medium) {
             Image(systemName: "record.circle")
+                .font(.title3)
                 .foregroundStyle(Theme.Colors.destructive)
                 .symbolEffect(.pulse, options: .repeating)
                 .accessibilityHidden(true)
+
+            TextField("Add a description", text: $draft.description)
+                .textFieldStyle(.plain)
+                .font(.system(.title3, design: .default, weight: .regular))
+                .focused($isDescriptionFocused)
+                .onSubmit { isDescriptionFocused = false }
+                // Written when the field gives up focus rather than on every keystroke: a running
+                // timer's description is something you finish typing before you care that it is
+                // saved, and a write per character is a thousand saves per sentence.
+                .onChange(of: isDescriptionFocused) { _, focused in
+                    guard !focused else { return }
+                    services?.timer.setDescription(draft.description)
+                    commitChange()
+                }
+                .accessibilityIdentifier(AccessibilityID.Time.descriptionField)
+
+            Spacer(minLength: Theme.Spacing.small)
+
+            filingChips
+
+            Divider()
+                .frame(height: 24)
+
+            clock(running)
+
+            focusButton
+            stopButton
+            discardButton
         }
     }
 
-    // MARK: - Fields
+    /// Everything the entry is filed under, as one cluster.
+    ///
+    /// Only while something runs. These are the questions you can answer once the clock is going,
+    /// and putting them in front of Start was what made beginning to track a form to fill in.
+    private var filingChips: some View {
+        HStack(spacing: Theme.Spacing.tight) {
+            TimeSubjectPicker(
+                subject: draft.subject,
+                onPick: { subject in
+                    draft.subject = subject
+                    services?.timer.setSubject(resolve(draft.subject))
+                    commitChange()
+                },
+                onOpen: onOpenSubject
+            )
 
-    private var descriptionField: some View {
-        TextField(
-            mode == .manual ? "What did you work on?" : "What are you working on?",
-            text: $draft.description
-        )
-        .textFieldStyle(.plain)
-        .font(Theme.Text.rowTitleEmphasised)
-        .focused($isDescriptionFocused)
-        .onSubmit { primaryAction() }
-        // Written when the field gives up focus rather than on every keystroke: a running timer's
-        // description is something you finish typing before you care that it is saved, and a write
-        // per character would be a thousand saves for one sentence.
-        .onChange(of: isDescriptionFocused) { _, focused in
-            guard !focused, running != nil else { return }
-            services?.timer.setDescription(draft.description)
-            commitChange()
-        }
-        .accessibilityIdentifier(AccessibilityID.Time.descriptionField)
-    }
-
-    private var billableToggle: some View {
-        Button {
-            draft.isBillable.toggle()
-            if running != nil {
-                services?.timer.setBillable(draft.isBillable)
+            TimeProjectPicker(project: draft.project) { project in
+                draft.project = project
+                services?.timer.setProject(resolve(draft.project))
                 commitChange()
             }
-        } label: {
-            Image(systemName: draft.isBillable ? "dollarsign.circle.fill" : "dollarsign.circle")
+
+            TimePeoplePicker(people: draft.people) { people in
+                draft.people = people
+                services?.timer.setPeople(resolveAll(draft.people))
+                commitChange()
+            }
+
+            TimeTagPicker(slugs: draft.tagSlugs) { slugs in
+                draft.tagSlugs = slugs
+                services?.timer.setTags(slugs)
+                commitChange()
+            }
+
+            Button {
+                draft.isBillable.toggle()
+                services?.timer.setBillable(draft.isBillable)
+                commitChange()
+            } label: {
+                TimeChipLabel(
+                    symbolName: "dollarsign.circle",
+                    title: nil,
+                    isFilled: draft.isBillable
+                )
+            }
+            .buttonStyle(.plain)
+            .help(draft.isBillable ? "Billable" : "Not billable")
+            .accessibilityLabel("Billable")
+            .accessibilityValue(draft.isBillable ? "on" : "off")
+            .accessibilityIdentifier(AccessibilityID.Time.billableToggle)
+        }
+    }
+
+    // MARK: - The clock
+
+    /// The elapsed time, and the field it becomes when you click it.
+    ///
+    /// ### Why a running clock is drawn rather than stored
+    /// It used to be a `TextField` bound to `@State`, which made what you see a downstream
+    /// consequence of a tick arriving *and* of the view being invalidated by it. Both are true most
+    /// of the time and neither is guaranteed; the observed result was a clock that sat still for
+    /// fifteen seconds and then jumped.
+    ///
+    /// A running clock is not state. It is a pure function of one stored date and the current
+    /// moment, so `TimelineView` asks SwiftUI to redraw on a cadence it owns and each redraw
+    /// computes the elapsed time from `startedAt`. Nothing is left to fall out of step, and it stays
+    /// right across a sleep, a missed tick, and a clock change.
+    ///
+    /// It becomes a field on click, because typing a length into it is the correction this whole
+    /// module is built around — see ``ElephruitCore/DurationParser``.
+    @ViewBuilder
+    private func clock(_ running: RunningTimer) -> some View {
+        if isEditingDuration {
+            TextField("0:00:00", text: $durationText)
+                .textFieldStyle(.plain)
+                .font(clockFont)
+                .monospacedDigit()
+                .multilineTextAlignment(.trailing)
+                .frame(width: 128)
+                .focused($isDurationFocused)
+                .onSubmit(finishEditingDuration)
+                .onChange(of: isDurationFocused) { _, focused in
+                    guard !focused else { return }
+                    finishEditingDuration()
+                }
+                .help("Type a length — 1:30, 1.5, or 90m")
+                .accessibilityLabel("Duration")
+                .accessibilityIdentifier(AccessibilityID.Time.durationField)
+        } else {
+            TimelineView(.periodic(from: running.startedAt, by: 1)) { context in
+                Text(TimeFormatting.stopwatch(running.elapsed(at: context.date)))
+                    .font(clockFont)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+            }
+            .frame(width: 128, alignment: .trailing)
+            .contentShape(.rect)
+            .onTapGesture { beginEditingDuration() }
+            .help("Started at \(running.startedAt.formatted(date: .omitted, time: .shortened)) — click to correct")
+            .accessibilityLabel("Elapsed")
+            .accessibilityIdentifier(AccessibilityID.Time.durationField)
+        }
+    }
+
+    /// Large, rounded, and the biggest thing on the screen while it runs.
+    ///
+    /// A stopwatch that has to be hunted for is one nobody trusts is going. This is the single piece
+    /// of the interface that answers the question the whole module exists for.
+    private var clockFont: Font {
+        .system(size: 30, weight: .medium, design: .rounded)
+    }
+
+    // MARK: - Buttons
+
+    private var stopButton: some View {
+        Button(action: stop) {
+            Image(systemName: "stop.fill")
+                .font(.title3)
+                .frame(width: 40, height: 40)
+                .contentShape(.circle)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(draft.isBillable ? Theme.Colors.selection : Theme.Colors.secondaryText)
-        .help(draft.isBillable ? "Billable" : "Not billable")
-        .accessibilityLabel("Billable")
-        .accessibilityValue(draft.isBillable ? "on" : "off")
-        .accessibilityIdentifier(AccessibilityID.Time.billableToggle)
+        .foregroundStyle(Theme.Colors.onAccent)
+        .background(Circle().fill(Theme.Colors.destructive))
+        .help("Stop and keep this time")
+        .accessibilityLabel("Stop")
+        .accessibilityIdentifier(AccessibilityID.Time.stopButton)
     }
 
-    /// The span, in manual mode.
+    /// Starts a focus cycle over whatever is being tracked.
     ///
-    /// Typing a duration moves the *end*, because the start is the part somebody recording a past
-    /// stretch is sure about — "I started at nine and it took about ninety minutes".
-    private var manualSpanFields: some View {
-        HStack(spacing: Theme.Spacing.tight) {
-            DatePicker("From", selection: $manualStart, displayedComponents: [.hourAndMinute, .date])
-                .datePickerStyle(.compact)
-                .labelsHidden()
-                .onChange(of: manualStart) { _, _ in syncDurationDisplay() }
-
-            Text("–")
-                .rowForeground(.secondary)
-
-            DatePicker("To", selection: $manualEnd, displayedComponents: [.hourAndMinute, .date])
-                .datePickerStyle(.compact)
-                .labelsHidden()
-                .onChange(of: manualEnd) { _, _ in syncDurationDisplay() }
-        }
-    }
-
-    private var durationField: some View {
-        TextField("0:00:00", text: $durationText)
-            .textFieldStyle(.plain)
-            .font(.system(.title3, design: .rounded, weight: .medium))
-            .monospacedDigit()
-            .multilineTextAlignment(.trailing)
-            .frame(width: 88)
-            .focused($isDurationFocused)
-            .onSubmit(commitDuration)
-            .onChange(of: isDurationFocused) { _, focused in
-                if focused {
-                    // Nothing to type over in manual mode with no span yet, and in timer mode the
-                    // live text would be overwritten a second later by the tick.
-                    return
+    /// A labelled pill rather than an icon. It was a bare `brain.head.profile` glyph between the
+    /// clock and Stop, at the same weight as the discard cross, and the first person to use it could
+    /// not find the pomodoro at all. An unlabelled icon among unlabelled icons is not discovered; it
+    /// is explained. The word costs forty points and removes the need to explain.
+    @ViewBuilder
+    private var focusButton: some View {
+        if services?.timer.isFocusing != true {
+            Button {
+                services?.timer.startFocus()
+                commitChange()
+            } label: {
+                HStack(spacing: Theme.Spacing.tight) {
+                    Image(systemName: "brain.head.profile")
+                    Text("Focus")
                 }
-                commitDuration()
+                .font(Theme.Text.rowSubtitle)
+                .padding(.horizontal, Theme.Spacing.medium)
+                .frame(height: 30)
+                .contentShape(.capsule)
             }
-            .help("Type a length — 1:30, 1.5, or 90m")
-            .accessibilityLabel("Duration")
-            .accessibilityIdentifier(AccessibilityID.Time.durationField)
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.Colors.selection)
+            .background(Capsule().fill(Theme.Colors.selection.opacity(0.12)))
+            .help(focusHint)
+            .accessibilityLabel("Work in focus blocks")
+            .accessibilityIdentifier(AccessibilityID.Time.focusButton)
+        }
     }
 
-    // MARK: - Actions
-
-    private var actionButton: some View {
-        Button(action: primaryAction) {
-            Label(actionTitle, systemImage: actionSymbol)
-                .labelStyle(.iconOnly)
-                .frame(width: 20)
-        }
-        .buttonStyle(.borderedProminent)
-        .tint(running == nil ? Theme.Colors.selection : Theme.Colors.destructive)
-        .disabled(!canAct)
-        .help(actionTitle)
-        .accessibilityLabel(actionTitle)
-        .accessibilityIdentifier(
-            running == nil ? AccessibilityID.Time.startButton : AccessibilityID.Time.stopButton
-        )
+    /// Says what pressing Focus will actually do, in the lengths this person has set.
+    private var focusHint: String {
+        let plan = services?.timer.pomodoroPlan ?? .standard
+        let focus = Int((plan.focus / 60).rounded())
+        let rest = Int((plan.shortBreak / 60).rounded())
+        return "Work in \(focus)-minute blocks with \(rest)-minute breaks"
     }
 
     private var discardButton: some View {
@@ -281,173 +366,208 @@ struct TimeEntryBar: View {
             commitChange()
         } label: {
             Image(systemName: "xmark")
+                .font(Theme.Text.rowSubtitle)
+                .frame(width: 26, height: 26)
+                .contentShape(.rect)
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
         // Deliberately quiet next to Stop. Both end the timer and only one keeps the time, so the
         // destructive one must not be the one the eye lands on first.
         .foregroundStyle(Theme.Colors.secondaryText)
-        .help("Discard this timer without recording it")
+        .help("Throw this away without recording it")
         .accessibilityLabel("Discard timer")
         .accessibilityIdentifier(AccessibilityID.Time.discardButton)
     }
 
-    private var actionTitle: String {
-        if running != nil { return "Stop" }
-        return mode == .manual ? "Add" : "Start"
+    // MARK: - Commands
+
+    /// Starts an untitled timer, and puts the caret where the name goes.
+    ///
+    /// Untitled on purpose. Requiring a name before the clock starts is the friction this whole
+    /// arrangement exists to remove, and the caret landing in the description means naming it is the
+    /// obvious next thing rather than a thing to remember.
+    private func start() {
+        services?.timer.switchTo(item: nil)
+        draft = TimeEntryComposition()
+        commitChange()
+        isDescriptionFocused = true
     }
 
-    private var actionSymbol: String {
-        if running != nil { return "stop.fill" }
-        return mode == .manual ? "plus" : "play.fill"
-    }
-
-    private var canAct: Bool {
-        if running != nil { return true }
-        return mode == .timer || manualEnd > manualStart
-    }
-
-    private func primaryAction() {
+    private func stop() {
         guard let services else { return }
-
-        if running != nil {
-            services.timer.setDescription(draft.description)
-            services.timer.stop()
-            draft = TimeEntryComposition()
-            commitChange()
-            return
-        }
-
-        switch mode {
-        case .timer:
-            services.timer.switchTo(
-                item: resolvedSubject(),
-                description: draft.description,
-                tagSlugs: draft.tagSlugs,
-                isBillable: draft.isBillable
-            )
-
-            // A duration typed before pressing play starts the timer already that long — the "I have
-            // been at this twenty minutes and forgot to start it" case, which otherwise means
-            // starting a timer and immediately correcting it.
-            if let backdate = pendingBackdate {
-                services.timer.setElapsed(backdate)
-                pendingBackdate = nil
-            }
-
-        case .manual:
-            guard manualEnd > manualStart else { return }
-            let subject = resolvedSubject()
-            services.perform {
-                try services.timeEntries.addManual(
-                    item: subject,
-                    description: draft.description,
-                    startedAt: manualStart,
-                    endedAt: manualEnd,
-                    tagSlugs: draft.tagSlugs,
-                    isBillable: draft.isBillable
-                )
-            }
-            // The description clears and everything else stays. Logging a morning by hand is four
-            // entries against the same project with the same tags, and re-picking them each time is
-            // the friction that stops people doing it at all.
-            draft.description = ""
-            manualStart = manualEnd
-            manualEnd = manualStart.addingTimeInterval(3_600)
-            syncDurationDisplay()
-        }
-
+        services.timer.setDescription(draft.description)
+        services.timer.stop()
+        draft = TimeEntryComposition()
         commitChange()
     }
 
-    private func commitDuration() {
-        guard let parsed = DurationParser.parse(durationText) else {
-            // Unreadable input is not applied and not cleared — what was typed stays there to be
-            // fixed, because silently reverting a field somebody just typed into reads as the app
-            // losing their work.
-            syncDurationDisplay()
-            return
-        }
+    private func resume(_ id: UUID) {
+        guard let services, let entry = try? services.timeEntries.entry(id: id) else { return }
+        services.timer.resume(entry)
+        commitChange()
+    }
 
-        if running != nil {
+    private func beginEditingDuration() {
+        syncDurationDisplay()
+        isEditingDuration = true
+        isDurationFocused = true
+    }
+
+    private func finishEditingDuration() {
+        if let parsed = DurationParser.parse(durationText) {
             services?.timer.setElapsed(parsed)
             commitChange()
-        } else if mode == .manual {
-            manualEnd = manualStart.addingTimeInterval(parsed)
-        } else {
-            pendingBackdate = parsed > 0 ? parsed : nil
         }
-
-        syncDurationDisplay()
+        // Unreadable input is simply not applied. What was typed is dropped rather than left sitting
+        // in a control that is about to become a clock again — a stopwatch reading "banana" is worse
+        // than one that quietly refused.
+        isEditingDuration = false
     }
 
     private func commitChange() {
         onChange()
     }
 
-    /// The picked subject as an `Item`, or `nil` for time tracked against nothing.
+    // MARK: - Resolving
+
+    /// A picked reference as an `Item`, or `nil`.
     ///
-    /// The draft holds an id and a title rather than the item itself, because a view cannot safely
-    /// keep a `PersistentModel` across a store change. This is where that is turned back into
-    /// something the repository can file against, and a lookup that fails means the item was deleted
-    /// while the bar was open — in which case tracking against nothing is the right answer, not a
-    /// refusal to start.
-    private func resolvedSubject() -> Item? {
-        guard let services, let subject = draft.subject else { return nil }
-        return (try? services.items.item(id: subject.id)) ?? nil
+    /// The draft holds ids and titles rather than the items themselves, because a view cannot safely
+    /// keep a `PersistentModel` across a store change. A lookup that fails means the item was
+    /// deleted while the card was open — in which case tracking against nothing is the right answer,
+    /// not a refusal.
+    private func resolve(_ reference: SubjectReference?) -> Item? {
+        guard let services, let reference else { return nil }
+        return (try? services.items.item(id: reference.id)) ?? nil
+    }
+
+    private func resolveAll(_ references: [SubjectReference]) -> [Item] {
+        references.compactMap { resolve($0) }
     }
 
     // MARK: - Draft
 
-    /// Fills the bar from whatever is running, so the fields describe the timer rather than a stale
+    /// Fills the card from whatever is running, so the fields describe the timer rather than a stale
     /// draft that happens to be sitting in them.
     private func syncFromRunning() {
         if let running {
             draft = TimeEntryComposition(
                 description: running.entryDescription,
-                subject: running.itemID.map { SubjectReference(id: $0, title: running.itemTitle ?? "Untitled") },
+                subject: running.itemID.map {
+                    SubjectReference(id: $0, title: running.itemTitle ?? "Untitled")
+                },
+                project: running.projectID.map {
+                    SubjectReference(id: $0, title: running.projectTitle ?? "Untitled")
+                },
+                people: running.people.map { SubjectReference(id: $0.id, title: $0.name) },
                 tagSlugs: running.tagSlugs,
                 isBillable: running.isBillable
             )
-            pendingBackdate = nil
         } else {
             draft = TimeEntryComposition()
-            pendingBackdate = nil
-            prepareManualSpan()
         }
+        isEditingDuration = false
         syncDurationDisplay()
     }
 
-    /// Defaults to the hour just gone, which is nearly always what somebody is recording.
-    private func prepareManualSpan() {
-        let now = services?.dateProvider.now ?? Date()
-        manualEnd = now
-        manualStart = now.addingTimeInterval(-3_600)
-    }
-
-    /// Keeps the duration text in step with whatever it is describing — unless it is being typed
-    /// into, in which case the user's half-finished input wins over the clock.
     private func syncDurationDisplay() {
-        guard !isDurationFocused else { return }
-
-        if let elapsed = services?.timer.elapsed, running != nil {
-            durationText = TimeFormatting.clock(elapsed)
-        } else if mode == .manual {
-            durationText = TimeFormatting.clock(max(0, manualEnd.timeIntervalSince(manualStart)))
-        } else {
-            durationText = TimeFormatting.clock(pendingBackdate ?? 0)
+        guard let running else {
+            durationText = ""
+            return
         }
+        // Read straight off the start date rather than from the service's `elapsed`, so what lands
+        // in the field when it is clicked is the number the clock beside it was showing — not
+        // whatever the last tick happened to leave behind.
+        durationText = TimeFormatting.clock(running.elapsed(at: Date()))
     }
+
+    /// A few things worth carrying on with, deduplicated by what a continued timer would be.
+    ///
+    /// Two entries against one task with different descriptions are two different things to pick up,
+    /// so the key is both. Entries with nothing to call them are skipped — a menu of three identical
+    /// blank lines helps nobody.
+    private func loadRecents() {
+        guard let services, let recent = try? services.timeEntries.recentEntries(limit: 12) else {
+            recentEntries = []
+            return
+        }
+
+        var seen = Set<String>()
+        var found: [RecentEntry] = []
+
+        for entry in recent {
+            let title = entry.item?.displayTitle ?? entry.entryDescription
+            guard !title.isEmpty else { continue }
+
+            let key = "\(entry.item?.id.uuidString ?? "")\u{1f}\(entry.entryDescription)"
+            guard seen.insert(key).inserted else { continue }
+
+            found.append(RecentEntry(id: entry.id, title: title))
+            if found.count == 5 { break }
+        }
+        recentEntries = found
+    }
+}
+
+/// Something worth carrying on with, as the Continue menu sees it.
+struct RecentEntry: Identifiable, Hashable {
+    let id: UUID
+    let title: String
 }
 
 /// The fields an entry shares whether it is timed or typed.
 ///
-/// One value rather than four `@State`s so that clearing the bar, filling it from a running timer,
+/// One value rather than six `@State`s so that clearing the card, filling it from a running timer,
 /// and handing it to a row editor are each one assignment and cannot half-happen.
 struct TimeEntryComposition: Equatable {
     var description: String = ""
     var subject: SubjectReference?
+
+    /// The project this is billed to, when the subject's own parent chain is not the answer.
+    var project: SubjectReference?
+
+    /// Who was there.
+    var people: [SubjectReference] = []
+
     var tagSlugs: [String] = []
     var isBillable: Bool = false
+
+    /// The filing of an entry that already exists, for an editor to start from.
+    ///
+    /// One initialiser rather than the same six-line literal at three call sites, which is where a
+    /// field added to this type quietly stops being carried into an edit.
+    init(_ snapshot: TimeEntrySnapshot) {
+        self.init(
+            description: snapshot.entryDescription,
+            subject: snapshot.itemID.map {
+                SubjectReference(id: $0, title: snapshot.itemTitle ?? "Untitled")
+            },
+            // Only a project the user chose. Filling this from a derived one would pin it on save,
+            // and the entry would stop following its task the next time that task moved.
+            project: snapshot.isProjectExplicit ? snapshot.projectID.map {
+                SubjectReference(id: $0, title: snapshot.projectTitle ?? "Untitled")
+            } : nil,
+            people: snapshot.people.map { SubjectReference(id: $0.id, title: $0.name) },
+            tagSlugs: snapshot.tagSlugs,
+            isBillable: snapshot.isBillable
+        )
+    }
+
+    init(
+        description: String = "",
+        subject: SubjectReference? = nil,
+        project: SubjectReference? = nil,
+        people: [SubjectReference] = [],
+        tagSlugs: [String] = [],
+        isBillable: Bool = false
+    ) {
+        self.description = description
+        self.subject = subject
+        self.project = project
+        self.people = people
+        self.tagSlugs = tagSlugs
+        self.isBillable = isBillable
+    }
 }
 
 /// An item referred to by a picker, without holding the item.
@@ -457,210 +577,4 @@ struct TimeEntryComposition: Equatable {
 struct SubjectReference: Equatable, Hashable, Identifiable {
     var id: UUID
     var title: String
-}
-
-// MARK: - Pickers
-
-/// What the time is against.
-///
-/// A popover rather than an always-open field: on the bar it has to sit beside five other controls,
-/// and a search field wide enough to be useful would crowd out the description — which is the field
-/// that has to be inviting, because it is the one that gets typed into every time.
-struct TimeSubjectPicker: View {
-    @Environment(\.services) private var services
-
-    let subject: SubjectReference?
-    let onPick: (SubjectReference?) -> Void
-
-    /// `nil` on surfaces with nowhere to navigate to, like a row inside a sheet.
-    var onOpen: ((UUID) -> Void)?
-
-    @State private var isPresented = false
-    @State private var query = ""
-    @State private var suggestions: [SubjectReference] = []
-    @FocusState private var isSearchFocused: Bool
-
-    var body: some View {
-        Button {
-            isPresented = true
-        } label: {
-            HStack(spacing: Theme.Spacing.tight) {
-                Image(systemName: subject == nil ? "folder.badge.plus" : "folder.fill")
-                if let subject {
-                    Text(subject.title)
-                        .lineLimit(1)
-                        .frame(maxWidth: 140, alignment: .leading)
-                }
-            }
-            .font(Theme.Text.rowSubtitle)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(subject == nil ? Theme.Colors.secondaryText : Theme.Colors.selection)
-        .help(subject.map { "Against “\($0.title)”" } ?? "Choose what this time is against")
-        .accessibilityLabel("Subject")
-        .accessibilityValue(subject?.title ?? "none")
-        .accessibilityIdentifier(AccessibilityID.Time.subjectPicker)
-        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-            popoverContent
-        }
-    }
-
-    private var popoverContent: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            TextField("Search tasks, projects, notes…", text: $query)
-                .textFieldStyle(.roundedBorder)
-                .focused($isSearchFocused)
-                .onChange(of: query) { _, text in updateSuggestions(for: text) }
-
-            if let subject {
-                Button("Clear “\(subject.title)”", systemImage: "xmark.circle") {
-                    onPick(nil)
-                    isPresented = false
-                }
-                .buttonStyle(.link)
-                .font(Theme.Text.metadata)
-
-                if let onOpen {
-                    Button("Open “\(subject.title)”", systemImage: "arrow.forward.square") {
-                        onOpen(subject.id)
-                        isPresented = false
-                    }
-                    .buttonStyle(.link)
-                    .font(Theme.Text.metadata)
-                }
-            }
-
-            if suggestions.isEmpty {
-                Text(query.count < 2 ? "Type two letters to search." : "Nothing matches.")
-                    .font(Theme.Text.metadata)
-                    .rowForeground(.tertiary)
-            } else {
-                ForEach(suggestions) { suggestion in
-                    Button(suggestion.title) {
-                        onPick(suggestion)
-                        query = ""
-                        suggestions = []
-                        isPresented = false
-                    }
-                    .buttonStyle(.link)
-                    .font(Theme.Text.rowSubtitle)
-                    .lineLimit(1)
-                }
-            }
-        }
-        .padding(Theme.Spacing.medium)
-        .frame(width: 280)
-        .onAppear { isSearchFocused = true }
-    }
-
-    private func updateSuggestions(for text: String) {
-        guard let services, text.count >= 2 else {
-            suggestions = []
-            return
-        }
-        Task {
-            let found = await services.search.titleSuggestions(prefix: text, limit: 6)
-            guard query == text else { return }
-            suggestions = found.map { SubjectReference(id: $0.id, title: $0.title) }
-        }
-    }
-}
-
-/// The tags on an entry.
-///
-/// the layout's tag picker is a checklist of what exists plus a field that creates. Both halves earn
-/// their place: the checklist is what stops a library growing `admin`, `Admin` and `adminstration`,
-/// and the field is what stops the checklist being a wall you have to leave to get past.
-struct TimeTagPicker: View {
-    @Environment(\.services) private var services
-
-    let slugs: [String]
-    let onChange: ([String]) -> Void
-
-    @State private var isPresented = false
-    @State private var newTag = ""
-    @State private var available: [String] = []
-
-    var body: some View {
-        Button {
-            available = (try? services?.tags.allTags().map(\.slug)) ?? []
-            isPresented = true
-        } label: {
-            HStack(spacing: Theme.Spacing.tight) {
-                Image(systemName: slugs.isEmpty ? "tag" : "tag.fill")
-                if !slugs.isEmpty {
-                    TagChipRow(slugs: slugs, limit: 2)
-                }
-            }
-            .font(Theme.Text.rowSubtitle)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(slugs.isEmpty ? Theme.Colors.secondaryText : Theme.Colors.selection)
-        .help(slugs.isEmpty ? "Add tags" : "Tagged \(slugs.joined(separator: ", "))")
-        .accessibilityLabel("Tags")
-        .accessibilityValue(slugs.isEmpty ? "none" : slugs.joined(separator: ", "))
-        .accessibilityIdentifier(AccessibilityID.Time.tagPicker)
-        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-            popoverContent
-        }
-    }
-
-    private var popoverContent: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            HStack(spacing: Theme.Spacing.tight) {
-                TextField("New tag", text: $newTag)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(addTyped)
-
-                Button("Add", action: addTyped)
-                    .disabled(newTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-
-            if available.isEmpty {
-                Text("No tags yet.")
-                    .font(Theme.Text.metadata)
-                    .rowForeground(.tertiary)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(available, id: \.self) { slug in
-                            Toggle(isOn: binding(for: slug)) {
-                                Text(slug).font(Theme.Text.rowSubtitle)
-                            }
-                            .toggleStyle(.checkbox)
-                        }
-                    }
-                }
-                .frame(maxHeight: 200)
-            }
-        }
-        .padding(Theme.Spacing.medium)
-        .frame(width: 240)
-    }
-
-    private func binding(for slug: String) -> Binding<Bool> {
-        Binding(
-            get: { slugs.contains(slug) },
-            set: { isOn in
-                onChange(isOn ? (slugs + [slug]).sorted() : slugs.filter { $0 != slug })
-            }
-        )
-    }
-
-    private func addTyped() {
-        let name = newTag.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-
-        // Normalised here rather than trusted from the field, so the checklist this reopens onto
-        // shows the tag that was actually created rather than the text that was typed.
-        let slug = TextNormalizer.slug(name)
-        guard !slug.isEmpty, !slugs.contains(slug) else {
-            newTag = ""
-            return
-        }
-
-        onChange((slugs + [slug]).sorted())
-        if !available.contains(slug) { available.append(slug) }
-        newTag = ""
-    }
 }

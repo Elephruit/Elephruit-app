@@ -64,11 +64,84 @@ public final class TimerService {
     /// timers silently rearranged.
     public private(set) var reconciledTimerCount = 0
 
+    // MARK: Focus
+
+    /// The focus cycle currently running, or `nil`.
+    ///
+    /// Deliberately **not** persisted. A pomodoro is a fact about the next twenty-five minutes of
+    /// your attention, and restoring one an hour after the app quit would resume a block nobody is
+    /// working. The *time* it produced is durable, because that is written to entries as it happens;
+    /// the intention behind it is not, and pretending otherwise would put a bell on the app that
+    /// rings for something the user has forgotten they started.
+    public private(set) var pomodoro: PomodoroSession?
+
+    /// The lengths a new cycle runs to. Owned by settings and pushed in here.
+    public var pomodoroPlan: PomodoroPlan = .standard
+
+    /// Whether a finished phase makes a sound.
+    public var playsPomodoroSound = true
+
+    /// A phase that has just ended and has not been acknowledged.
+    ///
+    /// The banner's content. A value rather than a callback so the same fact can be shown in the
+    /// Time view, in the menu bar, and asserted in a test.
+    public private(set) var finishedPhase: PomodoroPhase?
+
+    /// A stretch stopped with the intention of carrying on. See ``ElephruitCore/PausedTimer``.
+    ///
+    /// Not persisted, on the same terms as a focus cycle: an intention to carry on is a fact about
+    /// the next few minutes, and restoring one a day later would offer to resume work nobody
+    /// remembers pausing. The *time* is safe either way, because pausing stops the entry — which is
+    /// the whole reason pause is modelled this way.
+    public private(set) var paused: PausedTimer?
+
+    /// Told whenever an entry stops being the running one.
+    ///
+    /// ### Why a callback rather than the service doing the work
+    /// Because what wants to know lives *above* this layer — the calendar mirror is a feature, and
+    /// persistence cannot see it without the dependency graph pointing backwards. A closure keeps
+    /// the arrow the right way round and keeps this object testable with no calendar at all.
+    ///
+    /// Fired for every path that closes an entry: stopping, discarding, switching away, a break
+    /// beginning, and resolving an idle gap. Missing one of those means an entry that is finished in
+    /// the store and still open in whatever is mirroring it.
+    public var onEntryFinished: ((UUID) -> Void)?
+
+    /// What to time again when the break ends.
+    ///
+    /// Held as an id rather than as the entry, because a break can outlive a store change and a
+    /// `PersistentModel` cannot be kept across one. Resolved back into an entry at the moment the
+    /// next focus block begins, and if it has gone by then the block simply starts untethered rather
+    /// than refusing to start.
+    private var focusSubjectEntryID: UUID?
+
     public private(set) var lastError: AppError?
 
     private var tickTask: Task<Void, Never>?
     private var sleepObserver: (any NSObjectProtocol)?
     private var wakeObserver: (any NSObjectProtocol)?
+
+    /// Held while a timer runs, so the system does not throttle the thing being measured.
+    ///
+    /// ### Why this exists
+    /// App Nap. A Mac aggressively de-prioritises an application whose windows are not visible —
+    /// coalescing its timers, stretching its wakeups, and in the limit letting a one-second loop go
+    /// minutes between iterations. For nearly every kind of background work that is correct and
+    /// invisible. For a *stopwatch* it is the whole product failing: the reported behaviour was a
+    /// clock that did not move for fifteen seconds, moved once, and then sat still until a minute
+    /// and a half had gone — which is precisely the shape of a throttled process.
+    ///
+    /// And a timer is running exactly when the app is *not* frontmost. That is the point of it.
+    ///
+    /// `.userInitiatedAllowingIdleSystemSleep` is the narrowest option that does the job: it says
+    /// this work was asked for by a person and must not be coalesced away, while explicitly leaving
+    /// the Mac free to sleep when it is idle. Holding the machine awake would be a different and
+    /// much larger promise, and the sleep path is already handled deliberately — see
+    /// ``observeSleep()``, which writes a heartbeat on the way down and offers the gap on the way
+    /// back up.
+    ///
+    /// Released the moment nothing is running, so an app sitting idle asks nothing of the system.
+    private var activityAssertion: (any NSObjectProtocol)?
 
     /// The last heartbeat this process wrote, so ticking does not write on every second.
     private var lastHeartbeatWrite: Date?
@@ -112,6 +185,11 @@ public final class TimerService {
         tickTask?.cancel()
         tickTask = nil
 
+        if let assertion = activityAssertion {
+            ProcessInfo.processInfo.endActivity(assertion)
+            activityAssertion = nil
+        }
+
         let center = NSWorkspace.shared.notificationCenter
         if let sleepObserver { center.removeObserver(sleepObserver) }
         if let wakeObserver { center.removeObserver(wakeObserver) }
@@ -153,6 +231,20 @@ public final class TimerService {
             running = nil
             elapsed = 0
         }
+        updateActivityAssertion()
+    }
+
+    /// Takes the assertion when something starts running, and gives it back when nothing is.
+    private func updateActivityAssertion() {
+        if running != nil, activityAssertion == nil {
+            activityAssertion = ProcessInfo.processInfo.beginActivity(
+                options: .userInitiatedAllowingIdleSystemSleep,
+                reason: "A time entry is running"
+            )
+        } else if running == nil, let assertion = activityAssertion {
+            ProcessInfo.processInfo.endActivity(assertion)
+            activityAssertion = nil
+        }
     }
 
     public var isRunning: Bool { running != nil }
@@ -167,6 +259,8 @@ public final class TimerService {
     @discardableResult
     public func start(
         item: Item?,
+        project: Item? = nil,
+        people: [Item] = [],
         description: String = "",
         tagSlugs: [String] = [],
         isBillable: Bool = false
@@ -174,6 +268,8 @@ public final class TimerService {
         perform {
             try entries.start(
                 item: item,
+                project: project,
+                people: people,
                 description: description,
                 tagSlugs: tagSlugs,
                 isBillable: isBillable
@@ -185,13 +281,27 @@ public final class TimerService {
     @discardableResult
     public func switchTo(
         item: Item?,
+        project: Item? = nil,
+        people: [Item] = [],
         description: String = "",
         tagSlugs: [String] = [],
         isBillable: Bool = false
     ) -> Bool {
-        perform {
+        // Captured before the switch, because the entry that just finished is the one anything
+        // downstream cares about and it is no longer the running one afterwards.
+        let previous = running?.id
+        defer { previous.map { onEntryFinished?($0) } }
+
+        // A new piece of work is a new sitting. Carrying the old accumulation over would show the
+        // morning's total on the clock of the thing just started.
+        paused = nil
+        accumulatedBeforeCurrent = 0
+
+        return perform {
             try entries.switchTo(
                 item: item,
+                project: project,
+                people: people,
                 description: description,
                 tagSlugs: tagSlugs,
                 isBillable: isBillable
@@ -199,9 +309,104 @@ public final class TimerService {
         }
     }
 
+    /// Stops the timer, and with it any focus cycle riding on it.
+    ///
+    /// The cycle ends rather than pausing, because a pomodoro is a way of working on *something*,
+    /// and a cycle that outlived the thing it was counting would come back on the next unrelated
+    /// timer as a half-finished round nobody worked.
     @discardableResult
     public func stop() -> Bool {
-        perform { try entries.stopRunning(at: nil) }
+        pomodoro = nil
+        // Stopping while paused ends the sitting. The entry was already closed when it was paused,
+        // so there is nothing to write — only the intention to continue, which is what is dropped.
+        paused = nil
+        let stopping = running?.id
+        let outcome = perform { try entries.stopRunning(at: nil) }
+        stopping.map { onEntryFinished?($0) }
+        return outcome
+    }
+
+    // MARK: Pausing
+
+    /// Stops the entry and remembers what to carry on with.
+    ///
+    /// The gap is genuinely not tracked — that is what a pause is — and the entry it closes is a
+    /// real, finished stretch. Resuming opens another. See ``ElephruitCore/PausedTimer`` for why
+    /// that is the honest shape rather than one entry with a hole in it.
+    @discardableResult
+    public func pause() -> Bool {
+        guard let running else { return false }
+
+        let worked = (paused?.accumulated ?? 0) + running.elapsed(at: dateProvider.now)
+        let title = running.displayTitle
+        let identifier = running.id
+
+        // The cycle stops too. A pomodoro counting down over work that is not happening is a bell
+        // that will ring for a block nobody worked.
+        pomodoro = nil
+
+        guard perform({ try entries.stopRunning(at: nil) }) else { return false }
+        onEntryFinished?(identifier)
+
+        paused = PausedTimer(id: identifier, displayTitle: title, accumulated: worked)
+        return true
+    }
+
+    /// Carries on from a pause, with everything the paused entry was filed under.
+    @discardableResult
+    public func resumeFromPause() -> Bool {
+        guard let paused else { return false }
+
+        let carried = paused.accumulated
+        let outcome = perform {
+            guard let entry = try entries.entry(id: paused.id) else { return nil }
+            return try entries.resume(entry)
+        }
+
+        // Cleared whether or not the entry could be found: one deleted while paused is not something
+        // anybody can carry on with, and leaving the widget offering to would be a button that does
+        // nothing forever.
+        self.paused = nil
+
+        // Carried, so the clock reads the whole sitting rather than restarting at zero.
+        accumulatedBeforeCurrent = outcome ? carried : 0
+        return outcome
+    }
+
+    /// Starts the current work again from zero, keeping what has been recorded so far.
+    ///
+    /// ### Why this does not simply reset the clock
+    /// Because resetting it would throw away the time already worked, and a button that silently
+    /// deletes an hour sits one pixel from Pause. This closes the current stretch — that time is
+    /// kept, and the log collapses it in with the rest — and opens a fresh one on the same work. The
+    /// clock returns to zero, which is what was asked for, and nothing is lost to get there.
+    @discardableResult
+    public func restart() -> Bool {
+        guard let running else { return false }
+
+        let identifier = running.id
+        let outcome = perform {
+            guard let entry = try entries.entry(id: identifier) else { return nil }
+            return try entries.resume(entry)
+        }
+        onEntryFinished?(identifier)
+
+        // A restart is a fresh sitting: the clock reads this stretch and no earlier one.
+        accumulatedBeforeCurrent = 0
+        paused = nil
+        return outcome
+    }
+
+    /// What earlier stretches of this sitting came to, so a resumed clock does not restart at zero.
+    ///
+    /// Reset whenever a genuinely new piece of work starts. Presentation only — no report and no
+    /// entry ever reads it.
+    public private(set) var accumulatedBeforeCurrent: TimeInterval = 0
+
+    /// What the floating timer shows: this stretch plus every earlier one in the same sitting.
+    public func sittingElapsed(at now: Date) -> TimeInterval {
+        if let running { return accumulatedBeforeCurrent + running.elapsed(at: now) }
+        return paused?.accumulated ?? 0
     }
 
     /// Throws the running timer away rather than recording it.
@@ -210,7 +415,15 @@ public final class TimerService {
     /// happened, this says the timer should never have been running.
     @discardableResult
     public func discard() -> Bool {
-        perform { try entries.discardRunning() }
+        pomodoro = nil
+        paused = nil
+        accumulatedBeforeCurrent = 0
+        let discarding = running?.id
+        let outcome = perform { try entries.discardRunning() }
+        // Announced like any other ending, because a discarded entry may have a copy elsewhere that
+        // now has to be taken back.
+        discarding.map { onEntryFinished?($0) }
+        return outcome
     }
 
     // MARK: Editing what is running
@@ -241,6 +454,26 @@ public final class TimerService {
         perform {
             guard let running = try entries.runningEntry() else { return nil }
             try entries.setTags(slugs, on: running)
+            return running
+        }
+    }
+
+    /// Replaces who is here on the running entry.
+    @discardableResult
+    public func setPeople(_ people: [Item]) -> Bool {
+        perform {
+            guard let running = try entries.runningEntry() else { return nil }
+            try entries.setPeople(people, on: running)
+            return running
+        }
+    }
+
+    /// Points the running entry at a project, overriding the derived one.
+    @discardableResult
+    public func setProject(_ project: Item?) -> Bool {
+        perform {
+            guard let running = try entries.runningEntry() else { return nil }
+            try entries.setProject(project, on: running)
             return running
         }
     }
@@ -314,6 +547,174 @@ public final class TimerService {
         reconciledTimerCount = 0
     }
 
+    // MARK: - Focus cycles
+
+    /// Whether a focus cycle is running.
+    public var isFocusing: Bool { pomodoro != nil }
+
+    /// Starts a focus cycle over whatever is being timed, starting the timer if nothing is.
+    ///
+    /// One button rather than two. *Start a pomodoro* and *start a timer* are the same intention
+    /// stated at two levels of detail, and a user who has to do both in order has to be told about
+    /// both — which is one explanation more than the feature is worth.
+    @discardableResult
+    public func startFocus(
+        item: Item? = nil,
+        project: Item? = nil,
+        people: [Item] = [],
+        description: String = "",
+        tagSlugs: [String] = [],
+        isBillable: Bool = false
+    ) -> Bool {
+        if running == nil {
+            let started = switchTo(
+                item: item,
+                project: project,
+                people: people,
+                description: description,
+                tagSlugs: tagSlugs,
+                isBillable: isBillable
+            )
+            guard started else { return false }
+        }
+
+        pomodoro = .starting(pomodoroPlan, at: dateProvider.now)
+        focusSubjectEntryID = running?.id
+        finishedPhase = nil
+        return true
+    }
+
+    /// Ends the cycle, leaving whatever is being timed alone.
+    ///
+    /// Two separate things end separately, on purpose: somebody who has finished counting rounds is
+    /// usually still working, and a button that stopped their timer as well would be one they press
+    /// once.
+    public func endFocus() {
+        pomodoro = nil
+        focusSubjectEntryID = nil
+        finishedPhase = nil
+    }
+
+    public func pauseFocus() {
+        guard let pomodoro else { return }
+        self.pomodoro = pomodoro.paused(at: dateProvider.now)
+    }
+
+    public func resumeFocus() {
+        guard let pomodoro else { return }
+        self.pomodoro = pomodoro.resumed(at: dateProvider.now)
+    }
+
+    /// Moves to the next phase now, without crediting the one being left.
+    ///
+    /// Skipping a focus block does **not** count it, for the reason the counter exists: a round is
+    /// something you worked, and a streak the app hands out for pressing Skip is not a measurement
+    /// of anything.
+    public func skipFocusPhase() {
+        guard let pomodoro else { return }
+        let now = dateProvider.now
+
+        if pomodoro.phase == .focus {
+            // The block was not finished, so it is not counted — but the *time* still happened and
+            // stays on the entry. Only the intention was abandoned.
+            self.pomodoro = PomodoroSession(
+                plan: pomodoro.plan,
+                phase: pomodoro.nextPhase,
+                runningSince: now,
+                completedFocusRounds: pomodoro.completedFocusRounds
+            )
+            stopForBreak(at: now)
+        } else {
+            self.pomodoro = pomodoro.advanced(at: now, running: true)
+            beginFocusBlock()
+        }
+
+        finishedPhase = nil
+    }
+
+    /// Dismisses the banner about a phase that has ended.
+    public func acknowledgeFinishedPhase() {
+        finishedPhase = nil
+    }
+
+    /// Starts the phase that is waiting, when it was not set to start on its own.
+    public func beginWaitingPhase() {
+        guard let pomodoro, pomodoro.isPaused else { return }
+        self.pomodoro = pomodoro.resumed(at: dateProvider.now)
+        finishedPhase = nil
+
+        if pomodoro.phase == .focus { beginFocusBlock() }
+    }
+
+    /// Advances the cycle when a phase has run its length.
+    private func advanceFocusIfDue(at now: Date) {
+        guard let session = pomodoro, !session.isPaused, session.hasFinishedPhase(at: now) else { return }
+
+        if session.phase == .focus {
+            creditFocusRound()
+        }
+
+        let continues = session.nextPhaseStartsAutomatically
+        let next = session.advanced(at: now, running: continues)
+        pomodoro = next
+
+        // The timer follows the phase. A break is not work, so it is not tracked — the alternative
+        // is a day whose totals include forty minutes of coffee, which makes every number on the
+        // screen an estimate.
+        if next.phase.isBreak {
+            stopForBreak(at: now)
+        } else if continues {
+            beginFocusBlock()
+        }
+
+        announce(session.phase)
+    }
+
+    /// Counts the block that has just finished, on the entry it was worked against.
+    private func creditFocusRound() {
+        do {
+            guard let entry = try entries.runningEntry() else { return }
+            try entries.noteFocusRound(on: entry)
+        } catch {
+            // A lost count costs a number on a report, not correctness of any recorded time. Logged
+            // rather than surfaced: an alert every twenty-five minutes would be worse than the miss.
+            Diagnostics.persistence.error("Focus round not recorded: \(error.summary, privacy: .public)")
+        }
+    }
+
+    /// Stops the timer for a break, remembering what to resume afterwards.
+    private func stopForBreak(at now: Date) {
+        guard let stopping = running?.id else { return }
+        focusSubjectEntryID = stopping
+        _ = perform { try entries.stopRunning(at: now) }
+        onEntryFinished?(stopping)
+    }
+
+    /// Times the same thing again for the next focus block.
+    private func beginFocusBlock() {
+        guard running == nil else { return }
+        _ = perform {
+            guard let id = focusSubjectEntryID, let previous = try entries.entry(id: id) else { return nil }
+            let resumed = try entries.resume(previous)
+            return resumed
+        }
+        focusSubjectEntryID = running?.id ?? focusSubjectEntryID
+    }
+
+    /// Says a phase has ended, as loudly as an app with no notification permission can.
+    ///
+    /// ### Why this is not a Notification Center alert
+    /// Because that needs a permission prompt, and this app has never shown one. Asking for
+    /// notification access is a decision with its own settings row and its own explanation of what
+    /// will and will not be sent — not something to acquire as a side effect of a focus timer. Until
+    /// that is built, a sound and a bouncing icon reach somebody in another app, which is the case
+    /// that matters, and the banner in the Time view says what happened when they come back.
+    private func announce(_ phase: PomodoroPhase) {
+        finishedPhase = phase
+        if playsPomodoroSound { NSSound.beep() }
+        NSApp?.requestUserAttention(.informationalRequest)
+    }
+
     // MARK: - Recovery
 
     /// Applies the user's decision, and only the user's decision.
@@ -328,6 +729,7 @@ public final class TimerService {
             try entries.resolveRecovery(choice, for: entry)
             pendingRecovery = nil
             refresh()
+            onEntryFinished?(pending.id)
         } catch {
             lastError = error
         }
@@ -352,6 +754,7 @@ public final class TimerService {
             try entries.resolveIdle(choice, for: pending)
             pendingIdle = nil
             refresh()
+            onEntryFinished?(pending.id)
         } catch {
             lastError = error
         }
@@ -377,6 +780,13 @@ public final class TimerService {
             return
         }
 
+        // Nobody is at the machine during a break. That is what a break is, and asking about it
+        // afterwards would be the app noticing its own instruction being followed.
+        if let pomodoro, pomodoro.phase.isBreak, !pomodoro.isPaused {
+            idleDetector.reset()
+            return
+        }
+
         let gap = idleDetector.observe(
             secondsSinceInput: idleClock.secondsSinceLastInput,
             now: now,
@@ -396,11 +806,27 @@ public final class TimerService {
 
     // MARK: - Ticking and heartbeat
 
+    /// The clock that drives the heartbeat, idle detection, and the focus cycle.
+    ///
+    /// ### Why the tolerance is spelled out
+    /// `Task.sleep(for:)` carries a **default tolerance the system is free to use**, and on a Mac it
+    /// uses it: wakeups are coalesced with whatever else is waiting so the CPU can stay asleep
+    /// longer. For most work that is exactly right and invisible. For this it was neither — the
+    /// observed behaviour was a timer that sat still for fifteen seconds, jumped, then sat still
+    /// until a minute and a half had passed.
+    ///
+    /// `.zero` asks for the second to actually be a second. It costs one wakeup per second while a
+    /// timer runs, which is the thing being paid for, and nothing at all when none is.
+    ///
+    /// The *displayed* clock no longer depends on this at all — see `TimeTrackerCard`, which derives
+    /// what it draws from the entry's start date on SwiftUI's own cadence. Two independent
+    /// mechanisms, because a clock that stops moving is the one bug in a time tracker that makes
+    /// every other feature untrustworthy.
     private func startTicking() {
         tickTask?.cancel()
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: .seconds(1), tolerance: .zero)
                 guard let self, !Task.isCancelled else { return }
                 tick()
             }
@@ -409,6 +835,11 @@ public final class TimerService {
 
     private func tick() {
         let now = dateProvider.now
+
+        // Before the early return, because a break is a phase with no timer running and it still has
+        // to end. A cycle that only advanced while something was being tracked would sit on the
+        // screen at 0:00 until somebody started working again.
+        advanceFocusIfDue(at: now)
 
         guard let running else {
             elapsed = 0

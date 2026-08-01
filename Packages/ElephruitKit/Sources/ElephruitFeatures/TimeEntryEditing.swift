@@ -26,6 +26,72 @@ struct TimeEntrySpan: Equatable {
     var endedAt: Date?
 }
 
+// MARK: - Live durations
+
+/// A duration that keeps moving while something under it is still running.
+///
+/// ### Why the log needs this at all
+/// Because it did not have it, and the result was a card reading `0:25` directly above a row
+/// reading `0:00` for the same stretch of work. The log is rebuilt from a snapshot taken when the
+/// view last reloaded, which is right for ninety-nine rows out of a hundred and wrong for the one
+/// that has not finished yet.
+///
+/// `since` is the moment the running stretch began, and `nil` for everything settled — which is
+/// almost every row, and those pay nothing: no timeline, no redraw, just the number they were
+/// given. Only a day that contains a running entry costs a redraw a second, and only for as long
+/// as it does.
+struct LiveDuration: View {
+    /// What the duration is when nothing is running: the settled total.
+    let base: TimeInterval
+
+    /// When the still-running stretch started, or `nil` if none is.
+    let since: Date?
+
+    let font: Font
+
+    /// Whether to count in seconds rather than in hours and minutes.
+    ///
+    /// ### Why this is not simply "is it running"
+    /// Because it depends on what the number is *of*. A single stretch that is still going is the
+    /// same stretch the tracker is showing at the top of the screen, and the two must agree — the
+    /// version that did not was genuinely alarming to read: a card saying `0:56` above a row saying
+    /// `0:01` looks like the log has lost fifty-five seconds, when in fact one was counting seconds
+    /// and the other minutes. A *day's* total is a different quantity that nobody reads to the
+    /// second, and `4:25:13` in a section header is noise pretending to be precision.
+    var countsSeconds = false
+
+    var body: some View {
+        if let since {
+            TimelineView(.periodic(from: since, by: 1)) { context in
+                text(base + max(0, context.date.timeIntervalSince(since)))
+                    .contentTransition(.numericText())
+            }
+        } else {
+            text(base)
+        }
+    }
+
+    private func text(_ interval: TimeInterval) -> some View {
+        Text(countsSeconds ? TimeFormatting.stopwatch(interval) : TimeFormatting.short(interval))
+            .font(font)
+            .monospacedDigit()
+    }
+}
+
+// MARK: - Measure
+
+extension View {
+    /// Caps a log row at the module's measure and keeps it left-aligned.
+    ///
+    /// The same reason the tracker is capped: a row whose description sits at the far left and whose
+    /// total sits at the far right of a wide screen has to be read across two feet of nothing, and
+    /// joining the two by eye is the only thing anybody does with a log.
+    func measuredRow() -> some View {
+        frame(maxWidth: TimeView.measure, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 // MARK: - Day header
 
 /// The header over one day of the log, and what that day came to.
@@ -53,9 +119,11 @@ struct TimeDayHeader: View {
                     .rowForeground(.tertiary)
             }
 
-            Text(TimeFormatting.short(section.total))
-                .font(Theme.Text.sectionHeader)
-                .monospacedDigit()
+            LiveDuration(
+                base: section.settledTotal,
+                since: section.runningSince,
+                font: Theme.Text.sectionHeader
+            )
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(section.title), \(TimeFormatting.spelled(section.total)) tracked")
@@ -76,6 +144,8 @@ struct TimeDayHeader: View {
 /// list buries under eight near-identical lines.
 struct TimeEntryGroupRow: View {
     @Environment(\.services) private var services
+
+    @State private var isHovering = false
 
     let group: TimeEntryGroup
     let isExpanded: Bool
@@ -132,7 +202,7 @@ struct TimeEntryGroupRow: View {
         HStack(spacing: Theme.Spacing.small) {
             countBadge
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+            VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: Theme.Spacing.small) {
                     Text(group.displayTitle)
                         .font(Theme.Text.rowTitle)
@@ -146,24 +216,15 @@ struct TimeEntryGroupRow: View {
                     }
                 }
 
-                HStack(spacing: Theme.Spacing.small) {
-                    Text(spanDescription)
-                        .font(Theme.Text.metadata)
-                        .rowForeground(.tertiary)
-                        .monospacedDigit()
-
-                    if let project = group.lead?.projectTitle {
-                        Text(project)
-                            .font(Theme.Text.metadata)
-                            .rowForeground(.tertiary)
-                    }
-
-                    if let source = group.lead?.source, source != .timer, group.isSingle {
-                        Text(source.displayName)
-                            .font(Theme.Text.metadata)
-                            .rowForeground(.tertiary)
-                    }
-                }
+                // ### Why this line is separated rather than spaced
+                // It carries up to five unrelated facts — the span, the project, who was there, how
+                // the entry was made, how many focus blocks it holds — and five things separated
+                // only by a gap read as one run-on phrase. A middle dot is what tells the eye where
+                // one fact ends, and it costs nothing when there is only one of them.
+                Text(metadataLine)
+                    .font(Theme.Text.metadata)
+                    .rowForeground(.tertiary)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: Theme.Spacing.small)
@@ -178,9 +239,31 @@ struct TimeEntryGroupRow: View {
                     .accessibilityLabel("Billable")
             }
 
-            Text(TimeFormatting.short(group.total))
-                .font(Theme.Text.rowTitle)
-                .monospacedDigit()
+            // Fixed width, so the durations form a column: a list of times starting at a different
+            // x on every row cannot be added up by eye, which is the only reason to read one.
+            LiveDuration(
+                base: group.settledTotal,
+                since: group.runningSince,
+                font: Theme.Text.rowTitle,
+                countsSeconds: group.isRunning
+            )
+            .frame(width: 64, alignment: .trailing)
+
+            // ### Why editing is a visible button and not only a double-click
+            // Because a double-click is not an affordance. Every entry in this log can be corrected
+            // in place — the subject, the people, the tags, the clock times — and none of that is
+            // worth having if the only way to reach it is a gesture nobody is told about. A pencil
+            // on hover costs nothing when the pointer is elsewhere and answers the question the
+            // moment it arrives. The double-click still works, and so does the context menu.
+            Button(action: onEdit) {
+                Image(systemName: "pencil")
+            }
+            .buttonStyle(.plain)
+            .rowForeground(.secondary)
+            .opacity(isHovering ? 1 : 0)
+            .help("Edit this entry")
+            .accessibilityLabel("Edit")
+            .accessibilityIdentifier(AccessibilityID.Time.editRowButton)
 
             Button(action: onResume) {
                 Image(systemName: "play.circle")
@@ -190,12 +273,37 @@ struct TimeEntryGroupRow: View {
             .help("Continue this")
             .accessibilityLabel("Continue")
         }
-        .frame(minHeight: Theme.Size.rowHeight)
+        .frame(minHeight: Theme.Size.rowHeightExpanded)
         .contentShape(.rect)
+        .onHover { isHovering = $0 }
+        .calmAnimation(value: isHovering)
         .onTapGesture(count: 2, perform: onEdit)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityDescription)
         .accessibilityAddTraits(.isButton)
+    }
+
+    /// The second line: everything true of the row that is not its title.
+    private var metadataLine: String {
+        var parts = [spanDescription]
+
+        if let project = group.lead?.projectTitle { parts.append(project) }
+
+        if let people = group.lead?.people, !people.isEmpty {
+            parts.append(people.count <= 2
+                ? "with \(people.map(\.name).joined(separator: " and "))"
+                : "with \(people.count) people")
+        }
+
+        if let rounds = group.lead?.focusRounds, rounds > 0 {
+            parts.append(rounds == 1 ? "1 focus block" : "\(rounds) focus blocks")
+        }
+
+        if let source = group.lead?.source, source != .timer, group.isSingle {
+            parts.append(source.displayName)
+        }
+
+        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     /// The count, or the running dot, or nothing.
@@ -246,12 +354,7 @@ struct TimeEntryGroupRow: View {
 
     private var composition: TimeEntryComposition {
         guard let lead = group.lead else { return TimeEntryComposition() }
-        return TimeEntryComposition(
-            description: lead.entryDescription,
-            subject: lead.itemID.map { SubjectReference(id: $0, title: lead.itemTitle ?? "Untitled") },
-            tagSlugs: lead.tagSlugs,
-            isBillable: lead.isBillable
-        )
+        return TimeEntryComposition(lead)
     }
 
     private var accessibilityDescription: String {
@@ -321,10 +424,13 @@ struct TimeEntryRow: View {
 
             Spacer(minLength: Theme.Spacing.small)
 
-            Text(TimeFormatting.short(entry.duration(at: services?.dateProvider.now ?? Date())))
-                .font(Theme.Text.rowSubtitle)
-                .monospacedDigit()
-                .rowForeground(.secondary)
+            LiveDuration(
+                base: entry.isRunning ? 0 : entry.duration(),
+                since: entry.isRunning ? entry.startedAt : nil,
+                font: Theme.Text.rowSubtitle,
+                countsSeconds: entry.isRunning
+            )
+            .rowForeground(.secondary)
         }
         .padding(.leading, Theme.Spacing.section)
         .frame(minHeight: Theme.Size.rowHeight)
@@ -342,12 +448,7 @@ struct TimeEntryRow: View {
     }
 
     private var composition: TimeEntryComposition {
-        TimeEntryComposition(
-            description: entry.entryDescription,
-            subject: entry.itemID.map { SubjectReference(id: $0, title: entry.itemTitle ?? "Untitled") },
-            tagSlugs: entry.tagSlugs,
-            isBillable: entry.isBillable
-        )
+        TimeEntryComposition(entry)
     }
 }
 
@@ -382,14 +483,15 @@ struct TimeEntryEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            HStack(spacing: Theme.Spacing.small) {
-                TextField("Description", text: $draft.description)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($isDescriptionFocused)
-                    .onSubmit(commit)
+            TextField("Description", text: $draft.description)
+                .textFieldStyle(.roundedBorder)
+                .focused($isDescriptionFocused)
+                .onSubmit(commit)
 
+            ElephruitDesign.FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
                 TimeSubjectPicker(subject: draft.subject) { draft.subject = $0 }
-
+                TimeProjectPicker(project: draft.project) { draft.project = $0 }
+                TimePeoplePicker(people: draft.people) { draft.people = $0 }
                 TimeTagPicker(slugs: draft.tagSlugs) { draft.tagSlugs = $0 }
             }
 

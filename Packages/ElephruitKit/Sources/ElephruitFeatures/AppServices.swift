@@ -41,6 +41,28 @@ public final class AppServices {
     /// The running timer, its heartbeat, and any recovery awaiting an answer.
     public let timer: TimerService
 
+    /// Tracked time written out to a calendar. Off, and outbound only — see ``TimeCalendarMirror``.
+    public let timeMirror: TimeCalendarMirror
+
+    /// The app collapsed to its clock, and whether it currently is.
+    ///
+    /// Built lazily on first use, because an app nobody collapses should never construct a panel.
+    /// Held here rather than per window: collapsing is a statement about the *application*, and two
+    /// windows racing to hide each other would be two mini timers and no way back.
+    ///
+    /// `@ObservationIgnored` because the *reference* never changes and there is nothing to observe
+    /// about it — and because the `@Observable` macro cannot rewrite a `lazy` stored property at
+    /// all. What views actually watch is the controller's own state, and `MiniTimerController` is
+    /// `@Observable` in its own right.
+    @ObservationIgnored
+    public private(set) lazy var miniTimer = MiniTimerController(services: self, defaults: defaults)
+
+    /// Where this machine's preferences live.
+    ///
+    /// Held rather than reached for, so a preview or a test can hand over a throwaway suite and not
+    /// have a focus-cycle length leak into the real one.
+    let defaults: UserDefaults
+
     /// The user's calendar: what it holds, which sets are saved, and every write.
     ///
     /// Off until the user turns it on, on the same terms as Contacts.
@@ -259,6 +281,7 @@ public final class AppServices {
         self.stack = stack
         self.dateProvider = dateProvider
         self.isDevelopmentMode = isDevelopmentMode
+        self.defaults = defaults
         self.shortcuts = ShortcutRegistry.load(from: .standard)
 
         // The main-actor context. Background work creates its own from the container.
@@ -354,13 +377,20 @@ public final class AppServices {
 
         // The provider is built lazily, and only when the feature is enabled — so an app that never
         // turns the calendar on never constructs an `EKEventStore` and never prompts.
-        self.calendar = CalendarService(
+        let calendar = CalendarService(
             dateProvider: dateProvider,
             defaults: defaults,
             index: calendarSearch,
             sets: calendarSets,
             annotations: eventLinks,
             makeProvider: calendarProvider ?? { EventKitCalendarProvider() }
+        )
+        self.calendar = calendar
+        self.timeMirror = TimeCalendarMirror(
+            entries: timeEntries,
+            calendar: calendar,
+            dateProvider: dateProvider,
+            defaults: defaults
         )
         self.people = PeopleService(items: items, dateProvider: dateProvider)
 
@@ -460,6 +490,71 @@ public final class AppServices {
         services.refreshDerivedState()
         return services
     }
+
+    // MARK: - Time tracking
+
+    /// Starts the timer, and connects it to everything that has to hear about a finished entry.
+    ///
+    /// The wiring lives here rather than in the initialiser because it is a *behaviour* the app
+    /// switches on once the window is up, and because a preview or a test that builds services and
+    /// never calls this gets a timer that touches no calendar at all.
+    public func startTimeTracking() {
+        timer.pomodoroPlan = storedPomodoroPlan
+        timer.playsPomodoroSound = defaults.object(forKey: "time.pomodoro.sound") as? Bool ?? true
+
+        timer.onEntryFinished = { [weak self] id in
+            guard let self else { return }
+            // Detached from the write that produced it: a calendar round trip must never sit between
+            // pressing Stop and the clock reading zero.
+            Task { await self.timeMirror.synchronise(entryID: id) }
+        }
+
+        timer.start()
+        timeMirror.refreshCount()
+    }
+
+    /// The focus-cycle lengths, as settings last left them.
+    ///
+    /// In `UserDefaults` rather than the store because they are a preference about how *this person*
+    /// works, carry nothing anybody else would want, and must not travel in an archive.
+    public var storedPomodoroPlan: PomodoroPlan {
+        get {
+            let standard = PomodoroPlan.standard
+            return PomodoroPlan(
+                focus: defaults.object(forKey: "time.pomodoro.focus") as? Double ?? standard.focus,
+                shortBreak: defaults.object(forKey: "time.pomodoro.shortBreak") as? Double
+                    ?? standard.shortBreak,
+                longBreak: defaults.object(forKey: "time.pomodoro.longBreak") as? Double
+                    ?? standard.longBreak,
+                roundsBeforeLongBreak: defaults.object(forKey: "time.pomodoro.rounds") as? Int
+                    ?? standard.roundsBeforeLongBreak,
+                startsBreaksAutomatically: defaults.object(forKey: "time.pomodoro.autoBreak") as? Bool
+                    ?? standard.startsBreaksAutomatically,
+                startsNextFocusAutomatically: defaults.object(forKey: "time.pomodoro.autoFocus") as? Bool
+                    ?? standard.startsNextFocusAutomatically
+            )
+        }
+        set {
+            defaults.set(newValue.focus, forKey: "time.pomodoro.focus")
+            defaults.set(newValue.shortBreak, forKey: "time.pomodoro.shortBreak")
+            defaults.set(newValue.longBreak, forKey: "time.pomodoro.longBreak")
+            defaults.set(newValue.roundsBeforeLongBreak, forKey: "time.pomodoro.rounds")
+            defaults.set(newValue.startsBreaksAutomatically, forKey: "time.pomodoro.autoBreak")
+            defaults.set(newValue.startsNextFocusAutomatically, forKey: "time.pomodoro.autoFocus")
+            // Pushed straight through, so a length changed mid-afternoon applies to the next block
+            // rather than to the next launch.
+            timer.pomodoroPlan = newValue
+        }
+    }
+
+    /// Brings the calendar copy of one entry into line, if the mirror is on.
+    ///
+    /// Called after an edit or a deletion. Costs a `Task` and an immediate return when the mirror is
+    /// off, which is the common case.
+    public func mirrorTime(entryID: UUID) {
+        Task { await timeMirror.synchronise(entryID: entryID) }
+    }
+
 
     // MARK: - Error handling
 
@@ -757,6 +852,19 @@ extension EnvironmentValues {
 }
 
 extension View {
+    /// Re-injects services into a sheet, which starts a fresh environment of its own.
+    ///
+    /// `nil` passes through untouched rather than crashing: a sheet presented before the library is
+    /// open has nothing to show, and the views inside already handle an absent store.
+    @ViewBuilder
+    public func appServicesIfAvailable(_ services: AppServices?) -> some View {
+        if let services {
+            appServices(services)
+        } else {
+            self
+        }
+    }
+
     public func appServices(_ services: AppServices) -> some View {
         environment(\.services, services)
             .modelContext(services.context)

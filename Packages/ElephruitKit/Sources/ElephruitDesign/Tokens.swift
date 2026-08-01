@@ -180,6 +180,13 @@ extension Theme {
         /// Selection. Follows the user's accent colour.
         public static let selection = Color.accentColor
 
+        /// What is legible *on top of* ``selection`` — a filled button, a selected pill.
+        ///
+        /// Not white. White is right under a blue accent and poor under a yellow one, and this is
+        /// the AppKit token that already knows which: it is the colour the system paints on its own
+        /// prominent controls, and it tracks the accent, the appearance, and Increase Contrast.
+        public static let onAccent = Color(nsColor: .alternateSelectedControlTextColor)
+
         /// The fill under whatever the pointer is over.
         ///
         /// Deliberately *not* ``selection``. Hover answers "what would I hit if I clicked here";
@@ -215,15 +222,6 @@ extension Theme {
         /// Teal rather than green, which already means *completed*, and rather than blue, which is
         /// the default accent and so would be indistinguishable from selection on half the screen.
         public static let personalDetail = Color(nsColor: .systemTeal)
-
-        /// Text or a glyph drawn on top of a filled, saturated swatch.
-        ///
-        /// Not `Color.white`, which is what this replaces in four places. White is legible on a
-        /// saturated fill and wrong everywhere the fill is not saturated — under Increase Contrast,
-        /// where AppKit lightens some fills, and on the pale end of an intensity scale, where white
-        /// on near-white is invisible. `alternateSelectedControlTextColor` is AppKit's own token for
-        /// exactly this question and answers it per appearance.
-        public static let onAccent = Color(nsColor: .alternateSelectedControlTextColor)
 
         /// The accent for the capture surfaces — Quick Jot and the person capture sheets.
         ///
