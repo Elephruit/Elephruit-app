@@ -1,5 +1,5 @@
 import ElephruitCore
-import ElephruitFeatures
+@testable import ElephruitFeatures
 import ElephruitModel
 import ElephruitPersistence
 import Foundation
@@ -328,6 +328,38 @@ struct PeopleWorkspaceTests {
         #expect(fields.name == "Theo Ramirez")
         #expect(fields.emails == ["theo.ramirez@example.com"])
         #expect(fields.phones == ["512-555-0155"])
+    }
+
+    /// Why the plus button opens a form rather than the command bar.
+    ///
+    /// The bar creates people only from `add`/`new`; a bare name is a search, and a search is not
+    /// runnable. So the most natural thing to type after pressing a plus was the one thing the bar
+    /// could not act on. If this ever starts passing as a creation, the form is no longer the only
+    /// honest answer to that button — but it is still the expected one.
+    @Test("A bare name is a search the command bar cannot run")
+    func bareNameIsNotRunnable() throws {
+        let services = makeServices()
+        let command = services.commandParser.parse("Theo Ramirez", context: CommandContext())
+
+        guard case .search = command.intent else {
+            Issue.record("expected a search, got \(command.intent)")
+            return
+        }
+        #expect(!command.isRunnable)
+    }
+
+    @Test("The new-person form leaves untouched fields unset rather than empty")
+    func newPersonFormOmitsBlankFields() throws {
+        let draft = NewPersonSheet.draft(
+            name: "  Theo Ramirez  ", organization: "", role: "  ",
+            email: "theo.ramirez@example.com", phone: ""
+        )
+
+        #expect(draft.fullName == "Theo Ramirez")
+        #expect(draft.organizationName == nil)
+        #expect(draft.roleTitle == nil, "a blank role must not become a role of empty string")
+        #expect(draft.emails.map { $0.value } == ["theo.ramirez@example.com"])
+        #expect(draft.phones.isEmpty)
     }
 
     /// Scenario 5, at the point where the app hands off to the system.
