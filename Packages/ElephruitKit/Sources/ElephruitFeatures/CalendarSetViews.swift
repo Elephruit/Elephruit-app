@@ -209,7 +209,7 @@ struct CalendarSetEditorView: View {
                         }
                     }
 
-                    Picker("Colour", selection: colorBinding) {
+                    Picker("Color", selection: colorBinding) {
                         ForEach(Theme.Palette.allCases, id: \.rawValue) { entry in
                             Text(entry.displayName).tag(entry.rawValue)
                         }

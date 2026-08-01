@@ -106,13 +106,15 @@ public final class PersonWorkspaceService {
         }
     }
 
-    /// Whether a task reads as a promise the user made rather than a job they gave themselves.
+    /// Whether a task reads as something the user owes somebody rather than a job they gave
+    /// themselves.
     ///
     /// Tagged, not inferred from wording. Guessing at "I said I'd…" would be a language model
-    /// pretending to be a rule, and the cost of a wrong guess here is a promise list the user stops
-    /// trusting.
+    /// pretending to be a rule, and the cost of a wrong guess here is a list the user stops trusting.
+    /// Which tags count is ``TagConventions/owed``, so this and the view that hides the marker from a
+    /// chip row cannot disagree about it.
     static func isPromise(_ item: Item) -> Bool {
-        item.kind == .task && item.tagSlugs.contains { $0 == "promise" || $0.hasSuffix("/promise") }
+        item.kind == .task && item.tagSlugs.contains { TagConventions.marksOwed($0) }
     }
 
     static func otherPeople(in item: Item, excluding personID: UUID) -> [PersonReference] {

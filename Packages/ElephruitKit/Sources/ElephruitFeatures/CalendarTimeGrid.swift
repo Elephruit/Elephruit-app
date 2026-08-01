@@ -473,12 +473,16 @@ private struct HourRuler: View {
                         .font(Theme.Text.keyHint)
                         .monospacedDigit()
                         .foregroundStyle(Theme.Colors.tertiaryText)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
 
                     if let secondary = display.secondaryZone {
                         Text(label(hour: hour, in: secondary))
                             .font(Theme.Text.keyHint)
                             .monospacedDigit()
                             .foregroundStyle(Theme.Colors.tertiaryText.opacity(0.7))
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                 }
                 .padding(.trailing, Theme.Spacing.small)
@@ -495,11 +499,20 @@ private struct HourRuler: View {
     /// Read at the day rather than computed from a fixed offset, because the gap between two zones
     /// is not constant — it changes for a fortnight each spring, which is exactly when somebody
     /// looking at a dual ruler most needs it to be right.
+    ///
+    /// ### Why the hour and not the time
+    /// This used to ask for `.shortened`, which is "10:00 AM" — eight characters in a column 56
+    /// points wide. Everything up to "9:00 AM" fitted and everything after it wrapped, so the ruler
+    /// read 8:00 AM, 9:00 AM, "10:00 A / M", "11:00 A / M", "12:00 P / M" down the side of the week.
+    ///
+    /// The fix is not a wider column. A ruler of whole hours has no minutes to report, and printing
+    /// ":00" twenty-four times says nothing while taking the room that made it wrap. `.hour()` gives
+    /// "10 AM" here and "10" in a twenty-four-hour locale, which is what Calendar itself shows.
     private func label(hour: Int, in zone: TimeZone) -> String {
         let dayStart = calendar.startOfDay(for: referenceDay)
         guard let instant = calendar.date(byAdding: .hour, value: hour, to: dayStart) else { return "" }
 
-        var style = Date.FormatStyle(date: .omitted, time: .shortened)
+        var style = Date.FormatStyle.dateTime.hour()
         style.timeZone = zone
         return instant.formatted(style)
     }
