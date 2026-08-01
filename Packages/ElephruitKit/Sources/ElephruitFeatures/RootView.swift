@@ -435,6 +435,7 @@ public struct RootView: View {
             // After the restore, so that `-ElephruitStartModule` is an override of where the window
             // was left rather than a competitor to it. See ``DesignReviewLaunch``.
             DesignReviewLaunch.applyStart(to: navigation)
+            DesignReviewLaunch.applySelection(to: navigation, using: services)
         }
 
         guard !storedNavigationState.isEmpty,

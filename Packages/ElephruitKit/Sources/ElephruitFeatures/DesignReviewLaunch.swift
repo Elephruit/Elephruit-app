@@ -1,5 +1,6 @@
 import AppKit
 import ElephruitCore
+import ElephruitPersistence
 import Foundation
 
 /// Launch arguments that put the app in a known state for a design review.
@@ -194,6 +195,40 @@ public enum DesignReviewLaunch {
             navigation.leaveModule()
             navigation.select(selection)
         }
+    }
+
+    /// The person whose profile the window should open on, by name.
+    ///
+    /// A profile is the densest screen in this app and the one the People module exists for, and it
+    /// is unreachable without selecting somebody — which needs a click. So on a locked machine it
+    /// could not be photographed at all, and this pass reviewed it by reading it.
+    static func selectedPersonName(in arguments: [String]) -> String? {
+        value(for: "-ElephruitSelectPerson", in: arguments)
+    }
+
+    /// Selects the named person, if one was asked for and one matches.
+    ///
+    /// Matched on a prefix, case-insensitively, so `-ElephruitSelectPerson Maya` is enough and the
+    /// argument does not have to carry a full name through a shell. A name matching nobody selects
+    /// nobody rather than selecting the first person in the library: a review that silently
+    /// photographs the wrong profile is worse than one that photographs an empty pane.
+    @MainActor
+    public static func applySelection(to navigation: NavigationModel, using services: AppServices?) {
+        guard isDevelopmentMode,
+              let name = selectedPersonName(in: ProcessInfo.processInfo.arguments)?.lowercased(),
+              let services
+        else { return }
+
+        var query = ItemQuery()
+        query.kinds = [.person]
+        guard let people = try? services.items.items(matching: query) else { return }
+
+        guard let match = people.first(where: { $0.title.lowercased().hasPrefix(name) }) else {
+            Diagnostics.shell.error("No person matching \(name, privacy: .public)")
+            return
+        }
+
+        navigation.selectItem(match.id)
     }
 
     /// Applies the window-size override to whichever window is showing the library.
