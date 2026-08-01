@@ -17,32 +17,44 @@ struct FocusStrip: View {
     let session: PomodoroSession
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.medium) {
-            phaseRing
+        // Redrawn on SwiftUI's own cadence rather than waiting to be told, for the same reason the
+        // tracker's clock is: a countdown that only advances when something else invalidates the
+        // view is a countdown that visibly stalls.
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let moment = session.isPaused ? (session.runningSince ?? context.date) : context.date
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(session.phase.displayName)
-                    .font(Theme.Text.rowTitleEmphasised)
+            HStack(spacing: Theme.Spacing.medium) {
+                phaseRing(at: moment)
 
-                Text(subtitle)
-                    .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.secondaryText)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(session.phase.displayName)
+                        .font(Theme.Text.rowTitleEmphasised)
+
+                    Text(subtitle)
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                }
+
+                Spacer(minLength: Theme.Spacing.small)
+
+                Text(TimeFormatting.stopwatch(session.remaining(at: moment)))
+                    .font(.system(.title2, design: .rounded, weight: .medium))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .foregroundStyle(session.isPaused ? Theme.Colors.secondaryText : Theme.Colors.primaryText)
+
+                controls
             }
-
-            Spacer(minLength: Theme.Spacing.small)
-
-            Text(TimeFormatting.stopwatch(remaining))
-                .font(.system(.title2, design: .rounded, weight: .medium))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-                .foregroundStyle(session.isPaused ? Theme.Colors.secondaryText : Theme.Colors.primaryText)
-
-            controls
         }
-        .padding(.horizontal, Theme.Spacing.large)
+        .padding(.horizontal, Theme.Spacing.medium)
         .padding(.vertical, Theme.Spacing.small)
-        .background(tint.opacity(0.08))
-        .overlay(alignment: .bottom) { Divider() }
+        // A card under the tracker's card, not a strip across the window: the cycle belongs to the
+        // thing being tracked, and a full-width band would read as something the window is saying
+        // rather than something this entry is doing.
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
+                .fill(tint.opacity(0.10))
+        )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.Time.focusStrip)
     }
@@ -54,8 +66,10 @@ struct FocusStrip: View {
     /// A ring rather than a bar because it sits beside a clock face and reads as one object with it;
     /// a horizontal bar here would compete with the day's progress bar in the summary below and the
     /// two would be read as the same measurement.
-    private var phaseRing: some View {
-        ZStack {
+    private func phaseRing(at moment: Date) -> some View {
+        let progress = session.progress(at: moment)
+
+        return ZStack {
             Circle()
                 .stroke(tint.opacity(0.2), lineWidth: 3)
 
@@ -123,12 +137,6 @@ struct FocusStrip: View {
     }
 
     // MARK: - Values
-
-    private var now: Date { services?.dateProvider.now ?? Date() }
-
-    private var remaining: TimeInterval { session.remaining(at: now) }
-
-    private var progress: Double { session.progress(at: now) }
 
     /// Amber for a break, accent for work.
     ///

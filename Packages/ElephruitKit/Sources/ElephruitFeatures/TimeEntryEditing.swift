@@ -26,6 +26,20 @@ struct TimeEntrySpan: Equatable {
     var endedAt: Date?
 }
 
+// MARK: - Measure
+
+extension View {
+    /// Caps a log row at the module's measure and keeps it left-aligned.
+    ///
+    /// The same reason the tracker is capped: a row whose description sits at the far left and whose
+    /// total sits at the far right of a wide screen has to be read across two feet of nothing, and
+    /// joining the two by eye is the only thing anybody does with a log.
+    func measuredRow() -> some View {
+        frame(maxWidth: TimeView.measure, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 // MARK: - Day header
 
 /// The header over one day of the log, and what that day came to.

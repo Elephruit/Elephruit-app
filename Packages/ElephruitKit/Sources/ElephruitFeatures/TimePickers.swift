@@ -7,11 +7,15 @@ import SwiftUI
 ///
 /// A shared label rather than five hand-built ones, because the row's whole job is to be read at a
 /// glance as a *set*: five chips drawn at five weights is a row you have to parse rather than scan.
-/// Empty chips are an outline and a symbol; filled ones carry the accent and the value.
+///
+/// ### Why an empty chip is still labelled
+/// Because the first version was not, and a row of five small grey glyphs is not a set of things you
+/// can attach — it is five dots. Nobody clicks a dot to find out what it is. A filled chip shows its
+/// value, because by then the word is redundant and the value is the thing being read.
 struct TimeChipLabel: View {
     let symbolName: String
 
-    /// The value, or `nil` when nothing is chosen and the chip is just an invitation.
+    /// The value, or the field's own name when nothing is chosen yet.
     var title: String?
 
     var isFilled: Bool
@@ -54,6 +58,9 @@ struct TimeChipLabel: View {
 struct TimeSubjectPicker: View {
     @Environment(\.services) private var services
 
+    /// What the chip says before anything is chosen.
+    var placeholder: String?
+
     let subject: SubjectReference?
     let onPick: (SubjectReference?) -> Void
 
@@ -68,7 +75,7 @@ struct TimeSubjectPicker: View {
         } label: {
             TimeChipLabel(
                 symbolName: subject == nil ? "folder.badge.plus" : "folder.fill",
-                title: subject?.title,
+                title: subject?.title ?? placeholder,
                 isFilled: subject != nil
             )
         }
@@ -107,6 +114,8 @@ struct TimeSubjectPicker: View {
 struct TimeProjectPicker: View {
     @Environment(\.services) private var services
 
+    var placeholder: String?
+
     let project: SubjectReference?
     let onPick: (SubjectReference?) -> Void
 
@@ -120,7 +129,7 @@ struct TimeProjectPicker: View {
         } label: {
             TimeChipLabel(
                 symbolName: project == nil ? "square.stack.3d.up" : "square.stack.3d.up.fill",
-                title: project?.title,
+                title: project?.title ?? placeholder,
                 isFilled: project != nil
             )
         }
@@ -200,6 +209,8 @@ struct TimeProjectPicker: View {
 struct TimePeoplePicker: View {
     @Environment(\.services) private var services
 
+    var placeholder: String?
+
     let people: [SubjectReference]
     let onChange: ([SubjectReference]) -> Void
 
@@ -211,7 +222,7 @@ struct TimePeoplePicker: View {
         } label: {
             TimeChipLabel(
                 symbolName: people.isEmpty ? "person.badge.plus" : "person.2.fill",
-                title: summary,
+                title: summary ?? placeholder,
                 isFilled: !people.isEmpty
             )
         }
@@ -294,6 +305,8 @@ struct TimePeoplePicker: View {
 struct TimeTagPicker: View {
     @Environment(\.services) private var services
 
+    var placeholder: String?
+
     let slugs: [String]
     let onChange: ([String]) -> Void
 
@@ -308,7 +321,7 @@ struct TimeTagPicker: View {
         } label: {
             TimeChipLabel(
                 symbolName: slugs.isEmpty ? "tag" : "tag.fill",
-                title: summary,
+                title: summary ?? placeholder,
                 isFilled: !slugs.isEmpty
             )
         }
