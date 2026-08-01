@@ -65,6 +65,8 @@ struct TaskCard: View {
 
             checklist
 
+            subtasks
+
             TaskAttributeRow(
                 task: task,
                 onAddChecklist: {
@@ -73,6 +75,8 @@ struct TaskCard: View {
                 },
                 onChange: onChange
             )
+
+            backlinks
 
             notices
         }
@@ -207,6 +211,84 @@ struct TaskCard: View {
                 .accessibilityIdentifier("task.stepField")
         }
         .frame(minHeight: Theme.Size.rowHeight)
+    }
+
+    // MARK: - Subtasks
+
+    /// Tasks that live under this one.
+    ///
+    /// ### Why they are on the card rather than a level down
+    /// Because a subtask is the work and the parent is the container for it, so "what is inside
+    /// this" is the question the card is open to answer. They sit below the steps and above the
+    /// attributes because both of those describe *this* task, and a subtask is a different task that
+    /// happens to live beneath it.
+    ///
+    /// Opening one opens its own card, in the list, in place. That is the whole reason the detail
+    /// column could go: following a subtask no longer means leaving the list to a pane that has to
+    /// re-explain where you are.
+    @ViewBuilder
+    private var subtasks: some View {
+        let children = subtaskList
+        if !children.isEmpty || isShowingSubtaskButton {
+            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+                ForEach(children, id: \.id) { subtask in
+                    DetailTaskRow(
+                        task: subtask,
+                        dateProvider: services?.dateProvider ?? SystemDateProvider(),
+                        onToggle: { act { try $0.items.toggleCompletion(subtask) } },
+                        onOpen: { navigation.selectItem(subtask.id) }
+                    )
+                }
+
+                Button("New Subtask", systemImage: "plus") { addSubtask() }
+                    .buttonStyle(.borderless)
+                    .font(Theme.Text.metadata)
+                    .help("A task of its own, with its own dates and its own place in Today.")
+            }
+        }
+    }
+
+    /// The button is offered while there is already at least one subtask, or the task has steps —
+    /// which is when somebody is thinking in parts. On a plain task it would be a sixth control
+    /// competing with the five that answer more common questions.
+    private var isShowingSubtaskButton: Bool {
+        !task.checklist.isEmpty
+    }
+
+    private var subtaskList: [Item] {
+        task.children
+            .filter { $0.kind == .task && $0.deletedAt == nil }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    private func addSubtask() {
+        guard let services else { return }
+        services.perform {
+            let subtask = try services.items.create(ItemDraft(kind: .task, parentID: task.id))
+            services.noteChange(to: subtask)
+        }
+        onChange()
+    }
+
+    // MARK: - Backlinks
+
+    /// What points at this task.
+    ///
+    /// Quiet, and last but for the notices, because it is context rather than content: a meeting
+    /// note that mentions this task is a reason the task exists, not part of doing it.
+    @ViewBuilder
+    private var backlinks: some View {
+        let links = task.visibleBacklinks()
+        if !links.isEmpty {
+            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+                Text("Linked from")
+                    .font(Theme.Text.sectionHeader)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+                    .kerning(0.4)
+
+                BacklinkList(links: links) { navigation.selectItem($0) }
+            }
+        }
     }
 
     // MARK: - Notices

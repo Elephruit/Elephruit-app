@@ -193,6 +193,17 @@ public struct InspectorView: View {
         }
     }
 
+    /// ### One vocabulary for the three dates
+    /// This said "Due" and "Defer until" while a task's own pane said "Deadline" and "Start" — two
+    /// names for each of two fields, on screen at the same time, which is redesign issue #9. The
+    /// words here changed rather than the words there, for two reasons. The task pane's names come
+    /// from the scheduling model that the whole module rests on: a *start* says do not ask me until
+    /// then, a *deadline* is the only date that can make anything late, and "defer" and "due" say
+    /// neither of those things clearly. And this is the surface with fewer readers, so moving it
+    /// costs less than moving the one people use every day.
+    ///
+    /// `deferUntil` keeps its name in the store, where it is a column with a migration behind it.
+    /// What a column is called and what a person is told are different questions.
     private func datesSection(for item: Item) -> some View {
         let fields = item.kind.supportedFields
 
@@ -201,10 +212,10 @@ public struct InspectorView: View {
                 dateRow("Start", for: item, keyPath: \.startAt, identifier: AccessibilityID.Inspector.startDateField)
             }
             if fields.contains(.dueDate) {
-                dateRow("Due", for: item, keyPath: \.dueAt, identifier: AccessibilityID.Inspector.dueDateField)
+                dateRow("Deadline", for: item, keyPath: \.dueAt, identifier: AccessibilityID.Inspector.dueDateField)
             }
             if fields.contains(.deferDate) {
-                dateRow("Defer until", for: item, keyPath: \.deferUntil, identifier: "inspector.deferDate")
+                dateRow("Hidden until", for: item, keyPath: \.deferUntil, identifier: "inspector.deferDate")
             }
 
             InspectorRow("Created") {

@@ -48,6 +48,11 @@ struct TaskWorkspaceView: View {
             // the row it was is no longer on screen and an editor with no row under it is a detail
             // pane by another name.
             .onChange(of: navigation.selection) { _, _ in editingTaskID = nil }
+            // Somebody followed a link to a task from outside the list — see ``TaskRedirect``. The
+            // destination has already been selected; this is the half that opens the card, once the
+            // rows for that destination have actually loaded.
+            .onChange(of: navigation.taskToOpen) { _, _ in openRequestedTask() }
+            .onChange(of: reloadToken) { _, _ in openRequestedTask() }
             .background { linkedDeletionDialog }
             // ⌫ on the selection, which is what somebody tries before they find any menu.
             .onDeleteCommand { trashSelection() }
@@ -665,6 +670,18 @@ struct TaskWorkspaceView: View {
     /// Closing the previous one is what makes "clicking another row closes this one" true without a
     /// dismissal gesture: the click that opens the next card is the same click that closes this one,
     /// and `TaskCard` flushes its pending write on the way out.
+    /// Honours a pending open request, if its task is in this list yet.
+    ///
+    /// Called both when the request arrives and after each reload, because the two race: the request
+    /// is set at the moment the destination changes, and the rows for that destination do not exist
+    /// until `reload` has run. Clearing the request only once the task is found means an arrival that
+    /// lands before the data does is picked up by the reload that follows.
+    private func openRequestedTask() {
+        guard let id = navigation.taskToOpen, let task = tasksByID[id] else { return }
+        navigation.taskToOpen = nil
+        open(task)
+    }
+
     private func open(_ task: Item) {
         navigation.selectedItemIDs = [task.id]
         editingTaskID = task.id
