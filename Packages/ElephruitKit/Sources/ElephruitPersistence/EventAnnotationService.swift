@@ -128,6 +128,77 @@ public final class EventAnnotationService {
         Set(try annotations(for: identities).filter { !$0.value.isEmpty }.keys)
     }
 
+    /// What has been prepared for each of a window's events, in one pass.
+    ///
+    /// ### Why this is not derived from ``annotation(for:)``
+    /// Because an annotation deliberately does not distinguish a linked *task* from a linked note —
+    /// every non-person incoming link lands in `noteIDs`, which is the right shape for an inspector
+    /// listing "what is attached to this". A day's plan asks a different question: *is there
+    /// anything I still have to do before this meeting*, and that question needs the task's status.
+    ///
+    /// Kept beside ``annotations(for:)`` and built the same way — one fetch of every meeting item,
+    /// keyed by identity — because asking per event is how a day of meetings becomes twenty queries.
+    public func preparation(for identities: [EventIdentity]) throws(AppError) -> [String: MeetingPreparation] {
+        let wanted = Set(identities.map { $0.storageKey })
+        guard !wanted.isEmpty else { return [:] }
+
+        var result: [String: MeetingPreparation] = [:]
+
+        for meeting in try allMeetingItems() {
+            guard let reference = meeting.eventReference, wanted.contains(reference.identityKey) else {
+                continue
+            }
+
+            var openTaskIDs: [UUID] = []
+            var completedTaskCount = 0
+            var linkedPeople = 0
+            var hasNote = false
+            var noteID: UUID?
+
+            for link in meeting.outgoingLinks {
+                guard let target = link.target, target.deletedAt == nil else { continue }
+                if target.kind == .person, link.kind == .participant { linkedPeople += 1 }
+            }
+
+            for link in meeting.incomingLinks {
+                guard let source = link.source, source.deletedAt == nil else { continue }
+                switch source.kind {
+                case .task:
+                    if source.status == .open {
+                        openTaskIDs.append(source.id)
+                    } else {
+                        completedTaskCount += 1
+                    }
+                case .person:
+                    break
+                default:
+                    hasNote = true
+                    if noteID == nil { noteID = source.id }
+                }
+            }
+
+            // The meeting item's own body counts as the meeting's notes. It is where the "## Before"
+            // and "## After" sections live, so a meeting somebody has written a line about should
+            // not read as having no notes because they wrote it in the obvious place.
+            let sections = Self.split(body: meeting.body)
+            if !meeting.body.isEmpty {
+                hasNote = true
+                if noteID == nil { noteID = meeting.id }
+            }
+
+            result[reference.identityKey] = MeetingPreparation(
+                hasNote: hasNote,
+                noteID: noteID,
+                openPreparationTaskIDs: openTaskIDs,
+                completedPreparationTaskCount: completedTaskCount,
+                hasPreparationNotes: !sections.preparation.isEmpty,
+                linkedPersonCount: linkedPeople
+            )
+        }
+
+        return result
+    }
+
     private func annotation(of meeting: Item, identity: EventIdentity) -> EventAnnotation {
         var personIDs: [UUID] = []
         var noteIDs: [UUID] = []
