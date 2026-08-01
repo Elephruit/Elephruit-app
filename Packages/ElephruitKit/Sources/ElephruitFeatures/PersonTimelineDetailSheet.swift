@@ -220,7 +220,7 @@ struct PersonTimelineDetailSheet: View {
                 if status == .completed {
                     Label("Completed", systemImage: "checkmark.circle.fill")
                         .font(.system(.body, weight: .semibold))
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Theme.Palette.green.color)
                 } else {
                     Button("Mark Complete", systemImage: "checkmark.circle") { complete() }
                         .buttonStyle(.borderedProminent)
@@ -271,11 +271,11 @@ struct PersonTimelineDetailSheet: View {
     }
 
     private var accent: Color {
-        if entry.isPromise { return .green }
+        if entry.isPromise { return Theme.Palette.green.color }
         switch entry.kind {
-        case .note: return .blue
-        case .interaction, .meeting: return .purple
-        case .task: return .green
+        case .note: return Theme.Palette.blue.color
+        case .interaction, .meeting: return Theme.Palette.purple.color
+        case .task: return Theme.Palette.green.color
         default: return Theme.Colors.selection
         }
     }

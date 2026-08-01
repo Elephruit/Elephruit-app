@@ -69,7 +69,7 @@ struct EditContactDetailsSheet: View {
                     Circle().fill(Theme.Colors.selection.gradient)
                     Text(personInitials)
                         .font(.system(.headline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Theme.Colors.onAccent)
                 }
                 .frame(width: 44, height: 44)
 
@@ -369,13 +369,13 @@ private enum ContactEditorPage: String, CaseIterable, Identifiable {
 
     var tint: Color {
         switch self {
-        case .name: .blue
-        case .work: .indigo
-        case .birthday: .pink
-        case .email: .cyan
-        case .phone: .green
-        case .address: .orange
-        case .website: .purple
+        case .name: Theme.Palette.blue.color
+        case .work: Theme.Palette.indigo.color
+        case .birthday: Theme.Palette.pink.color
+        case .email: Theme.Palette.cyan.color
+        case .phone: Theme.Palette.green.color
+        case .address: Theme.Palette.orange.color
+        case .website: Theme.Palette.purple.color
         }
     }
 }
@@ -697,10 +697,10 @@ private extension String {
 extension ContactDetailKind {
     var editorTint: Color {
         switch self {
-        case .email: .blue
-        case .phone: .green
-        case .address: .orange
-        case .website: .purple
+        case .email: Theme.Palette.blue.color
+        case .phone: Theme.Palette.green.color
+        case .address: Theme.Palette.orange.color
+        case .website: Theme.Palette.purple.color
         }
     }
 

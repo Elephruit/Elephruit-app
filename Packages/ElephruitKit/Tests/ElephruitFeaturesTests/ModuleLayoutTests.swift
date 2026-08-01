@@ -911,3 +911,95 @@ struct PaneWidthTests {
         #expect(width.resolved(stored: 700, available: 0) == 700)
     }
 }
+
+/// Where the width goes when there is more window than the columns asked for.
+///
+/// The old rule gave every spare point to the detail column, which is how a 1710-point window ended
+/// up laying the list out at 340 and putting 1,240 behind "Nothing selected" — titles truncating to
+/// "Send Maya the dog trai…" with two thirds of the window empty beside them.
+@Suite("Room to spare")
+struct RoomToSpareTests {
+    private func widths(
+        _ layout: ModuleShellLayout,
+        window: CGFloat,
+        hasSelection: Bool = true
+    ) -> ModuleShellLayout.Widths {
+        layout.widths(
+            windowWidth: window,
+            sidebarWidth: 208,
+            userWantsInspector: false,
+            hasSelection: hasSelection
+        )
+    }
+
+    @Test("A wide window fills the list to its own ceiling before anything else")
+    func listReachesItsMaximum() {
+        let layout = PrimaryNavigationLayout.shell
+        let result = widths(layout, window: 1710)
+
+        #expect(layout.primary.maximum == 520)
+        #expect(result.primary == 520)
+    }
+
+    /// The bound that makes the change safe. A list is allowed to reach the number its module
+    /// declared and not one point further, which is the difference between this and the unbounded
+    /// column the previous rule was written against.
+    @Test("It never exceeds the ceiling, however wide the window")
+    func listNeverExceedsItsMaximum() {
+        let layout = PrimaryNavigationLayout.shell
+        for window in [1710, 2400, 3200, 6000].map(CGFloat.init) {
+            #expect(widths(layout, window: window).primary == 520)
+        }
+    }
+
+    /// Nothing may be left over. A column set that adds up to less than the window leaves a strip of
+    /// nothing beside a divider, which reads as a rendering fault rather than as spare room.
+    @Test("The columns account for the whole window", arguments: [1200, 1440, 1710, 2400])
+    func nothingIsLeftUnallocated(window: Int) {
+        let result = widths(PrimaryNavigationLayout.shell, window: CGFloat(window))
+        #expect(result.total == CGFloat(window))
+    }
+
+    /// A canvas module has no detail column, so its primary column *is* the reading surface and
+    /// still takes everything — the change is about which column is fed first, not about capping
+    /// the one that was being fed.
+    @Test("A canvas still takes the whole window")
+    func canvasIsUnaffected() {
+        let result = widths(AppModule.calendar.shellLayout, window: 1710)
+        #expect(result.detail == nil)
+        #expect(result.primary == CGFloat(1502))
+    }
+
+    /// A narrow window is untouched by any of this: there is no spare width, so the branch that
+    /// shares it out never runs and every column sits at what it needs.
+    @Test("A tight window still gives the list only its minimum")
+    func tightWindowUnchanged() {
+        let layout = PrimaryNavigationLayout.shell
+        let result = widths(layout, window: 208 + layout.primary.minimum + layout.detail.width.minimum)
+        #expect(result.primary == layout.primary.minimum)
+    }
+}
+
+@Suite("Room to spare, per module")
+struct RoomToSpareByModuleTests {
+    /// Every document module, in a wide window, with nothing stored. Each should reach its own
+    /// declared list ceiling — the number the module chose — rather than sitting at its ideal with
+    /// the slack piled behind the detail pane.
+    @Test(
+        "Each document module fills its list to its own ceiling",
+        arguments: [AppModule.notes, .tasks, .people, .projects, .bookmarks, .archive, .trash]
+    )
+    func eachModuleReachesItsCeiling(module: AppModule) throws {
+        let layout = module.shellLayout
+        let result = layout.widths(
+            windowWidth: 1710,
+            sidebarWidth: 208,
+            userWantsInspector: false,
+            hasSelection: true
+        )
+
+        let ceiling = try #require(layout.primary.maximum)
+        #expect(result.primary == ceiling)
+        #expect(result.total == 1710)
+    }
+}

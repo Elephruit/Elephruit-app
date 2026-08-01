@@ -762,6 +762,56 @@ public final class AppServices {
             await search.warmIndex()
         }
     }
+
+    /// Loads the sample library, but only into a library that has none.
+    ///
+    /// The guard is what makes this safe to run from a launch argument. `loadSampleData()` writes
+    /// unconditionally, so a flag that called it on every launch would double the library each time
+    /// the app opened — and the second launch would look like a duplication bug rather than like the
+    /// flag doing exactly what it was told.
+    @discardableResult
+    public func loadSampleDataIfEmpty() -> Bool {
+        guard isDevelopmentMode else {
+            Diagnostics.features.error("Sample data requested outside development mode; refused")
+            return false
+        }
+
+        let existing = (try? items.count(matching: ItemQuery())) ?? 0
+        guard existing == 0 else { return false }
+
+        loadSampleData()
+        return true
+    }
+
+    /// Adds invented people until the library holds at least `count` of them.
+    ///
+    /// Tops up rather than replacing, and counts what is already there, so it composes with
+    /// ``loadSampleDataIfEmpty()`` and is idempotent across relaunches: asking for four hundred twice
+    /// gives four hundred, not eight.
+    public func seedPeople(upTo count: Int) {
+        guard isDevelopmentMode else {
+            Diagnostics.features.error("People seeding requested outside development mode; refused")
+            return
+        }
+
+        var query = ItemQuery()
+        query.kinds = [.person]
+        let existing = (try? items.count(matching: query)) ?? 0
+        guard existing < count else { return }
+
+        let seeded = perform {
+            try BulkPeopleSampleData.populate(services: self, count: count - existing)
+        }
+        guard seeded else { return }
+
+        refreshDerivedState()
+        Diagnostics.features.info("Seeded People up to \(count, privacy: .public) records")
+
+        Task { [search] in
+            await search.invalidateIndex()
+            await search.warmIndex()
+        }
+    }
 }
 
 extension PersistenceStack {
