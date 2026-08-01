@@ -641,9 +641,25 @@ public final class AppServices {
             Diagnostics.features.error("Sample data requested outside development mode; refused")
             return
         }
-        perform {
+        let populated = perform {
             try SampleData.populate(services: self)
             try TaskSampleData.populate(services: self)
+        }
+        guard populated else { return }
+
+        refreshDerivedState()
+
+        // Sample data is written straight through `ItemService`, which is the point — it exercises
+        // the same path a real write takes. What it skips is ``noteChange(to:)``, and with it the
+        // index, so a hundred and forty invented notes and tasks were unreachable by search: the
+        // index had already been opened, found complete, and had no reason to look again.
+        //
+        // The effect was that every review of this app searched an empty index and concluded the
+        // search field was broken. Rebuilding here costs a second on a library this size and makes
+        // the loaded data behave like data.
+        Task { [search] in
+            await search.invalidateIndex()
+            await search.warmIndex()
         }
     }
 }
