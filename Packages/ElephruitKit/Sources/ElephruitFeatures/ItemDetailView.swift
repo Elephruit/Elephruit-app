@@ -34,6 +34,19 @@ public struct ItemDetailView: View {
         self.navigation = navigation
     }
 
+    /// What this pane says when it is empty, which depends on where it is empty.
+    ///
+    /// See ``DetailEmptyState`` — the one sentence this replaces was shown in eleven destinations
+    /// and told the user to press ⌘N in the Trash.
+    private var emptyState: some View {
+        let content = DetailEmptyState.forSelection(navigation.selection)
+        return EmptyStateView(
+            symbolName: content.symbolName,
+            headline: content.headline,
+            message: content.message
+        )
+    }
+
     public var body: some View {
         Group {
             if let item = currentItem {
@@ -46,12 +59,8 @@ public struct ItemDetailView: View {
                 }
                 .toolbar { detailToolbar(for: item) }
             } else {
-                EmptyStateView(
-                    symbolName: "square.text.square",
-                    headline: "Nothing selected",
-                    message: "Choose something from the list, or press ⌘N to make something new."
-                )
-                .accessibilityIdentifier(AccessibilityID.Detail.emptyState)
+                emptyState
+                    .accessibilityIdentifier(AccessibilityID.Detail.emptyState)
             }
         }
         .task(id: navigation.selectedItemID) { load() }
