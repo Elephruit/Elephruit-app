@@ -33,8 +33,6 @@ public struct ItemListView: View {
 
     @FocusState private var isSearchFieldFocused: Bool
 
-    /// Events for the current window, when the selection is one that shows a calendar.
-    @State private var calendarEvents: [CalendarEventSummary] = []
 
     public init(navigation: NavigationModel) {
         self.navigation = navigation
@@ -72,7 +70,6 @@ public struct ItemListView: View {
             .toolbar { toolbarContent }
             .task { makeSessionIfNeeded() }
             .task(id: reloadToken) { await reload() }
-            .task(id: calendarToken) { await loadCalendar() }
             .onChange(of: navigation.isSearchActive) { _, isActive in
                 searchModeDidChange(isActive: isActive)
             }
@@ -106,16 +103,6 @@ public struct ItemListView: View {
                     onCancel: { pendingSavedSearchName = nil }
                 )
             }
-        } else if showsCalendar {
-            VStack(spacing: 0) {
-                CalendarStatusBanner(
-                    authorization: services?.calendar.authorization ?? .notRequested,
-                    isEnabled: services?.calendar.isEnabled ?? false,
-                    onEnable: { Task { await enableCalendar() } },
-                    onOpenSettings: openPrivacySettings
-                )
-                listWithEvents
-            }
         } else if isLoading, items.isEmpty {
             ProgressView()
                 .controlSize(.small)
@@ -126,6 +113,39 @@ public struct ItemListView: View {
         } else {
             list
         }
+    }
+
+    @ViewBuilder
+    private var list: some View {
+        VStack(spacing: 0) {
+            itemList
+
+            if navigation.hasMultipleSelection {
+                BatchActionBar(
+                    count: navigation.selectedItemIDs.count,
+                    isTrashScope: navigation.selection.showsTrashedItems,
+                    onComplete: { batchToggleCompletion() },
+                    onArchive: { batchArchive() },
+                    onTrash: { batchTrash() },
+                    onRestore: { batchRestore() },
+                    onClear: { navigation.selectedItemIDs = [] }
+                )
+            }
+        }
+    }
+
+    private var itemList: some View {
+        List(selection: selectedItemBinding) {
+            ForEach(displayedItems, id: \.id) { item in
+                NavigationLink(value: SidebarSelection.item(id: item.id)) {
+                    row(for: item)
+                }
+                .contextMenu { contextMenu(for: item) }
+                .modifier(ItemSwipeActions(item: item, navigation: navigation, onPermanentDeletion: { pendingPermanentDeletion = $0 }, onChange: { Task { await reload() } }))
+            }
+        }
+        .listStyle(.inset)
+        .alternatingRowBackgrounds(.disabled)
     }
 
     private func makeSessionIfNeeded() {
@@ -166,163 +186,6 @@ public struct ItemListView: View {
         }
     }
 
-    /// Today and Upcoming, where a calendar adds something. Elsewhere it would be noise.
-    private var showsCalendar: Bool {
-        navigation.selection == .today || navigation.selection == .upcoming
-    }
-
-    /// The window a calendar section covers for the current selection.
-    private var calendarRange: Range<Date>? {
-        guard let services else { return nil }
-        let clock = services.dateProvider
-
-        switch navigation.selection {
-        case .today:
-            return clock.startOfToday..<clock.startOfDay(daysFromToday: 1)
-        case .upcoming:
-            return clock.startOfToday..<clock.startOfDay(daysFromToday: 14)
-        default:
-            return nil
-        }
-    }
-
-    /// Events above, work below.
-    ///
-    /// Two sections rather than one interleaved list: events are when you are *not* free, tasks are
-    /// what you might do with the rest. Merging them implies an order that does not exist and hides
-    /// how much of the day is already spoken for.
-    @ViewBuilder
-    private var listWithEvents: some View {
-        if calendarEvents.isEmpty, displayedItems.isEmpty {
-            emptyState
-        } else {
-            VStack(spacing: 0) {
-                List(selection: selectedItemBinding) {
-                    DayEventsSection(
-                        events: calendarEvents,
-                        dateProvider: services?.dateProvider ?? SystemDateProvider(),
-                        onLink: { event in noteAbout(event) }
-                    )
-
-                    if !displayedItems.isEmpty {
-                        Section {
-                            ForEach(displayedItems, id: \.id) { item in
-                                NavigationLink(value: SidebarSelection.item(id: item.id)) {
-                                    row(for: item)
-                                }
-                                .contextMenu { contextMenu(for: item) }
-                                .modifier(ItemSwipeActions(item: item, navigation: navigation, onPermanentDeletion: { pendingPermanentDeletion = $0 }, onChange: { Task { await reload() } }))
-                            }
-                        } header: {
-                            SectionHeader(navigation.selection.title, count: displayedItems.count)
-                        }
-                    }
-                }
-                .listStyle(.inset)
-                .alternatingRowBackgrounds(.disabled)
-
-                if navigation.hasMultipleSelection {
-                    BatchActionBar(
-                        count: navigation.selectedItemIDs.count,
-                        isTrashScope: navigation.selection.showsTrashedItems,
-                        onComplete: { batchToggleCompletion() },
-                        onArchive: { batchArchive() },
-                        onTrash: { batchTrash() },
-                        onRestore: { batchRestore() },
-                        onClear: { navigation.selectedItemIDs = [] }
-                    )
-                }
-            }
-        }
-    }
-
-    private func enableCalendar() async {
-        guard let services else { return }
-        await services.calendar.enable()
-        await loadCalendar()
-    }
-
-    private func openPrivacySettings() {
-        // The one place a decision about calendar access can actually be changed, once macOS has
-        // recorded it. Offering anything else would be a button that does nothing.
-        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") else {
-            return
-        }
-        NSWorkspace.shared.open(url)
-    }
-
-    private func loadCalendar() async {
-        guard let services, showsCalendar, let range = calendarRange else {
-            calendarEvents = []
-            return
-        }
-        await services.calendar.load(range: range)
-        calendarEvents = services.calendar.events
-    }
-
-    /// Makes a note about a meeting, linked to that occurrence.
-    private func noteAbout(_ event: CalendarEventSummary) {
-        guard let services else { return }
-
-        services.perform {
-            var draft = ItemDraft(kind: .meeting, title: event.displayTitle)
-            draft.dueAt = event.startAt
-            let created = try services.items.create(draft)
-
-            let reference = EventReference(
-                identityKey: event.identity.storageKey,
-                cachedTitle: event.title,
-                startAt: event.startAt,
-                endAt: event.endAt
-            )
-            reference.isAllDay = event.isAllDay
-            reference.calendarName = event.calendarName
-            reference.locationName = event.locationName
-            reference.lastRefreshedAt = services.dateProvider.now
-            reference.item = created
-            services.context.insert(reference)
-            try services.context.save()
-
-            navigation.selectItem(created.id)
-            services.noteChange(to: created)
-        }
-        Task { await reload() }
-    }
-
-    @ViewBuilder
-    private var list: some View {
-        VStack(spacing: 0) {
-            itemList
-
-            if navigation.hasMultipleSelection {
-                BatchActionBar(
-                    count: navigation.selectedItemIDs.count,
-                    isTrashScope: navigation.selection.showsTrashedItems,
-                    onComplete: { batchToggleCompletion() },
-                    onArchive: { batchArchive() },
-                    onTrash: { batchTrash() },
-                    onRestore: { batchRestore() },
-                    onClear: { navigation.selectedItemIDs = [] }
-                )
-            }
-        }
-    }
-
-    private var itemList: some View {
-        List(selection: selectedItemBinding) {
-            ForEach(displayedItems, id: \.id) { item in
-                NavigationLink(value: SidebarSelection.item(id: item.id)) {
-                    row(for: item)
-                }
-                .contextMenu { contextMenu(for: item) }
-                .modifier(ItemSwipeActions(item: item, navigation: navigation, onPermanentDeletion: { pendingPermanentDeletion = $0 }, onChange: { Task { await reload() } }))
-            }
-        }
-        .listStyle(.inset)
-        .alternatingRowBackgrounds(.disabled)
-    }
-
-    // MARK: - Batch actions
 
     /// Each is one undo step, because each is one thing the user did.
     private func batchToggleCompletion() {
@@ -653,20 +516,6 @@ public struct ItemListView: View {
     /// on a property read on every evaluation of this view's body, to produce a string whose only
     /// use is to be compared for equality. Every part of it is already `Equatable`, which is all
     /// `task(id:)` asks for, so the comparison can simply be the comparison.
-    private struct CalendarToken: Equatable {
-        var selection: SidebarSelection
-        var isEnabled: Bool
-        var eventCount: Int
-    }
-
-    private var calendarToken: CalendarToken {
-        CalendarToken(
-            selection: navigation.selection,
-            isEnabled: services?.calendar.isEnabled ?? false,
-            eventCount: services?.calendar.events.count ?? 0
-        )
-    }
-
     private struct ReloadToken: Equatable {
         var selection: SidebarSelection
         var sort: ItemQuery.Sort?

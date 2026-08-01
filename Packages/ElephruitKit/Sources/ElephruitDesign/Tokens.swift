@@ -80,6 +80,15 @@ extension Theme {
         /// The editor's measure. Long lines are hard to read; this caps them at roughly 80
         /// characters at the default size while leaving the window free to be any width.
         public static let editorMaxWidth: CGFloat = 720
+
+        /// The measure of a page built from columns of rows rather than from prose.
+        ///
+        /// Wider than ``editorMaxWidth`` because the constraint is different: a paragraph is capped
+        /// so the eye does not have to travel back across it, and a day's plan has no paragraphs —
+        /// it has a date rail, a time gutter, titles, and metadata that need room to sit on one line
+        /// rather than wrap. Capped all the same, because a briefing stretched across an ultrawide
+        /// display puts a metre of glass between "2 overdue" and the work it is about.
+        public static let todayContentWidth: CGFloat = 1080
     }
 }
 

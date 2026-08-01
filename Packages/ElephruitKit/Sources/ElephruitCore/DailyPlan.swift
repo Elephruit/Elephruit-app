@@ -294,6 +294,64 @@ public enum DayEventRules {
     }
 }
 
+// MARK: - Joining the call
+
+/// Finding the link to the room, when the room is not a room.
+///
+/// ### Why this reads three fields and guesses at none
+/// A conferencing link arrives wherever the organiser's tooling put it — the URL field, the
+/// location, or halfway down the notes. So all three are read, in that order of trust. What is
+/// deliberately absent is any attempt to *infer* a call from a title: "Zoom with Priya" is a
+/// sentence, not a link, and a Join button that opens a search results page is worse than no button.
+///
+/// The host list is a recognition aid, not a gate. A link in the URL field is offered whatever its
+/// host, because the organiser put it in the field that means "this is where the meeting is"; a link
+/// found loose in the notes is offered only when its host is one of the known conferencing services,
+/// because notes are full of links to documents nobody wants to open by pressing Join.
+public enum MeetingLink {
+    static let knownHosts: Set<String> = [
+        "zoom.us", "meet.google.com", "teams.microsoft.com", "teams.live.com", "webex.com",
+        "whereby.com", "chime.aws", "gotomeeting.com", "bluejeans.com", "around.co",
+        "meet.jit.si", "discord.gg", "slack.com", "facetime.apple.com", "riverside.fm",
+    ]
+
+    /// The link to join, if there is one.
+    public static func url(in event: CalendarEventSummary) -> URL? {
+        if let url = event.url, url.scheme != nil { return url }
+
+        if let location = event.locationName, let found = firstURL(in: location) { return found }
+
+        if let notes = event.notes {
+            for candidate in urls(in: notes) where isKnownConferencing(candidate) {
+                return candidate
+            }
+        }
+
+        return nil
+    }
+
+    /// Whether the host is a conferencing service this recognises.
+    public static func isKnownConferencing(_ url: URL) -> Bool {
+        guard let host = url.host()?.lowercased() else { return false }
+        return knownHosts.contains { host == $0 || host.hasSuffix("." + $0) }
+    }
+
+    private static func firstURL(in text: String) -> URL? {
+        urls(in: text).first
+    }
+
+    private static func urls(in text: String) -> [URL] {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        else { return [] }
+
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return detector.matches(in: text, range: range).compactMap { match in
+            guard let url = match.url, url.scheme == "http" || url.scheme == "https" else { return nil }
+            return url
+        }
+    }
+}
+
 // MARK: - How much of the day is actually yours
 
 extension WorkingHours {

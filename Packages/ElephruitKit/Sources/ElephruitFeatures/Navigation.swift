@@ -8,8 +8,13 @@ import Observation
 /// A value type rather than a view reference, so it can be stored for scene restoration, compared
 /// for equality, and mapped to a query by a pure function that is unit-testable without a window.
 public enum SidebarSelection: Hashable, Sendable, Codable {
+    /// The day, whole: what needs doing, what is happening, and who is involved.
     case today
+
+    /// **Superseded by ``today``.** Kept so that a stored scene, a saved window, or a link written
+    /// by an earlier build still decodes; ``canonical`` redirects it. See the comment on ``home``.
     case upcoming
+
     case inbox
     case kind(ItemKind)
     case tag(slug: String)
@@ -22,7 +27,22 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
     // they are never enumerated and never reachable — but declaring them now means the phase that
     // builds one flips a flag instead of widening this enum, and a scene restored from a future
     // version decodes without loss.
+
+    /// **Superseded by ``today``.**
+    ///
+    /// ### Why the case stays
+    /// Home and Upcoming were two answers to one question. Home said what is *happening* — meetings,
+    /// the day's note, who is waiting — and Upcoming said what is *dated*, which is most of the same
+    /// records sorted differently. Somebody opening the app in the morning had to read both and hold
+    /// the join in their head, and neither could show the join, because neither had seen the other's
+    /// records. ``today`` is that join.
+    ///
+    /// The case is not deleted, because deleting it would break three things that are not the
+    /// sidebar: a `@SceneStorage` string written by the previous build, a `NavigationModel`
+    /// restored from it, and any link or shortcut that named it. All three now decode and land on
+    /// Today — see ``canonical``.
     case home
+
     case calendar
     case time
 
@@ -45,15 +65,28 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
     /// this enum and a scene restored from a newer version still decodes.
     case people(PeopleScope)
 
+    /// This selection, in its current form.
+    ///
+    /// The one place a superseded destination is redirected. Applied by ``NavigationModel/select(_:)``
+    /// and ``NavigationModel/restore(_:)``, which is every route into the app — a click, a menu
+    /// command, the palette, a deep link, an intent, and a restored scene — so a redirect cannot be
+    /// forgotten at one of them. Pure and total, so the redirect is a value a test can assert rather
+    /// than behaviour somebody has to reproduce in a window.
+    public var canonical: SidebarSelection {
+        switch self {
+        case .home, .upcoming: .today
+        default: self
+        }
+    }
+
+    /// Whether this selection is one an earlier build wrote and this one no longer draws.
+    public var isSuperseded: Bool { canonical != self }
+
     /// The query this selection shows.
     ///
     /// Pure, so "what does Today mean?" is answered in one testable place rather than inside a view.
     public func query(using dateProvider: any DateProvider) -> ItemQuery {
         switch self {
-        case .today:
-            .today(using: dateProvider)
-        case .upcoming:
-            .upcoming(days: 14, using: dateProvider)
         case .inbox:
             .inbox()
         case .kind(let kind):
@@ -69,9 +102,15 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
             .archive()
         case .trash:
             .trash()
-        case .home, .calendar, .time:
+        case .today, .home, .upcoming, .calendar, .time:
             // These destinations replace the list rather than filtering it, so there is no query to
             // answer with. An empty one is the honest result rather than a crash.
+            //
+            // Today joined them when it stopped being a filtered list and became the day itself. A
+            // day is three kinds of record and a set of relevance rules that no predicate expresses
+            // — see ``DailyPlanService`` — and leaving a half-right query here would let some future
+            // view use it by mistake. Home and Upcoming are redirected to Today before anything can
+            // ask them, and answer the same way if anything ever does.
             ItemQuery()
         case .people:
             // People are fetched through `PersonRepository`, which knows about placeholders and
@@ -98,14 +137,14 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
     /// The kind a "New Item" action should create here, so `⌘N` does the obvious thing.
     public var defaultNewItemKind: ItemKind {
         switch self {
-        case .today, .upcoming: .task
+        case .today, .home, .upcoming: .task
         case .inbox: .note
         case .kind(let kind): kind
         case .tag, .savedSearch, .item, .archive, .trash: .note
         // A meeting, in the calendar. `⌘N` there means an event rather than a note, and the
         // workspace intercepts it before this is consulted — this is the honest fallback.
         case .calendar: .meeting
-        case .home, .time: .note
+        case .time: .note
         case .people: .person
         case .taskView, .smartList, .builtInSmartList: .task
         }
@@ -113,8 +152,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
 
     public var title: String {
         switch self {
-        case .today: "Today"
-        case .upcoming: "Upcoming"
+        case .today, .home, .upcoming: "Today"
         case .inbox: "Inbox"
         case .kind(let kind): kind.pluralDisplayName
         case .tag(let slug): "#" + (TextNormalizer.slugComponents(slug).last ?? slug)
@@ -122,7 +160,6 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .item: "Contents"
         case .archive: "Archive"
         case .trash: "Trash"
-        case .home: "Home"
         case .calendar: "Calendar"
         case .time: "Time"
         case .people(let scope): scope.title
@@ -134,8 +171,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
 
     public var symbolName: String {
         switch self {
-        case .today: "sun.max"
-        case .upcoming: "calendar"
+        case .today, .home, .upcoming: "sun.max"
         case .inbox: "tray"
         case .kind(let kind): kind.symbolName
         case .tag: "number"
@@ -143,7 +179,6 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .item: "square.stack.3d.up"
         case .archive: "archivebox"
         case .trash: "trash"
-        case .home: "house"
         case .calendar: "calendar.day.timeline.left"
         case .time: "timer"
         case .people(let scope): scope.symbolName
@@ -155,8 +190,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
 
     public var accessibilityIdentifier: String {
         switch self {
-        case .today: AccessibilityID.Sidebar.today
-        case .upcoming: "sidebar.upcoming"
+        case .today, .home, .upcoming: AccessibilityID.Sidebar.today
         case .inbox: AccessibilityID.Sidebar.inbox
         case .kind(let kind): "sidebar.kind.\(kind.rawValue)"
         case .tag(let slug): AccessibilityID.Sidebar.tag(slug: slug)
@@ -164,7 +198,6 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .item(let id): "sidebar.item.\(id.uuidString)"
         case .archive: "sidebar.archive"
         case .trash: AccessibilityID.Sidebar.trash
-        case .home: "sidebar.home"
         case .calendar: "sidebar.calendar"
         case .time: "sidebar.time"
         case .people(let scope): "sidebar.people.\(scope.title.lowercased().replacingOccurrences(of: " ", with: "-"))"
@@ -433,7 +466,12 @@ public final class NavigationModel {
 
     public init() {}
 
-    public func select(_ selection: SidebarSelection) {
+    public func select(_ requested: SidebarSelection) {
+        // Every route into the app funnels through here — a click, a menu command, the palette, a
+        // deep link, an intent — so redirecting a superseded destination once, at the door, is what
+        // makes "Home and Upcoming still work" true everywhere rather than at the call sites
+        // somebody remembered.
+        let selection = requested.canonical
         guard self.selection != selection else { return }
 
         recordNavigation(currentLocation)
@@ -477,7 +515,7 @@ public final class NavigationModel {
         }
     }
 
-    /// Returns to the primary navigation's Home view and remembers where the module was left.
+    /// Returns to Today and remembers where the module was left.
     /// Browser-style Back still returns to the module, while the main sidebar never frames a module
     /// workspace as though it were a narrow generic list.
     public func leaveModule() {
@@ -486,7 +524,7 @@ public final class NavigationModel {
         withoutRecordingHistory {
             moduleSelections[activeModule] = selection
             self.activeModule = nil
-            selection = .home
+            selection = .today
             selectedItemIDs = []
             sortOverride = nil
         }

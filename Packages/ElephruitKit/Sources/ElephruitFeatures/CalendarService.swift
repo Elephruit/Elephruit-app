@@ -330,7 +330,19 @@ public final class CalendarService {
         await reload()
     }
 
+    /// Bumped every time ``events`` is replaced.
+    ///
+    /// ### Why a counter beside an observable array
+    /// Because a page that assembles something *from* the events cannot notice a change by watching
+    /// them: `[CalendarEventSummary]` is not `Equatable` cheaply enough to be a `task(id:)` token,
+    /// and a body that reads the array to build a token has already read the array. A monotonic
+    /// counter says "the calendar answered again" in one comparison, which is exactly what a
+    /// derived page needs — the same argument ``AppServices/changeToken`` makes for the library.
+    public private(set) var revision = 0
+
     private func reload() async {
+        defer { revision &+= 1 }
+
         guard isEnabled, let range = loadedRange else {
             events = []
             isShowingCachedEvents = false
