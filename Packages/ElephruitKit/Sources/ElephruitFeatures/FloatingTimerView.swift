@@ -354,6 +354,10 @@ struct FloatingCard: ViewModifier {
 struct MiniTimerView: View {
     @Environment(\.services) private var services
 
+    /// Read here rather than left to ``ElephruitDesign/View/calmAnimation(_:value:)``, because the
+    /// one animation on this surface is asked for imperatively — see the width below.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let controller: MiniTimerController
 
     /// Whether the window controls are showing.
@@ -367,6 +371,19 @@ struct MiniTimerView: View {
 
     /// The pending open or close, so the next hover can cancel it.
     @State private var menuTask: Task<Void, Never>?
+
+    /// The width the row wants, once it has measured itself.
+    ///
+    /// ### Why the card is given a width rather than taking the window's
+    /// Because this is the thing that animates, and the window must not be. A window that grows
+    /// while something slides open exposes, on every frame of the slide, a strip it has not drawn
+    /// yet — and it is the growing that does it: shrinking a window never uncovers anything, which
+    /// is exactly why closing the menu was smooth while opening it stuttered, and why both looked
+    /// fine to every reading of the code.
+    ///
+    /// So the window is set to its final size in one step, before the animation, and the card slides
+    /// out inside it. Nothing is uncovered by the movement, because the room was already there.
+    @State private var cardWidth: CGFloat?
 
     /// The gap the card keeps from the window's edge, for its shadow to fall into.
     ///
@@ -458,6 +475,21 @@ struct MiniTimerView: View {
                         // ``shadowRoom`` rather than from two spellings of the same token, because a
                         // window one point smaller than what is drawn in it does not look like a
                         // sizing mistake — it looks like the card has no bottom.
+                        // ### Why the animation is asked for here rather than declared above
+                        // `.animation(_:value:)` on the frame does not animate this. The width is
+                        // set from inside a layout callback, and a state change made there arrives
+                        // without a transaction for the modifier to attach to — so the card jumped
+                        // to its new width and only the window moved. Measured: the card's edge went
+                        // from start to finish inside a single frame. Asking for the animation at
+                        // the point of the change gives it the transaction it needs, and the same
+                        // measurement then shows eighteen even steps in each direction.
+                        withAnimation(Theme.Motion.respectingReduceMotion(
+                            Theme.Motion.standard,
+                            reduceMotion: reduceMotion
+                        )) {
+                            cardWidth = size.width
+                        }
+
                         controller.contentSizeChanged(
                             to: CGSize(
                                 width: size.width + 2 * Self.shadowRoom,
@@ -467,16 +499,19 @@ struct MiniTimerView: View {
                     }
             }
         }
-        // ### Why the row fills the card and is held against its right
-        // Because the card has to be the full width of the window at every moment of the animation,
-        // and the row does not. While the window slides open the row is wider than the space there
-        // is for it: pinned right, what the opening edge reveals is the controls being asked for,
-        // and what stays put is the clock and the Stop button — which must never be the things that
-        // get cut off. The card, being the width of the window, keeps both of its rounded ends the
-        // whole way rather than sliding open with a square edge.
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        // ### What actually moves, and why the row does not
+        // This width is the animation — the one thing on the whole surface that travels. The row
+        // inside is at its final size from the first frame and held against the right, so opening
+        // reveals the controls being asked for while the clock and the Stop button stay exactly
+        // where they were, and nothing inside has to be laid out again as the card passes over it.
+        // The card is clipped to its own shape, so what the widening uncovers is cut by the curve
+        // rather than spilling past it.
+        .frame(width: cardWidth, alignment: .trailing)
         .modifier(FloatingCard(tint: tint, depth: .panel))
         .padding(Self.shadowRoom)
+        // The card is narrower than the window for as long as it is opening, so it has to be told
+        // which edge to keep. The right one: it is the edge that never moves.
+        .frame(maxWidth: .infinity, alignment: .trailing)
         // Only *leaving* the pill is the pill's business. Arriving anywhere on it means nothing,
         // which is the whole point of the dots; but once the menu is open the pointer has to be
         // free to travel from the dots to the buttons without the thing closing under it.
