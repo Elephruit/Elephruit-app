@@ -29,17 +29,12 @@ public struct QuickCaptureView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-            CaptureComposerHeader()
-
-            CaptureComposer(
-                text: $composition.titleText,
-                isSaving: isSaving,
-                onSave: { save() },
-                onCancel: { dismiss() }
-            )
-        }
-        .padding(Theme.Spacing.large)
+        CaptureComposer(
+            composition: $composition,
+            isSaving: isSaving,
+            onSave: { save() },
+            onCancel: { dismiss() }
+        )
         .frame(width: 560)
         .background(.regularMaterial)
         .accessibilityIdentifier(AccessibilityID.QuickCapture.root)
