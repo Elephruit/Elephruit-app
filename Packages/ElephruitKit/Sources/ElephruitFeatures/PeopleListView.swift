@@ -161,7 +161,12 @@ struct PeopleListView: View {
                 )
             }
         }
-        .searchable(text: $searchText, placement: .toolbar, prompt: "people in Austin · likes natural wine")
+        // "Search People", not a worked example. The prompt used to read "people in Austin · likes
+        // natural wine", which is a sentence about somebody who does not exist, sitting in the place
+        // where the user's own text goes. It reads as content rather than as a prompt, and there is
+        // no Austin and no wine in an empty library. What the field *accepts* is worth teaching, but
+        // the empty-search view below has room to teach it and a prompt does not.
+        .searchable(text: $searchText, placement: .toolbar, prompt: "Search People")
         .searchFocused($isSearchFocused)
         .onKeyPress(.downArrow) { moveSearchSelection(by: 1) }
         .onKeyPress(.upArrow) { moveSearchSelection(by: -1) }
