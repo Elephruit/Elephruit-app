@@ -22,6 +22,7 @@ struct TodayEventRow: View {
     let actions: TodayActions
 
     @State private var isHovering = false
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.small) {
@@ -42,13 +43,25 @@ struct TodayEventRow: View {
 
             Spacer(minLength: Theme.Spacing.small)
 
-            if isHovering { hoverActions }
+            if isHovering || isFocused { hoverActions }
         }
         .padding(.vertical, Theme.Spacing.tight)
         .opacity(event.event.isCancelled ? 0.55 : 1)
         .contentShape(.rect)
         .onHover { isHovering = $0 }
         .hoverHighlight(extending: Theme.Spacing.small)
+        .focusable()
+        .focused($isFocused)
+        .onKeyPress(.return) {
+            // Return joins where there is a call to join and opens the notes otherwise, which is
+            // what the pointer does with the two controls the row reveals.
+            if actions.joinLink(for: event) != nil {
+                actions.join(event)
+            } else {
+                actions.openNotes(for: event)
+            }
+            return .handled
+        }
         .contextMenu { TodayEventMenu(event: event, model: model, actions: actions) }
         .help(tooltip)
         .accessibilityElement(children: .combine)
@@ -374,6 +387,7 @@ struct TodayTaskRow: View {
     var pinnedAt: Date?
 
     @State private var isHovering = false
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
@@ -390,14 +404,33 @@ struct TodayTaskRow: View {
 
             Spacer(minLength: Theme.Spacing.small)
 
-            if isHovering { hoverActions }
+            // Focus reveals them too. A control that only exists under a pointer is a control
+            // somebody navigating by keyboard cannot know about, let alone reach.
+            if isHovering || isFocused { hoverActions }
         }
         .padding(.vertical, Theme.Spacing.tight)
         .frame(minHeight: Theme.Size.rowHeight)
         .contentShape(.rect)
         .onHover { isHovering = $0 }
-        .hoverHighlight(isEnabled: !isSelected, extending: Theme.Spacing.small)
+        .hoverHighlight(isEnabled: !isSelected || isFocused, extending: Theme.Spacing.small)
         .onTapGesture { actions.select(item.id) }
+        // ### Why the row is focusable rather than wrapped in a button
+        // A row is not one control — it carries a completion circle and, on hover, three more — and
+        // nesting those inside an outer button on macOS makes the inner ones unreachable. So the row
+        // takes focus in its own right and answers the two keys a row owes somebody who is not using
+        // a mouse: Return opens it, Space ticks it off. Full Keyboard Access reaches the inner
+        // controls the ordinary way.
+        .focusable()
+        .focused($isFocused)
+        .focusEffectDisabled(false)
+        .onKeyPress(.return) {
+            actions.select(item.id)
+            return .handled
+        }
+        .onKeyPress(.space) {
+            actions.toggleCompletion(item)
+            return .handled
+        }
         .contextMenu { TodayTaskMenu(task: task, item: item, plan: plan, actions: actions) }
         .help(tooltip)
         .accessibilityElement(children: .combine)

@@ -57,6 +57,55 @@ public final class DailyPlanService {
     /// Throws only what the store throws. A missing calendar, a person with no profile, or a day
     /// with nothing in it are all ordinary and produce an ordinary, empty-ish plan.
     public func plan(for date: Date, filters: TodayFilters = .standard) throws(AppError) -> DayPlan {
+        try plan(for: date, filters: filters, sources: try sources(filters: filters))
+    }
+
+    /// Everything one pass over the library found, shared by every day on screen.
+    ///
+    /// ### Why this is read once and not per day
+    /// Because none of the scheduling rules translate to a predicate — they compare against *today*
+    /// in the user's calendar, read a commitment made on an earlier day, and consult a lifecycle
+    /// derived from four columns and a traversal — so answering "what is on Thursday" means walking
+    /// every open task. A page showing five days did that five times, and a real library is
+    /// thousands of rows. One walk, five days.
+    private struct LibrarySources {
+        var openTasks: [Item] = []
+        var resolvedTasks: [Item] = []
+        var celebrations: [Celebration] = []
+    }
+
+    private func sources(filters: TodayFilters) throws(AppError) -> LibrarySources {
+        var sources = LibrarySources()
+
+        if filters.showsTasks {
+            var open = ItemQuery()
+            open.kinds = [.task]
+            open.statuses = [.open]
+            open.sort = .manual
+            sources.openTasks = try services.items.items(matching: open)
+
+            var resolved = ItemQuery()
+            resolved.kinds = [.task]
+            resolved.statuses = [.completed, .cancelled]
+            resolved.sort = .updatedNewestFirst
+            // Bounded: a logbook of five thousand entries has nothing to say about this week, and
+            // the rows that do are the most recent ones by construction.
+            resolved.limit = 200
+            sources.resolvedTasks = try services.items.items(matching: resolved)
+        }
+
+        if filters.showsPeople {
+            sources.celebrations = try services.persons.allCelebrations()
+        }
+
+        return sources
+    }
+
+    private func plan(
+        for date: Date,
+        filters: TodayFilters,
+        sources: LibrarySources
+    ) throws(AppError) -> DayPlan {
         let day = calendar.startOfDay(for: date)
         let now = clock.now
         let isToday = calendar.isDate(day, inSameDayAs: now)
@@ -66,10 +115,13 @@ public final class DailyPlanService {
         let meetingTaskIDs = meetingPrepIndex(for: events)
 
         let taskContext = filters.showsTasks
-            ? try dayTasks(on: day, now: now, isToday: isToday, meetingTaskIDs: meetingTaskIDs, filters: filters)
+            ? dayTasks(
+                on: day, now: now, isToday: isToday,
+                meetingTaskIDs: meetingTaskIDs, filters: filters, sources: sources
+            )
             : DayTaskContext()
 
-        let celebrations = try celebrations(on: day, isToday: isToday)
+        let celebrations = celebrations(on: day, isToday: isToday, from: sources.celebrations)
 
         let people = filters.showsPeople
             ? try roster(
@@ -116,10 +168,11 @@ public final class DailyPlanService {
     /// A future strip draws five days; assembling each independently would run the scheduling rules
     /// over every open task five times.
     public func plans(from first: Date, count: Int, filters: TodayFilters = .standard) throws(AppError) -> [DayPlan] {
+        let sources = try sources(filters: filters)
         var plans: [DayPlan] = []
         var cursor = calendar.startOfDay(for: first)
         for _ in 0..<max(0, count) {
-            plans.append(try plan(for: cursor, filters: filters))
+            plans.append(try plan(for: cursor, filters: filters, sources: sources))
             guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
             cursor = next
         }
@@ -258,17 +311,12 @@ public final class DailyPlanService {
         now: Date,
         isToday: Bool,
         meetingTaskIDs: [UUID: (id: String, title: String)],
-        filters: TodayFilters
-    ) throws(AppError) -> DayTaskContext {
-        var query = ItemQuery()
-        query.kinds = [.task]
-        query.statuses = [.open]
-        query.sort = .manual
-        let open = try services.items.items(matching: query)
-
+        filters: TodayFilters,
+        sources: LibrarySources
+    ) -> DayTaskContext {
         var context = DayTaskContext()
 
-        for task in open {
+        for task in sources.openTasks {
             let facts = task.taskFacts()
             guard !isHidden(facts, by: filters) else { continue }
 
@@ -314,7 +362,7 @@ public final class DailyPlanService {
             }
         }
 
-        context.completedIDs = try completedTasks(on: day, filters: filters)
+        context.completedIDs = completedTasks(on: day, filters: filters, from: sources.resolvedTasks)
         return context
     }
 
@@ -330,16 +378,12 @@ public final class DailyPlanService {
         }
     }
 
-    private func completedTasks(on day: Date, filters: TodayFilters) throws(AppError) -> [UUID] {
-        var query = ItemQuery()
-        query.kinds = [.task]
-        query.statuses = [.completed, .cancelled]
-        query.sort = .updatedNewestFirst
-        // Bounded: a logbook of five thousand entries has nothing to say about today, and the rows
-        // that do are the most recent ones by construction.
-        query.limit = 200
-
-        return try services.items.items(matching: query)
+    private func completedTasks(
+        on day: Date,
+        filters: TodayFilters,
+        from resolved: [Item]
+    ) -> [UUID] {
+        resolved
             .filter { task in
                 let facts = task.taskFacts()
                 guard !isHidden(facts, by: filters) else { return false }
@@ -360,8 +404,11 @@ public final class DailyPlanService {
 
     // MARK: - Celebrations
 
-    private func celebrations(on day: Date, isToday: Bool) throws(AppError) -> [UpcomingCelebration] {
-        let all = try services.persons.allCelebrations()
+    private func celebrations(
+        on day: Date,
+        isToday: Bool,
+        from all: [Celebration]
+    ) -> [UpcomingCelebration] {
         guard !all.isEmpty else { return [] }
 
         // A window rather than a single day, and only on today. A birthday tomorrow is something you
