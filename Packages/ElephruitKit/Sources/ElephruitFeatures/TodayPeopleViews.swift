@@ -145,7 +145,7 @@ struct TodayPersonCard: View {
             if person.celebration != nil {
                 Image(systemName: "birthday.cake.fill")
                     .font(.system(size: 11))
-                    .foregroundStyle(Theme.Colors.familyAccent)
+                    .foregroundStyle(Theme.Colors.personalDetail)
                     .accessibilityHidden(true)
             }
         }
