@@ -361,16 +361,18 @@ struct MiniTimerView: View {
     let controller: MiniTimerController
 
     /// Whether the window controls are showing.
-    @State private var isMenuOpen = false
-
-    /// Whether they are showing because somebody clicked the dots rather than hovered them.
     ///
-    /// Clicked open, they stay open until clicked shut. A menu that evaporated the moment the
-    /// pointer wandered off would be one you have to keep re-opening to press two things in it.
-    @State private var isMenuPinned = false
-
-    /// The pending open or close, so the next hover can cancel it.
-    @State private var menuTask: Task<Void, Never>?
+    /// ### Why only a click changes this
+    /// It used to open on hover after a beat as well, and close on its own a grace period after the
+    /// pointer left. Both are gone, and the reason is that a *click* could not then mean one thing.
+    /// Resting on the dots for a fifth of a second opened the drawer, so a click that arrived after
+    /// that closed it again and a click that beat it opened it — the same gesture, on the same
+    /// control, doing opposite things depending on how fast the hand was. Then the auto-close would
+    /// fire on its own somewhere in the middle of that and change the answer again.
+    ///
+    /// The dots are a button. Pressing them shows the controls, pressing them again hides the
+    /// controls, and nothing else on this surface touches them.
+    @State private var isMenuOpen = false
 
     /// The width the row wants, once it has measured itself.
     ///
@@ -392,14 +394,6 @@ struct MiniTimerView: View {
     /// that drift apart produce a window smaller than the thing drawn in it, which does not look
     /// like a sizing mistake at all. It looks like the card has no bottom.
     private static let shadowRoom = Theme.Spacing.small
-
-    /// Long enough that a pointer crossing the dots on its way somewhere else does not open them,
-    /// short enough that a pointer that stopped on them is not left waiting.
-    private static let openDelay = Duration.milliseconds(180)
-
-    /// The grace after the pointer leaves. Covers the gap between the pill and whatever the pointer
-    /// clipped on the way past, so a hand that overshoots by two points does not lose the menu.
-    private static let closeDelay = Duration.milliseconds(320)
 
     /// Red while tracking, amber while paused, quiet when neither — so the panel says which of the
     /// three it is before any of the words are read.
@@ -490,21 +484,34 @@ struct MiniTimerView: View {
                         // main actor, where it is an ordinary change like any other. It costs a
                         // frame before the slide begins and nothing else — measured afterwards, the
                         // card travels its whole width in nineteen even steps each way.
-                        Task { @MainActor in
-                            withAnimation(Theme.Motion.respectingReduceMotion(
-                                Theme.Motion.standard,
-                                reduceMotion: reduceMotion
-                            )) {
-                                cardWidth = size.width
-                            }
-                        }
-
                         controller.contentSizeChanged(
                             to: CGSize(
                                 width: size.width + 2 * Self.shadowRoom,
                                 height: size.height + 2 * Self.shadowRoom
                             )
                         )
+
+                        Task { @MainActor in
+                            withAnimation(
+                                Theme.Motion.respectingReduceMotion(
+                                    Theme.Motion.standard,
+                                    reduceMotion: reduceMotion
+                                ),
+                                completionCriteria: .removed
+                            ) {
+                                cardWidth = size.width
+                            } completion: {
+                                // The window gives back the room it no longer needs at the moment
+                                // the card stops wanting it, rather than after a length of time
+                                // chosen to be longer than the card takes. A guessed delay is a
+                                // guess that can be wrong in both directions: too short crops the
+                                // card mid-slide, and too long — or cancelled by one of the size
+                                // reports the running clock produces as its digits change width —
+                                // leaves the window standing open around a card that has already
+                                // closed, which is a drawer that will not shut.
+                                controller.contentSettled()
+                            }
+                        }
                     }
             }
         }
@@ -521,13 +528,6 @@ struct MiniTimerView: View {
         // The card is narrower than the window for as long as it is opening, so it has to be told
         // which edge to keep. The right one: it is the edge that never moves.
         .frame(maxWidth: .infinity, alignment: .trailing)
-        // Only *leaving* the pill is the pill's business. Arriving anywhere on it means nothing,
-        // which is the whole point of the dots; but once the menu is open the pointer has to be
-        // free to travel from the dots to the buttons without the thing closing under it.
-        .onHover { inside in
-            if !inside { scheduleClose() }
-        }
-        .onDisappear { menuTask?.cancel() }
         .accessibilityIdentifier(AccessibilityID.Time.miniTimer)
     }
 
@@ -536,10 +536,10 @@ struct MiniTimerView: View {
     /// ### Why it is three dots and not one of the buttons
     /// Because it has to be legible as *there is more here* without being a fourth thing competing
     /// with Pause, Restart and Stop — and the vertical ellipsis is the one mark that says exactly
-    /// that and nothing else. Hovering it opens the menu after a beat; clicking it opens the menu
-    /// and leaves it open, for the times you want to change the width *and* pin it.
+    /// that and nothing else. Pressing it shows the controls and pressing it again hides them; see
+    /// ``isMenuOpen`` for why hovering no longer does anything at all.
     private var menuButton: some View {
-        Button(action: toggleMenu) {
+        Button { isMenuOpen.toggle() } label: {
             // Turned on its side rather than named vertically, because SF Symbols has no vertical
             // ellipsis to name — and the rotation is exact, so nothing is lost by asking for it.
             Image(systemName: "ellipsis")
@@ -550,58 +550,10 @@ struct MiniTimerView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(isMenuOpen ? Theme.Colors.primaryText : Theme.Colors.secondaryText)
-        .onHover { inside in
-            if inside { scheduleOpen() } else { cancelPendingOpen() }
-        }
         .help("Size, keep on top, and back to Elephruit")
         .accessibilityLabel("Window options")
+        .accessibilityValue(isMenuOpen ? "showing" : "hidden")
         .accessibilityIdentifier(AccessibilityID.Time.miniTimerMenu)
-    }
-
-    // MARK: - Opening and closing
-
-    /// Opens after a beat, unless the pointer has moved on by then.
-    private func scheduleOpen() {
-        guard !isMenuOpen else { return }
-
-        menuTask?.cancel()
-        menuTask = Task { @MainActor in
-            try? await Task.sleep(for: Self.openDelay)
-            guard !Task.isCancelled else { return }
-            isMenuOpen = true
-        }
-    }
-
-    /// Drops a pending open when the pointer leaves the dots again.
-    ///
-    /// Without this the delay only moves the problem: a pointer crossing the dots on its way to Stop
-    /// asked for nothing, and would still have the menu arrive on top of it a fifth of a second later.
-    private func cancelPendingOpen() {
-        guard !isMenuOpen else { return }
-        menuTask?.cancel()
-    }
-
-    /// Closes after a grace, unless it was clicked open or the pointer comes back.
-    private func scheduleClose() {
-        menuTask?.cancel()
-        guard isMenuOpen, !isMenuPinned else { return }
-
-        menuTask = Task { @MainActor in
-            try? await Task.sleep(for: Self.closeDelay)
-            guard !Task.isCancelled else { return }
-            isMenuOpen = false
-        }
-    }
-
-    /// A click is the deliberate version of the hover: it opens immediately and stays.
-    ///
-    /// Clicking an already-open menu shuts it, whether it was opened by a click or by resting on the
-    /// dots — the dots are the control for the menu, and a control that only works one way is a
-    /// control somebody presses twice wondering why nothing happened.
-    private func toggleMenu() {
-        menuTask?.cancel()
-        isMenuPinned = !isMenuOpen
-        isMenuOpen = isMenuPinned
     }
 
     /// Shuts the menu outright, for the one control on it that puts the panel away.
@@ -609,8 +561,6 @@ struct MiniTimerView: View {
     /// The panel is hidden rather than destroyed, so without this a menu left open — or worse,
     /// clicked open — would still be open the next time somebody collapsed the app.
     private func closeMenu() {
-        menuTask?.cancel()
-        isMenuPinned = false
         isMenuOpen = false
     }
 
