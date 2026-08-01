@@ -911,6 +911,147 @@ struct PaneWidthRecorderTests {
     }
 }
 
+/// Three window sizes, walked deliberately.
+///
+/// ### Why this is a test rather than three screenshots
+/// Because "does this still work at 900 points" is a question about arithmetic that is already pure
+/// — see ``ElephruitDesign/ModuleShellLayout/widths(windowWidth:sidebarWidth:showsList:userWantsInspector:hasSelection:stored:)``
+/// — and a screenshot answers it once, for one machine, at one text size, on the day it was taken.
+/// The visual half of a layout review is still a visual review; this is the half that can be pinned
+/// down, and it is the half that regressed.
+@Suite("Narrow, standard, and very wide")
+struct WindowSizeSweepTests {
+    /// The app's own minimum, a laptop, and an ultrawide.
+    private static let windows: [CGFloat] = [900, 1440, 2560]
+
+    private let sidebar: CGFloat = 208
+
+    /// The modules this sweep holds to the *content is widest* rule.
+    ///
+    /// Calendar and Time are canvases — their main content is the primary column — and People is the
+    /// module the rule was written for. Tasks and Bookmarks currently come out the other way round
+    /// at some widths, because the shell's "spare width goes to the list first" rule lets a list
+    /// reach a ceiling above the detail pane's own ideal. That is the same shape of problem, in
+    /// modules outside this pass; changing their declared widths is a decision about Tasks, not a
+    /// consequence of a decision about People, so it is reported rather than made here.
+    private static let contentFirstModules: [AppModule] = [.calendar, .time, .people]
+
+    @Test("No module in this pass leaves its main content the narrowest column")
+    func mainContentIsNeverTheNarrowest() {
+        for module in Self.contentFirstModules {
+            let layout = module.shellLayout
+
+            for window in Self.windows {
+                let result = layout.widths(
+                    windowWidth: window,
+                    sidebarWidth: sidebar,
+                    userWantsInspector: true,
+                    hasSelection: true
+                )
+
+                // The main content is the detail pane where a module has one, and the primary
+                // column where the module *is* its primary column — a calendar, a tracker.
+                let main = result.detail ?? result.primary
+
+                if let inspector = result.inspector {
+                    #expect(
+                        main > inspector,
+                        "\(module.title) at \(window): the inspector is wider than the content"
+                    )
+                }
+                #expect(
+                    main >= result.primary || result.detail == nil,
+                    "\(module.title) at \(window): the list is wider than what it opens"
+                )
+            }
+        }
+    }
+
+    @Test("Every column that is on screen is usable, at every size")
+    func nothingIsSqueezedBelowItsMinimum() {
+        for module in AppModule.displayOrder {
+            let layout = module.shellLayout
+
+            for window in Self.windows {
+                let result = layout.widths(
+                    windowWidth: window,
+                    sidebarWidth: sidebar,
+                    userWantsInspector: true,
+                    hasSelection: true
+                )
+
+                #expect(result.primary >= layout.primary.minimum, "\(module.title) at \(window)")
+                if let detail = result.detail {
+                    #expect(detail >= layout.detail.width.minimum, "\(module.title) at \(window)")
+                }
+                if let inspector = result.inspector {
+                    #expect(inspector >= layout.inspector.width.minimum, "\(module.title) at \(window)")
+                }
+
+                // And the columns fill the window rather than leaving a strip of nothing beside a
+                // divider — the failure that is invisible until somebody has a very wide display.
+                //
+                // Within a couple of points, not exactly. The proportional-shrink branch rounds each
+                // column down so that no column can be pushed over its share, and three columns
+                // rounding down can leave the set one or two points short in a window tight enough
+                // for the branch to run at all. That is a hairline, it predates this pass, and
+                // asserting exactness here would be asserting an implementation detail of the
+                // rounding rather than the property that matters.
+                #expect(
+                    window - result.total <= 2,
+                    "\(module.title) at \(window) leaves \(window - result.total) points unfilled"
+                )
+                #expect(result.total <= window, "\(module.title) at \(window) overflows the window")
+            }
+        }
+    }
+
+    /// The complaint, at the size it was reported at and at the two either side.
+    @Test("People gives the profile the room at every size")
+    func peopleProportionsHold() {
+        let layout = AppModule.people.shellLayout
+
+        for window in Self.windows {
+            let result = layout.widths(
+                windowWidth: window,
+                sidebarWidth: sidebar,
+                userWantsInspector: true,
+                hasSelection: true
+            )
+
+            let profile = result.detail ?? 0
+            #expect(profile > result.primary, "the list out-measures the profile at \(window)")
+
+            // At the narrowest the inspector must not be on screen at all: three columns and a
+            // sidebar in 900 points would leave the profile unusable, and the module's threshold is
+            // what prevents it rather than the arithmetic scraping through.
+            if window <= 1_200 {
+                #expect(result.inspector == nil, "the inspector appeared at \(window)")
+            }
+        }
+    }
+
+    /// A profile column with no ceiling has to be the thing that grows, and the growth has to land
+    /// in margins rather than in a contact row eighteen hundred points wide.
+    @Test("The profile column grows without the profile itself stretching")
+    func theProfileCapsItsOwnMeasure() {
+        let layout = AppModule.people.shellLayout
+        let ultrawide = layout.widths(
+            windowWidth: 2_560,
+            sidebarWidth: sidebar,
+            userWantsInspector: false,
+            hasSelection: true
+        )
+
+        let column = ultrawide.detail ?? 0
+        #expect(column > 1_500, "the profile column is not taking the spare width")
+        #expect(
+            PersonWorkspaceView.measure < column,
+            "the profile has no measure to stop it stretching with its column"
+        )
+    }
+}
+
 /// The width arithmetic itself, with no modules involved.
 @Suite("Pane width")
 struct PaneWidthTests {
