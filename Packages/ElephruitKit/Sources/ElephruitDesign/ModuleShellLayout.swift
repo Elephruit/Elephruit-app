@@ -308,14 +308,43 @@ extension ModuleShellLayout {
                 }
             }
         } else if over < 0 {
-            // Room to spare goes to the reading surface — the editor where there is one, the canvas
-            // where the module *is* one — up to whatever that column's own policy allows. A list
-            // never takes it: a wider list is a longer line of the same three fields, which is the
-            // habit that produced a 1,170-point column of titles in the first place.
+            // Room to spare, shared out in the order the columns can use it.
+            //
+            // ### Why the list gets the first share now
+            // It used to get none: every spare point went to the detail column, on the reasoning
+            // that "a wider list is a longer line of the same three fields". The warning is sound
+            // and the conclusion was too strong. What it was written against was an *unbounded*
+            // list — the 1,170-point column of titles this policy exists to prevent — and the
+            // bound that prevents it is `primary.maximum`, which every module declares. Growing to
+            // a declared ceiling is not the habit being warned about; it is the ceiling doing its
+            // job.
+            //
+            // Measured, the old rule cost more than it saved. In a 1710-point window Today laid the
+            // list out at 340 and gave 1,240 to a detail pane showing "Nothing selected", so titles
+            // truncated to "Send Maya the dog trai…" with two thirds of the window empty beside
+            // them. And the width being protected was largely notional: Notes declares a detail
+            // maximum of 960 while the editor inside it caps its measure at
+            // `Theme.Size.editorMaxWidth` — 720 — so everything past that was margin either way.
+            //
+            // So: the list fills to its own ceiling first, and the reading surface takes what is
+            // left. Neither can exceed what its module declared, and a module that wants a narrow
+            // list still gets one by saying so.
+            var spare = -over
+
+            if visible.contains(.detail), let current = wanted[.primary] {
+                let ceiling = bounds(of: .primary).maximum ?? current
+                let growth = Swift.max(0, Swift.min(spare, ceiling - current))
+                wanted[.primary] = current + growth
+                spare -= growth
+            }
+
+            // Whatever is still going spare lands on the reading surface. Deliberately *not* capped
+            // at its declared maximum: something has to absorb the remainder, a column short of the
+            // window leaves a strip of nothing beside a divider, and the detail pane is the one
+            // surface that already constrains its own content rather than stretching it.
             let elastic: Column = visible.contains(.detail) ? .detail : .primary
             if let current = wanted[elastic] {
-                let ceiling = bounds(of: elastic).maximum ?? .greatestFiniteMagnitude
-                wanted[elastic] = Swift.min(ceiling, current - over)
+                wanted[elastic] = current + spare
             }
         }
 
