@@ -38,7 +38,20 @@ struct TimeReportView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            controls
+            // The same measure the log uses, applied to the controls and the content alike — see
+            // `TimeView.measure`. A report is the surface this module's width problem showed up on
+            // worst: a project name at the far left of a nineteen-hundred-point window and its total
+            // at the far right, with a bar stretched between them, and the only way to find out how
+            // long you spent on something was to track along a line with your finger. The chart had
+            // the same trouble in the other direction — two hairline bars in an acre of grid.
+            //
+            // One frame for both Time surfaces rather than one each, so switching between the log
+            // and the report does not move every column.
+            VStack(spacing: 0) {
+                controls
+            }
+            .frame(maxWidth: TimeView.measure)
+            .frame(maxWidth: .infinity)
 
             Divider()
 
@@ -57,6 +70,8 @@ struct TimeReportView: View {
                         breakdown
                     }
                     .padding(Theme.Spacing.large)
+                    .frame(maxWidth: TimeView.measure, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 }
             }
         }
@@ -162,8 +177,14 @@ struct TimeReportView: View {
 
     // MARK: - Totals
 
+    /// The four figures a period comes down to.
+    ///
+    /// Spread across the measure rather than huddled at its leading edge behind a `Spacer`. Four
+    /// tiles bunched into the first third of the row and a third of a window of nothing after them
+    /// is not restraint, it is the row having been laid out for a narrower screen; and evenly spaced
+    /// they read as four columns of one table, which is what they are.
     private var totals: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.section) {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
             TimeTotalTile(
                 title: "Tracked",
                 value: TimeFormatting.short(report.total),
@@ -189,8 +210,6 @@ struct TimeReportView: View {
                 value: busiestDay?.value ?? "—",
                 detail: busiestDay?.detail
             )
-
-            Spacer()
         }
     }
 
@@ -229,37 +248,128 @@ struct TimeReportView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
             SectionHeader("By day")
 
-            Chart(dailyRows) { row in
+            Chart(dailyBars) { bar in
                 BarMark(
-                    x: .value("Day", DayKey.date(from: row.key) ?? Date()),
-                    y: .value("Hours", row.total / 3_600)
+                    // `unit: .day` is what makes this a bar per day rather than a hairline at an
+                    // instant. Without it a `BarMark` on a continuous date axis has no width of its
+                    // own and gets a default one, which in a week-wide plot is a thread — two
+                    // three-pixel lines in an acre of grid, which is what the chart was.
+                    x: .value("Day", bar.day, unit: .day),
+                    y: .value("Hours", bar.hours)
                 )
                 .foregroundStyle(Theme.Colors.selection)
                 .cornerRadius(Theme.Radius.small)
             }
             .chartYAxisLabel("hours")
-            .chartXAxis {
-                AxisMarks(values: .automatic(desiredCount: 8)) { value in
+            .chartYAxis {
+                // Leading, so the last bar of the period is not drawn underneath its own axis
+                // labels. On the trailing edge a still-running day sat behind the numbers.
+                AxisMarks(position: .leading) { _ in
                     AxisGridLine()
-                    AxisValueLabel(format: .dateTime.day().month(.abbreviated))
+                    AxisValueLabel()
+                }
+            }
+            .chartXAxis {
+                // ### Why this is a stride and not `.automatic(desiredCount: 8)`
+                // Because eight was a count of *marks*, not of days. Asked for eight ticks across a
+                // two-day domain, the axis put one every six hours and formatted each as a date —
+                // so a week's report read "Jul 30, Jul 30, Jul 30, Jul 30, Jul 31, Jul 31, Jul 31,
+                // Jul 31". Eight labels, two distinct values, and no way to tell which bar was
+                // which day.
+                //
+                // A calendar stride cannot do that: every mark is a day, a week or a month, and the
+                // spacing follows the period rather than a fixed number.
+                AxisMarks(values: .stride(by: axis.unit, count: axis.count)) { value in
+                    AxisGridLine()
+                    if let date = value.as(Date.self) {
+                        AxisValueLabel { Text(axis.label(for: date)) }
+                    }
                 }
             }
             .frame(height: 180)
             .accessibilityIdentifier(AccessibilityID.Time.reportChart)
             .accessibilityLabel("Daily totals across \(period.displayName)")
+            .accessibilityValue(chartDescription)
         }
     }
 
-    private var dailyRows: [TimeSummaryRow] {
+    /// One bar per calendar day in the period, including the days with nothing on them.
+    ///
+    /// ### Why the empty days are drawn
+    /// Because a chart of a week is a statement about the *week*, and one that plots only the days
+    /// that happen to have entries is a chart of the entries. Two bars side by side said "you worked
+    /// two days" whether those were Monday and Tuesday or Monday and Friday; the shape of the period
+    /// — which is the whole reason to look at a chart rather than the total above it — was missing.
+    ///
+    /// Filled here rather than in ``ElephruitCore/TimeReporting``, which the export and the log's
+    /// summary also read. A row of zero belongs in a picture of a week and does not belong in a
+    /// spreadsheet of what was tracked.
+    private var dailyBars: [DailyBar] {
         guard let services else { return [] }
-        return TimeReporting.report(
+
+        let calendar = services.dateProvider.calendar
+
+        // Keyed by the start of the day rather than by the report's own string key, so the lookup
+        // below compares the same kind of thing the loop is producing. Resolving each row's key back
+        // to a date once is cheaper than formatting a key per day, and it cannot disagree about what
+        // "the 3rd" means in a calendar that is not Gregorian.
+        var totals: [Date: TimeInterval] = [:]
+        for row in TimeReporting.report(
             entries: entries,
             grouping: .day,
             range: range,
-            calendar: services.dateProvider.calendar,
+            calendar: calendar,
             now: services.dateProvider.now,
             rounding: rounding
-        ).rows
+        ).rows {
+            guard let date = DayKey.date(from: row.key, in: calendar) else { continue }
+            totals[calendar.startOfDay(for: date)] = row.total
+        }
+
+        var bars: [DailyBar] = []
+        var day = calendar.startOfDay(for: range.lowerBound)
+
+        // Bounded, so a custom period of ten years cannot ask for four thousand bars. Past this the
+        // chart is a smear anyway and the breakdown below is the surface that answers.
+        while day < range.upperBound, bars.count < 400 {
+            bars.append(DailyBar(day: day, hours: (totals[day] ?? 0) / 3_600))
+            guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+            day = next
+        }
+
+        return bars
+    }
+
+    /// How many days the period covers, which is what decides how the axis is laboured.
+    private var dayCount: Int { dailyBars.count }
+
+    /// The x-axis's stride and its labels, chosen by how long the period is.
+    ///
+    /// A week wants weekday names — "Mon", "Tue" — because that is how anybody talks about a week,
+    /// and the dates are noise. A month wants dates, weekly. A year wants months. One rule producing
+    /// all three, so no period can end up labelled in a unit it does not use.
+    private var axis: DailyAxis {
+        switch dayCount {
+        case ..<10: DailyAxis(unit: .day, count: 1, style: .weekday)
+        case ..<32: DailyAxis(unit: .day, count: 7, style: .date)
+        case ..<190: DailyAxis(unit: .weekOfYear, count: 2, style: .date)
+        default: DailyAxis(unit: .month, count: 1, style: .month)
+        }
+    }
+
+    /// What the chart says to somebody who cannot see it.
+    ///
+    /// The busiest day and the count of days with anything on them: a screen reader cannot scan a
+    /// row of bars, and reading out thirty durations is not a summary of them.
+    private var chartDescription: String {
+        let worked = dailyBars.filter { $0.hours > 0 }
+        guard let busiest = worked.max(by: { $0.hours < $1.hours }) else {
+            return "Nothing tracked in this period"
+        }
+        let days = worked.count == 1 ? "1 day" : "\(worked.count) days"
+        return "\(days) with time on them. Busiest: "
+            + "\(busiest.day.formatted(.dateTime.weekday(.wide).day().month(.abbreviated))), "
+            + TimeFormatting.spelled(busiest.hours * 3_600)
     }
 
     // MARK: - Breakdown
@@ -276,6 +386,20 @@ struct TimeReportView: View {
             }
 
             VStack(spacing: 0) {
+                // ### Why the columns are labelled now
+                // Because a row ended "3 entries · 5.96 · 5:58" and only the first of those said
+                // what it was. The other two are the same quantity in two notations, adjacent,
+                // unheaded — and the natural reading of two numbers side by side is that they are
+                // two different measurements, so the column invited the question "5.96 of what, and
+                // why does it disagree with 5:58".
+                //
+                // Both are worth keeping: a person reads `5:58` and a spreadsheet wants `5.96`, and
+                // doing that conversion by hand is where a timesheet acquires its first wrong
+                // number. What was missing was two words saying so.
+                TimeReportHeaderRow()
+
+                Divider()
+
                 ForEach(report.rows) { row in
                     TimeReportRow(
                         row: row,
@@ -409,6 +533,41 @@ struct TimeReportView: View {
 
 // MARK: - Pieces
 
+/// One day of the period, whether or not anything was tracked on it.
+struct DailyBar: Identifiable, Hashable {
+    var day: Date
+    var hours: Double
+
+    var id: Date { day }
+}
+
+/// How the daily chart's x-axis is stepped and labelled for a period of a given length.
+///
+/// A value rather than three branches inside the chart builder, so "what does a quarter's axis look
+/// like" is a question with one answer in one place.
+struct DailyAxis {
+    enum Style {
+        /// "Mon", "Tue" — how anybody talks about a week.
+        case weekday
+        /// "3 Aug" — how anybody talks about a month.
+        case date
+        /// "Aug" — how anybody talks about a year.
+        case month
+    }
+
+    var unit: Calendar.Component
+    var count: Int
+    var style: Style
+
+    func label(for date: Date) -> String {
+        switch style {
+        case .weekday: date.formatted(.dateTime.weekday(.abbreviated))
+        case .date: date.formatted(.dateTime.day().month(.abbreviated))
+        case .month: date.formatted(.dateTime.month(.abbreviated))
+        }
+    }
+}
+
 /// One headline number, with the fact that qualifies it underneath.
 struct TimeTotalTile: View {
     let title: String
@@ -430,8 +589,48 @@ struct TimeTotalTile: View {
             Text(detail ?? " ")
                 .font(Theme.Text.metadata)
                 .foregroundStyle(Theme.Colors.tertiaryText)
+                .lineLimit(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// The widths the breakdown's columns share.
+///
+/// One place, so the heading and the rows cannot drift apart — a header row measured independently
+/// of the rows under it is a header that lines up until somebody changes a number.
+private enum ReportColumn {
+    static let title: CGFloat = 160
+    static let entries: CGFloat = 76
+    static let decimal: CGFloat = 52
+    static let duration: CGFloat = 56
+}
+
+/// What each column of the breakdown holds.
+struct TimeReportHeaderRow: View {
+    var body: some View {
+        HStack(spacing: Theme.Spacing.medium) {
+            Color.clear
+                .frame(width: ReportColumn.title, height: 1)
+
+            Spacer(minLength: 0)
+
+            Text("ENTRIES")
+                .frame(width: ReportColumn.entries, alignment: .trailing)
+
+            Text("HOURS")
+                .frame(width: ReportColumn.decimal, alignment: .trailing)
+
+            Text("TIME")
+                .frame(width: ReportColumn.duration, alignment: .trailing)
+        }
+        .font(Theme.Text.sectionHeader)
+        .kerning(Theme.Text.Tracking.caps)
+        .foregroundStyle(Theme.Colors.tertiaryText)
+        .padding(.horizontal, Theme.Spacing.medium)
+        .padding(.vertical, Theme.Spacing.small)
+        .accessibilityHidden(true)
     }
 }
 
@@ -453,7 +652,12 @@ struct TimeReportRow: View {
             }
             .font(Theme.Text.rowSubtitle)
             .lineLimit(1)
-            .frame(minWidth: 140, alignment: .leading)
+            .truncationMode(.tail)
+            // Fixed rather than a minimum, so every bar in the breakdown starts at the same x. A
+            // column that grows to the longest title staggers the bars by however long somebody's
+            // project happens to be called, and a bar chart whose bars start in different places
+            // cannot be compared by eye — which is the only thing bars are for.
+            .frame(width: ReportColumn.title, alignment: .leading)
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
@@ -465,24 +669,26 @@ struct TimeReportRow: View {
             }
             .frame(height: 8)
 
-            Text(row.entryCount == 1 ? "1 entry" : "\(row.entryCount) entries")
+            Text("\(row.entryCount)")
                 .font(Theme.Text.metadata)
+                .monospacedDigit()
                 .foregroundStyle(Theme.Colors.tertiaryText)
-                .frame(width: 76, alignment: .trailing)
+                .frame(width: ReportColumn.entries, alignment: .trailing)
 
             // Both forms, because the two readers of a report want different ones: a person reads
             // `3:24` and a spreadsheet wants `3.40`, and doing that conversion by hand is where a
-            // timesheet acquires its first wrong number.
+            // timesheet acquires its first wrong number. The heading above says which is which —
+            // unlabelled and adjacent, they read as two measurements that disagree.
             Text(TimeFormatting.decimalHours(row.total))
                 .font(Theme.Text.metadata)
                 .monospacedDigit()
                 .foregroundStyle(Theme.Colors.secondaryText)
-                .frame(width: 52, alignment: .trailing)
+                .frame(width: ReportColumn.decimal, alignment: .trailing)
 
             Text(TimeFormatting.short(row.total))
                 .font(Theme.Text.rowSubtitle)
                 .monospacedDigit()
-                .frame(width: 56, alignment: .trailing)
+                .frame(width: ReportColumn.duration, alignment: .trailing)
         }
         .padding(.horizontal, Theme.Spacing.medium)
         .padding(.vertical, Theme.Spacing.small)
