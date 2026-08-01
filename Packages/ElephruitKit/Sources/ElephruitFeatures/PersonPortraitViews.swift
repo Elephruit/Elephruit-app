@@ -599,13 +599,17 @@ private struct ChildProfileCard: View {
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
 
-                Button(action: onEdit) {
-                    Image(systemName: "ellipsis.circle")
-                        .foregroundStyle(Theme.Colors.secondaryText)
-                }
-                .buttonStyle(.borderless)
-                .help("Edit or delete relationship")
-                .accessibilityLabel("Edit relationship with \(child.displayTitle)")
+                // A word rather than a glyph, for the reason set out on ``RelatedPersonChip``: an
+                // unlabelled `…` is the one route to changing or removing this relationship, and it
+                // reads as decoration. "Relationship" says which of the several things on this card
+                // the button acts on, which "Edit" on its own would not.
+                Button("Relationship", systemImage: "pencil", action: onEdit)
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .font(Theme.Text.metadata)
+                    .help("Change or remove this relationship")
+                    .accessibilityLabel("Relationship with \(child.displayTitle)")
+                    .accessibilityHint("Change or remove this relationship")
             }
 
             ForEach(summaryFacts) { fact in
@@ -706,10 +710,13 @@ struct RelatedPersonChip: View {
                         Text(name)
                             .font(Theme.Text.rowSubtitle)
                             .lineLimit(1)
-                        Text(isPlaceholder ? "\(label) · sketch" : label)
-                            .font(Theme.Text.metadata)
-                            .foregroundStyle(Theme.Colors.tertiaryText)
-                            .lineLimit(1)
+
+                        if isPlaceholder {
+                            Text("sketch")
+                                .font(Theme.Text.metadata)
+                                .foregroundStyle(Theme.Colors.tertiaryText)
+                                .lineLimit(1)
+                        }
                     }
                 }
                 .padding(.leading, Theme.Spacing.small)
@@ -718,22 +725,42 @@ struct RelatedPersonChip: View {
             }
             .buttonStyle(.plain)
 
+            // ### Why the relationship type *is* the control
+            // Editing and deleting a relationship both worked and both had a confirmation. The only
+            // way in was a bare `…` with a tooltip, beside the relationship type drawn as static
+            // text — so the one thing on the chip a person would want to change looked like a label,
+            // and the thing that changed it looked like nothing in particular.
+            //
+            // Making the type itself the button says both facts in one control: this is the
+            // relationship, and this is what you press to change it. The chevron is what makes it
+            // read as editable rather than as a caption, and the whole word is the hit target rather
+            // than a 24-point circle.
+            //
+            // The context menu stays, as a second route rather than the only one.
             Button(action: onEdit) {
-                Image(systemName: "ellipsis")
-                    .font(Theme.Text.metadata)
-                    .frame(width: 24, height: 24)
-                    .contentShape(Circle())
+                HStack(spacing: Theme.Spacing.hairline) {
+                    Text(label)
+                        .font(Theme.Text.metadata)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(Theme.Text.keyHint)
+                }
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .padding(.horizontal, Theme.Spacing.small)
+                .padding(.vertical, Theme.Spacing.tight)
+                .background(Theme.Colors.subtleFill, in: Capsule())
+                .contentShape(Capsule())
             }
-            .buttonStyle(.borderless)
-            .help("Edit or delete relationship")
-            .accessibilityLabel("Edit relationship with \(name)")
+            .buttonStyle(.plain)
+            .help("Change or remove this relationship")
+            .accessibilityLabel("Relationship with \(name): \(label)")
+            .accessibilityHint("Change or remove this relationship")
         }
         .padding(.trailing, Theme.Spacing.tight)
         .background(Theme.Colors.subtleFill, in: Capsule())
         .help(isPlaceholder ? "\(name) — a lightweight record with no details yet" : name)
-        .accessibilityLabel("\(name), \(label)")
         .contextMenu {
-            Button("Edit Relationship…", systemImage: "pencil", action: onEdit)
+            Button("Change Relationship…", systemImage: "pencil", action: onEdit)
         }
     }
 }
