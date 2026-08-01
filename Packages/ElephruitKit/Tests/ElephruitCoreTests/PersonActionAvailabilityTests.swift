@@ -64,7 +64,7 @@ struct PersonActionAvailabilityTests {
     @Test("One number is named; several say a choice is coming")
     func detailNamesTheDestination() throws {
         let single = actions([phone("512-555-0192")])
-        #expect(try action("contact.call", in: single).detail == "mobile · 512-555-0192")
+        #expect(try action("contact.call", in: single).detail == "mobile · (512) 555-0192")
 
         let two = actions([phone("512-555-0192"), phone("512-555-0100", label: "home")])
         #expect(try action("contact.call", in: two).detail == "2 to choose from")
