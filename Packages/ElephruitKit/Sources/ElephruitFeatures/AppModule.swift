@@ -108,6 +108,23 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
 
     public var accessibilityIdentifier: String { "sidebar.module.\(rawValue)" }
 
+    /// Whether this module's sidebar holds navigation beyond its own front door.
+    ///
+    /// Calendar offers six views, every calendar it can read, and the sets composed from them; Time
+    /// offers two surfaces, a period and a grouping; Tasks and People build their columns from the
+    /// store. None of them needs a row naming the module underneath a header naming the module —
+    /// see ``SidebarRegistry/sidebarRows(in:)``, which is where the consequence is applied.
+    ///
+    /// Declared rather than inferred from the number of declared destinations, because the
+    /// distinction is *whether the module navigates*, and three of these four modules navigate by
+    /// rows that are not declared destinations at all.
+    public var hasNavigationOfItsOwn: Bool {
+        switch self {
+        case .calendar, .time, .tasks, .people: true
+        case .notes, .projects, .areas, .bookmarks, .archive, .trash: false
+        }
+    }
+
     /// The module a selection belongs to, or `nil` when it belongs to none.
     ///
     /// `nil` has two distinct meanings and both are correct here. A global destination — Home,

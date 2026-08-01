@@ -26,6 +26,21 @@ public enum PersonListSort: String, Sendable, Hashable, CaseIterable, Codable, I
     public var isAlphabetical: Bool {
         self != .recentInteraction
     }
+
+    /// What the quick-jump rail jumps *by*, said in one word.
+    ///
+    /// For the tooltip and the VoiceOver label, which have to be specific: "jump to a section" leaves
+    /// somebody who cannot see the list to guess which part of a name a letter refers to, and in this
+    /// app the answer changes with the order. Under family-name order the M's are the Mendozas;
+    /// under first-name order they are the Mayas; under organisation they are not names at all.
+    public var jumpLabel: String {
+        switch self {
+        case .firstName: "first name"
+        case .lastName: "surname"
+        case .organization: "company"
+        case .recentInteraction: "period"
+        }
+    }
 }
 
 /// One person, reduced to what ordering and sectioning need.

@@ -43,6 +43,9 @@ struct PersonWorkspaceView: View {
     @State private var isAddingRelationship = false
     @State private var presentedTimelineEntry: PersonTimelineEntry?
 
+    /// The widest the profile's content is drawn, however wide its column becomes.
+    static let measure: CGFloat = 860
+
     var body: some View {
         VStack(spacing: 0) {
             PersonHeaderView(
@@ -59,6 +62,11 @@ struct PersonWorkspaceView: View {
                 onShowBrief: { isShowingBrief = true },
                 onAddRelationship: { isAddingRelationship = true }
             )
+            // The same measure as the content below it, so the name, the actions and the first
+            // section under them share one left edge and one right edge. The divider still spans the
+            // column, because what it separates is the whole header from the whole page.
+            .frame(maxWidth: Self.measure, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Divider()
 
@@ -109,6 +117,19 @@ struct PersonWorkspaceView: View {
                     )
                 }
                 .padding(.vertical, Theme.Spacing.large)
+                // ### Why the profile has a measure of its own
+                // Because its column has no maximum — see `AppModule.shellLayout` — so the profile
+                // is what absorbs whatever a window has spare. That is the right shape for the
+                // column and the wrong shape for the content: a contact row whose label sits at the
+                // far left and whose value sits eighteen hundred points away is not a wide row, it
+                // is two rows the eye has to join.
+                //
+                // So the column takes the width and the content declines it past this point. Wider
+                // than the note editor's eighty characters, because a profile is a grid of short
+                // facts rather than prose and its relationship cards want room to sit two or three
+                // abreast; narrow enough that nothing inside it has to be read across a desk.
+                .frame(maxWidth: Self.measure, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .accessibilityIdentifier(AccessibilityID.People.workspace)

@@ -74,6 +74,50 @@ struct SidebarRegistryTests {
         #expect(SidebarRegistry.destinations(in: .calendar).contains { $0.id == "calendar" })
     }
 
+    @Test("A module that navigates does not draw a row naming itself")
+    func modulesWithNavigationDrawNoFrontDoorRow() {
+        // The module header already reads `‹ 􀉉 Calendar ⌄`. A row called *Calendar* directly under
+        // it was the front door of a module you were already standing in, drawn as somewhere to go —
+        // and in Calendar's case it was the column's only selectable row, so the sidebar's one piece
+        // of selection state was spent restating its own header.
+        #expect(SidebarRegistry.sidebarRows(in: .calendar).isEmpty)
+        #expect(SidebarRegistry.sidebarRows(in: .time).isEmpty)
+
+        // Still declared, because `⌘6` has to reach Calendar whether or not Calendar spends a row
+        // saying so — and a scene restored to `.calendar` still has to resolve.
+        #expect(SidebarRegistry.destinations(in: .calendar).count == 1)
+        #expect(SidebarRegistry.shortcutOrder.contains { $0.selection == .calendar })
+        #expect(SidebarRegistry.shortcutOrder.contains { $0.selection == .time })
+    }
+
+    @Test("A module with nothing else in its sidebar keeps its one row")
+    func singleDestinationModulesKeepTheirRow() {
+        // The rule is about duplication, not about austerity. Bookmarks genuinely is one list, and a
+        // module whose sidebar is empty is worse than one whose sidebar is a row.
+        for module in [AppModule.bookmarks, .archive, .trash] {
+            #expect(
+                SidebarRegistry.sidebarRows(in: module) == SidebarRegistry.destinations(in: module),
+                "\(module.title) lost the only row it had"
+            )
+        }
+
+        // And a front door with a name of its own is a destination among peers rather than a second
+        // name for the module: *All Notes* sits beside *Ideas*, *Reference* and *Daily Notes*.
+        #expect(SidebarRegistry.sidebarRows(in: .notes).count > 1)
+    }
+
+    @Test("Every module either navigates or draws its front door")
+    func noModuleHasAnEmptySidebar() {
+        // The failure this guards against is a module declared with `hasNavigationOfItsOwn` and no
+        // navigation to show for it, which would be a header over an empty column.
+        for module in AppModule.displayOrder {
+            #expect(
+                module.hasNavigationOfItsOwn || !SidebarRegistry.sidebarRows(in: module).isEmpty,
+                "\(module.title) would draw an empty sidebar"
+            )
+        }
+    }
+
     @Test("The primary band is exactly the four global destinations, in reading order")
     func primaryBandIsGlobalOnly() {
         // The whole redesign in one assertion. Anything else at the top level is a feature's

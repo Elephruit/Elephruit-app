@@ -265,9 +265,37 @@ public enum SidebarRegistry {
         destinationsByBand[band] ?? []
     }
 
-    /// The destinations a module draws at the top of its own sidebar, in display order.
+    /// The destinations a module *declares*, in display order.
+    ///
+    /// Every one of them, including the front door of a module that does not draw its front door as
+    /// a row. This is what the numeric shortcuts are built from — see ``shortcutOrder`` — because
+    /// `⌘6` has to reach Calendar whether or not Calendar spends a row saying so.
     public static func destinations(in module: AppModule) -> [SidebarDestination] {
         destinationsByModule[module] ?? []
+    }
+
+    /// The destinations a module draws as rows at the top of its own sidebar.
+    ///
+    /// ### Why this is not simply ``destinations(in:)``
+    /// Because a module header already names the module. Directly beneath `‹ 􀉉 Calendar ⌄` sat a row
+    /// called *Calendar*, and beneath `‹ 􀐫 Time ⌄` sat one called *Tracked Time*: the front door of
+    /// a module you are already standing in, drawn as somewhere to go. In Calendar's case it was
+    /// also the column's only selectable row, so the sidebar's one piece of selection state was
+    /// spent restating its own header.
+    ///
+    /// The rule is that a front door earns a row only when the module has **no other navigation**.
+    /// Bookmarks, Archive and Trash genuinely are one list each, and a module with an empty sidebar
+    /// would be worse than one row. Notes and Projects declare several destinations, and *All Notes*
+    /// beside *Ideas* and *Reference* is a destination among peers rather than a second name for the
+    /// module. Calendar and Time have views, calendars, sets, periods and groupings — that is
+    /// navigation, and it does not need to be introduced.
+    ///
+    /// Filtering here rather than in each view keeps the rule one declaration that a test can hold,
+    /// instead of an absence in two files that the next person reads as an oversight.
+    public static func sidebarRows(in module: AppModule) -> [SidebarDestination] {
+        let declared = destinations(in: module)
+        guard declared.count == 1, module.hasNavigationOfItsOwn else { return declared }
+        return []
     }
 
     /// Every available destination, in display order.

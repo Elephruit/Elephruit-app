@@ -230,12 +230,20 @@ extension Theme {
         /// becoming one, so that changing the colour of capture is an edit rather than a search.
         public static let captureAccent = Color(nsColor: .systemPurple)
 
-        /// The accent for a child's evolving details on a parent's profile.
-        ///
-        /// Distinct from ``personalDetail`` on purpose: a child's facts are the one part of a
-        /// profile that is deliberately local to this app and never written to the address book, and
-        /// the tint is part of how that reads as its own thing.
-        public static let familyAccent = Color(nsColor: .systemPink)
+        // There was a `familyAccent` here — pink, for a child's evolving details on a parent's
+        // profile — and the argument for it was that those facts are deliberately local to this app
+        // and the tint was part of how that read as its own thing.
+        //
+        // It is gone, and the argument was wrong twice. Pink and red in this palette mean
+        // ``warning``, ``overdue`` and ``destructive``, so a profile whose only coloured elements
+        // were the children read as several things having gone wrong; and "local to this app" is a
+        // fact about *provenance*, which the lock glyph on the card already states in words anybody
+        // can read, in the one condition where it is news. A hue cannot say "never written to your
+        // address book" to somebody who has not been told what the hue means, and the people who
+        // most need to know are the ones being told least.
+        //
+        // Nothing replaced it. A relationship card carries the person's own avatar tint and no other
+        // colour — see `RelationshipCard`.
 
         /// A detail that belongs to somebody's working life.
         ///
