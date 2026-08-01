@@ -48,6 +48,17 @@ struct ModuleSidebar: View {
             }
         }
         .listStyle(.sidebar)
+        // ### Why the list is inset from its own top edge
+        // The module header sits above this list with a `Divider` between them, and a `List` starts
+        // its first row flush against its own bounds. A selected first row therefore drew its
+        // rounded accent fill *through* that divider — the fill has no top inset of its own, and
+        // `hoverHighlight(extending:)` widens the highlight outward as well. The result read as the
+        // selection escaping the navigation region, which is exactly what it was doing.
+        //
+        // A scroll-content margin rather than padding on the row: padding would move the row and
+        // leave the fill where it was, and it would only fix whichever row happened to be first.
+        // This keeps every fill — selected, hovering, or a disclosure's — inside the list.
+        .contentMargins(.vertical, Theme.Spacing.tight, for: .scrollContent)
         .accessibilityIdentifier("sidebar.module.\(module.rawValue).list")
     }
 
@@ -76,7 +87,7 @@ struct NotesSidebarSection: View {
 
     var body: some View {
         Section {
-            ForEach(SidebarRegistry.destinations(in: .notes)) { destination in
+            ForEach(SidebarRegistry.sidebarRows(in: .notes)) { destination in
                 SidebarDestinationRow(
                     destination: destination,
                     isSelected: navigation.selection == destination.selection,
@@ -95,6 +106,13 @@ struct NotesSidebarSection: View {
 /// control in the middle column and the sidebar had one row that did nothing. It lives on the
 /// navigation model now, so choosing a window here *is* choosing what the report covers — the same
 /// arrangement the calendar's view switcher uses.
+///
+/// ### Why there is no "Tracked Time" row
+/// The same reason Calendar has no "Calendar" row: the module header already names the module, and a
+/// front-door destination row underneath it is a second name for where you already are. It is drawn
+/// only by the modules that have no navigation of their own — see ``SingleDestinationSection`` — and
+/// Time has two surfaces and two settings, which is navigation. `.time` remains the module's
+/// ``AppModule/defaultSelection`` and what the numeric shortcut selects; it is simply not restated.
 struct TimeSidebarSection: View {
     @Environment(\.services) private var services
 
@@ -103,16 +121,8 @@ struct TimeSidebarSection: View {
     @ScaledMetric(relativeTo: .body) private var rowHeight = SidebarMetrics.baseRowHeight
 
     var body: some View {
-        Section {
-            ForEach(SidebarRegistry.destinations(in: .time)) { destination in
-                SidebarDestinationRow(
-                    destination: destination,
-                    isSelected: navigation.selection == destination.selection,
-                    rowHeight: rowHeight
-                )
-            }
-
-            if let running = services?.timer.running {
+        if let running = services?.timer.running {
+            Section {
                 RunningTimerRow(running: running, rowHeight: rowHeight) {
                     navigation.select(.time)
                     navigation.timeSurface = .log
@@ -192,7 +202,7 @@ struct ProjectsSidebarSection: View {
 
     var body: some View {
         Section {
-            ForEach(SidebarRegistry.destinations(in: .projects)) { destination in
+            ForEach(SidebarRegistry.sidebarRows(in: .projects)) { destination in
                 SidebarDestinationRow(
                     destination: destination,
                     isSelected: navigation.selection == destination.selection,
@@ -230,7 +240,7 @@ struct AreasSidebarSection: View {
 
     var body: some View {
         Section {
-            ForEach(SidebarRegistry.destinations(in: .areas)) { destination in
+            ForEach(SidebarRegistry.sidebarRows(in: .areas)) { destination in
                 SidebarDestinationRow(
                     destination: destination,
                     isSelected: navigation.selection == destination.selection,
@@ -261,6 +271,14 @@ struct AreasSidebarSection: View {
 
 /// Bookmarks, Archive and Trash, each of which genuinely is one list.
 ///
+/// ### The rule about front-door rows
+/// A module draws its own destination row **only when it has no other navigation**. Bookmarks really
+/// is one list, and a sidebar with nothing in it would be worse than one row; Calendar and Time have
+/// views, calendars, sets, periods and groupings, and a row naming the module on top of a header
+/// naming the module is the duplication this rule exists to prevent. Modules whose front door has a
+/// name of its own — *All Notes*, *All Projects* — keep it, because "All Notes" and "Notes" are not
+/// the same claim: one is a destination among four, the other is the module.
+///
 /// The Trash carries the one action that belongs beside it rather than in a menu three levels away,
 /// and it is the one action in this app that cannot be undone — so it asks first, and says why.
 struct SingleDestinationSection: View {
@@ -275,7 +293,7 @@ struct SingleDestinationSection: View {
 
     var body: some View {
         Section {
-            ForEach(SidebarRegistry.destinations(in: module)) { destination in
+            ForEach(SidebarRegistry.sidebarRows(in: module)) { destination in
                 SidebarDestinationRow(
                     destination: destination,
                     isSelected: navigation.selection == destination.selection,
@@ -364,9 +382,22 @@ struct ContainerSidebarRow: View {
 
 /// A row that turns a mode on rather than selecting a destination.
 ///
-/// Calendar views, time windows and groupings are all this shape: the destination does not change,
-/// the way it is drawn does. A checkmark rather than the list's selection fill, because the list's
-/// selection already means something else on the rows above.
+/// Calendar views, time surfaces, windows and groupings are all this shape: the destination does not
+/// change, the way it is drawn does.
+///
+/// ### Why the checkmark became a fill
+/// It was a checkmark at the far trailing edge, and in a module whose *only* navigation is rows of
+/// this shape that is not a selected state — it is a tick sitting twelve characters away from the
+/// word it refers to, in a sidebar where every other current thing is marked by a fill. Two ways of
+/// saying "this is the one you are looking at" in one column is one too many, and the quieter of the
+/// two was carrying the whole calendar.
+///
+/// So the fill is drawn here, on the same geometry ``SwiftUICore/View/hoverHighlight(isEnabled:cornerRadius:extending:)``
+/// uses — the same radius, the same outward extension, inside the row's own bounds. It is the accent
+/// at low opacity rather than the system's solid selected fill, because these rows sit in the same
+/// list as genuine destinations and a mode must not be indistinguishable from a place. Hover is
+/// suppressed while a row is on, for the reason the hover modifier already gives: a row cannot
+/// usefully be both what you are looking at and what you might click next.
 struct ModeRow: View {
     let title: String
     let symbolName: String
@@ -385,25 +416,27 @@ struct ModeRow: View {
                     .accessibilityHidden(true)
 
                 Text(title)
+                    .font(isOn ? Theme.Text.rowTitleEmphasised : Theme.Text.rowTitle)
                     .lineLimit(1)
 
                 Spacer(minLength: 0)
-
-                if isOn {
-                    Image(systemName: "checkmark")
-                        .font(Theme.Text.metadata.weight(.semibold))
-                        .foregroundStyle(Theme.Colors.selection)
-                        .accessibilityHidden(true)
-                }
             }
             .frame(minHeight: rowHeight)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .background {
+            RoundedRectangle(cornerRadius: SidebarMetrics.selectionRadius, style: .continuous)
+                .fill(Theme.Colors.selection.opacity(0.16))
+                .padding(.horizontal, -SidebarMetrics.selectionInset)
+                .opacity(isOn ? 1 : 0)
+        }
         .hoverHighlight(
+            isEnabled: !isOn,
             cornerRadius: SidebarMetrics.selectionRadius,
             extending: SidebarMetrics.selectionInset
         )
+        .calmAnimation(Theme.Motion.appearance, value: isOn)
         .help(hint)
         .accessibilityIdentifier(identifier)
         .accessibilityLabel(title)

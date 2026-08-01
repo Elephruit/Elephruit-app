@@ -47,6 +47,19 @@ public final class CalendarWorkspaceModel {
 
     static let viewKindKey = "calendar.viewKind"
 
+    /// The view a workspace built now would come up in.
+    ///
+    /// The sidebar needs this before any workspace exists — the module can be entered from a menu,
+    /// a shortcut, or a restored scene, and the workspace is not built until the calendar has been
+    /// on screen once. Exposed as the same read the initialiser performs, rather than duplicated
+    /// there, so the two can never disagree about what "the last view" was.
+    public static func storedViewKind(
+        defaults: UserDefaults = .standard,
+        fallback: CalendarViewKind = .week
+    ) -> CalendarViewKind {
+        defaults.string(forKey: viewKindKey).flatMap(CalendarViewKind.init(rawValue:)) ?? fallback
+    }
+
     public init(
         dateProvider: any DateProvider,
         calendar: Calendar? = nil,
@@ -60,8 +73,7 @@ public final class CalendarWorkspaceModel {
         // The last view is restored because it is a statement about how somebody works rather than
         // about a particular day, and having to pick Week again every launch is a small tax paid
         // daily.
-        let stored = defaults.string(forKey: Self.viewKindKey).flatMap(CalendarViewKind.init(rawValue:))
-        self.viewKind = stored ?? viewKind
+        self.viewKind = Self.storedViewKind(defaults: defaults, fallback: viewKind)
         self.defaults = defaults
     }
 
