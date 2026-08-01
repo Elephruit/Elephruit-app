@@ -123,4 +123,50 @@ struct CaptureHighlightTests {
         #expect(spans.token(intersecting: 3..<6)?.text == "landscape")
         #expect(spans.token(intersecting: 12..<15) == nil, "an ordinary word is an ordinary word")
     }
+
+    // MARK: - The caret across the same boundary
+
+    @Test("A caret in plain text is at the same offset in both counts")
+    func caretIsUnchangedWithoutSurrogates() {
+        let text = "Call the framer"
+        #expect(CaptureHighlight.utf16Offset(ofCharacter: 5, in: text) == 5)
+        #expect(CaptureHighlight.characterOffset(ofUTF16: 5, in: text) == 5)
+    }
+
+    /// The whole reason the pair exists. A caret reported by AppKit as 4 is, in the units the parser
+    /// counts in, 2 — and treating one as the other puts the insertion point two words away.
+    @Test("A caret after an emoji converts in both directions")
+    func caretAcrossAnEmoji() {
+        let text = "👨‍👩‍👧 party"
+        let afterFamily = 1
+
+        let utf16 = CaptureHighlight.utf16Offset(ofCharacter: afterFamily, in: text)
+        #expect(utf16 > afterFamily)
+        #expect(CaptureHighlight.characterOffset(ofUTF16: utf16, in: text) == afterFamily)
+    }
+
+    @Test("A caret at the very end converts to the very end")
+    func caretAtTheEnd() {
+        let text = "🎉 party"
+        #expect(CaptureHighlight.characterOffset(ofUTF16: text.utf16.count, in: text) == text.count)
+        #expect(CaptureHighlight.utf16Offset(ofCharacter: text.count, in: text) == text.utf16.count)
+    }
+
+    /// A caret has to be somewhere, so both directions clamp rather than returning nothing.
+    @Test("An impossible caret lands inside the text rather than crashing")
+    func caretIsClamped() {
+        let text = "short"
+        #expect(CaptureHighlight.utf16Offset(ofCharacter: 99, in: text) == 5)
+        #expect(CaptureHighlight.characterOffset(ofUTF16: 99, in: text) == 5)
+        #expect(CaptureHighlight.utf16Offset(ofCharacter: -3, in: text) == 0)
+        #expect(CaptureHighlight.characterOffset(ofUTF16: -3, in: text) == 0)
+    }
+
+    /// AppKit will not normally produce one, but arithmetic on an offset might, and the answer has to
+    /// be a whole character rather than a trap.
+    @Test("A caret inside a surrogate pair reports the character it is inside")
+    func caretInsideASurrogatePair() {
+        let text = "🎉x"
+        #expect(CaptureHighlight.characterOffset(ofUTF16: 1, in: text) == 0)
+    }
 }
