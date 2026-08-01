@@ -157,15 +157,30 @@ struct CalendarStatusBanner: View {
 
                 Spacer(minLength: Theme.Spacing.small)
 
+                // ### Every state that shows a message also offers a way out of it
+                // There used to be a gap here, and Today sat in it. The two branches were "not
+                // enabled" and "enabled, asked, refused"; the state in between — enabled, never
+                // asked — matched neither, so `message` returned the "Elephruit can show your
+                // calendar alongside your work" line and nothing was drawn beside it. A strip with
+                // an icon and an offer and no control, at the top of the day's list, which does not
+                // respond to being clicked.
+                //
+                // A banner that describes a capability the user cannot reach from it is worse than
+                // no banner. If there is something to say, there is something to press.
                 if !isEnabled {
                     Button("Show My Calendar", action: onEnable)
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.bordered)
                         .controlSize(.small)
-                } else if !authorization.isWorthAsking, !authorization.canRead {
+                } else if authorization.isWorthAsking {
+                    // Enabled, but macOS has never been asked. Asking is the whole remaining step.
+                    Button("Allow Access…", action: onEnable)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                } else if !authorization.canRead {
                     // Asking again would show no prompt, so the only honest button sends the user
                     // where the decision actually lives.
                     Button("Open System Settings", action: onOpenSettings)
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.bordered)
                         .controlSize(.small)
                 }
             }
