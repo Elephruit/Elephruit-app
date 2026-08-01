@@ -199,6 +199,36 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
     }
 }
 
+/// The two halves of the Time module.
+public enum TimeSurface: String, Hashable, Sendable, CaseIterable, Codable {
+    /// What you did, newest first, correctable in place.
+    case log
+
+    /// Where it went, over any stretch, ready to take somewhere else.
+    case report
+
+    public var displayName: String {
+        switch self {
+        case .log: "Log"
+        case .report: "Reports"
+        }
+    }
+
+    public var symbolName: String {
+        switch self {
+        case .log: "list.bullet.rectangle"
+        case .report: "chart.bar.xaxis"
+        }
+    }
+
+    public var hint: String {
+        switch self {
+        case .log: "Every stretch, day by day, in the order you tracked it."
+        case .report: "Totals over any period, grouped how you like, ready to export."
+        }
+    }
+}
+
 /// One window's navigation and presentation state.
 ///
 /// Per-window rather than global, so two windows can look at different things — which is most of
@@ -344,6 +374,14 @@ public final class NavigationModel {
 
     /// How the Time module's entries are rolled up.
     public var timeGrouping: TimeGrouping = .item
+
+    /// Which half of the Time module is on screen.
+    ///
+    /// A mode rather than a second sidebar destination, because the two are the same *content* asked
+    /// two different questions — what did I do, and where did it go — and a destination would give
+    /// them separate selections, separate window titles, and two places for the period to be
+    /// remembered differently.
+    public var timeSurface: TimeSurface = .log
 
     /// A day something outside the window asked the calendar to show.
     ///
