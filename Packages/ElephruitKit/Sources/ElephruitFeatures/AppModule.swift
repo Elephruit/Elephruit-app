@@ -164,29 +164,39 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     }
 }
 
-/// The four destinations that are not inside any module.
+/// The destinations that are not inside any module.
 ///
 /// Held as a type rather than as a filter over ``SidebarRegistry`` so that "what is global" has one
 /// answer, and so that the order — which is the order they are read in — is declared once.
+///
+/// ### Why there are two of these and not four
+/// There were four: Home, Today, Upcoming and Inbox. Home and Upcoming were two views of the same
+/// morning — one showing what is *happening*, one showing what is *dated* — and Today was a third,
+/// a flat list of everything due. Three destinations answering one question is three places to look
+/// before knowing what the day holds, and none of them could show how the three kinds of record
+/// relate, because none of them had seen all three. They are now one destination that has.
+///
+/// Inbox stays, because it answers a genuinely different question: what has arrived and not yet been
+/// filed. That is not a fact about a day.
 public enum GlobalDestination: String, Hashable, Sendable, Codable, CaseIterable, Identifiable {
-    case home
     case today
-    case upcoming
     case inbox
 
     public var id: String { rawValue }
 
     public var selection: SidebarSelection {
         switch self {
-        case .home: .home
         case .today: .today
-        case .upcoming: .upcoming
         case .inbox: .inbox
         }
     }
 
-    /// Whether a selection is one of the four.
+    /// Whether a selection belongs to no module.
+    ///
+    /// Asked of the *canonical* form, so a scene restored from a build that had Home or Upcoming is
+    /// recognised as global rather than falling through to the "belongs to whichever module you were
+    /// in" branch — which is what would strand a restored window inside People showing Today.
     public static func contains(_ selection: SidebarSelection) -> Bool {
-        allCases.contains { $0.selection == selection }
+        allCases.contains { $0.selection == selection.canonical }
     }
 }

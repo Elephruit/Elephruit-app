@@ -207,6 +207,35 @@ public final class TaskService {
         }
     }
 
+    /// Chooses this task for a particular day.
+    ///
+    /// ### Why this is a commitment and not a start date
+    /// Because they answer different questions and the model has always kept them apart. A start
+    /// date says *this cannot be worked on before then*; a commitment says *I intend to do this on
+    /// that day*. Somebody dragging a task onto Thursday in a day planner is doing the second, and
+    /// writing the first instead would silently make the task unavailable in Anytime until Thursday
+    /// arrived — a task quietly disappearing from the list of what you could pick up, because you
+    /// said when you meant to do it.
+    ///
+    /// ``commitToToday(_:)`` is this for the one day that has an idempotency rule of its own: a task
+    /// carried over from Monday must stay carried over rather than looking freshly planned, which is
+    /// what the guard there protects and what makes it worth keeping as its own method.
+    public func commit(_ task: Item, to day: Date) throws(AppError) {
+        let start = calendar.startOfDay(for: day)
+        guard start != dateProvider.startOfToday else {
+            try commitToToday(task)
+            return
+        }
+
+        let order = try nextTodayOrder()
+        try mutate(task) { subject in
+            subject.todayCommittedOn = start
+            // Only meaningful while the commitment is for today itself — see `TaskInvariants`.
+            subject.isLaterToday = false
+            subject.todayOrder = order
+        }
+    }
+
     /// Pushes a task to the back half of today.
     ///
     /// Commits it first if it was not already: "later today" is a statement about today's plan, and

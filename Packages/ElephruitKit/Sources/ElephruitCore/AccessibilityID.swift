@@ -225,10 +225,34 @@ public enum AccessibilityID {
         public static let linkedContactSection = "people.linkedContact"
     }
 
-    public enum Home {
-        public static let root = "home"
-        public static let startDailyNote = "home.startDailyNote"
-        public static let followUps = "home.followUps"
+    /// The day, whole. Replaces the identifiers Home and Upcoming used between them.
+    public enum Today {
+        public static let root = "today"
+        public static let briefing = "today.briefing"
+        public static let figures = "today.briefing.figures"
+        public static let nextCommitment = "today.briefing.next"
+
+        public static let needsAttention = "today.needsAttention"
+        public static let schedule = "today.schedule"
+        public static let tasks = "today.tasks"
+        public static let people = "today.people"
+        public static let completed = "today.completed"
+
+        public static let startDailyNote = "today.startDailyNote"
+        public static let dailyNote = "today.dailyNote"
+        public static let quickAdd = "today.quickAdd"
+
+        public static let previousDay = "today.previousDay"
+        public static let nextDay = "today.nextDay"
+        public static let returnToToday = "today.returnToToday"
+        public static let datePicker = "today.datePicker"
+        public static let showPreviousDays = "today.showPreviousDays"
+        public static let loadMoreDays = "today.loadMoreDays"
+        public static let filters = "today.filters"
+
+        public static func day(_ key: String) -> String { "today.day.\(key)" }
+        public static func person(_ key: String) -> String { "today.person.\(key)" }
+        public static func event(_ id: String) -> String { "today.event.\(id)" }
     }
 
     public enum Calendar {
