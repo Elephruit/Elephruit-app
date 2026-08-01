@@ -167,8 +167,13 @@ struct CaptureComposer: View {
         return true
     }
 
+    /// What the caret is part-way through naming.
+    ///
+    /// Every lookup goes through ``CaptureSuggestionSource``, which is also what the icon menus use,
+    /// so the list under the field and the list in the popover cannot come to disagree about which
+    /// people there are.
     private func refreshSuggestions() async {
-        guard let completion, let services else {
+        guard let completion else {
             suggestions = []
             return
         }
@@ -178,22 +183,17 @@ struct CaptureComposer: View {
 
         switch completion.trigger {
         case .tag:
-            let slugs = ((try? services.tags.allTags()) ?? [])
-                .map(\.slug)
-                .filter { query.isEmpty || $0.hasPrefix(query.lowercased()) }
-            suggestions = Array(slugs.prefix(6))
+            suggestions = source.tagSlugs(matching: query, limit: 6)
 
-        case .person, .project:
-            // The same index-backed lookup that already backs `[[` completion in the editor.
-            let titles = await services.search.titleSuggestions(prefix: query, limit: 12)
-            let kinds: Set<ItemKind> = completion.trigger == .person
-                ? [.person]
-                : [.project, .area, .goal]
-            let matches = titles
-                .compactMap { try? services.items.item(id: $0.id) }
-                .filter { kinds.contains($0.kind) }
-                .map(\.title)
-            suggestions = Array(matches.prefix(6))
+        case .person:
+            suggestions = await source.titles(matching: query, kinds: [.person], limit: 6)
+
+        case .project:
+            suggestions = await source.titles(
+                matching: query,
+                kinds: CaptureSuggestionSource.containerKinds,
+                limit: 6
+            )
 
         case .dueDate, .followDate:
             let examples = NaturalDateParser.recognisedExamples
@@ -234,9 +234,19 @@ struct CaptureComposer: View {
 
     private var footer: some View {
         HStack(spacing: Theme.Spacing.medium) {
-            destination
+            CaptureDestinationButton(
+                draft: $composition.draft,
+                source: source,
+                onBeforeChoosing: settleWhatWasTyped
+            )
 
             Spacer()
+
+            CaptureActionRow(
+                draft: $composition.draft,
+                source: source,
+                onBeforeChoosing: settleWhatWasTyped
+            )
 
             Button("Cancel", action: onCancel)
                 .keyboardShortcut(.cancelAction)
@@ -253,26 +263,19 @@ struct CaptureComposer: View {
         .background(Theme.Colors.subtleFill)
     }
 
-    /// Where this will land — the Inbox, or a project named with `>`.
-    ///
-    /// A label for now; the picker arrives with the rest of the point-and-click row.
-    private var destination: some View {
-        let hint = composition.draft.projectHint
-        let resolved = hint.flatMap { try? services?.capture.resolveContainer(named: $0) } ?? nil
+    private var source: CaptureSuggestionSource {
+        CaptureSuggestionSource(services: services)
+    }
 
-        return Label(
-            resolved?.title ?? hint ?? "Inbox",
-            systemImage: resolved == nil && hint != nil ? "questionmark.square.dashed" : (hint == nil ? "tray" : "square.stack.3d.up")
-        )
-        .font(Theme.Text.metadata)
-        .foregroundStyle(resolved == nil && hint != nil ? Theme.Colors.unresolvedLink : Theme.Colors.secondaryText)
-        .lineLimit(1)
-        .help(
-            resolved == nil && hint != nil
-                ? "No project with this name — the capture will go to the Inbox"
-                : "Where this will be filed"
-        )
-        .accessibilityIdentifier(AccessibilityID.QuickCapture.destinationButton)
+    /// Turns anything typed but unsettled into a chip, before a click adds one of its own.
+    ///
+    /// Without this, `due:friday` left sitting in the sentence would be lifted later and would
+    /// overwrite a date picked from the menu afterwards — because a lift is treated as the more
+    /// recent act, and by the clock it would be. Settling first puts the two in the order they
+    /// actually happened.
+    private func settleWhatWasTyped() {
+        composition.flush(knowing: vocabulary)
+        suggestions = []
     }
 
     // MARK: - What the library knows
