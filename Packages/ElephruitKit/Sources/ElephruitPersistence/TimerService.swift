@@ -87,6 +87,18 @@ public final class TimerService {
     /// Time view, in the menu bar, and asserted in a test.
     public private(set) var finishedPhase: PomodoroPhase?
 
+    /// Told whenever an entry stops being the running one.
+    ///
+    /// ### Why a callback rather than the service doing the work
+    /// Because what wants to know lives *above* this layer — the calendar mirror is a feature, and
+    /// persistence cannot see it without the dependency graph pointing backwards. A closure keeps
+    /// the arrow the right way round and keeps this object testable with no calendar at all.
+    ///
+    /// Fired for every path that closes an entry: stopping, discarding, switching away, a break
+    /// beginning, and resolving an idle gap. Missing one of those means an entry that is finished in
+    /// the store and still open in whatever is mirroring it.
+    public var onEntryFinished: ((UUID) -> Void)?
+
     /// What to time again when the break ends.
     ///
     /// Held as an id rather than as the entry, because a break can outlive a store change and a
@@ -226,7 +238,12 @@ public final class TimerService {
         tagSlugs: [String] = [],
         isBillable: Bool = false
     ) -> Bool {
-        perform {
+        // Captured before the switch, because the entry that just finished is the one anything
+        // downstream cares about and it is no longer the running one afterwards.
+        let previous = running?.id
+        defer { previous.map { onEntryFinished?($0) } }
+
+        return perform {
             try entries.switchTo(
                 item: item,
                 project: project,
@@ -246,7 +263,10 @@ public final class TimerService {
     @discardableResult
     public func stop() -> Bool {
         pomodoro = nil
-        return perform { try entries.stopRunning(at: nil) }
+        let stopping = running?.id
+        let outcome = perform { try entries.stopRunning(at: nil) }
+        stopping.map { onEntryFinished?($0) }
+        return outcome
     }
 
     /// Throws the running timer away rather than recording it.
@@ -256,7 +276,12 @@ public final class TimerService {
     @discardableResult
     public func discard() -> Bool {
         pomodoro = nil
-        return perform { try entries.discardRunning() }
+        let discarding = running?.id
+        let outcome = perform { try entries.discardRunning() }
+        // Announced like any other ending, because a discarded entry may have a copy elsewhere that
+        // now has to be taken back.
+        discarding.map { onEntryFinished?($0) }
+        return outcome
     }
 
     // MARK: Editing what is running
@@ -517,9 +542,10 @@ public final class TimerService {
 
     /// Stops the timer for a break, remembering what to resume afterwards.
     private func stopForBreak(at now: Date) {
-        guard running != nil else { return }
-        focusSubjectEntryID = running?.id
+        guard let stopping = running?.id else { return }
+        focusSubjectEntryID = stopping
         _ = perform { try entries.stopRunning(at: now) }
+        onEntryFinished?(stopping)
     }
 
     /// Times the same thing again for the next focus block.
@@ -561,6 +587,7 @@ public final class TimerService {
             try entries.resolveRecovery(choice, for: entry)
             pendingRecovery = nil
             refresh()
+            onEntryFinished?(pending.id)
         } catch {
             lastError = error
         }
@@ -585,6 +612,7 @@ public final class TimerService {
             try entries.resolveIdle(choice, for: pending)
             pendingIdle = nil
             refresh()
+            onEntryFinished?(pending.id)
         } catch {
             lastError = error
         }

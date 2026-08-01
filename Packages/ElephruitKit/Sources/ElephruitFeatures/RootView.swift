@@ -203,7 +203,7 @@ public struct RootView: View {
             services?.checkForAttachmentTidy()
             // Before the index warm, because a timer left running deserves an answer sooner than
             // search deserves to be fast.
-            services?.timer.start()
+            services?.startTimeTracking()
             await services?.warmSearchIndex()
         }
         .sheet(isPresented: repairSheetBinding) {

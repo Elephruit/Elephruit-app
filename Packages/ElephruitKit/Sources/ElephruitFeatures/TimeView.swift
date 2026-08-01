@@ -363,7 +363,8 @@ public struct TimeView: View {
 
     private func duplicate(_ snapshot: TimeEntrySnapshot) {
         guard let services, let entry = try? services.timeEntries.entry(id: snapshot.id) else { return }
-        services.perform { try services.timeEntries.duplicate(entry) }
+        let copy = try? services.timeEntries.duplicate(entry)
+        copy.map { services.mirrorTime(entryID: $0.id) }
         bump()
     }
 
@@ -375,6 +376,9 @@ public struct TimeView: View {
                 try services.timeEntries.delete(entry)
             }
         }
+        // After the delete, not before: the mirror reads the entry to decide, and a soft-deleted one
+        // is what tells it to take the calendar copy back.
+        ids.forEach { services.mirrorTime(entryID: $0) }
         services.timer.refresh()
         bump()
     }
@@ -414,6 +418,7 @@ public struct TimeView: View {
             }
         }
 
+        ids.forEach { services.mirrorTime(entryID: $0) }
         services.timer.refresh()
         bump()
     }
