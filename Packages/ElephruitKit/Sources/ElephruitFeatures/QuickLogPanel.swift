@@ -118,6 +118,15 @@ public final class QuickLogController {
         )
         hosting.sizingOptions = [.preferredContentSize]
 
+        // A `.titled` window has a title bar whether or not one is drawn, and AppKit reports a
+        // 32-point top safe-area inset for it even with the bar hidden, transparent, and the content
+        // told to fill the frame. SwiftUI honours that, so everything in the panel sat a title bar's
+        // height below where this file says it does. Nothing is clipped here — the window is roomier
+        // than its contents — but the panel was hanging low in its own window for no reason anybody
+        // reading the layout could have seen. See ``MiniTimerController``, where the same inset cost
+        // the collapsed timer its bottom edge.
+        hosting.safeAreaRegions = []
+
         let panel = QuickLogPanel(content: hosting)
         panel.center()
         self.panel = panel

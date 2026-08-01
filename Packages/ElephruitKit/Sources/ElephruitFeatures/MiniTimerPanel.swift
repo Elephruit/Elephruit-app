@@ -312,6 +312,24 @@ public final class MiniTimerController {
         )
         hosting.sizingOptions = [.preferredContentSize]
 
+        // ### Why the safe area has to be turned off, and what it cost to find out
+        // A `.titled` window has a title bar whether or not you can see one. This panel's is hidden
+        // and transparent and the content view is told to fill the frame — but AppKit still reports
+        // a **24-point top safe-area inset**, because the ordinary reason to draw under a title bar
+        // is to put something decorative there, not to pretend it does not exist.
+        //
+        // SwiftUI honours that inset, so the card was laid out below an invisible title bar and its
+        // bottom ran off the end of a window sized to hold it exactly. What that looked like was a
+        // pill with no bottom edge: the fill was there, the border was not, because the border was
+        // the part hanging outside the window.
+        //
+        // It is worth saying how this was finally established, because two rounds of reading the
+        // code did not: the view was rendered into a bitmap with `cacheDisplay(in:to:)` and the rows
+        // counted. The card's top border was at 20 points in a window whose padding is 8, and
+        // everything below 58 was gone. Nothing about a layout that reads correctly will tell you
+        // that; the pixels will.
+        hosting.safeAreaRegions = []
+
         let panel = MiniTimerPanel(content: hosting)
         panel.isPinned = isPinned
         self.panel = panel
