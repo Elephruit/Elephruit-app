@@ -466,4 +466,13 @@ public enum TimePeriod: Sendable, Hashable {
         if case .custom = self { return true }
         return false
     }
+
+    /// The named window this period is, or `nil` when it is a custom range.
+    ///
+    /// What a rail of window chips needs in order to know which one to fill: `isCustom` says a
+    /// custom range is in force but not which chip is current when one is not.
+    public var window: TimeWindow? {
+        if case .window(let window) = self { return window }
+        return nil
+    }
 }

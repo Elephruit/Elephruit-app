@@ -97,6 +97,28 @@ public struct TimeView: View {
                 .padding(.top, Theme.Spacing.medium)
                 .padding(.bottom, Theme.Spacing.small)
 
+                // ### Why the rail sits under the tracker rather than above it
+                // Everything below it is *of* the chosen period — the summary, the day sections,
+                // the entries — and the tracker is not: it is about now, and starting a timer has
+                // nothing to do with which week you happen to be reading. So the rail goes exactly
+                // where its authority begins.
+                //
+                // On Reports it is at the very top, for the same rule rather than in spite of it:
+                // there, everything on the page answers to it.
+                TimeFilterBar(
+                    // The short windows only. A log is a place you correct yesterday from, and a
+                    // year of one is a list nobody can correct anything from — the long ranges
+                    // belong to Reports, which is the surface that can draw one.
+                    windows: TimeWindow.logWindows,
+                    selectedWindow: window,
+                    onSelectWindow: { navigation.timeWindow = $0 },
+                    groupings: TimeGrouping.allCases,
+                    grouping: grouping,
+                    onSelectGrouping: { navigation.timeGrouping = $0 }
+                )
+
+                Divider()
+
                 // ### Why the summary disappears rather than reading zero
                 // A period with nothing in it used to say so three times on one screen: "Nothing
                 // tracked" in the window subtitle, a large "0:00" over the words "Nothing tracked
@@ -341,26 +363,17 @@ public struct TimeView: View {
 
     // MARK: - Toolbar
 
+    /// ### What is no longer in this toolbar
+    /// The period and the grouping. They were here as two menus, in the sidebar as two sections of
+    /// checkmark rows, and — once Reports grew a filter rail — in the view as well. Three copies of
+    /// one control, two of which hid their options behind a click, on the surface where flipping
+    /// between periods is most of the activity.
+    ///
+    /// They live in ``TimeFilterBar`` now, in the view, which both Time surfaces share. What stays
+    /// here is what is genuinely about the *log* rather than about the period: how it is displayed,
+    /// how to add time by hand, and the way across to Reports.
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem {
-            // The log's own windows only. The long ranges belong to Reports, which is the surface
-            // that can draw a year without becoming a list nobody can correct anything from.
-            Picker("Period", selection: windowBinding) {
-                ForEach(TimeWindow.logWindows, id: \.self) { Text($0.displayName).tag($0) }
-            }
-            .pickerStyle(.menu)
-            .accessibilityIdentifier(AccessibilityID.Time.windowPicker)
-        }
-
-        ToolbarItem {
-            Picker("Group By", selection: groupingBinding) {
-                ForEach(TimeGrouping.allCases, id: \.self) { Text($0.displayName).tag($0) }
-            }
-            .pickerStyle(.menu)
-            .accessibilityIdentifier(AccessibilityID.Time.groupingPicker)
-        }
-
         ToolbarItem {
             // A menu rather than a bare `Toggle`, which rendered as an unlabelled filled circle —
             // a control whose only clue to what it does is whether it looks pressed.
@@ -385,14 +398,6 @@ public struct TimeView: View {
             }
             .help("Totals over any period, ready to export")
         }
-    }
-
-    private var windowBinding: Binding<TimeWindow> {
-        Binding(get: { navigation.timeWindow }, set: { navigation.timeWindow = $0 })
-    }
-
-    private var groupingBinding: Binding<TimeGrouping> {
-        Binding(get: { navigation.timeGrouping }, set: { navigation.timeGrouping = $0 })
     }
 
     private var subtitle: String {
