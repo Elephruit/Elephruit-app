@@ -99,10 +99,28 @@ extension ContentItem {
         if kind.supportsStatus {
             parts.append(status == .completed ? "completed" : "incomplete")
         }
-        if let dueAt {
-            let overdue = dateProvider.isOverdue(dueAt)
-            let relative = dueAt.formatted(.relative(presentation: .named))
-            parts.append(overdue ? "overdue \(relative)" : "due \(relative)")
+        // The same date the row draws, named the same way it is named on screen.
+        //
+        // These two used to disagree, and the disagreement grew when the row learned to show a
+        // last-edited date: the row drew one, and this announced nothing at all, so a list of notes
+        // was fully dated for anybody looking at it and undated for anybody listening to it. Reading
+        // from ``RowDate`` is what keeps them one decision rather than two.
+        //
+        // It also carries the part the screen drops. The row shows a bare date for a deadline and a
+        // bare date for a last edit, and tells them apart by colour and by the row's own glyph;
+        // neither of those reaches VoiceOver, so the word does.
+        if let rowDate = RowDate.resolve(for: self) {
+            let relative = rowDate.date.formatted(.relative(presentation: .named))
+            switch rowDate.role {
+            case .due:
+                parts.append(dateProvider.isOverdue(rowDate.date) ? "overdue \(relative)" : "due \(relative)")
+            case .deleted:
+                parts.append("deleted \(relative)")
+            case .archived:
+                parts.append("archived \(relative)")
+            case .changed:
+                parts.append("edited \(relative)")
+            }
         }
         if let parentTitle {
             parts.append("in \(parentTitle)")
@@ -112,8 +130,8 @@ extension ContentItem {
         }
         if isFavorite { parts.append("favorite") }
         if isPinned { parts.append("pinned") }
-        if isArchived { parts.append("archived") }
-        if isInTrash { parts.append("in trash") }
+        // Archived and deleted are not repeated here: the date above already says both, with the
+        // date attached, and "archived, archived 3 Jul" is the announcement this replaces.
 
         return parts.joined(separator: ", ")
     }

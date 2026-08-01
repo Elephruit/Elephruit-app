@@ -43,7 +43,7 @@ public struct ShortcutSettingsSection: View {
                 }
 
                 if let explanation = globalResults[command]?.explanation {
-                    Label(explanation, systemImage: "keyboard.badge.exclamationmark")
+                    Label(explanation, systemImage: "exclamationmark.triangle")
                         .font(Theme.Text.metadata)
                         .foregroundStyle(Theme.Colors.unresolvedLink)
                         .fixedSize(horizontal: false, vertical: true)
@@ -73,7 +73,7 @@ public struct ShortcutSettingsSection: View {
         case .registered:
             Label("Working everywhere", systemImage: "checkmark.circle")
                 .labelStyle(.iconOnly)
-                .foregroundStyle(.green)
+                .foregroundStyle(Theme.Palette.green.color)
                 .help("This shortcut works from any application.")
         case .alreadyClaimed, .unsupportedKey:
             Label("Not available", systemImage: "exclamationmark.circle")
