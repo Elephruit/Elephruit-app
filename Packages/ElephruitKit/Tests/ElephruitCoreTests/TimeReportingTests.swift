@@ -40,6 +40,106 @@ struct TimeReportingTests {
         clock.startOfToday..<clock.startOfToday.addingTimeInterval(86_400)
     }
 
+    // MARK: - The cross-tab behind the daily chart
+
+    private var twoDays: Range<Date> {
+        clock.startOfToday..<clock.startOfToday.addingTimeInterval(172_800)
+    }
+
+    /// The stacked chart's whole claim: a day's coloured pieces add up to that day.
+    @Test("A day's cells sum to that day's total")
+    func cellsSumToTheDay() {
+        let alpha = (id: UUID(), title: "Alpha")
+        let beta = (id: UUID(), title: "Beta")
+
+        let entries = [
+            entry(from: 3_600, to: 7_200, project: alpha),      // 1h today
+            entry(from: 7_200, to: 9_000, project: beta),       // 30m today
+            entry(from: 90_000, to: 93_600, project: alpha),    // 1h tomorrow
+        ]
+
+        let cells = TimeReporting.dailyBreakdown(
+            entries: entries, grouping: .project, range: twoDays, calendar: calendar, now: clock.now
+        )
+        let byDay = Dictionary(grouping: cells, by: \.dayKey)
+
+        let daily = TimeReporting.report(
+            entries: entries, grouping: .day, range: twoDays, calendar: calendar, now: clock.now
+        )
+
+        for row in daily.rows {
+            let sum = (byDay[row.key] ?? []).reduce(0) { $0 + $1.total }
+            #expect(sum == row.total, "\(row.key) cells sum to \(sum) but the day is \(row.total)")
+        }
+
+        #expect(byDay.count == 2)
+    }
+
+    /// A session from 23:00 to 01:00 is an hour on each day. The cross-tab has to split it the same
+    /// way the daily total does, or the stack will not match the bar it is inside.
+    @Test("A session crossing midnight is split across both days, under the same row")
+    func midnightIsSplitInTheCrossTab() {
+        let project = (id: UUID(), title: "Night shift")
+        let entries = [entry(from: 82_800, to: 90_000, project: project)] // 23:00 → 01:00
+
+        let cells = TimeReporting.dailyBreakdown(
+            entries: entries, grouping: .project, range: twoDays, calendar: calendar, now: clock.now
+        )
+
+        #expect(cells.count == 2)
+        #expect(cells.allSatisfy { $0.title == "Night shift" })
+        for cell in cells {
+            #expect(cell.total == 3_600, "each side of midnight is an hour")
+        }
+    }
+
+    /// The reason the chart checks `rowsCanOverlap` before it stacks: under a tag report an hour
+    /// counts in full under each tag, so the cells of one day *can* exceed the day.
+    @Test("Overlapping groupings produce cells that exceed the day, exactly as the table does")
+    func overlappingGroupingsOvercount() {
+        let entries = [entry(from: 3_600, to: 7_200, tags: ["admin", "billing"])]
+
+        let cells = TimeReporting.dailyBreakdown(
+            entries: entries, grouping: .tag, range: today, calendar: calendar, now: clock.now
+        )
+
+        #expect(cells.count == 2)
+        #expect(cells.reduce(0) { $0 + $1.total } == 7_200, "an hour under each of two tags")
+
+        let daily = TimeReporting.report(
+            entries: entries, grouping: .day, range: today, calendar: calendar, now: clock.now
+        )
+        #expect(daily.rows.first?.total == 3_600, "the day itself is still one hour")
+
+        // And the flag the chart reads before deciding to stack.
+        #expect(TimeGrouping.tag.rowsCanOverlap)
+        #expect(TimeGrouping.project.rowsCanOverlap == false)
+    }
+
+    @Test("Grouping by day has no cross-tab to draw")
+    func dayCrossTabIsEmpty() {
+        // Colouring a day's bar by which day it is would be the x-axis said twice.
+        let cells = TimeReporting.dailyBreakdown(
+            entries: [entry(from: 0, to: 3_600)],
+            grouping: .day, range: today, calendar: calendar, now: clock.now
+        )
+        #expect(cells.isEmpty)
+    }
+
+    @Test("Unfiled time gets a cell rather than vanishing from the chart")
+    func unfiledTimeIsStillACell() {
+        let cells = TimeReporting.dailyBreakdown(
+            entries: [entry(from: 0, to: 3_600)],
+            grouping: .project, range: today, calendar: calendar, now: clock.now
+        )
+
+        #expect(cells.count == 1)
+        #expect(cells.first?.title == "No project")
+        // Which is what the palette reads to draw it grey rather than giving an absence a colour of
+        // its own — see `ReportSeriesPalette.isUnassignedKey(_:)`.
+        #expect(cells.first?.rowKey.hasPrefix("\u{1}") == true)
+    }
+
     // MARK: - Totals
 
     @Test("An empty week is empty rather than wrong")
