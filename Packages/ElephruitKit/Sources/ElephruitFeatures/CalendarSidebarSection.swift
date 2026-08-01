@@ -13,6 +13,20 @@ import SwiftUI
 ///
 /// The toolbar keeps what is genuinely about *navigating time* — back, Today, forward — because that
 /// changes on every glance and belongs beside what it moves.
+///
+/// ### Why the word "Calendar" appears once
+/// It appeared twice. The module header named the module — `‹ 􀉉 Calendar ⌄` — and directly beneath
+/// it, flush against the header's divider, sat a lone destination row also called *Calendar*, which
+/// was the module's front door and therefore already where you were. It was the only selectable row
+/// in the column, so the sidebar's one piece of selection state was spent restating the header, and
+/// its accent fill ran into the divider above it because a `List` begins its first row flush against
+/// its own bounds.
+///
+/// Deleting it costs nothing. `.calendar` is still the module's ``AppModule/defaultSelection`` and
+/// still what `⌘6` and every deep link select; it simply is not drawn as a row that says the name of
+/// the place you are standing in. What the column navigates instead is the thing that genuinely
+/// differs — **which view of your days**, then which calendars are being read, then which set — with
+/// *Views* first because it is the choice made most often.
 struct CalendarSidebarSection: View {
     @Environment(\.services) private var services
 
@@ -26,23 +40,13 @@ struct CalendarSidebarSection: View {
     @State private var isShowingSetEditor = false
 
     var body: some View {
-        Section {
-            ForEach(SidebarRegistry.destinations(in: .calendar)) { destination in
-                SidebarDestinationRow(
-                    destination: destination,
-                    isSelected: navigation.selection == destination.selection,
-                    rowHeight: rowHeight
-                )
-            }
-        }
-
-        Section("View") {
+        Section("Views") {
             ForEach(CalendarViewKind.allCases) { kind in
                 ModeRow(
                     title: kind.displayName,
                     symbolName: kind.symbolName,
                     hint: hint(for: kind),
-                    isOn: navigation.calendarWorkspace?.viewKind == kind,
+                    isOn: currentViewKind == kind,
                     identifier: "sidebar.calendar.view.\(kind.rawValue)",
                     rowHeight: rowHeight
                 ) {
@@ -54,6 +58,18 @@ struct CalendarSidebarSection: View {
 
         calendarsSection
         setsSection
+    }
+
+    /// Which view is current, including before the workspace has been built.
+    ///
+    /// The workspace is `nil` until the calendar has been drawn once, and the module can be entered
+    /// from a menu, a shortcut, or a restored scene before that happens. Reading only the workspace
+    /// meant arriving in Calendar to a column of six views with none of them marked — the sidebar
+    /// saying it did not know what you were looking at, in the one second where you had just asked.
+    /// The workspace restores its own kind from the same stored value, so asking for it here is the
+    /// same answer one frame early rather than a second source of truth.
+    private var currentViewKind: CalendarViewKind {
+        navigation.calendarWorkspace?.viewKind ?? CalendarWorkspaceModel.storedViewKind()
     }
 
     /// Every calendar the app can read, grouped by the account it came from.
