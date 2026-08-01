@@ -153,18 +153,29 @@ public struct QuickJotDraft: Sendable, Hashable {
     /// Folds the tokens ``CaptureLift`` removed from the text into these decisions.
     ///
     /// Every field goes through the mutators above rather than being assigned, so a lifted `due:`
-    /// promotes the kind by exactly the same rule a clicked flag does. First writer wins for the
-    /// single-valued fields: a chip the user already placed is a commitment, and text arriving later
-    /// is not a reason to overrule it.
+    /// promotes the kind by exactly the same rule a clicked flag does.
+    ///
+    /// ### Why the newcomer wins here, and loses in ``merged(with:)``
+    /// A lift happens because the user *just typed* the token and then moved off it. Somebody who
+    /// picked Today from the menu and then wrote `due:friday` has changed their mind, and a chip that
+    /// refused to budge would be the interface arguing with them. So the last writer wins.
+    ///
+    /// That is safe only because a lift is flushed before any menu is opened, which is what stops the
+    /// mirror-image sequence from going wrong: type `due:friday`, leave it sitting in the sentence,
+    /// then pick Today. The stale text becomes a chip *first*, and the click then replaces it — so
+    /// the later act still wins, and nothing is replayed out of order.
+    ///
+    /// ``merged(with:)`` is the opposite because it is looking at something else: words that could
+    /// never be lifted at all. Those are leftovers, not decisions, and they defer.
     public mutating func apply(_ lifted: CaptureDraft) {
         for slug in lifted.tagSlugs { addTag(slug) }
         for name in lifted.personHints { addPerson(name) }
 
-        if projectHint == nil, let hint = lifted.projectHint { setProject(hint) }
-        if dueDate == nil, let interpretation = lifted.dueInterpretation { setDue(interpretation) }
-        if followDate == nil, let follow = lifted.followDate { setFollow(follow) }
-        if priority == nil, let priority = lifted.priority { setPriority(priority) }
-        if url == nil, let url = lifted.url { setURL(url) }
+        if let hint = lifted.projectHint { setProject(hint) }
+        if let interpretation = lifted.dueInterpretation { setDue(interpretation) }
+        if let follow = lifted.followDate { setFollow(follow) }
+        if let priority = lifted.priority { setPriority(priority) }
+        if let url = lifted.url { setURL(url) }
 
         // A `- ` prefix is the one lift with no token behind it, so the lifter reports it as a kind.
         if !kindIsExplicit, lifted.kind != .note { kind = lifted.kind }

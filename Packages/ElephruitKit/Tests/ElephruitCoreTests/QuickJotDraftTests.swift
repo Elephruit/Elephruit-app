@@ -140,13 +140,15 @@ struct QuickJotDraftTests {
         #expect(draft.kind == .task)
     }
 
-    @Test("A chip already placed is not overruled by text arriving later")
-    func firstWriterWins() {
+    /// A lift means the user has just typed the token and moved off it. Changing your mind about a
+    /// date should work; a chip that refused to budge would be the interface arguing back.
+    @Test("Typing a new date replaces the chip that was there")
+    func lastWriterWins() {
         var draft = QuickJotDraft()
         draft.setDue(DateInterpretation(day: .today))
         draft.apply(CaptureParser.parse("Call the framer due:tomorrow"))
 
-        #expect(draft.dueDate == .today)
+        #expect(draft.dueDate == .tomorrow)
     }
 
     @Test("A lifted task prefix sets the kind even with no token behind it")
