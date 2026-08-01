@@ -25,6 +25,8 @@ public protocol TimeEntryRepository: AnyObject {
     @discardableResult
     func start(
         item: Item?,
+        project: Item?,
+        people: [Item],
         description: String,
         tagSlugs: [String],
         isBillable: Bool
@@ -46,6 +48,8 @@ public protocol TimeEntryRepository: AnyObject {
     @discardableResult
     func switchTo(
         item: Item?,
+        project: Item?,
+        people: [Item],
         description: String,
         tagSlugs: [String],
         isBillable: Bool
@@ -55,6 +59,8 @@ public protocol TimeEntryRepository: AnyObject {
     @discardableResult
     func addManual(
         item: Item?,
+        project: Item?,
+        people: [Item],
         description: String,
         startedAt: Date,
         endedAt: Date,
@@ -77,6 +83,47 @@ public protocol TimeEntryRepository: AnyObject {
     /// Here rather than in a ``update(_:_:)`` closure because turning slugs into `Tag`s needs the
     /// tag repository, which this object already holds and a view has no business reaching for.
     func setTags(_ slugs: [String], on entry: TimeEntry) throws(AppError)
+
+    /// Replaces who was there.
+    ///
+    /// Anything that is not a person is dropped rather than refused. The call sites are pickers that
+    /// search every kind, and a search that can offer a project has to be allowed to be wrong about
+    /// one without failing the edit that carried it.
+    func setPeople(_ people: [Item], on entry: TimeEntry) throws(AppError)
+
+    /// Sets the project an entry is billed to, overriding the one derived from its subject.
+    ///
+    /// Passing `nil` returns it to the derived answer rather than to no project at all — see
+    /// ``ElephruitModel/TimeEntry/reportingProject()``.
+    func setProject(_ project: Item?, on entry: TimeEntry) throws(AppError)
+
+    /// Records that one more focus block was finished on this entry.
+    ///
+    /// Called when a pomodoro's focus phase runs to its end, never when one is cut short: the count
+    /// has to mean *blocks you finished*, or a streak becomes something the app awards for leaving a
+    /// timer on.
+    func noteFocusRound(on entry: TimeEntry) throws(AppError)
+
+    /// Remembers, or forgets, the calendar event written for this entry.
+    func setMirror(
+        eventIdentifier: String?,
+        calendarIdentifier: String?,
+        on entry: TimeEntry
+    ) throws(AppError)
+
+    /// Finished entries in a window, oldest first, for the mirror to work through.
+    ///
+    /// Oldest first because it writes a calendar, and a calendar written backwards is one whose
+    /// progress nobody can see. Excludes anything still running, which by definition has no end to
+    /// write.
+    func finishedEntries(in range: Range<Date>) throws(AppError) -> [TimeEntry]
+
+    /// Every entry this app has written a calendar event for, whether or not it is deleted.
+    ///
+    /// What *Remove mirrored events* works through. Includes soft-deleted entries deliberately: an
+    /// entry thrown away after being mirrored still has an event out there, and leaving it behind is
+    /// how somebody ends up deleting two hundred events by hand.
+    func mirroredEntries() throws(AppError) -> [TimeEntry]
 
     /// Makes an entry exactly this long.
     ///
@@ -167,6 +214,8 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
     @discardableResult
     public func start(
         item: Item?,
+        project: Item? = nil,
+        people: [Item] = [],
         description: String,
         tagSlugs: [String],
         isBillable: Bool = false
@@ -176,6 +225,8 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
         }
         return try insertEntry(
             item: item,
+            project: project,
+            people: people,
             description: description,
             startedAt: dateProvider.now,
             endedAt: nil,
@@ -220,6 +271,8 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
     @discardableResult
     public func switchTo(
         item: Item?,
+        project: Item? = nil,
+        people: [Item] = [],
         description: String,
         tagSlugs: [String],
         isBillable: Bool = false
@@ -235,6 +288,8 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
 
         return try insertEntry(
             item: item,
+            project: project,
+            people: people,
             description: description,
             startedAt: now,
             endedAt: nil,
@@ -249,6 +304,8 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
     @discardableResult
     public func addManual(
         item: Item?,
+        project: Item? = nil,
+        people: [Item] = [],
         description: String,
         startedAt: Date,
         endedAt: Date,
@@ -260,6 +317,8 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
         }
         return try insertEntry(
             item: item,
+            project: project,
+            people: people,
             description: description,
             startedAt: startedAt,
             endedAt: endedAt,
@@ -277,8 +336,14 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
         // Billability comes along. Whether work is billable is a fact about the work, not about the
         // stretch of clock, so continuing something billable and getting an unbillable entry is a
         // silent revenue leak nobody notices until the invoice.
+        //
+        // So do the people and the project. Continuing the pairing session you broke off ten minutes
+        // ago and getting an entry that has forgotten who you were pairing with is a correction
+        // nobody remembers to make.
         try switchTo(
             item: entry.item,
+            project: entry.project,
+            people: entry.people,
             description: entry.entryDescription,
             tagSlugs: entry.tagSlugs,
             isBillable: entry.isBillable
@@ -297,6 +362,8 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
 
         return try insertEntry(
             item: entry.item,
+            project: entry.project,
+            people: entry.people,
             description: entry.entryDescription,
             startedAt: entry.startedAt,
             endedAt: endedAt,
@@ -309,6 +376,8 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
     @discardableResult
     private func insertEntry(
         item: Item?,
+        project: Item?,
+        people: [Item],
         description: String,
         startedAt: Date,
         endedAt: Date?,
@@ -327,11 +396,36 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
             createdAt: now
         )
         entry.item = item
+        entry.project = Self.projectOrNil(project)
+        entry.people = Self.peopleOnly(people)
         entry.tags = try tags.ensureTags(named: tagSlugs)
 
         context.insert(entry)
         try save()
         return entry
+    }
+
+    /// Keeps only the people out of whatever a picker handed over.
+    ///
+    /// Dropped rather than refused, and deduplicated, because these arrive from a search field that
+    /// can offer every kind: a picker allowed to be wrong about one row must not be allowed to fail
+    /// the whole edit that carried it.
+    private static func peopleOnly(_ items: [Item]) -> [Item] {
+        var seen = Set<UUID>()
+        return items.filter { item in
+            guard item.kind == .person, !seen.contains(item.id) else { return false }
+            seen.insert(item.id)
+            return true
+        }
+    }
+
+    /// Only a project may be billed to.
+    ///
+    /// An area or a goal contains projects rather than being one, and filing time directly against
+    /// either would make a project report that silently skips those hours.
+    private static func projectOrNil(_ item: Item?) -> Item? {
+        guard let item, item.kind == .project else { return nil }
+        return item
     }
 
     // MARK: Editing
@@ -351,6 +445,38 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
     public func setTags(_ slugs: [String], on entry: TimeEntry) throws(AppError) {
         entry.tags = try tags.ensureTags(named: slugs)
         entry.updatedAt = dateProvider.now
+        try save()
+    }
+
+    public func setPeople(_ people: [Item], on entry: TimeEntry) throws(AppError) {
+        entry.people = Self.peopleOnly(people)
+        entry.updatedAt = dateProvider.now
+        try save()
+    }
+
+    public func setProject(_ project: Item?, on entry: TimeEntry) throws(AppError) {
+        entry.project = Self.projectOrNil(project)
+        entry.updatedAt = dateProvider.now
+        try save()
+    }
+
+    public func noteFocusRound(on entry: TimeEntry) throws(AppError) {
+        entry.focusRounds += 1
+        // Deliberately not touching `updatedAt`, on the same terms as a heartbeat: a finished focus
+        // block is the app counting, not the user editing, and letting it bump the modification date
+        // would make every tracked pomodoro look like a correction.
+        try save()
+    }
+
+    public func setMirror(
+        eventIdentifier: String?,
+        calendarIdentifier: String?,
+        on entry: TimeEntry
+    ) throws(AppError) {
+        entry.mirroredEventIdentifier = eventIdentifier
+        entry.mirroredCalendarIdentifier = eventIdentifier == nil ? nil : calendarIdentifier
+        // Also not an edit. The mirror is bookkeeping about a copy, and an entry that looks modified
+        // every time a calendar write succeeds is one whose real edit history is unreadable.
         try save()
     }
 
@@ -456,7 +582,13 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
             var projectID: UUID?
             var projectTitle: String?
 
-            if let item = entry.item {
+            // An entry that names its project needs no walk at all, and must not take one: the memo
+            // is keyed by *item*, so two entries against the same note billed to two different
+            // projects would otherwise be given whichever answer was cached first.
+            if let explicit = entry.project {
+                projectID = explicit.id
+                projectTitle = explicit.displayTitle
+            } else if let item = entry.item {
                 let resolved: (id: UUID, title: String)?
                 if let cached = projectByItem[item.id] {
                     resolved = cached
@@ -480,8 +612,49 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
                 itemKind: entry.item?.kind,
                 projectID: projectID,
                 projectTitle: projectTitle,
-                tagSlugs: entry.tagSlugs
+                tagSlugs: entry.tagSlugs,
+                people: entry.participants,
+                focusRounds: entry.focusRounds
             )
+        }
+    }
+
+    public func finishedEntries(in range: Range<Date>) throws(AppError) -> [TimeEntry] {
+        audit?.record(.other)
+
+        let lower = range.lowerBound
+        let upper = range.upperBound
+
+        var descriptor = FetchDescriptor<TimeEntry>(
+            predicate: #Predicate {
+                $0.deletedAt == nil
+                    && $0.endedAt != nil
+                    && $0.startedAt < upper
+                    && ($0.endedAt ?? upper) > lower
+            },
+            sortBy: [SortDescriptor(\.startedAt)]
+        )
+        descriptor.fetchLimit = nil
+
+        do {
+            return try context.fetch(descriptor)
+        } catch {
+            throw .storeUnavailable(underlying: error.localizedDescription)
+        }
+    }
+
+    public func mirroredEntries() throws(AppError) -> [TimeEntry] {
+        audit?.record(.other)
+
+        let descriptor = FetchDescriptor<TimeEntry>(
+            predicate: #Predicate { $0.mirroredEventIdentifier != nil },
+            sortBy: [SortDescriptor(\.startedAt)]
+        )
+
+        do {
+            return try context.fetch(descriptor)
+        } catch {
+            throw .storeUnavailable(underlying: error.localizedDescription)
         }
     }
 
@@ -573,6 +746,8 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
         case .discardAndContinue:
             try insertEntry(
                 item: entry.item,
+                project: entry.project,
+                people: entry.people,
                 description: entry.entryDescription,
                 startedAt: now,
                 endedAt: nil,
@@ -584,8 +759,13 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
         case .keepAsSeparateEntry:
             let awayEnd = max(stopAt, observation.idleUntil)
             if awayEnd > stopAt {
+                // The people are deliberately dropped along with the billability. Nobody was there —
+                // that is the definition of the stretch being split out — and a row saying an hour
+                // was spent with somebody who had gone home is worse than no row at all.
                 try insertEntry(
                     item: entry.item,
+                    project: entry.project,
+                    people: [],
                     description: idleEntryDescription,
                     startedAt: stopAt,
                     endedAt: awayEnd,
@@ -599,6 +779,8 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
             // thing they were timing before they walked away.
             try insertEntry(
                 item: entry.item,
+                project: entry.project,
+                people: entry.people,
                 description: entry.entryDescription,
                 startedAt: max(awayEnd, now),
                 endedAt: nil,
