@@ -147,8 +147,8 @@ public struct InspectorView: View {
             }
 
             if item.kind.supportedFields.contains(.appearance) {
-                InspectorRow("Colour") {
-                    Picker("Colour", selection: colorBinding(for: item)) {
+                InspectorRow("Color") {
+                    Picker("Color", selection: colorBinding(for: item)) {
                         Text("Default").tag(String?.none)
                         ForEach(Theme.Palette.allCases, id: \.self) { entry in
                             Text(entry.displayName).tag(String?.some(entry.rawValue))

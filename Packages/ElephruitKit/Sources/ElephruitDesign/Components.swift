@@ -112,36 +112,60 @@ public struct ItemRow<Item: ContentItem>: View {
         return .primary
     }
 
-    /// The secondary line is assembled from whatever is actually present.
-    private var secondaryParts: [String] {
-        var parts: [String] = []
-        if showsParent, let parentTitle = item.parentTitle, !parentTitle.isEmpty {
-            parts.append(parentTitle)
-        }
-        let excerpt = item.excerpt
-        if !excerpt.isEmpty {
-            parts.append(excerpt)
-        }
-        return parts
+    /// The parent's title, when there is one worth showing.
+    private var parentTitle: String? {
+        guard showsParent, let title = item.parentTitle, !title.isEmpty else { return nil }
+        return title
     }
 
+    /// The body excerpt, when there is one.
+    private var excerpt: String? {
+        let text = item.excerpt
+        return text.isEmpty ? nil : text
+    }
+
+    /// The secondary line is assembled from whatever is actually present.
+    private var secondaryParts: [String] {
+        [parentTitle, excerpt].compactMap { $0 }
+    }
+
+    /// Renders the parts that exist, with a separator only *between* two of them.
+    ///
+    /// The separator used to be drawn whenever there was a parent, which left a row whose parent is
+    /// known and whose body is empty reading "Planning ·" — a dangling conjunction promising a
+    /// second clause that never arrives. It is visible on every untitled or bodyless item in the
+    /// app, so the rule is now stated once: a separator is a thing that goes between two things.
     private var secondaryLine: some View {
         HStack(spacing: Theme.Spacing.tight) {
-            if showsParent, let parentTitle = item.parentTitle, !parentTitle.isEmpty {
+            if let parentTitle {
                 Text(parentTitle)
                     .rowForeground(.tertiary)
-                Text("·").rowForeground(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .layoutPriority(excerpt == nil ? 1 : 0)
+
+                if excerpt != nil {
+                    Text(verbatim: "·").rowForeground(.tertiary)
+                }
             }
 
-            Text(item.excerpt)
-                .rowForeground(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+            if let excerpt {
+                Text(excerpt)
+                    .rowForeground(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
         }
         .font(Theme.Text.rowSubtitle)
         .accessibilityHidden(true)
     }
 
+    /// Tags, priority and a due date, kept whole.
+    ///
+    /// `layoutPriority(1)` states the order things give way in: a title has somewhere to go when it
+    /// runs out of room — the ellipsis — and a date does not. Without it SwiftUI divides the
+    /// shortfall between them and compresses both, which is how "Yesterday" became three stacked
+    /// syllables in a narrow column.
     @ViewBuilder
     private var trailingAccessories: some View {
         HStack(spacing: Theme.Spacing.small) {
@@ -160,6 +184,7 @@ public struct ItemRow<Item: ContentItem>: View {
                 DueDateLabel(date: dueAt, dateProvider: dateProvider, isActionable: item.isActionable)
             }
         }
+        .layoutPriority(1)
     }
 }
 
@@ -186,6 +211,8 @@ public struct DueDateLabel: View {
             .font(Theme.Text.metadata)
             .rowTint(color)
             .monospacedDigit()
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .accessibilityHidden(true)
     }
 
@@ -227,6 +254,11 @@ public struct TagChip: View {
 
     public var body: some View {
         Text(displayName)
+            // A chip is a label, not a paragraph. Without this it is a text view like any other, and
+            // a narrow list column compresses it one character at a time until "urgent" is six rows
+            // of one letter — which is what a list row looked like below about 200 points.
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .font(Theme.Text.chip)
             .foregroundStyle(foreground)
             .padding(.horizontal, Theme.Spacing.small)
@@ -285,6 +317,8 @@ public struct TagChipRow: View {
                 Text("+\(slugs.count - limit)")
                     .font(Theme.Text.chip)
                     .rowForeground(.tertiary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
         }
         .accessibilityElement(children: .combine)
@@ -419,9 +453,22 @@ public struct EmptyStateView: View {
                 }
             }
 
+            // ### Why this is a real button
+            // It used to be `.borderless`, which on macOS is accent-coloured text and nothing else:
+            // no border, no hover, no pressed state, and a hit target the width of the words. On a
+            // screen that is otherwise empty, the one thing there is to do was drawn as a caption —
+            // "Ask Again" under a padlock, "Add Time…" under a stopwatch — and it was not obvious
+            // that either could be clicked at all.
+            //
+            // An empty state's action is its primary action by construction: there is nothing else
+            // on the screen to compete with. So it is the prominent style, at the large control
+            // size, and it is the default button, which makes Return do the obvious thing for
+            // somebody who arrived here without a mouse.
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .keyboardShortcut(.defaultAction)
                     .padding(.top, Theme.Spacing.tight)
             }
         }

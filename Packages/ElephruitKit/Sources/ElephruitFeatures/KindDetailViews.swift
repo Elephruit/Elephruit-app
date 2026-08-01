@@ -102,6 +102,9 @@ struct TaskDetailView: View {
             Divider()
 
             ScrollView {
+                // The rule above belongs to the header, and the first thing under it is a section
+                // heading. Without this the word NOTES sits on the line, close enough to read as
+                // part of it rather than as the start of what follows.
                 VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
                     NotesField(
                         text: $bodyText,
@@ -129,6 +132,7 @@ struct TaskDetailView: View {
                         .padding(.horizontal, Theme.Spacing.large)
                     }
                 }
+                .padding(.top, Theme.Spacing.medium)
                 .padding(.bottom, Theme.Spacing.large)
             }
         }

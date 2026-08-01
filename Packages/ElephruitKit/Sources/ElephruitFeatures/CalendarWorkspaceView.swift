@@ -666,7 +666,7 @@ struct CalendarToolbar: View {
                 }
 
                 if !calendar.hiddenCalendarIdentifiers.isEmpty {
-                    Button("Show All Calendars") {
+                    Button("Show All Calendars", systemImage: "eye") {
                         Task { await calendar.showAllCalendars() }
                     }
                 }

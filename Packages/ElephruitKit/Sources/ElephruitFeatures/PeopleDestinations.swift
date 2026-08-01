@@ -518,7 +518,7 @@ struct CardScanView: View {
                 prefill(from: card)
 
                 if card.isEmpty {
-                    failure = "No contact details were recognised. You can still fill them in yourself."
+                    failure = "No contact details were recognized. You can still fill them in yourself."
                 }
             } catch {
                 failure = "The card could not be read: \(error.localizedDescription)"

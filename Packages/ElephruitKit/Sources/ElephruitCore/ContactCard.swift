@@ -120,6 +120,14 @@ public struct ContactDetail: Sendable, Hashable, Identifiable {
 
     public var affinity: ContactAffinity { ContactLabelReader.affinity(of: label) }
 
+    /// The value as it should read on screen.
+    ///
+    /// Phone numbers are grouped conventionally; everything else is itself. ``value`` stays the
+    /// stored spelling, because that is what dials and what matches — see ``PhoneNumberFormatting``.
+    public var displayValue: String {
+        kind == .phone ? PhoneNumberFormatting.display(value) : value
+    }
+
     /// The label as it should read on screen — "Work", "Beach house" — or the kind's own name when
     /// the detail carries no label at all.
     public var displayLabel: String {

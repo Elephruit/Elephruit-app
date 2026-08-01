@@ -55,20 +55,59 @@ public final class ReminderSyncEngine {
     private let tasks: TaskService
     private let context: ModelContext
     private let dateProvider: any DateProvider
-    private let provider: any RemindersProviding
+
+    /// The adapter, resolved **per use** rather than captured once.
+    ///
+    /// ### Why this is a closure and not a value
+    /// It was a value, and that was the bug that made linking Reminders appear to do nothing.
+    ///
+    /// `RemindersService` does not hold one adapter for its lifetime. It starts with an inert
+    /// `NoRemindersProvider` — so that an app which never links a reminder never constructs an
+    /// `EKEventStore` and never prompts — and swaps in the real `EventKitRemindersProvider` inside
+    /// `enable()`, when the user turns the integration on. `AppServices` builds this engine during
+    /// its own initialisation, which is *before* any of that can have happened.
+    ///
+    /// So on the launch in which somebody links Reminders, the engine was left holding the inert
+    /// adapter for the rest of the session. `reconcile()` asked it whether it could read, was told
+    /// no, and returned an empty report — no reminders, no error, no explanation. The list picker
+    /// filled in correctly the whole time, because `RemindersService` asks *itself*, so the
+    /// integration looked connected while importing nothing.
+    ///
+    /// Resolving through the service on every call means the engine can never be older than the
+    /// adapter it is meant to be driving.
+    private let resolveProvider: @MainActor () -> any RemindersProviding
+
+    private var provider: any RemindersProviding { resolveProvider() }
 
     public init(
         items: any ItemRepository,
         tasks: TaskService,
         context: ModelContext,
         dateProvider: any DateProvider,
-        provider: any RemindersProviding
+        provider: @escaping @MainActor () -> any RemindersProviding
     ) {
         self.items = items
         self.tasks = tasks
         self.context = context
         self.dateProvider = dateProvider
-        self.provider = provider
+        self.resolveProvider = provider
+    }
+
+    /// For a caller whose adapter genuinely never changes — the fixtures, and the tests over them.
+    public convenience init(
+        items: any ItemRepository,
+        tasks: TaskService,
+        context: ModelContext,
+        dateProvider: any DateProvider,
+        provider: any RemindersProviding
+    ) {
+        self.init(
+            items: items,
+            tasks: tasks,
+            context: context,
+            dateProvider: dateProvider,
+            provider: { provider }
+        )
     }
 
     private var calendar: Calendar { dateProvider.calendar }
@@ -229,7 +268,10 @@ public final class ReminderSyncEngine {
         localStampFrom stampSource: Item
     ) throws(AppError) {
         let stamp = stampSource.updatedAt
-        try items.update(task) { subject in
+        // Through `recordSyncMetadata`, not `update`: this is bookkeeping about a sync, not an edit
+        // the user made, and stamping `updatedAt` here is what made every pass believe there was a
+        // local change to push. See `ItemRepository.recordSyncMetadata(on:_:)`.
+        try items.recordSyncMetadata(on: task) { subject in
             subject.setReminderLink(
                 ReminderLinkState(
                     externalID: snapshot.id,
@@ -250,10 +292,33 @@ public final class ReminderSyncEngine {
     /// Reads first, decides second, writes last — so a pass that finds nothing to do performs no
     /// writes at all, which is what makes "reminders are never changed without intent" testable.
     @discardableResult
-    public func reconcile() async -> ReminderSyncReport {
+    /// - Parameter listIDs: The lists the user has chosen to take part. Reminders in them that are
+    ///   not linked to anything here yet are brought in. Empty means import nothing — never "all",
+    ///   which would be the app deciding to copy somebody's whole Reminders database.
+    public func reconcile(importingFrom listIDs: [String] = []) async -> ReminderSyncReport {
         var report = ReminderSyncReport()
 
         guard await provider.authorization.canRead else { return report }
+
+        // ### Why the import comes first, and why it exists at all
+        // It did not. `reconcile()` walked the tasks that were *already* linked and reconciled each
+        // against its reminder, which is the right thing to do second and useless on its own: with
+        // nothing linked yet there was nothing to walk, so a freshly connected account reported
+        // "Everything is in step" and imported not one reminder. `unlinkedReminders(inLists:)` and
+        // `importReminder(_:)` were both written and neither was called from anywhere but a test.
+        //
+        // First, because a reminder imported now should then be reconciled by the same pass rather
+        // than waiting for the next one — that is what makes connecting an account a single step.
+        for snapshot in await unlinkedReminders(inLists: listIDs) {
+            do {
+                _ = try importReminder(snapshot)
+                report.imported += 1
+            } catch {
+                // Named by list rather than by title: a failure message is a diagnostic, and the
+                // titles of somebody's reminders are not diagnostics.
+                report.failures.append("Could not import a reminder from list \(snapshot.listID).")
+            }
+        }
 
         let linked = (try? linkedTasks()) ?? []
         report.examined = linked.count
@@ -271,6 +336,23 @@ public final class ReminderSyncEngine {
             switch decision {
             case .unchanged:
                 continue
+
+            case .establishBaseline:
+                // The stored fingerprint was written by the pre-`v2` scheme and cannot be compared.
+                // Record today's, and *keep the existing local stamp* so an edit the user is waiting
+                // to push is still waiting after this pass rather than being swallowed by it.
+                guard let remote else { continue }
+                try? items.recordSyncMetadata(on: task) { subject in
+                    subject.setReminderLink(
+                        ReminderLinkState(
+                            externalID: state.externalID,
+                            listID: state.listID,
+                            lastSyncedFingerprint: remote.fingerprint,
+                            lastSyncedAt: self.dateProvider.now,
+                            lastSyncedLocalStamp: state.lastSyncedLocalStamp
+                        )
+                    )
+                }
 
             case .adoptRemote:
                 guard let remote else { continue }
@@ -419,7 +501,19 @@ public final class ReminderSyncEngine {
     // MARK: - Discovery
 
     /// Reminders in the chosen lists that are not linked to anything here yet.
+    ///
+    /// ### An empty list of lists means none
+    /// `RemindersProviding.reminders(inLists:)` reads an empty array as *every* list — a reasonable
+    /// convention for a fetch primitive, and the exact opposite of what it means one layer up, where
+    /// `RemindersService.participatingListIDs` starts empty and is documented as "empty means none,
+    /// never all, which would be the app deciding".
+    ///
+    /// Those two readings met here. Connecting an account and ticking nothing would have imported
+    /// the user's entire Reminders database on the first pass — every list, including the ones they
+    /// had deliberately left out. The guard is what keeps the promise the settings screen makes.
     public func unlinkedReminders(inLists listIDs: [String]) async -> [ReminderSnapshot] {
+        guard !listIDs.isEmpty else { return [] }
+
         let remote = await provider.reminders(inLists: listIDs, includingCompleted: false)
         let known = Set(((try? linkedTasks()) ?? []).compactMap(\.externalIdentifier))
         return remote.filter { !known.contains($0.id) }

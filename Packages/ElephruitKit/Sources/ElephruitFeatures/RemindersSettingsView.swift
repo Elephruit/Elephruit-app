@@ -119,7 +119,25 @@ public struct RemindersSettingsSection: View {
                 }
                 .disabled(services.reminders.isSyncing)
 
-                if let report = services.reminders.lastReport {
+                // Three different things, said differently, because they mean different things:
+                // a pass in flight, a pass that failed, and the last one that worked. Showing only
+                // the summary — which is what this did — leaves a failed sync looking identical to
+                // a quiet one, and leaves a working integration with nothing to say it is working.
+                if services.reminders.isSyncing {
+                    HStack(spacing: Theme.Spacing.tight) {
+                        ProgressView().controlSize(.small)
+                        Text("Syncing…")
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Syncing")
+                } else if let failure = services.reminders.lastReport?.failures.first {
+                    Label(failure, systemImage: "exclamationmark.triangle.fill")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.warning)
+                        .lineLimit(2)
+                } else if let report = services.reminders.lastReport {
                     Text(report.summary)
                         .font(Theme.Text.metadata)
                         .foregroundStyle(Theme.Colors.secondaryText)
@@ -163,7 +181,19 @@ public struct RemindersSettingsSection: View {
     ) -> Binding<Bool> {
         Binding(
             get: { services.reminders.participatingListIDs.contains(list.id) },
-            set: { services.reminders.setParticipating($0, listID: list.id) }
+            set: { isParticipating in
+                services.reminders.setParticipating(isParticipating, listID: list.id)
+
+                // Ticking a list is the request. Leaving the import until somebody also finds "Sync
+                // Now" makes the switch look broken — it reports the list as taking part while none
+                // of its reminders are anywhere to be seen.
+                //
+                // Only on the way *on*. Unticking a list is not a reason to run a pass, and
+                // certainly not a reason to remove anything: tasks already imported from it keep
+                // their links, exactly as they do when the whole integration is switched off.
+                guard isParticipating else { return }
+                Task { await services.reminders.sync(using: services.reminderSync) }
+            }
         )
     }
 
