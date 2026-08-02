@@ -63,6 +63,11 @@ struct ProjectsSidebarSection: View {
         } message: {
             Text(deletionMessage)
         }
+        .task(id: navigation.projectCreationRequestID) {
+            guard let requestID = navigation.projectCreationRequestID else { return }
+            beginCreation(from: .blank)
+            navigation.consumeProjectCreationRequest(requestID)
+        }
     }
 
     // MARK: Header

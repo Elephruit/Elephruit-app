@@ -108,32 +108,41 @@ public struct SidebarView: View {
     /// up there making a container instead would be two plus signs a few points apart meaning two
     /// different things.
     ///
-    /// ### Why a menu rather than two buttons
-    /// Because the question is which of the two, and most people do not yet know. The menu can carry
-    /// the one line that distinguishes them at the moment of choosing, which is the only moment the
-    /// distinction matters. A project finishes; an area does not.
+    /// New Project is a direct button because a menu owns the keyboard until it has dismissed. A
+    /// naming field revealed by a menu action therefore cannot accept the first keystroke. The less
+    /// frequent Area action remains in the adjacent menu and carries the distinction in its help.
     ///
     /// Only in Tasks. Notes and Calendar have no containers of this kind, and a disabled control in
     /// every other module would be a permanent offer the app never intends to honour.
     @ViewBuilder
     private var newListFooter: some View {
         if navigation.activeModule == .tasks {
-            Menu {
-                Button("New Project") { create(.project) }
-                    .help("Something with an end. It shows progress and can be finished.")
+            HStack(spacing: Theme.Spacing.small) {
+                Button {
+                    navigation.beginCreatingProject()
+                } label: {
+                    Label("New Project", systemImage: "plus")
+                        .font(Theme.Text.metadata)
+                }
+                .buttonStyle(.plain)
+                .help("Something with an end. It shows progress and can be finished.")
 
-                Button("New Area") { create(.area) }
-                    .help("A standing responsibility. It never finishes, so it never shows progress.")
-            } label: {
-                Label("New List", systemImage: "plus")
-                    .font(Theme.Text.metadata)
+                Menu {
+                    Button("New Area") { create(.area) }
+                        .help("A standing responsibility. It never finishes, so it never shows progress.")
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
             .fixedSize()
             .padding(.horizontal, SidebarMetrics.leadingInset)
             .padding(.top, Theme.Spacing.small)
-            .help("Add a project or an area to the list below")
+            .help("Add a project, or choose the menu for a new area")
             .accessibilityIdentifier("sidebar.tasks.newList")
         }
     }

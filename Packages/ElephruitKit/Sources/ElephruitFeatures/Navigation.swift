@@ -389,6 +389,12 @@ public final class NavigationModel {
     /// should not unexpectedly put the insertion point in its title.
     public var titleEditRequest: UUID?
 
+    /// A direct request to reveal the unsaved project-name field in the primary sidebar.
+    ///
+    /// The Tasks sidebar can make this request while the Projects section is not mounted. Keeping
+    /// the token here lets the section consume it after navigation brings the primary sidebar back.
+    public private(set) var projectCreationRequestID: UUID?
+
     // MARK: Browser-style history
 
     private struct NavigationLocation: Equatable {
@@ -796,6 +802,17 @@ public final class NavigationModel {
     public func beginNaming(_ id: UUID) {
         titleEditRequest = id
         selectItem(id)
+    }
+
+    /// Opens the Projects section in naming mode without creating or saving anything first.
+    public func beginCreatingProject() {
+        projectCreationRequestID = UUID()
+        select(.kind(.project))
+    }
+
+    public func consumeProjectCreationRequest(_ id: UUID) {
+        guard projectCreationRequestID == id else { return }
+        projectCreationRequestID = nil
     }
 
     /// A task somebody asked to open, from somewhere that is not the task list.

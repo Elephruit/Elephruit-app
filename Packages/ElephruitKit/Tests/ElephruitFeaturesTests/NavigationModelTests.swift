@@ -17,6 +17,21 @@ struct BrowserNavigationHistoryTests {
         #expect(navigation.titleEditRequest == itemID)
     }
 
+    @Test("Beginning a project reveals Projects and leaves creation pending until its field appears")
+    func beginCreatingProject() throws {
+        let navigation = NavigationModel()
+        navigation.enterModule(.tasks)
+
+        navigation.beginCreatingProject()
+
+        #expect(navigation.selection == .kind(.project))
+        #expect(navigation.activeModule == .projects)
+        let requestID = try #require(navigation.projectCreationRequestID)
+
+        navigation.consumeProjectCreationRequest(requestID)
+        #expect(navigation.projectCreationRequestID == nil)
+    }
+
     @Test("Back and forward restore the selected record")
     func recordHistory() {
         let navigation = NavigationModel()
