@@ -307,6 +307,17 @@ public struct RootView: View {
         SidebarMetrics.widths(fittingTitles: SidebarRegistry.nonTruncatingTitles)
     }
 
+    /// The sidebar range while the shell is moving its other dividers into place.
+    ///
+    /// A `NavigationSplitView` must make every column add up to the window. If the primary and
+    /// detail columns are briefly fixed while the sidebar is still flexible, AppKit balances the
+    /// transition by moving the sidebar divider. It then remembers that accidental position after
+    /// the constraints relax, which makes primary navigation jump on every Today/Inbox switch.
+    private var effectiveSidebarWidths: SidebarWidths {
+        guard let pinned = pinnedWidths[.sidebar] else { return sidebarWidths }
+        return SidebarWidths(minimum: pinned, ideal: pinned, maximum: pinned)
+    }
+
     /// Every column's width, decided together.
     ///
     /// ### Why one value rather than a question per pane
@@ -343,9 +354,9 @@ public struct RootView: View {
                 // Derived *once* per text size, because this runs on every evaluation of this body
                 // and measuring twenty-five titles is not free — see ``SidebarMetrics/widths(fittingTitles:)``.
                 .navigationSplitViewColumnWidth(
-                    min: sidebarWidths.minimum,
-                    ideal: sidebarWidths.ideal,
-                    max: sidebarWidths.maximum
+                    min: effectiveSidebarWidths.minimum,
+                    ideal: effectiveSidebarWidths.ideal,
+                    max: effectiveSidebarWidths.maximum
                 )
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
                     guard width > 0 else { return }
@@ -729,7 +740,13 @@ public struct RootView: View {
         // nothing is forgotten by going through it. What is gained is that there is one calculation
         // rather than two that agree until they do not.
         let widths = shellWidths
-        var pinned: [ModuleShellLayout.Column: CGFloat] = [.primary: widths.primary]
+        var pinned: [ModuleShellLayout.Column: CGFloat] = [
+            // Hold the divider exactly where the user sees it while Today adds or removes the detail
+            // column. Otherwise the sidebar is the only flexible column in this layout pass and
+            // absorbs the difference between the two shell shapes.
+            .sidebar: sidebarWidth > 0 ? sidebarWidth : sidebarWidths.ideal,
+            .primary: widths.primary,
+        ]
         if let detail = widths.detail { pinned[.detail] = detail }
         pinnedWidths = pinned
 
