@@ -195,10 +195,21 @@ actor FakeCalendarProvider: CalendarProviding {
     }
 
     nonisolated var changes: AsyncStream<Void> {
-        AsyncStream { _ in }
+        AsyncStream { continuation in
+            Task { await self.store(continuation) }
+        }
+    }
+
+    private func store(_ continuation: AsyncStream<Void>.Continuation) {
+        self.continuation = continuation
     }
 
     // MARK: Test control
+
+    /// What EventKit does during a sync: posts `EKEventStoreChanged`, often in bursts.
+    func emitChange() {
+        continuation?.yield()
+    }
 
     func replace(with events: [CalendarEventSummary]) {
         storedEvents = events
@@ -528,5 +539,46 @@ struct RecurringEventTests {
         #expect(first?.startAt == tuesday)
         #expect(second?.startAt == wednesday)
         #expect(first?.id != second?.id, "Two notes about two standups must not collapse into one link")
+    }
+}
+
+/// A background sync posts `EKEventStoreChanged` in bursts, and a burst must cost one refresh.
+@MainActor
+@Suite("Change notifications coalesce")
+struct CalendarChangeCoalescingTests {
+    @Test("A burst of store-change notifications produces one re-read, not one each")
+    func burstCoalesces() async throws {
+        let clock = FixedDateProvider.reference
+        let provider = FakeCalendarProvider(
+            events: [event("Standup", identifier: "a", start: clock.startOfToday)]
+        )
+        let service = makeService(provider: provider, clock: clock)
+
+        await service.enable()
+        await service.load(range: clock.today)
+        let readsBeforeBurst = await provider.callCount(of: "events")
+
+        // What a sync delivers: many notifications in quick succession.
+        for _ in 0..<12 {
+            await provider.emitChange()
+        }
+
+        // Wait for the coalescing window to close and the refresh to land, then a beat longer to
+        // catch any queued extras the old code would have run.
+        var refreshed = 0
+        for _ in 0..<40 {
+            try await Task.sleep(for: .milliseconds(50))
+            refreshed = (await provider.callCount(of: "events")) - readsBeforeBurst
+            if refreshed > 0 { break }
+        }
+        try await Task.sleep(for: .milliseconds(400))
+        refreshed = (await provider.callCount(of: "events")) - readsBeforeBurst
+
+        #expect(refreshed > 0, "a store change must still cause a re-read")
+        // On a loaded machine the twelve emissions can straddle a few coalescing windows, so the
+        // bound is a tolerance rather than an exact count. The defect this guards — one re-read
+        // per buffered notification — produces all twelve, every time.
+        #expect(refreshed <= 4,
+                "twelve notifications became \(refreshed) re-reads — the burst is not being coalesced")
     }
 }

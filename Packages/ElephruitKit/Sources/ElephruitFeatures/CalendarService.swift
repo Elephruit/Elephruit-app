@@ -76,6 +76,10 @@ public final class CalendarService {
     private let annotations: EventAnnotationService?
 
     private var watchTask: Task<Void, Never>?
+
+    /// The armed coalescing window, if a change notification has one open. See ``absorbChange()``.
+    private var pendingChangeReload: Task<Void, Never>?
+
     private var loadedRange: Range<Date>?
 
     static let enabledKey = "calendar.isEnabled"
@@ -158,6 +162,8 @@ public final class CalendarService {
 
         watchTask?.cancel()
         watchTask = nil
+        pendingChangeReload?.cancel()
+        pendingChangeReload = nil
         provider = NoCalendarProvider()
         events = []
         calendars = []
@@ -688,6 +694,16 @@ public final class CalendarService {
     /// An edit made in Calendar.app should appear here without the user having to do anything, and
     /// `EKEventStoreChanged` is how that arrives. Coalesced, because a sync can deliver a burst of
     /// them and re-reading a month per notification is how a background sync becomes a beachball.
+    ///
+    /// ### Why the coalescing is a second task rather than a sleep in the loop
+    /// It was a sleep in the loop, and that coalesces nothing: the stream buffers every
+    /// notification, so a burst of thirty became thirty full re-reads of the calendar list and the
+    /// visible month, each politely 250 ms after the last — the exact beachball the delay was
+    /// meant to prevent, only slower. Now the first notification of a burst arms one window;
+    /// everything landing inside it is absorbed, and one refresh runs when it closes. A change
+    /// that arrives *during* that refresh finds the window disarmed and arms the next one, so
+    /// nothing is ever missed — the same absorb-then-run-once shape `CountsService.refresh()`
+    /// uses, proven by `CalendarServiceTests`' burst test.
     private func watchForChanges() {
         watchTask?.cancel()
         let stream = provider.changes
@@ -695,12 +711,24 @@ public final class CalendarService {
         watchTask = Task { [weak self] in
             for await _ in stream {
                 guard let self else { return }
-                try? await Task.sleep(for: .milliseconds(250))
-                guard !Task.isCancelled else { return }
-
-                await refreshCalendars()
-                await reload()
+                self.absorbChange()
             }
+        }
+    }
+
+    /// Arms the coalescing window, unless a burst already has.
+    private func absorbChange() {
+        guard pendingChangeReload == nil else { return }
+
+        pendingChangeReload = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard let self, !Task.isCancelled else { return }
+
+            // Disarmed before the reads, so a change arriving while they run schedules the next
+            // pass rather than being lost.
+            self.pendingChangeReload = nil
+            await self.refreshCalendars()
+            await self.reload()
         }
     }
 }

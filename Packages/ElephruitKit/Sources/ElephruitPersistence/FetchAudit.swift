@@ -25,11 +25,22 @@ public final class FetchAudit {
         public var itemCountQueries = 0
         public var otherFetches = 0
 
+        /// How many `Item` rows the store returned across those fetches.
+        ///
+        /// This is the materialisation count: a row costs its ~77 µs the moment the store returns
+        /// it, whether or not a post-filter then discards it. A fetch *count* cannot see the
+        /// difference — the old whole-store post-filters were also "one fetch" — so a test that
+        /// wants to pin the shape of a query asserts on this. It still cannot see relationship
+        /// faults fired later by Swift-side code; the scaling benchmarks remain the authoritative
+        /// guard for total cost.
+        public var itemRowsMaterialized = 0
+
         public var total: Int { itemFetches + itemCountQueries + otherFetches }
 
         /// A readable summary for a failing assertion.
         public var description: String {
-            "\(itemFetches) item fetch(es), \(itemCountQueries) count quer(ies), \(otherFetches) other"
+            "\(itemFetches) item fetch(es) returning \(itemRowsMaterialized) row(s), "
+                + "\(itemCountQueries) count quer(ies), \(otherFetches) other"
         }
     }
 
@@ -47,11 +58,15 @@ public final class FetchAudit {
 
     public init() {}
 
-    public func record(_ access: Access) {
+    /// Records one store access. `rows` is how many rows it returned, for the accesses that
+    /// return any — see ``Tally/itemRowsMaterialized``.
+    public func record(_ access: Access, rows: Int = 0) {
         guard isRecording else { return }
 
         switch access {
-        case .itemFetch: tally.itemFetches += 1
+        case .itemFetch:
+            tally.itemFetches += 1
+            tally.itemRowsMaterialized += rows
         case .itemCountQuery: tally.itemCountQueries += 1
         case .other: tally.otherFetches += 1
         }

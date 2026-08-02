@@ -38,24 +38,15 @@ public final class TaskSidebarModel {
     }
 
     /// Recomputes. Called on change, never during rendering.
+    ///
+    /// This runs after every save, so what it asks matters: the badges come from one pass over the
+    /// open tasks rather than one fetch per badge, and the sync count is a store-side count rather
+    /// than a materialisation of every work item ever resolved.
     public func refresh() {
-        badges = computeBadges()
+        badges = (try? views.badgeCounts()) ?? [:]
         containers = computeContainers()
         smartLists = views.smartLists()
-        syncNeedsAttention = computeSyncAttention()
-    }
-
-    private func computeBadges() -> [TaskSystemView: Int] {
-        var result: [TaskSystemView: Int] = [:]
-        for view in TaskSystemView.allCases where view.showsCount {
-            result[view] = (try? views.badgeCount(for: view)) ?? 0
-        }
-        return result
-    }
-
-    private func computeSyncAttention() -> Int {
-        let filter = TaskFilter(rules: [.syncNeedsAttention], includesResolved: true)
-        return ((try? views.tasks(matching: filter)) ?? []).count
+        syncNeedsAttention = views.syncAttentionCount()
     }
 
     /// The container tree, flattened with a depth on each row.

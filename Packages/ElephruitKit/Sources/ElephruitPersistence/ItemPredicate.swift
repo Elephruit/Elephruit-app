@@ -30,12 +30,26 @@ enum ItemPredicateBuilder {
     ///
     /// Every other filter is applied by ``ItemQuery/postFilter(_:)`` in ordinary Swift. The
     /// boundary between the two is documented on ``ItemQuery/requiresPostFiltering``.
+    /// The containment clause a query wants pushed to the store.
+    ///
+    /// Only the two forms hot paths ask for: a specific parent (a project's contents, a heading's
+    /// tasks) and the top level (sibling ordering). `hasNoParent == false` — "anything with *a*
+    /// parent" — stays a post-filter: nothing hot asks it, and a clause nothing exercises is a
+    /// clause nothing would notice breaking.
+    enum ParentFilter {
+        case id(UUID)
+        case unparented
+    }
+
     static func make(
         scope: ItemQuery.Scope,
         kindRaws: [String],
         statusRaws: [String],
         dueFrom: Date?,
-        dueBefore: Date?
+        dueBefore: Date?,
+        isPinned: Bool? = nil,
+        parent: ParentFilter? = nil,
+        tagSlug: String? = nil
     ) -> Predicate<Item> {
         let filterByKind = !kindRaws.isEmpty
         let filterByStatus = !statusRaws.isEmpty
@@ -50,6 +64,43 @@ enum ItemPredicateBuilder {
             )
         }
 
+        // The containment clause rides along on the same terms as the due bound: one focused
+        // variant per combination that actually occurs, never stacked with another rider, and the
+        // caller keeps post-filtering either way so every combination stays correct. It exists in
+        // the two scopes hot paths use — `.active` for a container's contents, `.all` for sibling
+        // renumbering, where trashed and archived siblings must keep counting.
+        if let parent {
+            switch (scope, parent) {
+            case (.active, .id(let parentID)):
+                return activeParent(filterByKind, kindRaws, filterByStatus, statusRaws, parentID)
+            case (.active, .unparented):
+                return activeUnparented(filterByKind, kindRaws, filterByStatus, statusRaws)
+            case (.all, .id(let parentID)):
+                return anyScopeParent(filterByKind, kindRaws, filterByStatus, statusRaws, parentID)
+            case (.all, .unparented):
+                return anyScopeUnparented(filterByKind, kindRaws, filterByStatus, statusRaws)
+            default:
+                break  // Archived and Trash are small; the post-filter answers there.
+            }
+        }
+
+        // One tag, on the same terms. A tag page post-filtered its slugs, which fetched every
+        // active content item to keep the tagged few. The store narrows by *one* slug — for a
+        // multi-tag query, any one of them — and the post-filter still requires them all, so the
+        // clause only ever shrinks what is materialised.
+        if scope == .active, let tagSlug {
+            return activeTagged(filterByKind, kindRaws, filterByStatus, statusRaws, tagSlug)
+        }
+
+        // The pinned clause rides along on the same terms as the due bound, and for the same
+        // reason: the sidebar's pinned rows are recomputed after every save, and post-filtering
+        // them meant materialising every active item to find half a dozen pins. Only in the active
+        // scope, and never alongside a due bound — the caller keeps post-filtering either way, so
+        // every combination stays correct.
+        if scope == .active, let isPinned {
+            return activePinned(filterByKind, kindRaws, filterByStatus, statusRaws, isPinned)
+        }
+
         switch scope {
         case .active:
             return active(filterByKind, kindRaws, filterByStatus, statusRaws)
@@ -59,6 +110,68 @@ enum ItemPredicateBuilder {
             return trashed(filterByKind, kindRaws, filterByStatus, statusRaws)
         case .all:
             return anyScope(filterByKind, kindRaws, filterByStatus, statusRaws)
+        }
+    }
+
+    /// Active, restricted to one container's children. Five clauses.
+    private static func activeParent(
+        _ filterByKind: Bool,
+        _ kindRaws: [String],
+        _ filterByStatus: Bool,
+        _ statusRaws: [String],
+        _ parentID: UUID
+    ) -> Predicate<Item> {
+        #Predicate<Item> { item in
+            item.deletedAt == nil
+                && item.archivedAt == nil
+                && item.parent?.id == parentID
+                && (!filterByKind || kindRaws.contains(item.kindRaw))
+                && (!filterByStatus || statusRaws.contains(item.statusRaw))
+        }
+    }
+
+    /// Active, restricted to the top level. Five clauses.
+    private static func activeUnparented(
+        _ filterByKind: Bool,
+        _ kindRaws: [String],
+        _ filterByStatus: Bool,
+        _ statusRaws: [String]
+    ) -> Predicate<Item> {
+        #Predicate<Item> { item in
+            item.deletedAt == nil
+                && item.archivedAt == nil
+                && item.parent == nil
+                && (!filterByKind || kindRaws.contains(item.kindRaw))
+                && (!filterByStatus || statusRaws.contains(item.statusRaw))
+        }
+    }
+
+    /// Every scope, restricted to one container's children. Three clauses.
+    private static func anyScopeParent(
+        _ filterByKind: Bool,
+        _ kindRaws: [String],
+        _ filterByStatus: Bool,
+        _ statusRaws: [String],
+        _ parentID: UUID
+    ) -> Predicate<Item> {
+        #Predicate<Item> { item in
+            item.parent?.id == parentID
+                && (!filterByKind || kindRaws.contains(item.kindRaw))
+                && (!filterByStatus || statusRaws.contains(item.statusRaw))
+        }
+    }
+
+    /// Every scope, restricted to the top level. Three clauses.
+    private static func anyScopeUnparented(
+        _ filterByKind: Bool,
+        _ kindRaws: [String],
+        _ filterByStatus: Bool,
+        _ statusRaws: [String]
+    ) -> Predicate<Item> {
+        #Predicate<Item> { item in
+            item.parent == nil
+                && (!filterByKind || kindRaws.contains(item.kindRaw))
+                && (!filterByStatus || statusRaws.contains(item.statusRaw))
         }
     }
 
@@ -82,6 +195,40 @@ enum ItemPredicateBuilder {
                 && item.archivedAt == nil
                 && item.dueSortKey >= dueFrom
                 && item.dueSortKey < dueBefore
+                && (!filterByKind || kindRaws.contains(item.kindRaw))
+                && (!filterByStatus || statusRaws.contains(item.statusRaw))
+        }
+    }
+
+    /// Active, restricted to items carrying one tag. Five clauses and a subquery.
+    private static func activeTagged(
+        _ filterByKind: Bool,
+        _ kindRaws: [String],
+        _ filterByStatus: Bool,
+        _ statusRaws: [String],
+        _ tagSlug: String
+    ) -> Predicate<Item> {
+        #Predicate<Item> { item in
+            item.deletedAt == nil
+                && item.archivedAt == nil
+                && item.tags.contains { $0.slug == tagSlug }
+                && (!filterByKind || kindRaws.contains(item.kindRaw))
+                && (!filterByStatus || statusRaws.contains(item.statusRaw))
+        }
+    }
+
+    /// Active, restricted by the pinned flag. Five clauses.
+    private static func activePinned(
+        _ filterByKind: Bool,
+        _ kindRaws: [String],
+        _ filterByStatus: Bool,
+        _ statusRaws: [String],
+        _ isPinned: Bool
+    ) -> Predicate<Item> {
+        #Predicate<Item> { item in
+            item.deletedAt == nil
+                && item.archivedAt == nil
+                && item.isPinned == isPinned
                 && (!filterByKind || kindRaws.contains(item.kindRaw))
                 && (!filterByStatus || statusRaws.contains(item.statusRaw))
         }

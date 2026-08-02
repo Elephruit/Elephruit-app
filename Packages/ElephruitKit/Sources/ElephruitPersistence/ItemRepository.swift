@@ -182,9 +182,12 @@ public final class SwiftDataItemRepository: ItemRepository {
     }
 
     private func fetch(_ descriptor: FetchDescriptor<Item>) throws(AppError) -> [Item] {
-        audit?.record(.itemFetch)
         do {
-            return try context.fetch(descriptor)
+            let rows = try context.fetch(descriptor)
+            // Recorded with the row count, so a test can pin how much a query *materialises* —
+            // the figure a bare fetch count cannot see. See `FetchAudit.Tally.itemRowsMaterialized`.
+            audit?.record(.itemFetch, rows: rows.count)
+            return rows
         } catch {
             throw .storeUnavailable(underlying: error.localizedDescription)
         }
@@ -619,21 +622,30 @@ public final class SwiftDataItemRepository: ItemRepository {
     private static let orderGap: Double = 1024
 
     private func nextSortOrder(parentID: UUID?) throws(AppError) -> Double {
-        var query = ItemQuery()
-        query.scope = .all
-        query.sort = .manual
-        // Ordering is structural, so it must see *every* sibling. Excluding headings here would give
-        // two headings in the same project an identical sort order.
-        query.includesNonContentKinds = true
+        // One top-1 fetch: the store finds the highest sibling order and returns a single row.
+        //
+        // This used to go through `ItemQuery` with `hasNoParent`/`parentID`, both of which are
+        // post-filters — so every create fetched and materialised *every item in the store*, then
+        // read `parent` on each to keep the siblings. That was the whole of the measured cost of
+        // creating an item: ~0.1 ms per existing item, over a second at ten thousand.
+        //
+        // The predicate deliberately has no scope or kind clause. Ordering is structural, so it
+        // must see every sibling — trashed, archived, and headings alike. Excluding headings here
+        // would give two headings in the same project an identical sort order.
+        let predicate: Predicate<Item>
         if let parentID {
-            query.parentID = parentID
+            predicate = #Predicate { $0.parent?.id == parentID }
         } else {
-            query.hasNoParent = true
+            predicate = #Predicate { $0.parent == nil }
         }
-        query.limit = nil
 
-        let siblings = try items(matching: query)
-        let highest = siblings.map(\.sortOrder).max() ?? 0
+        var descriptor = FetchDescriptor<Item>(
+            predicate: predicate,
+            sortBy: [SortDescriptor(\.sortOrder, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+
+        let highest = try fetch(descriptor).first?.sortOrder ?? 0
         return highest + Self.orderGap
     }
 
