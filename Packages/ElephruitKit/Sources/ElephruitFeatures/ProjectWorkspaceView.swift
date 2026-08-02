@@ -86,9 +86,16 @@ struct ProjectWorkspaceView: View {
     @ViewBuilder
     private func content(_ model: ProjectWorkspaceModel) -> some View {
         VStack(spacing: 0) {
-            ProjectWorkspaceHeader(model: model)
             ProjectViewTabBar(model: model, navigation: navigation, projectID: projectID)
             Divider()
+            // Project chrome stays in one place whether this project has health concerns or not.
+            // Putting this optional row above the tabs let populated projects insert data into the
+            // unified toolbar's transition area, while new projects looked correct because they
+            // skipped the row. Concerns belong below the stable tabs, ahead of the project body.
+            if !model.health.concerns.isEmpty {
+                ProjectWorkspaceHeader(model: model)
+                Divider()
+            }
             if model.activeView?.kind == .bugs {
                 ProjectBugAddBar(model: model)
                 Divider()
@@ -262,7 +269,7 @@ struct ProjectWorkspaceHeader: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Theme.Spacing.large)
-            .padding(.top, Theme.Spacing.small)
+            .padding(.vertical, Theme.Spacing.small)
         }
     }
 }
