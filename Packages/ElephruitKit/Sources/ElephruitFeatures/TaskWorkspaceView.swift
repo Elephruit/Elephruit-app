@@ -70,12 +70,15 @@ struct TaskWorkspaceView: View {
         } else if sections.isEmpty, flatTasks.isEmpty, draftSectionID == nil {
             emptyState
         } else {
-            // The column is capped and centred for the ordinary reason a column of text is: a task
-            // title dragged out to 1400 points puts its own metadata a foot away from itself. The
-            // bottom bar rides inside this frame, so it stays under the rows it acts on.
+            // The column is capped for the ordinary reason a column of text is: a task title
+            // dragged out to 1400 points puts its own metadata a foot away from itself. Anchored
+            // leading rather than centred, because the window title sits at the column's left edge
+            // and a page floating in the middle of a wide column reads as content that has escaped
+            // its space — the same decision Time's log makes. The bottom bar rides inside this
+            // frame, so it stays under the rows it acts on.
             list
                 .frame(maxWidth: Theme.Size.editorMaxWidth)
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

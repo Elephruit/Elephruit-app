@@ -284,9 +284,14 @@ struct TimeTrackerCard: View {
                 Text(TimeFormatting.stopwatch(running.elapsed(at: context.date)))
                     .font(clockFont)
                     .monospacedDigit()
+                    .lineLimit(1)
+                    // The width is a floor, not a ceiling. Fixed at 128 this wrapped once a timer
+                    // crossed ten hours — "23:17:0" over a lone "6" — because a frame narrower
+                    // than the digits does not shrink them, it folds them.
+                    .fixedSize()
                     .contentTransition(.numericText())
             }
-            .frame(width: 128, alignment: .trailing)
+            .frame(minWidth: 128, alignment: .trailing)
             .contentShape(.rect)
             .onTapGesture { beginEditingDuration() }
             .help("Started at \(running.startedAt.formatted(date: .omitted, time: .shortened)) — click to correct")
