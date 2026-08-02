@@ -74,7 +74,6 @@ struct CaptureTitleField: NSViewRepresentable {
         textView.placeholder = placeholder
         textView.applyHighlighting()
 
-        DispatchQueue.main.async { textView.window?.makeFirstResponder(textView) }
         return textView
     }
 

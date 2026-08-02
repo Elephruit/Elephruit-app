@@ -37,6 +37,35 @@ final class QuickJotPanel: NSPanel {
     /// Panels are not key by default, and a capture field that cannot be typed into is not capture.
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    /// Makes the title the typing destination whenever the shortcut raises this panel.
+    ///
+    /// The panel is retained when hidden, so the title's `viewDidMoveToWindow` hook only covers its
+    /// first presentation. A later invocation must take focus back from whichever chip or button
+    /// was last used before the panel disappeared.
+    func focusTitle() {
+        contentView?.layoutSubtreeIfNeeded()
+        if focusTitleIfPresent() { return }
+
+        // `NSHostingView` may finish materialising its represented views on the next run-loop turn.
+        // Retry once after that work rather than assuming the hierarchy is already complete.
+        DispatchQueue.main.async { [weak self] in
+            _ = self?.focusTitleIfPresent()
+        }
+    }
+
+    @discardableResult
+    private func focusTitleIfPresent() -> Bool {
+        guard let title = contentView?.firstDescendant(of: TokenisedTextView.self) else { return false }
+        return makeFirstResponder(title)
+    }
+}
+
+private extension NSView {
+    func firstDescendant<View: NSView>(of type: View.Type) -> View? {
+        if let match = self as? View { return match }
+        return subviews.lazy.compactMap { $0.firstDescendant(of: type) }.first
+    }
 }
 
 /// Owns the one panel, what has been composed in it, and where focus goes when it closes.
@@ -91,6 +120,7 @@ public final class QuickJotController {
     public func show() {
         if let panel {
             panel.makeKeyAndOrderFront(nil)
+            panel.focusTitle()
             isVisible = true
             return
         }
@@ -110,6 +140,7 @@ public final class QuickJotController {
         // Without this the panel is key but the app is not active, so the caret does not blink and
         // the first keystroke can be swallowed.
         NSApp.activate()
+        panel.focusTitle()
         isVisible = true
     }
 
