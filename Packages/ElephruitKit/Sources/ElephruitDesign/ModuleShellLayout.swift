@@ -201,6 +201,17 @@ extension ModuleShellLayout {
         bounds(of: column).maximum ?? .greatestFiniteMagnitude
     }
 
+    /// The largest laid-out width that should trigger restoration correction.
+    ///
+    /// A pane's declared maximum is the largest width it *asks for*. The shell may still give its
+    /// elastic pane the room left after every other column reaches its ceiling, because a split
+    /// view must fill the window. That resolved width is valid even when it is larger than the
+    /// pane's preference. Treating it as an invalid AppKit restoration creates a permanent
+    /// pin-release-pin loop on wide Inbox and Notes windows.
+    public func restorationCeiling(of column: Column, resolvedWidth: CGFloat) -> CGFloat {
+        max(declaredCeiling(of: column), resolvedWidth)
+    }
+
     /// The narrowest this column is ever allowed to be.
     ///
     /// The sidebar's is passed in rather than declared here: it is primary navigation, it is the

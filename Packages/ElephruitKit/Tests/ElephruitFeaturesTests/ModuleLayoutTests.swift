@@ -97,6 +97,27 @@ struct ModuleLayoutTests {
         #expect(AppModule.calendar.shellLayout.declaredCeiling(of: .primary) == .greatestFiniteMagnitude)
     }
 
+    /// The reported seizure: the wide window leaves more room for the empty detail pane than its
+    /// preferred maximum. That is the shell's deliberate elastic result, not a stale AppKit divider
+    /// to correct. Rejecting it starts a pin-release cycle that never settles.
+    @Test("An elastic detail width is accepted beyond its preferred maximum")
+    func elasticDetailDoesNotTriggerRestoration() {
+        for layout in [PrimaryNavigationLayout.shell, AppModule.notes.shellLayout] {
+            let widths = layout.widths(
+                windowWidth: 2048,
+                sidebarWidth: 240,
+                userWantsInspector: false,
+                hasSelection: false
+            )
+            let detail = try! #require(widths.detail)
+            let declared = layout.declaredCeiling(of: .detail)
+
+            #expect(detail > declared)
+            #expect(layout.restorationCeiling(of: .detail, resolvedWidth: detail) == detail)
+            #expect(detail <= layout.restorationCeiling(of: .detail, resolvedWidth: detail) + 1)
+        }
+    }
+
     /// The complaint this answers: the list was excessively wide, the profile was cramped, and the
     /// pane on the far right took a permanent slice of both.
     @Test("A person's profile is the column that takes the spare width")

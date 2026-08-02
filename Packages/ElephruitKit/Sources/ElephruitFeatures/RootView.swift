@@ -777,11 +777,22 @@ public struct RootView: View {
         // AppKit's split view restores its remembered divider *asynchronously* — the
         // "NSSplitView Subview Frames" autosave arrives a beat after the window is up — and that
         // late restoration does not honour `navigationSplitViewColumnWidth`. A list with a declared
-        // maximum of 340 can therefore open at a thousand points and stay there. The samples
-        // are where the loss shows up, so this is where it is corrected: a settled width past the
-        // module's own ceiling is never something the user chose — the divider cannot be dragged
-        // past a maximum that is being honoured — and is re-pinned rather than recorded.
-        if width > shellLayout.declaredCeiling(of: column) + 1 {
+        // maximum of 340 can therefore open at a thousand points and stay there. The samples are
+        // where the loss shows up, so this is where it is corrected. The shell's elastic pane is
+        // allowed to exceed its declared preference in order to fill the window, however; checking
+        // only the declared ceiling made Inbox and Notes continuously pin and release that valid
+        // width every 50 ms.
+        let resolvedWidth: CGFloat = switch column {
+        case .primary: shellWidths.primary
+        case .detail: shellWidths.detail ?? 0
+        case .sidebar: shellWidths.sidebar ?? 0
+        case .inspector: shellWidths.inspector ?? 0
+        }
+        let restorationCeiling = shellLayout.restorationCeiling(
+            of: column,
+            resolvedWidth: resolvedWidth
+        )
+        if width > restorationCeiling + 1 {
             Task { await correctInvalidColumnWidths() }
             return
         }
