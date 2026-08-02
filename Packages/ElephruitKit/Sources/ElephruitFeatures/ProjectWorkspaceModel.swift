@@ -46,6 +46,14 @@ public final class ProjectWorkspaceModel {
     /// health concern — reaches the same inline surface when the Bugs view is active.
     public var expandedBugID: UUID?
 
+    /// Whether the Bugs view is temporarily showing completed fixes that still need checking.
+    ///
+    /// The saved Bugs configuration hides resolved work by default. Verification happens after a
+    /// bug is completed, so this transient review mode is the deliberate exception: it exposes
+    /// only the fixes that can clear the "Awaiting verification" concern without changing the
+    /// user's saved view.
+    public private(set) var isReviewingFixesAwaitingVerification = false
+
     /// Whether a text field in the workspace currently has focus.
     ///
     /// **The keyboard shortcuts are gated on this**, and that gate is not optional. The handlers are
@@ -103,6 +111,7 @@ public final class ProjectWorkspaceModel {
         }
         activeView = match
         expandedBugID = nil
+        isReviewingFixesAwaitingVerification = false
         // A search belongs to the moment, not to the view. Carrying it across a tab change would
         // make the next view look mysteriously empty.
         searchText = ""
@@ -117,6 +126,20 @@ public final class ProjectWorkspaceModel {
         }
 
         var configuration = activeView.configuration
+        let fixesAwaitingVerification = allFacts.filter {
+            $0.kind == .bug && $0.status == .completed && !$0.isVerified
+        }
+        let wasReviewing = isReviewingFixesAwaitingVerification
+        if isReviewingFixesAwaitingVerification, fixesAwaitingVerification.isEmpty {
+            isReviewingFixesAwaitingVerification = false
+            expandedBugID = nil
+        }
+
+        if isReviewingFixesAwaitingVerification {
+            configuration.showsResolved = true
+            configuration.showsSubtasks = true
+            configuration.filter = TaskFilter(includesResolved: true)
+        }
         // A search is transient and belongs to nobody. Folding it in as a rule here — rather than
         // writing it into the view — is what keeps it out of the saved configuration.
         if let text = searchText.nilIfBlank {
@@ -124,10 +147,22 @@ public final class ProjectWorkspaceModel {
         }
 
         groups = WorkItemArrangement.arrange(
-            allFacts,
+            isReviewingFixesAwaitingVerification ? fixesAwaitingVerification : allFacts,
             configuration: configuration,
             vocabulary: vocabulary
         )
+
+        if isReviewingFixesAwaitingVerification,
+           let first = visibleOrder.first,
+           expandedBugID.map(visibleOrder.contains) != true {
+            select(first)
+            expandedBugID = first
+        } else if wasReviewing, !isReviewingFixesAwaitingVerification {
+            selectedItemIDs.formIntersection(visibleOrder)
+            if let focusedItemID, !visibleOrder.contains(focusedItemID) {
+                self.focusedItemID = nil
+            }
+        }
 
         // A sheet open over something that has just been deleted has to close. Asked of `itemsByID`
         // rather than of the repository, which would still find a trashed item and leave the sheet
@@ -297,9 +332,25 @@ public final class ProjectWorkspaceModel {
             $0.kind == .bug && $0.status == .completed && !$0.isVerified
         }) else { return false }
 
+        guard let bugsView = views.first(where: { $0.kind == .bugs }) else { return false }
+        activeView = bugsView
+        searchText = ""
+        isReviewingFixesAwaitingVerification = true
+        rearrange()
         select(fix.id)
-        present(fix.id)
+        expandedBugID = fix.id
         return true
+    }
+
+    /// Returns from the transient verification queue to the user's normal Bugs view.
+    public func endVerificationReview() {
+        isReviewingFixesAwaitingVerification = false
+        expandedBugID = nil
+        rearrange()
+        selectedItemIDs.formIntersection(visibleOrder)
+        if let focusedItemID, !visibleOrder.contains(focusedItemID) {
+            self.focusedItemID = nil
+        }
     }
 
     public func present(_ id: UUID) {

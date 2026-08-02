@@ -256,12 +256,59 @@ struct WorkItemEditingTests {
         #expect(model.presentedItemID == nil)
         #expect(model.selectedItemIDs == [fixedBug.id])
         #expect(model.expandedBugID != openBug.id)
+        #expect(model.isReviewingFixesAwaitingVerification)
+        #expect(model.visibleOrder == [fixedBug.id])
 
         try services.bugs.markVerified(fixedBug)
         model.refresh()
 
         #expect(model.health.bugsAwaitingVerification == 0)
+        #expect(!model.isReviewingFixesAwaitingVerification)
+        #expect(model.expandedBugID == nil)
         #expect(!model.presentFixAwaitingVerification())
+    }
+
+    @Test("Verification review advances through completed fixes and then returns to open bugs")
+    func verificationReviewAdvances() throws {
+        let services = makeServices()
+        let project = try services.items.create(ItemDraft(kind: .project, title: "P"))
+        let openBug = try services.workItems.createWorkItem(
+            title: "Still broken", kind: .bug, in: project
+        )
+        let firstFix = try services.workItems.createWorkItem(
+            title: "First fix", kind: .bug, in: project
+        )
+        let secondFix = try services.workItems.createWorkItem(
+            title: "Second fix", kind: .bug, in: project
+        )
+        _ = try services.tasks.complete(firstFix)
+        _ = try services.tasks.complete(secondFix)
+
+        let model = ProjectWorkspaceModel(services: services)
+        model.load(projectID: project.id, viewID: nil)
+
+        #expect(model.presentFixAwaitingVerification())
+        #expect(Set(model.visibleOrder) == [firstFix.id, secondFix.id])
+
+        let firstPresentedID = try #require(model.expandedBugID)
+        let firstPresented = try #require(model.item(firstPresentedID))
+        try services.bugs.markVerified(firstPresented)
+        model.refresh()
+
+        #expect(model.isReviewingFixesAwaitingVerification)
+        #expect(model.visibleOrder.count == 1)
+        #expect(model.expandedBugID == model.visibleOrder.first)
+        #expect(model.expandedBugID != firstPresentedID)
+
+        let lastPresented = try #require(model.expandedBugID.flatMap(model.item))
+        try services.bugs.markVerified(lastPresented)
+        model.refresh()
+
+        #expect(!model.isReviewingFixesAwaitingVerification)
+        #expect(model.expandedBugID == nil)
+        #expect(model.visibleOrder.contains(openBug.id))
+        #expect(!model.visibleOrder.contains(firstFix.id))
+        #expect(!model.visibleOrder.contains(secondFix.id))
     }
 
     @Test("Deleting from the workspace lands the selection on the nearest survivor")
