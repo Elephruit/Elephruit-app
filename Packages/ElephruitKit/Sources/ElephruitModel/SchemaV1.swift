@@ -335,6 +335,39 @@ public enum SchemaV10: VersionedSchema {
     }
 }
 
+/// The eleventh schema: a note's rich text.
+///
+/// One nullable `Data` column — `Item.noteDocumentData` — and nothing else. Additive, optional,
+/// defaulted to `nil`, so a store opened under this version gains a nullable column and keeps every
+/// byte it had.
+///
+/// ### Why there is no data migration, and why that is the safe direction
+/// Because `nil` already means something true: *this note has not been opened since rich text
+/// existed*, and its `body` is still the whole of it. Conversion happens on read, one note at a
+/// time, through `NoteBodyImport` — which adopts structure only when re-projecting the result gives
+/// back the original string character for character, and otherwise keeps the note as plain
+/// paragraphs.
+///
+/// A custom stage would have to rewrite every note in the library at once, on the strength of a
+/// parser that has never been run against *these* notes, at the one moment the user is least able to
+/// judge the result and least able to undo it. ADR 0006's consequence 6 asks for the legacy read
+/// path to stay until the conversion has been validated and a rollback window has passed, and a
+/// nullable column that means "not yet" is what keeps that promise available. Nothing is rewritten
+/// until the user opens a note and edits it.
+///
+/// ### Why it is a version at all
+/// For the reason spelled out on ``SchemaV3``: the version identifier is what the `.schema-version`
+/// stamp beside the store is compared against, and a mismatch is what triggers the backup in
+/// `PersistenceStack`. A schema change that did not bump the version would migrate real user data
+/// with no backup taken.
+public enum SchemaV11: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 11) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV10.models
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -347,7 +380,7 @@ public enum SchemaV10: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV10.self]
+        [SchemaV11.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -367,9 +400,9 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV10.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV11.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV10.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV11.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {
