@@ -254,7 +254,24 @@ public enum WorkItemArrangement {
         var byStage: [UUID: [TaskFacts]] = [:]
         var unplaced: [TaskFacts] = []
         for item in facts {
-            if let stageID = item.workflowStageID, vocabulary.stages.contains(where: { $0.id == stageID }) {
+            // Lifecycle wins visually when work is resolved outside the board. Completing a card
+            // from its menu changes the status, not the independent workflow stage; grouping only
+            // by the stored stage would therefore leave a completed card sitting in “In progress”.
+            // Keep that working stage stored so reopening can return the card to it, but project the
+            // resolved card into the board's matching terminal column in the meantime.
+            let terminalCategory: WorkflowStageCategory? = switch item.status {
+            case .completed: .done
+            case .cancelled: .cancelled
+            case .none, .open: nil
+            }
+            let stageID = terminalCategory.flatMap { category in
+                vocabulary.stages
+                    .filter { $0.category == category }
+                    .min { $0.sortOrder < $1.sortOrder }?
+                    .id
+            } ?? item.workflowStageID
+
+            if let stageID, vocabulary.stages.contains(where: { $0.id == stageID }) {
                 byStage[stageID, default: []].append(item)
             } else {
                 unplaced.append(item)

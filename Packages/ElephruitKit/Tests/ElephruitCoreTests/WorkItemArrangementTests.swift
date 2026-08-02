@@ -349,6 +349,27 @@ struct WorkItemArrangementTests {
         #expect(full.contains { $0.key == doneKey })
     }
 
+    @Test("Resolving work outside the board moves its card to a terminal column")
+    func resolvedWorkUsesTerminalColumn() throws {
+        let configuration = ProjectViewConfiguration.default(for: .board)
+        let completed = Self.work(
+            "Fixed bug",
+            kind: .bug,
+            status: .completed,
+            stage: Self.backlogID
+        )
+
+        let groups = WorkItemArrangement.arrange(
+            [completed],
+            configuration: configuration,
+            vocabulary: Self.vocabulary
+        )
+
+        let done = try #require(groups.first { $0.stageID == Self.doneID })
+        #expect(done.items.map(\.id) == [completed.id])
+        #expect(groups.first { $0.stageID == Self.backlogID }?.items.isEmpty == true)
+    }
+
     // MARK: Filtering
 
     @Test("Resolved work is hidden unless the view asks for it")
