@@ -43,7 +43,7 @@ public struct SidebarView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            if let module = navigation.activeModule {
+            if let module = navigation.activeModule, module.hasOwnSidebar {
                 ModuleHeader(module: module, navigation: navigation)
                 Divider()
             }
@@ -136,6 +136,7 @@ public struct SidebarView: View {
     private var primaryList: some View {
         List(selection: selectionBinding) {
             globalBand
+            projectsBand
             moduleBand
             pinnedBand
             crossModuleBand
@@ -155,6 +156,14 @@ public struct SidebarView: View {
                 )
             }
         }
+    }
+
+    /// The Projects tree, between the day and the modules.
+    ///
+    /// Above the modules because a project is what people are actually in most of the time, and
+    /// below the global band because Today still comes first.
+    private var projectsBand: some View {
+        ProjectsSidebarSection(navigation: navigation, rowHeight: rowHeight)
     }
 
     /// The modules.

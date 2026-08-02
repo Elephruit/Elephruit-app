@@ -111,7 +111,11 @@ public struct ItemDetailView: View {
         // What arrives here now is somebody following a *link* to a task — a backlink, a person's
         // page, a search result, a deep link — and the right answer to that is to take them to
         // where the task lives and open it there, which is what ``TaskRedirect`` does.
-        case .task:
+        // The same argument covers a bug, a feature and the two planning markers. Each of them
+        // lives inside a project workspace and is opened there; arriving at one through a link or a
+        // search result should take you to where it lives rather than rebuild a lesser copy of it
+        // in a column.
+        case .task, .bug, .feature, .milestone, .release:
             TaskRedirect(task: item, navigation: navigation)
 
         case .bookmark:

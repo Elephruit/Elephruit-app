@@ -251,7 +251,7 @@ public final class SwiftDataItemRepository: ItemRepository {
 
         try reconcileWikiLinks(for: item)
 
-        if item.kind == .task, item.status == .open {
+        if item.kind.isWorkItem, item.status == .open {
             rearmCompletionSuggestion(above: item)
         }
 
@@ -431,7 +431,7 @@ public final class SwiftDataItemRepository: ItemRepository {
         guard heading.kind == .heading else { return }
         let destination = heading.parent
 
-        for task in heading.children.filter({ $0.kind == .task }) {
+        for task in heading.children.filter({ $0.kind.isWorkItem }) {
             task.parent = destination
             task.updatedAt = dateProvider.now
         }
@@ -489,7 +489,7 @@ public final class SwiftDataItemRepository: ItemRepository {
         }
 
         // Re-opening work is one of the three transitions that re-arms the suggestion.
-        if wasCompleted, item.kind == .task {
+        if wasCompleted, item.kind.isWorkItem {
             rearmCompletionSuggestion(above: item)
             try save()
         }
@@ -576,7 +576,7 @@ public final class SwiftDataItemRepository: ItemRepository {
         }
 
         // Moving open work into a project is the third re-arming transition.
-        if item.kind == .task, item.status == .open {
+        if item.kind.isWorkItem, item.status == .open {
             rearmCompletionSuggestion(above: item)
             try save()
         }

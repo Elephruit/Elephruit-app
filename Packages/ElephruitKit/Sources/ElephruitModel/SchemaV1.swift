@@ -368,6 +368,45 @@ public enum SchemaV11: VersionedSchema {
     }
 }
 
+/// The twelfth schema: a project becomes a workspace.
+///
+/// Eight new entities — `WorkflowStage`, `ProjectViewRecord`, `BugRecord`, `ItemComment`,
+/// `ItemActivity`, `AutomationRule`, `CustomFieldDefinition`, `InboxNotification` — and nine
+/// nullable or defaulted columns on `Item`. No rename, no type change, no column removed, so this
+/// is still a lightweight stage that Core Data infers, and [ADR 0005]'s trigger for freezing the
+/// model types is still not met.
+///
+/// Every new entity follows the CloudKit rules the store has kept since v1: every attribute
+/// defaulted, no unique constraints, every to-one optional, every relationship declaring its
+/// inverse, and no `.deny` rules. None of that is exercised yet — sync has not shipped for anything
+/// — but the decision of record is that deferring sync must not make adopting it harder later, and
+/// eight entities is exactly the scale at which retrofitting would hurt.
+///
+/// Numbered twelfth rather than eleventh because the rich-text column landed on `main` while
+/// this work was in a worktree, and took eleven. Nothing about the change is different for it;
+/// the two are independent additive stages that happen to have been written at the same time.
+///
+/// The one design note worth reading here rather than at the call site: **custom fields add no
+/// storage.** `CustomFieldDefinition` names and types a key; the values live in `Item.userMetadata`,
+/// which has been in the schema since v1. That is why renaming a field is a service operation that
+/// moves values rather than a single write.
+public enum SchemaV12: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 12) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV11.models + [
+            WorkflowStage.self,
+            ProjectViewRecord.self,
+            BugRecord.self,
+            ItemComment.self,
+            ItemActivity.self,
+            AutomationRule.self,
+            CustomFieldDefinition.self,
+            InboxNotification.self,
+        ]
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -380,7 +419,7 @@ public enum SchemaV11: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV11.self]
+        [SchemaV12.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -400,9 +439,9 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV11.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV12.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV11.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV12.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {

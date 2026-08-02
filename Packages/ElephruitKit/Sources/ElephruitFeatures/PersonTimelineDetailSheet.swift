@@ -155,7 +155,7 @@ struct PersonTimelineDetailSheet: View {
                 symbol: "calendar"
             )
 
-            if entry.kind == .task {
+            if entry.kind.isWorkItem {
                 metadataTile(title: "Status", value: status.displayName, symbol: status.symbolName)
             } else if let interactionKind = entry.interactionKind {
                 metadataTile(title: "Type", value: interactionKind.displayName, symbol: interactionKind.symbolName)
@@ -216,7 +216,7 @@ struct PersonTimelineDetailSheet: View {
 
     private var footer: some View {
         HStack {
-            if entry.isPromise || entry.kind == .task {
+            if entry.isPromise || entry.kind.isWorkItem {
                 if status == .completed {
                     Label("Completed", systemImage: "checkmark.circle.fill")
                         .font(.system(.body, weight: .semibold))

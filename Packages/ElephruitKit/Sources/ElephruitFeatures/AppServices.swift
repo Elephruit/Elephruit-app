@@ -109,6 +109,32 @@ public final class AppServices {
     /// What the Tasks band of the sidebar reads. Computed on change, never during a render.
     public let taskSidebar: TaskSidebarModel
 
+    // MARK: Projects
+
+    /// A project's columns, views and custom fields.
+    public let projectWorkspace: ProjectWorkspaceService
+
+    /// Creating and changing work, and writing down that it changed.
+    public let workItems: WorkItemService
+
+    /// Everything specific to defects.
+    public let bugs: BugService
+
+    /// Turning a template into a real project.
+    public let projectTemplates: ProjectTemplateService
+
+    /// A project's own rules.
+    public let automations: AutomationEngine
+
+    /// The figures a project is judged by.
+    public let projectReports: ProjectReportingService
+
+    /// What the user is told, and how often.
+    public let inbox: InboxService
+
+    /// The Projects tree at the top of the sidebar.
+    public let projectSidebar: ProjectsSidebarModel
+
     /// Apple Reminders, off until the user turns it on.
     public let reminders: RemindersService
 
@@ -388,6 +414,56 @@ public final class AppServices {
         self.tasks = tasks
         self.taskViews = taskViews
         self.taskSidebar = TaskSidebarModel(items: items, views: taskViews)
+
+        // Constructed in dependency order, which is also the order they were designed in: furniture,
+        // then work, then the things that read work.
+        let projectWorkspace = ProjectWorkspaceService(
+            items: items,
+            context: context,
+            dateProvider: dateProvider
+        )
+        self.projectWorkspace = projectWorkspace
+        let workItems = WorkItemService(
+            items: items,
+            workspace: projectWorkspace,
+            context: context,
+            dateProvider: dateProvider
+        )
+        self.workItems = workItems
+        let bugs = BugService(
+            items: items,
+            workItems: workItems,
+            context: context,
+            dateProvider: dateProvider
+        )
+        self.bugs = bugs
+        let inbox = InboxService(context: context, dateProvider: dateProvider)
+        self.inbox = inbox
+        self.projectTemplates = ProjectTemplateService(
+            items: items,
+            workspace: projectWorkspace,
+            workItems: workItems,
+            context: context
+        )
+        self.automations = AutomationEngine(
+            items: items,
+            workspace: projectWorkspace,
+            workItems: workItems,
+            bugs: bugs,
+            inbox: inbox,
+            context: context,
+            dateProvider: dateProvider
+        )
+        self.projectReports = ProjectReportingService(
+            workspace: projectWorkspace,
+            bugs: bugs,
+            dateProvider: dateProvider
+        )
+        self.projectSidebar = ProjectsSidebarModel(
+            items: items,
+            inbox: inbox,
+            dateProvider: dateProvider
+        )
 
         // Built lazily and only when the feature is enabled, on the same terms as the calendar and
         // the address book — so an app that never links a reminder never constructs an
@@ -791,6 +867,11 @@ public final class AppServices {
         counts.refresh()
         sidebar.refresh()
         taskSidebar.refresh()
+        // Without this the Projects tree is empty until something else changes — which is exactly
+        // how "no projects until you create one" happened: everything the sidebar reads is computed
+        // on change and never during a render, so the *first* computation has to come from
+        // somewhere, and at launch this is the only somewhere there is.
+        projectSidebar.refresh()
     }
 
     // MARK: - Sample data

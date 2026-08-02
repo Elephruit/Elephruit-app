@@ -34,11 +34,32 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
 
     public var id: String { rawValue }
 
-    /// The order the modules are listed in, which is the order they are declared in.
+    /// The modules the sidebar lists, in declaration order.
     ///
     /// Declared rather than sorted, because the order is an editorial decision — the modules a day
     /// is actually worked in come first — and an alphabetical list would put Archive above Calendar.
-    public static var displayOrder: [AppModule] { allCases }
+    ///
+    /// **Projects is absent, and the case still exists.** A module is somewhere you *enter*, which
+    /// swaps the sidebar for its own navigation — and that is exactly wrong for projects, of which
+    /// there are a dozen and between which people move constantly. Behind a row called "Projects",
+    /// the user's own structure sat one level further away than the Trash, and the list you switch
+    /// projects with had been swapped out by the act of opening one.
+    ///
+    /// So the tree lives at the top of the primary sidebar (see `ProjectsSidebarSection`) and the
+    /// case stays for two jobs that are not the sidebar: `ModuleLayoutPolicy` still needs to say how
+    /// wide a project workspace is, and ``module(for:)`` still has to answer which module owns a bug.
+    public static var displayOrder: [AppModule] {
+        allCases.filter { $0 != .projects }
+    }
+
+    /// Whether this module draws its own second-level sidebar when you are inside it.
+    ///
+    /// `false` for projects alone. Everything else replaces the sidebar's contents on entry;
+    /// a project replaces the *middle column* and leaves the sidebar — including the project tree
+    /// you just clicked in — exactly where it was.
+    public var hasOwnSidebar: Bool {
+        self != .projects
+    }
 
     public var title: String {
         switch self {
@@ -148,6 +169,8 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
             .trash
         case .kind(let kind):
             module(for: kind)
+        case .project, .projectInbox:
+            .projects
         case .home, .today, .upcoming, .inbox:
             nil
         case .item, .tag, .savedSearch:
@@ -164,6 +187,10 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         switch kind {
         case .task: .tasks
         case .project, .goal: .projects
+        // A bug, a feature, a milestone and a release only ever exist inside a project, so the
+        // module that owns their list is the one that owns the project — not Tasks, even though a
+        // bug and a feature are work by every other measure in this app.
+        case .bug, .feature, .milestone, .release: .projects
         case .area: .areas
         case .person, .organization: .people
         case .bookmark: .bookmarks

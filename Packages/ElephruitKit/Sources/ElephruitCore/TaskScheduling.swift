@@ -330,6 +330,72 @@ public struct TaskFacts: Sendable, Hashable, Identifiable {
     /// thousand tasks folds nothing.
     public var searchText: String
 
+    // MARK: Project workspace
+    //
+    // Every field below defaults, and the defaults are the pre-Projects behaviour: a plain task in
+    // no project answers `.task`, no stage, no assignee, nothing blocked. That is what lets one
+    // fact type serve both the scheduling model and the board without the scheduling model
+    // acquiring a project's vocabulary.
+
+    /// Which kind of work this is. `.task` for everything the task system already managed.
+    public var kind: ItemKind
+
+    /// The human-readable handle — `ELE-42`.
+    public var referenceKey: String?
+
+    /// The board column this sits in, if the project has a board.
+    public var workflowStageID: UUID?
+
+    /// What that column means. Carried alongside the identifier so grouping and filtering never
+    /// have to reach back to the project to find out whether a column is terminal.
+    public var stageCategory: WorkflowStageCategory?
+
+    /// Position within the column, independent of ``sortOrder``, which is position within the
+    /// project. The same work is in two orders at once and both are the user's.
+    public var boardOrder: Double
+
+    /// The person doing it. At most one — enforced where it is written, not here.
+    public var assigneeID: UUID?
+
+    public var milestoneID: UUID?
+    public var releaseID: UUID?
+
+    /// What must be resolved before this can proceed.
+    public var blockedByIDs: [UUID]
+
+    /// What this is holding up.
+    public var blocksIDs: [UUID]
+
+    /// Whether anything blocking it is still unresolved.
+    ///
+    /// Stored rather than derived from ``blockedByIDs`` because the answer needs the *status* of
+    /// those items, which a fact about this one does not have. Computing it here would mean either
+    /// carrying every blocker's status or fetching during a filter.
+    public var isBlocked: Bool
+
+    /// `nil` for anything that is not a bug — and for a bug whose record has not been created yet,
+    /// which is why the model layer substitutes `.minor` rather than passing the nil through.
+    public var severity: BugSeverity?
+
+    public var isRegression: Bool
+
+    /// Whether somebody has confirmed the fix works. Always `false` for anything that is not a bug.
+    ///
+    /// Carried here so a project's health does not need a second walk of the whole project just to
+    /// count the fixes nobody has checked.
+    public var isVerified: Bool
+
+    public var estimateMinutes: Int?
+
+    /// Time actually recorded against it.
+    public var trackedMinutes: Int
+
+    public var commentCount: Int
+
+    /// Custom field values, by field name. Values live in `Item.userMetadata`, so a custom field
+    /// costs no storage of its own — see `CustomFieldDefinition`.
+    public var customFields: [String: MetadataValue]
+
     public init(
         id: UUID = UUID(),
         title: String = "",
@@ -368,7 +434,25 @@ public struct TaskFacts: Sendable, Hashable, Identifiable {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         sortOrder: Double = 0,
-        searchText: String = ""
+        searchText: String = "",
+        kind: ItemKind = .task,
+        referenceKey: String? = nil,
+        workflowStageID: UUID? = nil,
+        stageCategory: WorkflowStageCategory? = nil,
+        boardOrder: Double = 0,
+        assigneeID: UUID? = nil,
+        milestoneID: UUID? = nil,
+        releaseID: UUID? = nil,
+        blockedByIDs: [UUID] = [],
+        blocksIDs: [UUID] = [],
+        isBlocked: Bool = false,
+        severity: BugSeverity? = nil,
+        isRegression: Bool = false,
+        isVerified: Bool = false,
+        estimateMinutes: Int? = nil,
+        trackedMinutes: Int = 0,
+        commentCount: Int = 0,
+        customFields: [String: MetadataValue] = [:]
     ) {
         self.id = id
         self.title = title
@@ -408,6 +492,24 @@ public struct TaskFacts: Sendable, Hashable, Identifiable {
         self.updatedAt = updatedAt
         self.sortOrder = sortOrder
         self.searchText = searchText
+        self.kind = kind
+        self.referenceKey = referenceKey
+        self.workflowStageID = workflowStageID
+        self.stageCategory = stageCategory
+        self.boardOrder = boardOrder
+        self.assigneeID = assigneeID
+        self.milestoneID = milestoneID
+        self.releaseID = releaseID
+        self.blockedByIDs = blockedByIDs
+        self.blocksIDs = blocksIDs
+        self.isBlocked = isBlocked
+        self.severity = severity
+        self.isRegression = isRegression
+        self.isVerified = isVerified
+        self.estimateMinutes = estimateMinutes
+        self.trackedMinutes = trackedMinutes
+        self.commentCount = commentCount
+        self.customFields = customFields
     }
 }
 

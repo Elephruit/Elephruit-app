@@ -1253,7 +1253,10 @@ struct RoomToSpareByModuleTests {
     /// the better answer, and the one `theProfileIsTheFlexibleColumn` holds instead.
     @Test(
         "Each document module fills its list to its own ceiling",
-        arguments: [AppModule.notes, .projects, .bookmarks, .archive, .trash]
+        // Neither Tasks nor Projects is here any more, and for the same reason: both stopped being
+        // document modules with a list beside a detail column. A board of six columns does not fit
+        // in the width a list gets, so there is no ceiling for it to fill.
+        arguments: [AppModule.notes, .bookmarks, .archive, .trash]
     )
     func eachModuleReachesItsCeiling(module: AppModule) throws {
         let layout = module.shellLayout

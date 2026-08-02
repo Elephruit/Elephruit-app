@@ -146,9 +146,30 @@ extension AppModule {
                 )
             )
 
-        case .projects, .areas:
-            // A project is a list of tasks under a brief, so it wants width for the list and not for
-            // the prose.
+        case .projects:
+            // A canvas, alongside Calendar and Time, and for the same reason they are: a board of
+            // six columns does not fit in the 340 points a list column gets. The workspace draws
+            // itself across the whole width and brings its own tab bar.
+            //
+            // No detail column, because a work item opens in a **sheet**. That was an inspector
+            // drawer first, on the brief's "avoid excessive modals" line — and the line was
+            // explicitly withdrawn after use. A work item is nine sections wide, none of it reads in
+            // a 440-point column, and the column came out of the board's width, so the board paid
+            // for a pane that was still too narrow. A sheet has room for two columns — prose left,
+            // fields right — which is what every issue tracker converges on.
+            ModuleShellLayout(
+                primary: PaneWidth(minimum: 560, ideal: 1100),
+                detail: .unavailable,
+                inspector: DetailPanePolicy(
+                    hidesWhenNothingSelected: true,
+                    width: PaneWidth(minimum: 300, ideal: 360, maximum: 460),
+                    compactWindowWidth: 1200
+                )
+            )
+
+        case .areas:
+            // An area is a list of projects under a brief, so it wants width for the list and not
+            // for the prose. Split out from projects, which stopped being a list module.
             ModuleShellLayout(
                 primary: PaneWidth(minimum: 260, ideal: 340, maximum: 480),
                 detail: DetailPanePolicy(

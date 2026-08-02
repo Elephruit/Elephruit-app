@@ -164,8 +164,9 @@ public enum CaptureLift {
         guard !token.isQuoted else { return false }
 
         switch token.kind {
-        case .tag, .priority, .unrecognised:
+        case .tag, .priority, .unrecognised, .kind:
             // One non-whitespace run and one word from a closed set. Neither has any lookahead.
+            // A kind word is the most closed of the lot — five words, exactly matched.
             return false
         case .project, .person:
             return true
@@ -209,6 +210,10 @@ public enum CaptureLift {
         switch token.kind {
         case .tag:
             lifted.tagSlugs.append(token.text)
+        case .kind:
+            // The kind is already on the parsed draft; the token exists so the text can be lifted
+            // out of the title rather than left in it as a stray "#bug".
+            lifted.kind = parsed.kind
         case .person:
             lifted.personHints.append(token.text)
         case .project:

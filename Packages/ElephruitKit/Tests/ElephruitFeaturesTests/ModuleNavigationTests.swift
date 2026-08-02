@@ -53,14 +53,20 @@ struct ModuleNavigationTests {
         #expect(navigation.activeModule == nil, "Today belongs to no module")
     }
 
-    @Test("The modules are listed in the order the design fixed")
+    @Test("The modules are listed in the order the design fixed, and Projects is not among them")
     func modulesAreOrdered() {
+        // Projects left the band deliberately. A module is somewhere you *enter*, which swaps the
+        // sidebar for its own navigation — exactly wrong for a dozen projects people move between
+        // constantly. The tree sits at the top level instead; the case survives for layout and for
+        // `module(for:)`.
         #expect(
             AppModule.displayOrder == [
                 .calendar, .tasks, .people, .notes, .time,
-                .projects, .areas, .bookmarks, .archive, .trash,
+                .areas, .bookmarks, .archive, .trash,
             ]
         )
+        #expect(AppModule.allCases.contains(.projects))
+        #expect(!AppModule.projects.hasOwnSidebar)
     }
 
     @Test("No global destination belongs to a module, and no module claims one")

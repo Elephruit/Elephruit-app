@@ -58,6 +58,12 @@ public struct DetailEmptyState: Sendable, Hashable {
                 message: "Choose something to read it, or put it back in your library."
             )
 
+        // A project draws its own workspace across the whole width, so nothing here is ever shown.
+        // The arm exists because the switch is exhaustive and a fallthrough would offer to open a
+        // detail pane the layout has already declared unavailable.
+        case .project, .projectInbox:
+            .generic
+
         // People. ⌘N makes a note, not a person, so it is not offered — the way to add somebody is
         // the + button above the list, and naming the wrong shortcut would teach the wrong habit.
         case .people:
@@ -125,6 +131,27 @@ public struct DetailEmptyState: Sendable, Hashable {
                 symbolName: "checkmark.circle",
                 headline: "No task selected",
                 message: "Choose a task to see its dates and where it belongs, or press ⌘N to add one."
+            )
+
+        case .bug:
+            DetailEmptyState(
+                symbolName: "ant",
+                headline: "No bug selected",
+                message: "Choose a bug to see how to reproduce it and which build it affects."
+            )
+
+        case .feature:
+            DetailEmptyState(
+                symbolName: "sparkles",
+                headline: "No feature selected",
+                message: "Choose a feature to see what it covers and where it stands."
+            )
+
+        case .milestone, .release:
+            DetailEmptyState(
+                symbolName: "flag",
+                headline: "Nothing selected",
+                message: "Choose a milestone or a release to see the work aimed at it."
             )
 
         case .project:

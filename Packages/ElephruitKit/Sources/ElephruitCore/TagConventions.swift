@@ -23,3 +23,27 @@ public enum TagConventions {
         owedSpellings.contains(slug) || owedSpellings.contains { slug.hasSuffix("/\($0)") }
     }
 }
+
+
+/// The `#` words that name a *kind* of thing rather than tag it.
+///
+/// `#bug crash on launch` files a defect; `#bugs` and `#bug-triage` stay ordinary tags, because a
+/// sigil that quietly swallowed every word starting with "bug" would be worse than no shorthand at
+/// all. Only the exact words below are claimed.
+public enum CaptureKindWords {
+    public static let words: [String: ItemKind] = [
+        "bug": .bug,
+        "feature": .feature,
+        "task": .task,
+        "milestone": .milestone,
+        "release": .release,
+    ]
+
+    /// The kind a tag slug names, if it names one.
+    public static func kind(for slug: String) -> ItemKind? {
+        words[slug]
+    }
+
+    /// The order the grammar sheet lists them in — the two people actually type first.
+    public static let hintOrder: [String] = ["bug", "feature", "task", "milestone", "release"]
+}

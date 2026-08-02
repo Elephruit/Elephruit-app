@@ -73,6 +73,25 @@ extension Item {
     /// every predicate in Today would be a fault-in while a list was drawing.
     public func taskFacts() -> TaskFacts {
         let containers = enclosingContainers()
+        // One pass over the outgoing links, not six.
+        //
+        // The obvious spelling asks separately for the assignee, the milestone, the release and the
+        // blockers, and each of those scans `outgoingLinks` from the start. Six scans per item, over
+        // every item in the project, on every refresh — for four answers that one loop produces.
+        var assigneeItem: Item?
+        var milestoneItem: Item?
+        var releaseItem: Item?
+        var blocking: [Item] = []
+        for link in outgoingLinks {
+            guard let target = link.target, target.deletedAt == nil else { continue }
+            switch link.kind {
+            case .assignee: assigneeItem = assigneeItem ?? target
+            case .targetsMilestone: milestoneItem = milestoneItem ?? target
+            case .relatesToRelease: releaseItem = releaseItem ?? target
+            case .blockedBy: blocking.append(target)
+            default: break
+            }
+        }
 
         // ### Why these three are hoisted out of the argument list
         // Each was being computed twice by the initialiser call below, and this function is the
@@ -117,7 +136,7 @@ extension Item {
             waitingOnPersonID: people.waitingOn,
             hasAttachments: !attachments.isEmpty,
             isRepeating: recurrenceData != nil,
-            hasSubtasks: children.contains { $0.kind == .task && $0.deletedAt == nil },
+            hasSubtasks: children.contains { $0.kind.isWorkItem && $0.deletedAt == nil },
             checklistTotal: steps.total,
             checklistCompleted: steps.completed,
             source: source.kind,
@@ -125,8 +144,81 @@ extension Item {
             createdAt: createdAt,
             updatedAt: updatedAt,
             sortOrder: sortOrder,
-            searchText: searchText
+            searchText: searchText,
+            kind: kind,
+            referenceKey: referenceKey,
+            workflowStageID: workflowStageID,
+            stageCategory: resolvedStageCategory(within: containers.project),
+            boardOrder: boardOrder,
+            assigneeID: assigneeItem?.id,
+            milestoneID: milestoneItem?.id,
+            releaseID: releaseItem?.id,
+            blockedByIDs: blocking.map(\.id),
+            blocksIDs: blockedItems().map(\.id),
+            isBlocked: blocking.contains { $0.status == .open || $0.status == .none },
+            // A bug whose record has not been created yet reads as `.minor` rather than as nothing.
+            // Passing the nil through drops it out of every severity band and files it under "Not a
+            // bug", which is a judgement nobody made about a report somebody filed in good faith.
+            severity: bugRecord?.severity ?? (kind == .bug ? .minor : nil),
+            isRegression: bugRecord?.isRegression ?? false,
+            isVerified: bugRecord?.verifiedAt != nil,
+            estimateMinutes: estimateMinutes,
+            trackedMinutes: trackedMinutes(),
+            commentCount: comments.count,
+            customFields: userMetadata
         )
+    }
+
+    /// What the board column this sits in means, resolved through the owning project.
+    ///
+    /// `nil` when the work is unplaced or the column has since been deleted — both of which the
+    /// board shows as "Unplaced" rather than pretending to a category.
+    ///
+    /// Takes the project rather than walking up to find it. `taskFacts()` has already computed the
+    /// enclosing containers, and walking again meant faulting the `workflowStages` relationship on
+    /// every ancestor of every item — a second upward traversal per item, for an answer that was
+    /// already in hand.
+    public func resolvedStageCategory(within project: Item?) -> WorkflowStageCategory? {
+        guard let stageID = workflowStageID, let project else { return nil }
+        return project.workflowStages.first { $0.id == stageID }?.category
+    }
+
+    /// The person doing this work. At most one — see `WorkItemService.assign`.
+    public func assignee() -> Item? {
+        linkedTarget(kind: .assignee)
+    }
+
+    /// The single item this one points at with a link of the given kind.
+    public func linkedTarget(kind: LinkKind) -> Item? {
+        outgoingLinks.first { $0.kind == kind }?.target
+    }
+
+    /// What must be resolved before this can proceed.
+    public func blockers() -> [Item] {
+        outgoingLinks
+            .filter { $0.kind == .blockedBy }
+            .compactMap(\.target)
+            .filter { $0.deletedAt == nil }
+    }
+
+    /// What this is holding up.
+    public func blockedItems() -> [Item] {
+        incomingLinks
+            .filter { $0.kind == .blockedBy }
+            .compactMap(\.source)
+            .filter { $0.deletedAt == nil }
+    }
+
+    public func duplicateOf() -> Item? {
+        linkedTarget(kind: .duplicateOf)
+    }
+
+    /// Minutes actually recorded against this item.
+    public func trackedMinutes(now: Date = Date()) -> Int {
+        let seconds = timeEntries.reduce(into: 0.0) { total, entry in
+            total += entry.duration(at: now)
+        }
+        return Int(seconds / 60)
     }
 
     /// When this item becomes actionable.
@@ -260,7 +352,7 @@ extension Item {
 
     /// Whether this item is one the task system manages.
     public var isTaskLike: Bool {
-        kind == .task
+        kind.isWorkItem
     }
 }
 

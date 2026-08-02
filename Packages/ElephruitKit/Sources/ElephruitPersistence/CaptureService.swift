@@ -67,9 +67,22 @@ public struct CaptureService {
             url: draft.url
         )
 
-        // An unresolvable project hint is not an error: the item lands in the Inbox, which is exactly
-        // where an unfiled capture belongs.
-        if let hint = draft.projectHint, let container = try resolveContainer(named: hint) {
+        // Resolved once, and used twice: to decide how to file, and again after creation to place
+        // the item on the project's board.
+        //
+        // An unresolvable project hint is not an error: the item lands in the Inbox, which is
+        // exactly where an unfiled capture belongs.
+        var container: Item?
+        if let hint = draft.projectHint {
+            container = try resolveContainer(named: hint)
+        }
+
+        // **Only when the container can actually hold this kind.** Setting `parentID` regardless is
+        // the bug that made `>Project` on a note fail outright: `ItemKind.project.canContain(.note)`
+        // is false, so `ItemValidator` rejected the whole capture and *nothing* was filed. Filing a
+        // note under a project is a `.filedUnder` link — which the project already reads back as
+        // "Project notes" — and capture simply never wrote it.
+        if let container, container.kind.canContain(draft.kind) {
             itemDraft.parentID = container.id
         }
 
@@ -90,6 +103,23 @@ public struct CaptureService {
         let item = try items.create(itemDraft)
         try linkPeople(named: draft.personHints, from: item)
 
+        // Before the project branch, so a bug captured into the Inbox still has somewhere to write
+        // reproduction steps. Filing and being a defect are independent facts.
+        if item.kind == .bug, item.bugRecord == nil {
+            let record = BugRecord(facts: BugFacts(severity: .minor))
+            record.item = item
+            context.insert(record)
+        }
+
+        if let container {
+            if item.parent == nil {
+                // The kind could not be contained, so it is associated by link instead. This is the
+                // other half of the `>Project` fix.
+                try items.fileItem(item, under: container)
+            }
+            try placeInProject(item, container: container)
+        }
+
         // Capture returns with nothing pending.
         //
         // `items.create` saves, but the links inserted after it did not, and were left to autosave.
@@ -100,6 +130,30 @@ public struct CaptureService {
         try commit()
 
         return item
+    }
+
+    /// Gives work captured into a project the two things a project's work has: a handle and a place
+    /// on the board.
+    ///
+    /// Without this a captured bug arrives with no reference and in no column — present in the
+    /// project, absent from the only view that claims to show everything.
+    private func placeInProject(_ item: Item, container: Item) throws(AppError) {
+        guard item.kind.isWorkItem else { return }
+
+        if item.referenceKey == nil, let key = container.projectKey {
+            item.referenceKey = WorkItemReference.format(
+                key: key,
+                number: container.nextReferenceNumber
+            )
+            container.nextReferenceNumber += 1
+        }
+
+        if item.workflowStageID == nil {
+            let landing = container.workflowStages
+                .sorted { $0.sortOrder < $1.sortOrder }
+                .first { !$0.category.isTerminal }
+            item.workflowStageID = landing?.id
+        }
     }
 
     /// Finds a container matching a `>hint`, exactly first and then by prefix.

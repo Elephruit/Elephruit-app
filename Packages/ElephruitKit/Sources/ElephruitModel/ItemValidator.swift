@@ -61,6 +61,26 @@ public enum ItemValidator {
         if item.eventReference != nil, !fields.contains(.eventReference) {
             throw fieldFailure("eventReference", kind)
         }
+
+        // The project-workspace columns. Each is checked against its owning kind rather than
+        // against an `ItemFields` flag, because each belongs to exactly one kind — a flag would be
+        // a bit that only ever has one holder, which reads as generality that is not there.
+        if item.bugRecord != nil, kind != .bug {
+            throw fieldFailure("bugRecord", kind)
+        }
+        if item.projectKey != nil, kind != .project {
+            throw fieldFailure("projectKey", kind)
+        }
+        if item.releaseVersion != nil, kind != .release {
+            throw fieldFailure("releaseVersion", kind)
+        }
+        if item.workflowStageID != nil, !kind.isWorkItem {
+            throw fieldFailure("workflowStageID", kind)
+        }
+        if item.goalTargetValue != nil || item.goalCurrentValue != nil || item.goalUnit != nil,
+           kind != .goal {
+            throw fieldFailure("goalValue", kind)
+        }
         if !item.children.isEmpty, !fields.contains(.children) {
             throw fieldFailure("children", kind)
         }
@@ -249,6 +269,35 @@ public enum ItemValidator {
             item.waitingSince = nil
             item.followUpAt = nil
             if clearedPlanning { cleared.append("planning marks") }
+        }
+
+        // The project-workspace columns, cleared on the same terms and reported the same way —
+        // turning a bug into a task drops the report, and the caller has to be able to say so.
+        if item.bugRecord != nil, newKind != .bug {
+            item.bugRecord = nil
+            cleared.append("bug report")
+        }
+        if item.projectKey != nil, newKind != .project {
+            item.projectKey = nil
+            cleared.append("project key")
+        }
+        if item.releaseVersion != nil, newKind != .release {
+            item.releaseVersion = nil
+            cleared.append("version")
+        }
+        // **Kept when converting between work kinds.** A bug that becomes a task is still the same
+        // work sitting in the same column, and emptying the column would move it on the board for a
+        // reason nobody would connect to the change they just made.
+        if item.workflowStageID != nil, !newKind.isWorkItem {
+            item.workflowStageID = nil
+            cleared.append("board column")
+        }
+        if item.goalTargetValue != nil || item.goalCurrentValue != nil || item.goalUnit != nil,
+           newKind != .goal {
+            item.goalTargetValue = nil
+            item.goalCurrentValue = nil
+            item.goalUnit = nil
+            cleared.append("goal target")
         }
 
         if !newKind.supportsStatus {

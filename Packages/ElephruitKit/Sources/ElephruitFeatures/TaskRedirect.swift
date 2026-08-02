@@ -45,7 +45,13 @@ struct TaskRedirect: View {
     private var destination: SidebarSelection {
         var cursor = task.parent
         while let candidate = cursor {
-            if candidate.kind == .project || candidate.kind == .list || candidate.kind == .area {
+            // A project opens as its own workspace rather than as a row in a list, so sending
+            // somebody to `.item` would land them on the generic detail for the project instead of
+            // the board their work is actually on.
+            if candidate.kind == .project {
+                return .project(id: candidate.id, viewID: nil)
+            }
+            if candidate.kind == .list || candidate.kind == .area {
                 return .item(id: candidate.id)
             }
             cursor = candidate.parent

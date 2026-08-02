@@ -29,7 +29,7 @@ public final class PeopleService {
                 continue
             }
 
-            if source.kind == .task, source.status == .open {
+            if source.kind.isWorkItem, source.status == .open {
                 openItemIDs.append(source.id)
             }
 

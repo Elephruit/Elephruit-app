@@ -249,6 +249,11 @@ public struct ItemListView: View {
     @ViewBuilder
     private var emptyState: some View {
         switch navigation.selection {
+        // A project draws `ProjectWorkspaceView` instead of this list, so this arm is unreachable.
+        // It exists because the switch is exhaustive, and because an empty state offering to add a
+        // note is the wrong offer in a place that holds work.
+        case .project, .projectInbox:
+            EmptyView()
         case .inbox:
             EmptyStateView(
                 symbolName: "tray",

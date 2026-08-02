@@ -130,7 +130,14 @@ throws a sheet over the board.
 
 ---
 
-## 3. Schema — `SchemaV10` (`0.0.10`)
+## 3. Schema — `SchemaV12` (`0.0.12`)
+
+> The lost work built this as `SchemaV10`. `main` has since shipped its own `SchemaV10` (the
+> Reminders-home column), so the rebuild is **V11**. If you are reading this against a later `main`,
+> check `CurrentSchema` and take the next number — the version literal is pinned by
+> `SchemaComplianceTests` and `EstimateMigrationTests`, so a stale number fails loudly rather than
+> silently.
+
 
 Additive throughout: eight entities, nine nullable/defaulted columns, no rename, no type change — so
 [ADR 0005](adr/0005-schema-freeze-before-the-next-stage.md)'s trigger for freezing model types is
@@ -419,7 +426,7 @@ context.
 
 Each phase ends green (`swift build`, `swift test`, `xcodebuild` Debug) and is one commit.
 
-1. **Model & schema** — `SchemaV10`, eight entities, `Item` columns, new kinds/link kinds, the
+1. **Model & schema** — `SchemaV12`, eight entities, `Item` columns, new kinds/link kinds, the
    `isWorkItem` sweep, `ItemFields`/`canContain`, migration test.
 2. **Services** — the seven above, wired into `AppServices`.
 3. **Sidebar** — `ProjectsSidebarModel`/`Section`, `SidebarSelection.project`, `displayOrder`.
