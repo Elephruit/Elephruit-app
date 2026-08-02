@@ -378,8 +378,12 @@ public final class DailyPlanService {
         var containers: [UUID: Item] = [:]
         for candidate in sources.candidates + sources.resolved where named.contains(candidate.facts.id) {
             window.tasks[candidate.facts.id] = candidate.item
-            // From the facts already derived rather than a second walk of the parent chain.
+            // From the facts already derived rather than a second walk of the parent chain — and
+            // fetched once per *container*, not once per task. A window naming a few hundred tasks
+            // across forty projects was running a few hundred fetches to fill a forty-entry map,
+            // which was most of what a warm reassembly cost.
             if let container = candidate.facts.projectID ?? candidate.facts.listID,
+               containers[container] == nil,
                let item = try? services.items.item(id: container) {
                 containers[container] = item
             }
