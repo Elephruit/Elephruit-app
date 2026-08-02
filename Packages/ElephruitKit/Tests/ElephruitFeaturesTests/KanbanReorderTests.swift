@@ -56,4 +56,11 @@ struct KanbanReorderTests {
         #expect(drag.targetedColumnKey == nil)
         #expect(drag.itemIDs(in: "todo").isEmpty)
     }
+
+    @Test("The middle of a card is a neutral zone")
+    func cardMidpointHasHysteresis() {
+        #expect(KanbanCardDropDelegate.placeAfter(at: 10) == false)
+        #expect(KanbanCardDropDelegate.placeAfter(at: 24) == nil)
+        #expect(KanbanCardDropDelegate.placeAfter(at: 38) == true)
+    }
 }

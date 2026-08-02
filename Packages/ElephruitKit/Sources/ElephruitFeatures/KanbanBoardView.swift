@@ -23,6 +23,7 @@ struct KanbanBoardView: View {
                 }
             }
             .padding(Theme.Spacing.large)
+            .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 }
@@ -41,6 +42,57 @@ struct KanbanColumnView: View {
     private var isDropTargeted: Bool { drag.targetedColumnKey == column.key }
 
     var body: some View {
+        ZStack {
+            // A sibling behind the cards, not an ancestor around them. This catches every blank
+            // point in the column without competing with a card's exact insertion target.
+            Color.clear
+                .contentShape(Rectangle())
+                .onDrop(
+                    of: [.elephruitTaskDrag],
+                    delegate: KanbanEndDropDelegate(
+                        columnKey: column.key,
+                        drag: drag,
+                        performMove: accept
+                    )
+                )
+
+            columnContents
+                .padding(Theme.Spacing.small)
+        }
+        .frame(width: 280)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.large)
+                .fill(isDropTargeted ? Theme.Colors.selectionFill : Theme.Colors.subtleFill.opacity(0.45))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.large)
+                .strokeBorder(
+                    isDropTargeted ? Theme.Colors.selection : Theme.Colors.separator,
+                    style: StrokeStyle(
+                        lineWidth: isDropTargeted ? 2 : 0.5,
+                        dash: isDropTargeted ? [6, 4] : []
+                    )
+                )
+        }
+        .overlay(alignment: .bottom) {
+            if isDropTargeted {
+                Label("Release to move to \(column.title)", systemImage: "arrow.down.to.line")
+                    .font(Theme.Text.rowSubtitle)
+                    .foregroundStyle(Theme.Colors.onAccent)
+                    .padding(.horizontal, Theme.Spacing.small)
+                    .padding(.vertical, Theme.Spacing.tight)
+                    .background(Theme.Colors.selection, in: Capsule())
+                    .padding(Theme.Spacing.small)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .accessibilityIdentifier("kanban.dropTarget.\(column.key)")
+            }
+        }
+        .animation(.easeOut(duration: 0.16), value: isDropTargeted)
+        .animation(.snappy(duration: 0.12), value: displayedItems.map(\.id))
+    }
+
+    private var columnContents: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
             header
 
@@ -102,48 +154,6 @@ struct KanbanColumnView: View {
 
             Spacer(minLength: 0)
         }
-        .padding(Theme.Spacing.small)
-        .frame(width: 280)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.large)
-                .fill(isDropTargeted ? Theme.Colors.selectionFill : Theme.Colors.subtleFill.opacity(0.45))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Radius.large)
-                .strokeBorder(
-                    isDropTargeted ? Theme.Colors.selection : Theme.Colors.separator,
-                    style: StrokeStyle(
-                        lineWidth: isDropTargeted ? 2 : 0.5,
-                        dash: isDropTargeted ? [6, 4] : []
-                    )
-                )
-        }
-        .overlay(alignment: .bottom) {
-            if isDropTargeted {
-                Label("Release to move to \(column.title)", systemImage: "arrow.down.to.line")
-                    .font(Theme.Text.rowSubtitle)
-                    .foregroundStyle(Theme.Colors.onAccent)
-                    .padding(.horizontal, Theme.Spacing.small)
-                    .padding(.vertical, Theme.Spacing.tight)
-                    .background(Theme.Colors.selection, in: Capsule())
-                    .padding(Theme.Spacing.small)
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                    .accessibilityIdentifier("kanban.dropTarget.\(column.key)")
-            }
-        }
-        .animation(.easeOut(duration: 0.16), value: isDropTargeted)
-        .animation(.snappy(duration: 0.12), value: displayedItems.map(\.id))
-        // The precise card targets above choose an exact slot. This outer target is the fallback
-        // for every other point in the column — including the add field and the empty space below
-        // it — so entering a column never depends on finding a narrow strip between controls.
-        .onDrop(
-            of: [.elephruitTaskDrag],
-            delegate: KanbanEndDropDelegate(
-                columnKey: column.key,
-                drag: drag,
-                performMove: accept
-            )
-        )
     }
 
     private var header: some View {
@@ -274,7 +284,8 @@ struct KanbanPlacement: Equatable {
 /// A card is two insertion targets: its upper half means before, its lower half means after.
 @MainActor
 struct KanbanCardDropDelegate: DropDelegate {
-    static let midpoint: CGFloat = 24
+    static let upperThreshold: CGFloat = 18
+    static let lowerThreshold: CGFloat = 30
 
     let targetID: UUID
     let columnKey: String
@@ -284,12 +295,19 @@ struct KanbanCardDropDelegate: DropDelegate {
     func validateDrop(info: DropInfo) -> Bool { drag.isDragging }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        drag.move(
-            to: columnKey,
-            relativeTo: targetID,
-            placeAfter: info.location.y > Self.midpoint
-        )
+        if let placeAfter = Self.placeAfter(at: info.location.y) {
+            drag.move(to: columnKey, relativeTo: targetID, placeAfter: placeAfter)
+        }
         return DropProposal(operation: .move)
+    }
+
+    /// The middle twelve points are intentionally inert. After a reflow the card beneath the
+    /// pointer shifts; without this hysteresis, a stationary pointer can alternately read as just
+    /// above and just below the midpoint and make two cards strobe past each other.
+    static func placeAfter(at y: CGFloat) -> Bool? {
+        if y < upperThreshold { return false }
+        if y > lowerThreshold { return true }
+        return nil
     }
 
     func performDrop(info: DropInfo) -> Bool {
