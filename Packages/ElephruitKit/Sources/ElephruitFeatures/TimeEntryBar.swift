@@ -90,26 +90,30 @@ struct TimeTrackerCard: View {
     private var idleState: some View {
         HStack(spacing: Theme.Spacing.large) {
             Button(action: start) {
-                Image(systemName: "play.fill")
-                    .font(.title2)
-                    .frame(width: 52, height: 52)
-                    .contentShape(.circle)
+                HStack(spacing: Theme.Spacing.large) {
+                    Image(systemName: "play.fill")
+                        .font(.title2)
+                        .frame(width: 52, height: 52)
+                        .foregroundStyle(Theme.Colors.onAccent)
+                        .background(Circle().fill(Theme.Colors.selection))
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Start a timer")
+                            .font(.system(.title3, design: .default, weight: .medium))
+
+                        Text("Name it once it is running. Nothing has to be decided first.")
+                            .font(Theme.Text.rowSubtitle)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                    }
+                }
+                // A labelled control owns the transparent spacing between its icon and words. If
+                // the pointer can land inside the visual unit, the click must activate the unit.
+                .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Theme.Colors.onAccent)
-            .background(Circle().fill(Theme.Colors.selection))
             .help("Start timing now")
             .accessibilityLabel("Start a timer")
             .accessibilityIdentifier(AccessibilityID.Time.startButton)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Start a timer")
-                    .font(.system(.title3, design: .default, weight: .medium))
-
-                Text("Name it once it is running. Nothing has to be decided first.")
-                    .font(Theme.Text.rowSubtitle)
-                    .foregroundStyle(Theme.Colors.secondaryText)
-            }
 
             Spacer(minLength: Theme.Spacing.small)
 

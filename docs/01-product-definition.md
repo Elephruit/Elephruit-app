@@ -37,6 +37,10 @@ possible. That is the product.
    shipped in v1, not a checkbox added under pressure.
 7. **Nothing leaves the device** unless the user turns on a specific, named
    integration. No analytics. No telemetry. No crash reporting SDK.
+8. **The visible control is the hit target.** When an icon and text read as one
+   control, the icon, text, and transparent space between them are all clickable.
+   Labels built from separate views must define a content shape covering the full
+   visual unit; a click inside what looks like a control must never silently fail.
 
 ## Explicit non-goals (v1)
 
