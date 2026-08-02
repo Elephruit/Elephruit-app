@@ -324,6 +324,8 @@ struct ProjectViewTabBar: View {
                 RoundedRectangle(cornerRadius: Theme.Radius.medium)
                     .fill(isActive ? tint(view).opacity(0.14) : .clear)
             )
+            // Include the transparent spacing between the icon and title in the button's target.
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("project.view.\(view.kind.rawValue)")
