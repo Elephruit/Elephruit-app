@@ -6,67 +6,123 @@ import SwiftUI
 
 /// A note, an idea, a reference, a decision — anything whose body *is* the view.
 ///
-/// One metadata line above, the text, and collapsed disclosures below. Nothing competes with the
-/// writing, which is the whole point of the kind.
+/// The notes workspace: an outline rail on the left when the document has enough structure to
+/// earn one, the page in the middle, and the format and info panels floating from the toolbar.
+/// Nothing competes with the writing, which is the whole point of the kind.
 struct NoteDetailView: View {
     @Environment(\.services) private var services
-    @Environment(\.prefersMonospacedEditor) private var prefersMonospaced
 
     let item: Item
     let navigation: NavigationModel
     @Binding var title: String
-    @Binding var bodyText: String
-    @Binding var pendingInsertion: WikiLinkInsertion?
-    let completionContext: WikiLinkCompletionContext?
-    let completionSuggestions: [(id: UUID, title: String)]
-    let onCompletionContextChange: (WikiLinkCompletionContext?) -> Void
-    let onAcceptCompletion: (String) -> Void
+
+    @State private var model = NoteEditorModel()
+    @State private var showsFormatPanel = false
+    @State private var showsInfoPanel = false
+
+    /// Remembered across notes and launches: hiding the outline is a way of working, not a
+    /// per-document choice.
+    @AppStorage("notes.outlineVisible") private var outlineVisible = true
+
+    @State private var detailWidth = CGFloat.zero
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            DetailHeader(item: item, title: $title, isEditable: !item.isInTrash) {
-                ContextLine(facts: contextFacts)
-            }
-
-            Divider()
-
-            ZStack(alignment: .topLeading) {
-                MarkdownTextEditor(
-                    text: $bodyText,
-                    pendingInsertion: $pendingInsertion,
-                    isMonospaced: prefersMonospaced,
-                    isEditable: !item.isInTrash,
-                    onCompletionContextChange: onCompletionContextChange
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                if completionContext != nil, !completionSuggestions.isEmpty {
-                    LinkCompletionList(
-                        suggestions: completionSuggestions,
-                        onAccept: onAcceptCompletion
-                    )
-                    .padding(.leading, Theme.Spacing.large)
-                    .padding(.top, Theme.Spacing.section)
-                }
-            }
-
-            if !backlinks.isEmpty {
+        HStack(spacing: 0) {
+            if showsOutline {
+                NoteOutlineRail(model: model)
                 Divider()
-                BacklinkList(links: backlinks) { navigation.selectItem($0) }
-                    .padding(.horizontal, Theme.Spacing.large)
-                    .padding(.vertical, Theme.Spacing.medium)
-                    .frame(maxHeight: 180)
             }
 
-            Divider()
-            AttachmentSection(item: item)
-                .padding(.horizontal, Theme.Spacing.large)
-                .padding(.vertical, Theme.Spacing.small)
+            VStack(alignment: .leading, spacing: 0) {
+                DetailHeader(item: item, title: $title, isEditable: !item.isInTrash) {
+                    ContextLine(facts: contextFacts)
+                }
+
+                Divider()
+
+                NotePageView(item: item, navigation: navigation, model: model)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if !backlinks.isEmpty {
+                    Divider()
+                    BacklinkList(links: backlinks) { navigation.selectItem($0) }
+                        .padding(.horizontal, Theme.Spacing.large)
+                        .padding(.vertical, Theme.Spacing.medium)
+                        .frame(maxHeight: 180)
+                }
+
+                Divider()
+                AttachmentSection(item: item)
+                    .padding(.horizontal, Theme.Spacing.large)
+                    .padding(.vertical, Theme.Spacing.small)
+            }
+        }
+        .toolbar { noteToolbar }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            detailWidth = width
         }
         // Dropping a file anywhere on a note attaches it, which is what someone dragging a PDF onto
         // a window expects. Copied, never moved.
         .acceptsAttachmentDrops(on: item)
         .accessibilityIdentifier(AccessibilityID.Detail.root)
+    }
+
+    /// Shown when asked for, worth its width, and affordable: below about 660 points the rail
+    /// would be taken out of the editor's measure, which is the wrong thing to spend.
+    private var showsOutline: Bool {
+        outlineVisible && model.document.hasUsefulOutline() && detailWidth >= 660
+    }
+
+    @ToolbarContentBuilder
+    private var noteToolbar: some ToolbarContent {
+        ToolbarItem {
+            Button {
+                outlineVisible.toggle()
+            } label: {
+                Label("Contents", systemImage: "list.bullet.indent")
+            }
+            .help(outlineVisible ? "Hide the outline" : "Show the outline")
+            .disabled(!model.document.hasUsefulOutline())
+        }
+
+        ToolbarItem {
+            Button {
+                showsFormatPanel.toggle()
+                showsInfoPanel = false
+            } label: {
+                Label("Format", systemImage: "textformat")
+            }
+            .help("Format — paragraph styles, marks, links")
+            .popover(isPresented: $showsFormatPanel, arrowEdge: .bottom) {
+                NoteFormatPanel(model: model)
+            }
+            .disabled(item.isInTrash)
+        }
+
+        ToolbarItem {
+            Button {
+                showsInfoPanel.toggle()
+                showsFormatPanel = false
+            } label: {
+                Label("Info", systemImage: "info.circle")
+            }
+            .help("Info — properties, statistics, actions")
+            .popover(isPresented: $showsInfoPanel, arrowEdge: .bottom) {
+                NoteInfoPanel(item: item, model: model, onDelete: moveToTrash)
+            }
+        }
+    }
+
+    private func moveToTrash() {
+        guard let services else { return }
+        let id = item.id
+        services.perform { try services.undo.moveToTrash([item]) }
+        navigation.selectedItemIDs.remove(id)
+        if navigation.selectedItemID == id { navigation.selectItem(nil) }
+        services.refreshDerivedState()
+        services.noteRemoval(of: id)
     }
 
     private var backlinks: [ItemLink] { item.visibleBacklinks() }

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The design system's vocabulary.
@@ -363,6 +364,36 @@ extension Theme {
         public static func color(named name: String?, neutral: Color) -> Color {
             guard let name, let entry = Palette(rawValue: name) else { return neutral }
             return entry.color
+        }
+
+        /// The palette entry as AppKit sees it, for the note editor's drawing.
+        ///
+        /// Defined here beside ``color`` — and nowhere else — so the two resolutions cannot
+        /// drift apart, and so the hygiene scan keeps treating any other file that spells out
+        /// colour names as a second palette.
+        public var nsColor: NSColor {
+            switch self {
+            case .red: .systemRed
+            case .orange: .systemOrange
+            case .yellow: .systemYellow
+            case .green: .systemGreen
+            case .mint: .systemMint
+            case .teal: .systemTeal
+            case .cyan: .systemCyan
+            case .blue: .systemBlue
+            case .indigo: .systemIndigo
+            case .purple: .systemPurple
+            case .pink: .systemPink
+            case .brown: .systemBrown
+            case .graphite: .systemGray
+            }
+        }
+
+        /// Resolves a stored name for an AppKit caller, falling back to the neutral it sits in —
+        /// the counterpart of ``color(named:neutral:)``, for the same reason it exists.
+        public static func nsColor(named name: String?, neutral: NSColor) -> NSColor {
+            guard let name, let entry = Palette(rawValue: name) else { return neutral }
+            return entry.nsColor
         }
     }
 }
