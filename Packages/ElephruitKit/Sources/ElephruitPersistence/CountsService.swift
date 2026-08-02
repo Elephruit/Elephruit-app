@@ -29,10 +29,21 @@ public struct SidebarCounts: Sendable, Hashable {
 /// It returns `SidebarCounts` — plain `Int`s — so no `PersistentModel` crosses an isolation boundary,
 /// which is the architecture's one hard concurrency rule.
 ///
-/// Both counts need a clause the store-side predicate cannot express (a comparison against an optional
-/// date; the absence of tags). Rather than materialise everything and filter, each fetch is narrowed
-/// by a small, translatable predicate first — open actionable items for Today, unparented active items
-/// for Inbox — and the remainder is decided in Swift over a set that is already small.
+/// ### Why these are counts in SQL rather than fetches filtered in Swift
+/// They were fetches: Today materialised every open actionable item and Inbox materialised every
+/// active unparented item, each pass, on every save. Materialising a row costs ~77 µs regardless of
+/// which properties are read — measured, and unchanged by `propertiesToFetch` — so on a large
+/// library the badge pass took over half a second of CPU to produce two integers, while
+/// `fetchCount` over the same predicates takes about a millisecond.
+///
+/// The two clauses SQL cannot express — a comparison against an *optional* date, and the external
+/// home whose rule belongs to ``ElephruitModel/Item/hasHome`` — are still decided in Swift, but
+/// over only the rows they can possibly affect: due items that carry a deferral, and unparented
+/// items linked to an external list. Both sets are tiny in any real library.
+///
+/// `CountsParityTests` holds the store-side arithmetic equal to the model's own
+/// ``ElephruitModel/Item/isUnprocessedCapture`` across every branch of the rule, so the badge
+/// cannot drift from the list the way duplicated clauses once let it.
 @ModelActor
 actor CountsWorker {
     func counts(startOfTomorrow: Date, now: Date) throws -> SidebarCounts {
@@ -42,35 +53,77 @@ actor CountsWorker {
         )
     }
 
+    /// Open actionable work due before tomorrow, minus anything still deferred.
+    ///
+    /// Counted as a subtraction because the deferral comparison cannot go to the store — it is
+    /// against an optional date. The store counts everything due, then the rows that *carry* a
+    /// deferral — a handful in any real library — are fetched, and the ones whose deferral has not
+    /// yet arrived come off the total. Same rule the fetch-everything version applied, evaluated
+    /// over only the rows it can affect.
     private func todayCount(startOfTomorrow: Date, now: Date) throws -> Int {
-        var query = ItemQuery()
-        query.kinds = [.task, .project, .goal]
-        query.statuses = [.open]
+        let kindRaws: [String] = [ItemKind.task, .project, .goal].map(\.rawValue)
+        let openRaw: String = ItemStatus.open.rawValue
 
-        // Store-side: active scope, kind, status. Everything an actionable item could be — typically a
-        // few hundred rows even in a mature library.
-        let candidates = try modelContext.fetch(FetchDescriptor<Item>(predicate: query.predicate()))
-
-        return candidates.count { item in
-            guard let dueAt = item.dueAt, dueAt < startOfTomorrow else { return false }
-            guard let deferUntil = item.deferUntil else { return true }
-            return deferUntil <= now
-        }
-    }
-
-    private func inboxCount() throws -> Int {
-        let descriptor = FetchDescriptor<Item>(
-            predicate: #Predicate<Item> { item in
-                item.deletedAt == nil && item.archivedAt == nil && item.parent == nil
-            }
+        let due = try modelContext.fetchCount(
+            FetchDescriptor<Item>(
+                predicate: CountPredicates.dueOpen(
+                    kindRaws: kindRaws, statusRaw: openRaw, dueBefore: startOfTomorrow
+                )
+            )
         )
 
-        let unparented = try modelContext.fetch(descriptor)
+        let deferredCandidates = try modelContext.fetch(
+            FetchDescriptor<Item>(
+                predicate: CountPredicates.dueOpenDeferred(
+                    kindRaws: kindRaws, statusRaw: openRaw, dueBefore: startOfTomorrow
+                )
+            )
+        )
 
-        // The same question `ItemQuery.inbox()` asks, asked of the same object. It used to be the
-        // same three clauses written out again under a comment promising to keep them in step, and a
-        // badge that says 3 over a list of 2 reads as a bug in the app rather than in the query.
-        return unparented.count(where: \.isUnprocessedCapture)
+        // The candidate predicate drops the archive clause to stay under the solver ceiling, so it
+        // is re-checked here; only rows the count above included may be subtracted.
+        let stillHidden = deferredCandidates.count { item in
+            guard item.archivedAt == nil, let deferUntil = item.deferUntil else { return false }
+            return deferUntil > now
+        }
+
+        return due - stillHidden
+    }
+
+    /// Unprocessed captures, counted without materialising them.
+    ///
+    /// The store counts everything inbox-shaped — active, unparented, an eligible kind, untagged,
+    /// and not filed under a *live* container, the same clauses ``ElephruitModel/Item/hasHome``
+    /// reads. The one home the store cannot see is an external list, so the rows that could carry
+    /// one are fetched — synchronised, unparented, not deliberately inboxed — and the members of
+    /// the counted set among them are subtracted, using the model's own vocabulary for each clause.
+    private func inboxCount() throws -> Int {
+        let inboxShaped = try modelContext.fetchCount(
+            FetchDescriptor<Item>(
+                predicate: CountPredicates.inboxShaped(
+                    ineligibleKindRaws: ItemKind.allCases.filter { !$0.appearsInInbox }.map(\.rawValue),
+                    filedRaw: LinkKind.filedUnder.rawValue
+                )
+            )
+        )
+
+        let externallyHomed = try modelContext.fetch(
+            FetchDescriptor<Item>(
+                predicate: CountPredicates.externallyHomedCandidates(
+                    systemStoreRaw: SourceKind.systemStore.rawValue
+                )
+            )
+        )
+
+        let overcounted = externallyHomed.count { item in
+            item.isKeptInStepWithAnExternalList
+                && item.inboxedAt == nil
+                && item.kind.appearsInInbox
+                && item.tags.isEmpty
+                && item.filedUnderContainers().isEmpty
+        }
+
+        return inboxShaped - overcounted
     }
 }
 
