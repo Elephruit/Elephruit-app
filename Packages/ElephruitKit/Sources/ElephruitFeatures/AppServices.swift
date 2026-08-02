@@ -972,6 +972,48 @@ public final class AppServices {
             await search.warmIndex()
         }
     }
+
+    /// Removes what ``seedPeople(upTo:)`` planted, and nothing else.
+    ///
+    /// The counterpart the seeder always owed: development mode does not redirect the store, so a
+    /// seeding flag on a launch without `-ElephruitUseTemporaryStore` writes invented people into
+    /// the real library — which happened. Each candidate is matched by running the generator
+    /// backwards (see ``BulkPeopleSampleData/isSeeded(_:)``), and removal is permanent rather than
+    /// through the Trash: seventeen hundred synthetic rows in the Trash is a second mess, not a
+    /// safety net, and the records were never the user's to begin with.
+    public func removeSeededPeople() {
+        guard isDevelopmentMode else {
+            Diagnostics.features.error("Seeded-people removal requested outside development mode; refused")
+            return
+        }
+
+        var query = ItemQuery()
+        query.kinds = [.person]
+        guard let people = try? items.items(matching: query) else { return }
+
+        let seeded = people.filter { BulkPeopleSampleData.isSeeded($0) }
+        guard !seeded.isEmpty else {
+            Diagnostics.features.info("No seeded people found; nothing removed")
+            return
+        }
+
+        let removed = perform {
+            for person in seeded {
+                try items.deletePermanently(person)
+            }
+        }
+        guard removed else { return }
+
+        refreshDerivedState()
+        Diagnostics.features.info(
+            "Removed \(seeded.count, privacy: .public) seeded people; \(people.count - seeded.count, privacy: .public) records untouched"
+        )
+
+        Task { [search] in
+            await search.invalidateIndex()
+            await search.warmIndex()
+        }
+    }
 }
 
 extension PersistenceStack {

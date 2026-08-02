@@ -154,6 +154,16 @@ public enum DesignReviewLaunch {
             && ProcessInfo.processInfo.arguments.contains("-ElephruitLoadSampleData")
     }
 
+    /// Whether the launch should remove what people-seeding planted.
+    ///
+    /// The undo for `-ElephruitPeopleCount` run against the wrong store. Matching is the
+    /// generator's own formulas run backwards — see `BulkPeopleSampleData.isSeeded` — so real
+    /// records cannot be caught by it.
+    public static var removesSeededPeople: Bool {
+        isDevelopmentMode
+            && ProcessInfo.processInfo.arguments.contains("-ElephruitRemoveSeededPeople")
+    }
+
     /// How many people the library should hold, for a performance review.
     public static var peopleCount: Int? {
         guard isDevelopmentMode else { return nil }
