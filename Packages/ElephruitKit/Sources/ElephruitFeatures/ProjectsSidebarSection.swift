@@ -103,6 +103,10 @@ struct ProjectsSidebarSection: View {
             TextField("Name", text: $draftName)
                 .textFieldStyle(.plain)
                 .focused($focusedField, equals: .rename(row.id))
+                .task {
+                    await Task.yield()
+                    focusedField = .rename(row.id)
+                }
                 .onSubmit { commitRename(row) }
                 .onExitCommand { cancelEditing() }
                 .padding(.leading, indent(indentOverride ?? row.depth))
@@ -136,6 +140,13 @@ struct ProjectsSidebarSection: View {
             TextField("Project name", text: $draftName)
                 .textFieldStyle(.plain)
                 .focused($focusedField, equals: .newProject)
+                .task {
+                    // A menu still owns the keyboard during its action. Ask for focus only after
+                    // this field is mounted and the menu has begun dismissing; asking in the menu
+                    // action is dropped because there is no text field to receive it yet.
+                    await Task.yield()
+                    focusedField = .newProject
+                }
                 .onSubmit { commitCreation() }
                 .onExitCommand { cancelEditing() }
                 .accessibilityLabel("New project name")
@@ -232,7 +243,6 @@ struct ProjectsSidebarSection: View {
         renamingID = nil
         draftName = ""
         pendingCreation = PendingProjectCreation(template: template, area: area)
-        focus(.newProject)
     }
 
     private func commitCreation() {
@@ -255,7 +265,6 @@ struct ProjectsSidebarSection: View {
         pendingCreation = nil
         draftName = row.title
         renamingID = row.id
-        focus(.rename(row.id))
     }
 
     private func commitRename(_ row: ProjectSidebarRow) {
@@ -273,13 +282,6 @@ struct ProjectsSidebarSection: View {
         pendingCreation = nil
         draftName = ""
         focusedField = nil
-    }
-
-    private func focus(_ field: EditingField) {
-        Task { @MainActor in
-            await Task.yield()
-            focusedField = field
-        }
     }
 
     private func toggleFavourite(_ row: ProjectSidebarRow) {
