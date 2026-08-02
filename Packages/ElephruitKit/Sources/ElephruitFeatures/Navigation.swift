@@ -383,6 +383,12 @@ public final class NavigationModel {
     /// The item the detail pane shows.
     public private(set) var selectedItemID: UUID?
 
+    /// A newly created item whose title field should take the keyboard when its detail appears.
+    ///
+    /// This is a one-shot request rather than a general focus preference: opening an existing item
+    /// should not unexpectedly put the insertion point in its title.
+    public var titleEditRequest: UUID?
+
     // MARK: Browser-style history
 
     private struct NavigationLocation: Equatable {
@@ -784,6 +790,12 @@ public final class NavigationModel {
     /// Selects exactly one item.
     public func selectItem(_ id: UUID?) {
         selectedItemIDs = id.map { [$0] } ?? []
+    }
+
+    /// Selects a new item and puts its title field into the typing path.
+    public func beginNaming(_ id: UUID) {
+        titleEditRequest = id
+        selectItem(id)
     }
 
     /// A task somebody asked to open, from somewhere that is not the task list.

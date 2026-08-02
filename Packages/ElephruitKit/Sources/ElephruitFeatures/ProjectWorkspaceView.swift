@@ -159,21 +159,16 @@ struct ProjectWorkspaceView: View {
         }
     }
 
-    /// The toolbar's second line: the project key and the round figure, when either exists.
+    /// The toolbar's second line: progress, when the project has work to measure.
     ///
-    /// This is where "EA" went. As a monospaced badge beside the title it read as clutter —
-    /// three names stacked at the top of every project — and as a subtitle it is what a subtitle
-    /// is for: present, quiet, and out of the title's way.
+    /// Reference prefixes are internal tracking furniture. Showing an automatically generated one
+    /// here made it look like a second, uneditable project name, especially while creating a project.
     private var subtitle: String {
         guard let model else { return "" }
-        var parts: [String] = []
-        if let key = model.project?.projectKey {
-            parts.append(key)
-        }
         if model.health.completionFraction != nil {
-            parts.append("\(model.health.completedWork) of \(model.health.totalWork) done")
+            return "\(model.health.completedWork) of \(model.health.totalWork) done"
         }
-        return parts.joined(separator: " — ")
+        return ""
     }
 
     /// The toolbar search field, folded into the arrangement as a transient rule.

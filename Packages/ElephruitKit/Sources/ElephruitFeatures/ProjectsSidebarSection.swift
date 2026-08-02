@@ -15,8 +15,10 @@ struct ProjectsSidebarSection: View {
 
     @State private var showsArchived = false
     @State private var renamingID: UUID?
+    @State private var pendingCreation: PendingProjectCreation?
     @State private var draftName = ""
     @State private var pendingDeletion: ProjectSidebarRow?
+    @FocusState private var focusedField: EditingField?
 
     private var model: ProjectsSidebarModel? { services?.projectSidebar }
 
@@ -35,6 +37,10 @@ struct ProjectsSidebarSection: View {
                     ForEach(model.rows) { row in
                         projectRow(row)
                     }
+                }
+
+                if pendingCreation != nil {
+                    newProjectField
                 }
 
                 if !model.archived.isEmpty {
@@ -68,7 +74,7 @@ struct ProjectsSidebarSection: View {
             Menu {
                 ForEach(ProjectTemplate.all) { template in
                     Button {
-                        create(from: template)
+                        beginCreation(from: template)
                     } label: {
                         Label(template.name, systemImage: template.symbolName)
                     }
@@ -96,8 +102,9 @@ struct ProjectsSidebarSection: View {
         if renamingID == row.id {
             TextField("Name", text: $draftName)
                 .textFieldStyle(.plain)
+                .focused($focusedField, equals: .rename(row.id))
                 .onSubmit { commitRename(row) }
-                .onExitCommand { renamingID = nil }
+                .onExitCommand { cancelEditing() }
                 .padding(.leading, indent(indentOverride ?? row.depth))
         } else {
             ProjectSidebarRowView(
@@ -118,6 +125,22 @@ struct ProjectsSidebarSection: View {
             .font(Theme.Text.rowSubtitle)
             .foregroundStyle(Theme.Colors.tertiaryText)
             .padding(.vertical, Theme.Spacing.tight)
+    }
+
+    private var newProjectField: some View {
+        HStack(spacing: Theme.Spacing.tight) {
+            Image(systemName: ItemKind.project.symbolName)
+                .frame(width: Theme.Size.rowGlyph)
+                .foregroundStyle(Theme.Colors.secondaryText)
+
+            TextField("Project name", text: $draftName)
+                .textFieldStyle(.plain)
+                .focused($focusedField, equals: .newProject)
+                .onSubmit { commitCreation() }
+                .onExitCommand { cancelEditing() }
+                .accessibilityLabel("New project name")
+        }
+        .padding(.leading, pendingCreation?.indent ?? 0)
     }
 
     @ViewBuilder
@@ -159,7 +182,7 @@ struct ProjectsSidebarSection: View {
         }
         Divider()
         if row.isArea {
-            Button("New Project in \(row.title)") { create(from: .blank, in: row) }
+            Button("New Project in \(row.title)") { beginCreation(from: .blank, in: row) }
         }
         Button("Move Up") { move(row, by: -1) }
         Button("Move Down") { move(row, by: 1) }
@@ -205,25 +228,34 @@ struct ProjectsSidebarSection: View {
 
     // MARK: Actions
 
-    private func create(from template: ProjectTemplate, in area: ProjectSidebarRow? = nil) {
-        guard let services else { return }
-        let container = area.flatMap { try? services.items.item(id: $0.id) }
+    private func beginCreation(from template: ProjectTemplate, in area: ProjectSidebarRow? = nil) {
+        renamingID = nil
+        draftName = ""
+        pendingCreation = PendingProjectCreation(template: template, area: area)
+        focus(.newProject)
+    }
+
+    private func commitCreation() {
+        guard let services, let pendingCreation, let name = draftName.nilIfBlank else { return }
+        let area = pendingCreation.area.flatMap { try? services.items.item(id: $0.id) }
         guard let project = try? services.projectTemplates.createProject(
-            named: "New Project",
-            from: template,
-            in: container
+            named: name,
+            from: pendingCreation.template,
+            in: area
         ) else { return }
 
+        self.pendingCreation = nil
+        draftName = ""
+        focusedField = nil
         services.refreshDerivedState()
         navigation.select(.project(id: project.id, viewID: nil))
-        // Straight into a rename, because a project called "New Project" is one somebody has to come
-        // back and fix — and the moment they will actually do it is now.
-        beginRename(ProjectSidebarRow(id: project.id, title: project.title, symbolName: project.kind.symbolName))
     }
 
     private func beginRename(_ row: ProjectSidebarRow) {
+        pendingCreation = nil
         draftName = row.title
         renamingID = row.id
+        focus(.rename(row.id))
     }
 
     private func commitRename(_ row: ProjectSidebarRow) {
@@ -234,6 +266,20 @@ struct ProjectsSidebarSection: View {
         else { return }
         try? services.items.update(item) { $0.title = name }
         services.refreshDerivedState()
+    }
+
+    private func cancelEditing() {
+        renamingID = nil
+        pendingCreation = nil
+        draftName = ""
+        focusedField = nil
+    }
+
+    private func focus(_ field: EditingField) {
+        Task { @MainActor in
+            await Task.yield()
+            focusedField = field
+        }
     }
 
     private func toggleFavourite(_ row: ProjectSidebarRow) {
@@ -286,6 +332,21 @@ struct ProjectsSidebarSection: View {
         services.perform { try services.undo.moveToTrash([item]) }
         services.refreshDerivedState()
         if navigation.selection.projectID == row.id { navigation.select(.today) }
+    }
+}
+
+private enum EditingField: Hashable {
+    case rename(UUID)
+    case newProject
+}
+
+private struct PendingProjectCreation {
+    let template: ProjectTemplate
+    let area: ProjectSidebarRow?
+
+    var indent: CGFloat {
+        guard let area else { return 0 }
+        return CGFloat(area.depth + 1) * Theme.Spacing.large
     }
 }
 

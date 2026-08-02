@@ -140,16 +140,17 @@ public struct SidebarView: View {
 
     /// Creates the container, then opens it so the first thing that happens is naming it.
     ///
-    /// The title is the kind's own name rather than an empty string, because an untitled row in a
-    /// tree of named ones reads as a rendering fault. It is selected on arrival, so typing replaces
-    /// it — see ``ItemDetailView``.
+    /// The empty title is intentional: the detail header supplies a clear kind-specific prompt and
+    /// takes keyboard focus, so the first typing becomes the name instead of editing placeholder
+    /// content such as "New Project".
     private func create(_ kind: ItemKind) {
         guard let services else { return }
-        let draft = ItemDraft(kind: kind, title: kind == .area ? "New Area" : "New Project")
+        let draft = ItemDraft(kind: kind, title: "")
         var created: Item?
         guard services.perform({ created = try services.items.create(draft) }), let created else { return }
         services.noteChange(to: created)
         navigation.select(.item(id: created.id))
+        navigation.beginNaming(created.id)
     }
 
     /// The two levels, and the move between them.

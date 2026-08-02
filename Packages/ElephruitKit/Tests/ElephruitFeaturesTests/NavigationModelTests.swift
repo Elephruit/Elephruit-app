@@ -6,6 +6,17 @@ import Testing
 @MainActor
 @Suite("Browser-style navigation history")
 struct BrowserNavigationHistoryTests {
+    @Test("Beginning a name edit selects the new item and publishes a one-shot focus request")
+    func beginNaming() {
+        let navigation = NavigationModel()
+        let itemID = UUID()
+
+        navigation.beginNaming(itemID)
+
+        #expect(navigation.selectedItemID == itemID)
+        #expect(navigation.titleEditRequest == itemID)
+    }
+
     @Test("Back and forward restore the selected record")
     func recordHistory() {
         let navigation = NavigationModel()

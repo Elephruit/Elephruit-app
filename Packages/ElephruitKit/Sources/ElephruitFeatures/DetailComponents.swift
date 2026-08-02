@@ -8,10 +8,13 @@ import SwiftUI
 /// One line, not a block. The item being viewed should remain the visual focus, and a header that
 /// grows to four rows of metadata is competing with it.
 struct DetailHeader<Context: View>: View {
+    @Environment(NavigationModel.self) private var navigation
+
     let item: Item
     @Binding var title: String
     let isEditable: Bool
     @ViewBuilder let context: Context
+    @FocusState private var isTitleFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
@@ -20,10 +23,11 @@ struct DetailHeader<Context: View>: View {
                     .foregroundStyle(Theme.Palette.color(named: item.colorName))
                     .accessibilityHidden(true)
 
-                TextField("Title", text: $title, prompt: Text("Untitled \(item.kind.displayName)"))
+                TextField("Title", text: $title, prompt: Text(titlePrompt))
                     .textFieldStyle(.plain)
                     .font(Theme.Text.title)
                     .disabled(!isEditable)
+                    .focused($isTitleFocused)
                     .accessibilityIdentifier(AccessibilityID.Detail.titleField)
                     .accessibilityLabel("Title")
             }
@@ -34,6 +38,19 @@ struct DetailHeader<Context: View>: View {
         }
         .padding(.horizontal, Theme.Spacing.large)
         .padding(.vertical, Theme.Spacing.medium)
+        .task(id: navigation.titleEditRequest) {
+            guard navigation.titleEditRequest == item.id, isEditable else { return }
+            isTitleFocused = true
+            navigation.titleEditRequest = nil
+        }
+    }
+
+    private var titlePrompt: String {
+        switch item.kind {
+        case .project: "Project name"
+        case .area: "Area name"
+        default: "Untitled \(item.kind.displayName)"
+        }
     }
 }
 
