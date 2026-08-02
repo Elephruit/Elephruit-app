@@ -266,22 +266,17 @@ struct BugInlineDetailView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
             Text(label)
                 .font(Theme.Text.rowTitleEmphasised)
-            TextEditor(text: text)
-                .font(Theme.Text.rowTitle)
-                .scrollContentBackground(.hidden)
-                .contentMargins(.horizontal, Theme.Spacing.medium, for: .scrollContent)
-                .contentMargins(.vertical, Theme.Spacing.small, for: .scrollContent)
-                .focused($focusedField, equals: field)
-                .overlay(alignment: .topLeading) {
-                    if text.wrappedValue.isEmpty {
-                        Text(prompt)
-                            .font(Theme.Text.rowTitle)
-                            .foregroundStyle(Theme.Colors.placeholderText)
-                            .padding(.horizontal, Theme.Spacing.medium)
-                            .padding(.vertical, Theme.Spacing.small)
-                            .allowsHitTesting(false)
+            BugReportTextEditor(
+                text: text,
+                placeholder: prompt,
+                isFocused: focusedField == field,
+                onFocusChange: { isFocused in
+                    if isFocused, focusedField != field {
+                        focusedField = field
                     }
-                }
+                },
+                onTraverse: { backwards in moveFocus(from: field, backwards: backwards) }
+            )
             .frame(maxWidth: .infinity, minHeight: minHeight)
             .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
             .overlay {
@@ -339,6 +334,13 @@ struct BugInlineDetailView: View {
                 .textFieldStyle(.plain)
                 .focused($focusedField, equals: field)
                 .onSubmit { commit(field) }
+                .onKeyPress(action: { press in
+                    guard press.key == .tab else { return .ignored }
+                    return moveFocus(
+                        from: field,
+                        backwards: press.modifiers.contains(.shift)
+                    ) ? .handled : .ignored
+                })
         }
         .padding(.horizontal, Theme.Spacing.small)
         .padding(.vertical, Theme.Spacing.tight)
@@ -426,6 +428,18 @@ struct BugInlineDetailView: View {
         case .affected: editor.updateBug { $0.affectedVersion = affectedVersion.nilIfBlank }
         case .fix: editor.updateBug { $0.fixVersion = fixVersion.nilIfBlank }
         }
+    }
+
+    @discardableResult
+    private func moveFocus(from field: Field, backwards: Bool) -> Bool {
+        let fields = Field.allCases
+        guard let index = fields.firstIndex(of: field) else { return false }
+        let destination = index + (backwards ? -1 : 1)
+        guard fields.indices.contains(destination) else {
+            return false
+        }
+        focusedField = fields[destination]
+        return true
     }
 
     private func commitAll() {
