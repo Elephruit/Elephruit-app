@@ -123,6 +123,7 @@ public final class SwipeActionCoordinator {
         if candidate == row { candidate = nil }
         if trackingRow == row { endTracking() }
         if openRow == row { openRow = nil }
+        if settlingRow == row { settlingRow = nil }
     }
 
     public func setHovered(_ row: AnyHashable, _ isHovered: Bool) {
@@ -150,6 +151,37 @@ public final class SwipeActionCoordinator {
 
     public func isOpen(_ row: AnyHashable) -> Bool { openRow == row }
 
+    /// Whether this row is involved in a swipe right now — being moved, resting open, or still
+    /// animating shut.
+    ///
+    /// ### Why rows ask this
+    /// Because the swipe chrome is expensive to keep on rows that are not using it. A row used to
+    /// carry its action buttons, a clip, and a compositing boundary permanently, just in case a
+    /// swipe began — and each of those is a RenderBox surface, allocated when the row appears.
+    /// Scrolling is nothing but rows appearing, and a Time Profiler run showed the main thread
+    /// spending most of a scroll inside `RB::SharedSurfaceGroup::wait_for_allocations`, stalled on
+    /// exactly those surfaces. A resting row now draws as plain content; the chrome exists only
+    /// while this returns `true`.
+    ///
+    /// The settling window is what lets the close animation finish before the chrome is taken
+    /// down: the model's offset snaps to zero at the moment of release, and a row that switched to
+    /// its plain form on that instant would cut the slide-back short.
+    public func isEngaged(_ row: AnyHashable) -> Bool {
+        trackingRow == row || openRow == row || settlingRow == row
+    }
+
+    /// The row still animating back to rest, kept engaged until the motion has finished.
+    private var settlingRow: AnyHashable?
+
+    /// Marks a row as settling and lets it go once the standard close animation has run.
+    private func beginSettling(_ row: AnyHashable) {
+        settlingRow = row
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            if self?.settlingRow == row { self?.settlingRow = nil }
+        }
+    }
+
     /// Whether this row is the one about to run its default action.
     public func isArmed(_ row: AnyHashable) -> Bool { isArmed && trackingRow == row }
 
@@ -171,6 +203,7 @@ public final class SwipeActionCoordinator {
     @discardableResult
     public func closeAll() -> Bool {
         let wasOpen = openRow != nil || trackingRow != nil
+        if let closing = openRow ?? trackingRow { beginSettling(closing) }
         openRow = nil
         endTracking()
         return wasOpen
@@ -319,6 +352,7 @@ public final class SwipeActionCoordinator {
         switch outcome {
         case .closed:
             openRow = nil
+            beginSettling(row)
             endTracking()
 
         case .open(let side):
@@ -329,6 +363,7 @@ public final class SwipeActionCoordinator {
         case .commit(let side):
             endTracking()
             openRow = nil
+            beginSettling(row)
             pendingCommit = (row, side)
         }
     }

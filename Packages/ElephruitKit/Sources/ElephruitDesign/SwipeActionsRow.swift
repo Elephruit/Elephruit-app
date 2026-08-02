@@ -49,19 +49,56 @@ struct SwipeActionsModifier: ViewModifier {
     let allowsFullSwipe: Bool
 
     func body(content: Content) -> some View {
-        if coordinator == nil || (leading.isEmpty && trailing.isEmpty) {
+        if let coordinator, !(leading.isEmpty && trailing.isEmpty) {
+            wired(content, coordinator: coordinator)
+        } else {
             // Nothing to reveal, or nowhere to reveal it. The row is returned untouched rather than
             // wrapped in machinery that would only ever measure itself.
             content
-        } else {
-            decorated(content)
+        }
+    }
+
+    /// The row with its swipe wiring, and — only while a swipe is in flight — its chrome.
+    ///
+    /// ### Why a resting row is plain content
+    /// The chrome is three RenderBox surfaces per row: the buttons layer, the clip that keeps them
+    /// behind the content, and the compositing boundary the ZStack introduces. Every one of them is
+    /// allocated when the row appears, and scrolling a list is nothing but rows appearing — a Time
+    /// Profiler run of the People list showed the main thread spending most of each scroll frame in
+    /// `RB::SharedSurfaceGroup::wait_for_allocations`, stalled on exactly these. What a resting row
+    /// actually needs is only the *wiring*: its measured width, whether the pointer is on it, and
+    /// its rotor actions. The chrome is built when the coordinator engages the row and taken down
+    /// once the closing animation has finished — see `SwipeActionCoordinator.isEngaged`.
+    @ViewBuilder
+    private func wired(_ content: Content, coordinator: SwipeActionCoordinator) -> some View {
+        Group {
+            if coordinator.isEngaged(rowID) {
+                decorated(content, offset: coordinator.offset(for: rowID))
+            } else {
+                content
+            }
+        }
+        // The wiring stays outside the branch, on a stable identity: geometry must be known before
+        // a gesture starts, the hover is how the coordinator knows which row a gesture belongs to,
+        // and the commit watcher has to survive the moment the chrome comes down — a full swipe
+        // disengages the row in the same turn it lands.
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            publish(width: width)
+        }
+        .onHover { coordinator.setHovered(rowID, $0) }
+        .onDisappear { coordinator.forget(rowID) }
+        // A landed full swipe. The coordinator decides *that* it landed; the row decides what to
+        // run, because only the row was given the handlers.
+        .onChange(of: coordinator.pendingCommit?.row) { _, _ in runPendingCommit() }
+        .accessibilityActions {
+            ForEach(leading + trailing) { action in
+                Button(action.title) { coordinator.perform(action, on: rowID) }
+            }
         }
     }
 
     @ViewBuilder
-    private func decorated(_ content: Content) -> some View {
-        let offset = coordinator?.offset(for: rowID) ?? 0
-
+    private func decorated(_ content: Content, offset: CGFloat) -> some View {
         ZStack(alignment: .center) {
             actionsLayer(offset: offset)
 
@@ -81,23 +118,7 @@ struct SwipeActionsModifier: ViewModifier {
                 }
         }
         .clipped()
-        // `onGeometryChange` rather than a `GeometryReader` in the background: the reader is a
-        // whole extra layout host per row, and rows are built by the dozen while a list scrolls.
-        // This costs a callback on appear and on resize, which is all the reader was being used for.
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
-            publish(width: width)
-        }
-        .onHover { coordinator?.setHovered(rowID, $0) }
-        .onDisappear { coordinator?.forget(rowID) }
         .calmAnimation(Theme.Motion.standard, value: isOpen)
-        // A landed full swipe. The coordinator decides *that* it landed; the row decides what to
-        // run, because only the row was given the handlers.
-        .onChange(of: coordinator?.pendingCommit?.row) { _, _ in runPendingCommit() }
-        .accessibilityActions {
-            ForEach(leading + trailing) { action in
-                Button(action.title) { coordinator?.perform(action, on: rowID) }
-            }
-        }
     }
 
     /// The buttons, pinned to their edges and uncovered as the row moves off them.
