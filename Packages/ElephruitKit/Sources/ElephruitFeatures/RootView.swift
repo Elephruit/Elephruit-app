@@ -548,6 +548,40 @@ public struct RootView: View {
             )
         }
 
+        // Projects is not in `displayOrder` — the tree lives at the top level of the sidebar — so
+        // the palette names its front door and every open project here rather than in the module
+        // loop above. Individual projects by name, because "get back to the project I was in" is
+        // the single most common navigation in the app and should never require the pointer.
+        commands.append(
+            PaletteCommand(
+                id: "go-projects",
+                title: "Go to All Projects",
+                category: .navigate,
+                symbolName: AppModule.projects.symbolName,
+                command: .goProjects,
+                in: registry
+            ) {
+                navigation.select(.kind(.project))
+            }
+        )
+
+        if let projectSidebar = services?.projectSidebar {
+            var listed = Set<UUID>()
+            for row in projectSidebar.favourites + projectSidebar.rows
+            where !row.isArea && listed.insert(row.id).inserted {
+                commands.append(
+                    PaletteCommand(
+                        id: "go-project-\(row.id.uuidString)",
+                        title: "Go to \(row.title)",
+                        category: .navigate,
+                        symbolName: row.symbolName
+                    ) {
+                        navigation.select(.project(id: row.id, viewID: nil))
+                    }
+                )
+            }
+        }
+
         for kind in ItemKind.shippingInMilestoneOne where kind != .dailyEntry {
             commands.append(
                 PaletteCommand(

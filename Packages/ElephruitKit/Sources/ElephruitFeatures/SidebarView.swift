@@ -41,9 +41,19 @@ public struct SidebarView: View {
         self.navigation = navigation
     }
 
+    /// Whether the sidebar swaps to a module's own level for this active module.
+    ///
+    /// One answer, asked by the header and the levels alike. The regression this guards against was
+    /// precisely the two drifting apart: the header checked ``AppModule/hasOwnSidebar`` and the
+    /// levels did not, so entering a project suppressed the header *and* swapped the list for a
+    /// module sidebar that draws nothing — a blank column with no way back.
+    static func showsModuleLevel(for module: AppModule?) -> Bool {
+        module?.hasOwnSidebar == true
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
-            if let module = navigation.activeModule, module.hasOwnSidebar {
+            if let module = navigation.activeModule, Self.showsModuleLevel(for: module) {
                 ModuleHeader(module: module, navigation: navigation)
                 Divider()
             }
@@ -120,7 +130,7 @@ public struct SidebarView: View {
     /// happens with no movement at all.
     private var levels: some View {
         ZStack {
-            if let module = navigation.activeModule {
+            if let module = navigation.activeModule, Self.showsModuleLevel(for: module) {
                 ModuleSidebar(module: module, navigation: navigation)
                     .transition(.push(from: .trailing))
             } else {
@@ -332,7 +342,7 @@ public struct SidebarView: View {
 
     private var selectionBinding: Binding<SidebarSelection?> {
         Binding(
-            get: { navigation.selection },
+            get: { navigation.selection.sidebarRowForm },
             set: { newValue in
                 guard let newValue else { return }
                 navigation.select(newValue)

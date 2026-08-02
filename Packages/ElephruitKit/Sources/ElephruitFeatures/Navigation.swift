@@ -115,6 +115,17 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         return false
     }
 
+    /// The form of this selection a sidebar row is tagged with.
+    ///
+    /// A project row is tagged `.project(id:viewID: nil)` — the row neither knows nor cares which
+    /// of the project's views is open. The live selection *does* carry the view, so that leaving
+    /// and returning lands on the same tab. Matching the row against the selection therefore drops
+    /// the view, or the highlight would vanish the moment a tab was chosen.
+    public var sidebarRowForm: SidebarSelection {
+        if case .project(let id, _) = self { return .project(id: id, viewID: nil) }
+        return self
+    }
+
     /// The query this selection shows.
     ///
     /// Pure, so "what does Today mean?" is answered in one testable place rather than inside a view.
