@@ -364,6 +364,9 @@ public struct RootView: View {
                 // same answer before it asks the content to lay out.
                 .frame(width: sidebarWidth)
                 .navigationSplitViewColumnWidth(sidebarWidth)
+                // SwiftUI's content width is not the native pane's width. Lock the actual
+                // NSSplitViewItem so sibling columns cannot rebalance the sidebar underneath us.
+                .background(SidebarSplitViewLock(width: sidebarWidth))
                 .overlay(alignment: .trailing) {
                     Rectangle()
                         .fill(.clear)
