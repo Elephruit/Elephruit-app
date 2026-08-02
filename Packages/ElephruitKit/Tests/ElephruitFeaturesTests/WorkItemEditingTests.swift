@@ -80,6 +80,27 @@ struct WorkItemEditingTests {
         #expect(facts.isRegression)
     }
 
+    @Test("A newly filed bug keeps the reporting device context in its first save")
+    func newBugTakesDeviceContext() throws {
+        let services = makeServices()
+        let project = try services.items.create(ItemDraft(kind: .project, title: "P"))
+        let context = BugReportDeviceContext(
+            environment: "MacBook Pro · macOS 26.0.1",
+            affectedVersion: "2.4 (build 310)"
+        )
+
+        let bug = try services.workItems.createWorkItem(
+            title: "It breaks",
+            kind: .bug,
+            in: project,
+            bugFacts: context.facts
+        )
+
+        #expect(bug.bugRecord?.environment == context.environment)
+        #expect(bug.bugRecord?.affectedVersion == context.affectedVersion)
+        #expect(BugReportDeviceContext.versionAndBuild(version: "2.4", build: "310") == "2.4 (build 310)")
+    }
+
     @Test("Verification round-trips, record or no record")
     func verificationRoundTrips() throws {
         let services = makeServices()
@@ -196,6 +217,23 @@ struct WorkItemEditingTests {
         #expect(model.presentedItemID == id)
     }
 
+    @Test("Opening a bug from any project view routes to its inline report, never a sheet")
+    func everyBugOpeningUsesInlinePresentation() throws {
+        let services = makeServices()
+        let project = try services.items.create(ItemDraft(kind: .project, title: "P"))
+        let bug = try services.workItems.createWorkItem(title: "It breaks", kind: .bug, in: project)
+
+        let model = ProjectWorkspaceModel(services: services)
+        model.load(projectID: project.id, viewID: nil)
+        #expect(model.activeView?.kind != .bugs)
+
+        model.present(bug.id)
+
+        #expect(model.activeView?.kind == .bugs)
+        #expect(model.expandedBugID == bug.id)
+        #expect(model.presentedItemID == nil)
+    }
+
     @Test("The verification concern opens the completed bug that can clear it")
     func verificationConcernOpensItsFix() throws {
         let services = makeServices()
@@ -213,9 +251,11 @@ struct WorkItemEditingTests {
 
         #expect(model.health.bugsAwaitingVerification == 1)
         #expect(model.presentFixAwaitingVerification())
-        #expect(model.presentedItemID == fixedBug.id)
+        #expect(model.activeView?.kind == .bugs)
+        #expect(model.expandedBugID == fixedBug.id)
+        #expect(model.presentedItemID == nil)
         #expect(model.selectedItemIDs == [fixedBug.id])
-        #expect(model.presentedItemID != openBug.id)
+        #expect(model.expandedBugID != openBug.id)
 
         try services.bugs.markVerified(fixedBug)
         model.refresh()
@@ -263,5 +303,6 @@ struct WorkItemEditingTests {
         model.moveToTrash([bug.id])
 
         #expect(model.presentedItemID == nil)
+        #expect(model.expandedBugID == nil)
     }
 }

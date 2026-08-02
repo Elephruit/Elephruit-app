@@ -56,7 +56,8 @@ public final class WorkItemService {
         in project: Item,
         stage: WorkflowStage? = nil,
         parent: Item? = nil,
-        severity: BugSeverity? = nil
+        severity: BugSeverity? = nil,
+        bugFacts: BugFacts? = nil
     ) throws(AppError) -> Item {
         var draft = ItemDraft(kind: kind, title: title)
         let container = parent ?? project
@@ -82,7 +83,9 @@ public final class WorkItemService {
         }
 
         if kind == .bug {
-            let record = BugRecord(facts: BugFacts(severity: severity ?? .minor))
+            var facts = bugFacts ?? BugFacts()
+            if let severity { facts.severity = severity }
+            let record = BugRecord(facts: facts)
             record.item = item
             context.insert(record)
         }

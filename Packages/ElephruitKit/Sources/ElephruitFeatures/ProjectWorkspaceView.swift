@@ -218,7 +218,8 @@ struct ProjectBugAddBar: View {
         guard let bug = try? services.workItems.createWorkItem(
             title: title,
             kind: .bug,
-            in: project
+            in: project,
+            bugFacts: BugReportDeviceContext.current.facts
         ) else { return }
 
         services.noteChange(to: bug)
