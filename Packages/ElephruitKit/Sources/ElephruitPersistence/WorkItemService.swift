@@ -254,6 +254,11 @@ public final class WorkItemService {
         let old = item.dueAt
         item.dueAt = date
         item.updatedAt = dateProvider.now
+        // Today narrows its fetch with `dayRelevanceKey` before applying the scheduling rules.
+        // Board edits save directly through this service rather than `ItemRepository.update`, so
+        // the projection must be refreshed here or a newly dated card remains indexed as undated
+        // and never reaches Today's classifier.
+        item.refreshSearchText()
         record(.dueDateChanged, on: item, oldValue: Self.dateText(old), newValue: Self.dateText(date))
         try save()
     }
