@@ -1,6 +1,7 @@
 # 31 — The notes editor: what to build, and what not to build again
 
-- **Status:** Specification. None of this exists yet.
+- **Status:** Built. Step 1 landed as the stored format; steps 2–6 are recorded in
+  `33-notes-workspace-record.md`.
 - **Date:** 2026-08-01
 
 ## Why this document exists

@@ -18,6 +18,7 @@ enum NoteCaretPlacement: Equatable {
 struct NoteProseSegmentView: NSViewRepresentable {
     let model: NoteEditorModel
     let ordinal: Int
+    var isEditable = true
 
     /// A `/` menu command was chosen, or a Markdown shortcut asked for an object.
     let onInsertionCommand: (NoteInsertionCommand, NotePieceLocation) -> Void
@@ -31,6 +32,7 @@ struct NoteProseSegmentView: NSViewRepresentable {
         view.noteCoordinator = context.coordinator
         context.coordinator.textView = view
 
+        view.isEditable = isEditable
         view.setAccessibilityIdentifier("\(AccessibilityID.Notes.segment).\(ordinal)")
         view.setAccessibilityLabel(String(localized: "Note text", comment: "Accessibility label for a prose segment"))
 
@@ -48,6 +50,10 @@ struct NoteProseSegmentView: NSViewRepresentable {
         // reporting those to SwiftUI mid-update is a state mutation during a view update.
         coordinator.isApplyingUpdate = true
         defer { coordinator.isApplyingUpdate = false }
+
+        if view.isEditable != isEditable {
+            view.isEditable = isEditable
+        }
 
         if coordinator.renderedRevision != model.renderRevision {
             coordinator.render(into: view)

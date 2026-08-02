@@ -26,25 +26,12 @@ struct NoteSlashMenuView: View {
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 0) {
-                            ForEach(NoteInsertionGroup.allCases, id: \.self) { group in
-                                let commands = matches.filter { $0.group == group }
-                                if !commands.isEmpty {
-                                    Text(group.rawValue)
-                                        .font(Theme.Text.sectionHeader)
-                                        .tracking(Theme.Text.Tracking.caps)
-                                        .textCase(.uppercase)
-                                        .foregroundStyle(Theme.Colors.secondaryText)
-                                        .padding(.horizontal, Theme.Spacing.medium)
-                                        .padding(.top, Theme.Spacing.small)
-                                        .padding(.bottom, Theme.Spacing.hairline)
-
-                                    ForEach(commands, id: \.self) { command in
-                                        row(for: command)
-                                    }
-                                }
-                            }
-                        }
+                        NoteSlashMenuList(
+                            matches: matches,
+                            highlighted: highlighted,
+                            onHighlight: onHighlight,
+                            onChoose: onChoose
+                        )
                         .padding(.vertical, Theme.Spacing.tight)
                     }
                     .onChange(of: highlighted) { _, newValue in
@@ -63,6 +50,38 @@ struct NoteSlashMenuView: View {
                 .strokeBorder(Theme.Colors.separator, lineWidth: 1)
         )
         .shadow(color: Theme.Colors.shadow.opacity(0.18), radius: 12, y: 4)
+    }
+
+}
+
+/// The menu's rows, apart from the scroll view that usually holds them — separately, so the
+/// gallery can rasterise them (`ImageRenderer` renders a `ScrollView` as an empty box).
+struct NoteSlashMenuList: View {
+    let matches: [NoteInsertionCommand]
+    let highlighted: NoteInsertionCommand?
+    let onHighlight: (NoteInsertionCommand) -> Void
+    let onChoose: (NoteInsertionCommand) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(NoteInsertionGroup.allCases, id: \.self) { group in
+                let commands = matches.filter { $0.group == group }
+                if !commands.isEmpty {
+                    Text(group.rawValue)
+                        .font(Theme.Text.sectionHeader)
+                        .tracking(Theme.Text.Tracking.caps)
+                        .textCase(.uppercase)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                        .padding(.horizontal, Theme.Spacing.medium)
+                        .padding(.top, Theme.Spacing.small)
+                        .padding(.bottom, Theme.Spacing.hairline)
+
+                    ForEach(commands, id: \.self) { command in
+                        row(for: command)
+                    }
+                }
+            }
+        }
     }
 
     private func row(for command: NoteInsertionCommand) -> some View {
@@ -126,13 +145,9 @@ struct NoteOutlineRail: View {
                 Spacer(minLength: 0)
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                        ForEach(entries) { entry in
-                            row(for: entry)
-                        }
-                    }
-                    .padding(.horizontal, Theme.Spacing.small)
-                    .padding(.vertical, Theme.Spacing.small)
+                    NoteOutlineList(model: model)
+                        .padding(.horizontal, Theme.Spacing.small)
+                        .padding(.vertical, Theme.Spacing.small)
                 }
                 .scrollIndicators(.never)
             }
@@ -140,6 +155,21 @@ struct NoteOutlineRail: View {
         .frame(width: 200, alignment: .leading)
         .accessibilityIdentifier(AccessibilityID.Notes.outline)
         .accessibilityLabel(String(localized: "Table of contents"))
+    }
+
+}
+
+/// The outline's rows, apart from their scroll view, for the same gallery reason as
+/// ``NoteSlashMenuList``.
+struct NoteOutlineList: View {
+    let model: NoteEditorModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+            ForEach(model.outline) { entry in
+                row(for: entry)
+            }
+        }
     }
 
     private func row(for entry: NoteOutlineEntry) -> some View {

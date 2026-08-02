@@ -682,14 +682,23 @@ final class NoteProseTextView: NSTextView {
         let content = paragraphContentRange(at: caret)
         let attribute = paragraphAttribute(at: caret)
 
-        // Shortcuts only convert ordinary prose. "- " inside a code block is code.
-        guard attribute.kind == .paragraph else { return }
-
         let leadingLength = caret - content.location
         guard leadingLength > 0, leadingLength <= 8 else { return }
 
         let leading = text.substring(with: NSRange(location: content.location, length: leadingLength))
         guard let match = NoteMarkdownShortcut.match(leading) else { return }
+
+        // Shortcuts convert ordinary prose — "- " inside a code block is code — with one
+        // exception: "[ ] " on a bulleted item, because "- [ ] " cannot be typed. Its own dash
+        // has already made the bullet by the time the bracket arrives.
+        switch (attribute.kind, match.shortcut) {
+        case (.paragraph, _):
+            break
+        case (.bulleted, .paragraph(kind: .checklist, ticked: _)):
+            break
+        default:
+            return
+        }
 
         let consumed = NSRange(location: content.location, length: leadingLength)
 
@@ -700,7 +709,8 @@ final class NoteProseTextView: NSTextView {
             didChangeText()
             rewriteParagraph(at: content.location, to: NoteParagraphAttribute(
                 kind: kind,
-                indent: 0,
+                // A bullet turning into a checklist keeps its depth.
+                indent: kind.acceptsIndent ? attribute.indent : 0,
                 isTicked: ticked,
                 language: nil,
                 tone: kind == .callout ? .note : nil

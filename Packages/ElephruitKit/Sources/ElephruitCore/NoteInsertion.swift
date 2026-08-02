@@ -37,10 +37,16 @@ public enum NoteMarkdownShortcut: Hashable, Sendable {
     /// lands.
     public static func match(_ text: String) -> Match? {
         // Longest spellings first, so "- [ ] " is a checklist and never a bulleted list whose text
-        // begins with brackets.
+        // begins with brackets. The bare bracket spellings exist because the dash forms cannot be
+        // *typed*: "- " converts to a bulleted item on its own trailing space, two keys before the
+        // bracket arrives. Typing "[ ] " on that bulleted item is how the checklist is reached by
+        // hand — the caller allows exactly that one bulleted-to-checklist conversion.
         let fixed: [(prefix: String, shortcut: NoteMarkdownShortcut)] = [
             ("- [x] ", .paragraph(kind: .checklist, ticked: true)),
             ("- [ ] ", .paragraph(kind: .checklist, ticked: false)),
+            ("[x] ", .paragraph(kind: .checklist, ticked: true)),
+            ("[ ] ", .paragraph(kind: .checklist, ticked: false)),
+            ("[] ", .paragraph(kind: .checklist, ticked: false)),
             ("### ", .paragraph(kind: .heading3, ticked: false)),
             ("## ", .paragraph(kind: .heading2, ticked: false)),
             ("# ", .paragraph(kind: .heading1, ticked: false)),

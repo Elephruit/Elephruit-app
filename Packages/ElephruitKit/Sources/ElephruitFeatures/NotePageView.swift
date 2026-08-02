@@ -96,6 +96,7 @@ public struct NotePageView: View {
                     NoteProseSegmentView(
                         model: model,
                         ordinal: ordinal,
+                        isEditable: !item.isInTrash,
                         onInsertionCommand: handleInsertion,
                         onOpenLink: open
                     )

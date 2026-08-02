@@ -24,6 +24,8 @@ struct NoteDetailView: View {
     /// per-document choice.
     @AppStorage("notes.outlineVisible") private var outlineVisible = true
 
+    @State private var detailWidth = CGFloat.zero
+
     var body: some View {
         HStack(spacing: 0) {
             if showsOutline {
@@ -56,15 +58,21 @@ struct NoteDetailView: View {
             }
         }
         .toolbar { noteToolbar }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            detailWidth = width
+        }
         // Dropping a file anywhere on a note attaches it, which is what someone dragging a PDF onto
         // a window expects. Copied, never moved.
         .acceptsAttachmentDrops(on: item)
         .accessibilityIdentifier(AccessibilityID.Detail.root)
     }
 
-    /// Shown when asked for *and* worth its width — a two-line note gets the space back.
+    /// Shown when asked for, worth its width, and affordable: below about 660 points the rail
+    /// would be taken out of the editor's measure, which is the wrong thing to spend.
     private var showsOutline: Bool {
-        outlineVisible && model.document.hasUsefulOutline()
+        outlineVisible && model.document.hasUsefulOutline() && detailWidth >= 660
     }
 
     @ToolbarContentBuilder
