@@ -1,6 +1,33 @@
 import AppKit
 import SwiftUI
 
+/// Gives the four AppKit-backed report editors a direct, deterministic focus route.
+///
+/// SwiftUI focus remains the source of truth for styling and for the compact fields, but moving
+/// between two `NSViewRepresentable`s cannot wait for two independent representable updates. The
+/// source editor asks this registry for the already-mounted destination and AppKit transfers first
+/// responder immediately.
+@MainActor
+final class BugReportFocusRegistry {
+    private final class WeakEditor {
+        weak var value: NSTextView?
+
+        init(_ value: NSTextView) { self.value = value }
+    }
+
+    private var editors: [AnyHashable: WeakEditor] = [:]
+
+    func register(_ editor: NSTextView, for key: AnyHashable) {
+        editors[key] = WeakEditor(editor)
+    }
+
+    @discardableResult
+    func focus(_ key: AnyHashable) -> Bool {
+        guard let editor = editors[key]?.value, let window = editor.window else { return false }
+        return window.makeFirstResponder(editor)
+    }
+}
+
 /// A plain multiline editor whose placeholder and caret use the same AppKit text-container origin.
 ///
 /// `TextEditor` draws its text in an `NSTextView`, but a SwiftUI overlay is laid out in a different
@@ -11,6 +38,8 @@ struct BugReportTextEditor: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String
     let isFocused: Bool
+    var focusKey: AnyHashable? = nil
+    var focusRegistry: BugReportFocusRegistry? = nil
     let onFocusChange: (Bool) -> Void
     let onTraverse: (_ backwards: Bool) -> Bool
 
@@ -54,12 +83,18 @@ struct BugReportTextEditor: NSViewRepresentable {
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
         scrollView.documentView = textView
+        if let focusKey, let focusRegistry {
+            focusRegistry.register(textView, for: focusKey)
+        }
         return scrollView
     }
 
     func updateNSView(_ scrollView: BugReportEditorScrollView, context: Context) {
         context.coordinator.parent = self
         guard let textView = scrollView.documentView as? BugReportEditorTextView else { return }
+        if let focusKey, let focusRegistry {
+            focusRegistry.register(textView, for: focusKey)
+        }
 
         if textView.placeholder != placeholder {
             textView.placeholder = placeholder

@@ -8,11 +8,13 @@ import Testing
 struct BugReportTextEditorTests {
     private struct FocusHarness: View {
         @State private var focusedEditor = 0
+        @State private var focusRegistry = BugReportFocusRegistry()
 
         var body: some View {
             VStack {
-                editor(index: 0, prompt: "Notes")
-                editor(index: 1, prompt: "Steps")
+                ForEach(Array(["Notes", "Steps", "Expected", "Actual"].enumerated()), id: \.offset) {
+                    editor(index: $0.offset, prompt: $0.element)
+                }
             }
         }
 
@@ -21,13 +23,16 @@ struct BugReportTextEditorTests {
                 text: .constant(""),
                 placeholder: prompt,
                 isFocused: focusedEditor == index,
+                focusKey: index,
+                focusRegistry: focusRegistry,
                 onFocusChange: { isFocused in
                     if isFocused { focusedEditor = index }
                 },
                 onTraverse: { backwards in
                     let destination = index + (backwards ? -1 : 1)
-                    guard (0...1).contains(destination) else { return false }
+                    guard (0...3).contains(destination) else { return false }
                     focusedEditor = destination
+                    focusRegistry.focus(destination)
                     return true
                 }
             )
@@ -76,11 +81,11 @@ struct BugReportTextEditorTests {
         #expect(textView.string == "\t")
     }
 
-    @Test("Tab makes the next editor the window's first responder")
+    @Test("Tab walks Notes, Steps, Expected, and Actual in order")
     func tabMovesFirstResponder() async {
         let host = NSHostingView(rootView: FocusHarness())
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 180),
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 360),
             styleMask: [.titled],
             backing: .buffered,
             defer: false
@@ -91,15 +96,15 @@ struct BugReportTextEditorTests {
 
         let editors = descendants(of: host, matching: BugReportEditorTextView.self)
             .sorted { $0.frameInWindow.maxY > $1.frameInWindow.maxY }
-        #expect(editors.count == 2)
-        guard editors.count == 2 else { return }
+        #expect(editors.count == 4)
+        guard editors.count == 4 else { return }
 
         window.makeFirstResponder(editors[0])
-        editors[0].insertTab(nil)
-        await Task.yield()
-        await Task.yield()
-
-        #expect(window.firstResponder === editors[1])
+        for index in 0..<3 {
+            editors[index].insertTab(nil)
+            await Task.yield()
+            #expect(window.firstResponder === editors[index + 1])
+        }
         window.close()
     }
 

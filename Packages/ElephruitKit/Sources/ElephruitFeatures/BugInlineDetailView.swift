@@ -23,6 +23,7 @@ struct BugInlineDetailView: View {
     @State private var affectedVersion = ""
     @State private var fixVersion = ""
     @State private var showsDeleteConfirmation = false
+    @State private var reportFocusRegistry = BugReportFocusRegistry()
     @FocusState private var focusedField: Field?
 
     private enum Field: Hashable, CaseIterable {
@@ -270,6 +271,8 @@ struct BugInlineDetailView: View {
                 text: text,
                 placeholder: prompt,
                 isFocused: focusedField == field,
+                focusKey: field,
+                focusRegistry: reportFocusRegistry,
                 onFocusChange: { isFocused in
                     if isFocused, focusedField != field {
                         focusedField = field
@@ -438,7 +441,9 @@ struct BugInlineDetailView: View {
         guard fields.indices.contains(destination) else {
             return false
         }
-        focusedField = fields[destination]
+        let destinationField = fields[destination]
+        focusedField = destinationField
+        reportFocusRegistry.focus(destinationField)
         return true
     }
 
