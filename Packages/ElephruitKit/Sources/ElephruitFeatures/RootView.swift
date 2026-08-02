@@ -8,9 +8,8 @@ import UniformTypeIdentifiers
 
 /// One window.
 ///
-/// A three-column `NavigationSplitView` — sidebar, list, detail — with the inspector as a trailing
-/// pane rather than a fourth column, because an inspector is *about* the detail rather than a peer
-/// of it.
+/// A fixed leading sidebar beside an independently resizing content surface, with the inspector as
+/// a trailing pane because an inspector is *about* the detail rather than a peer of it.
 ///
 /// Owns its own ``NavigationModel``, so two windows can look at different things.
 public struct RootView: View {
@@ -40,11 +39,12 @@ public struct RootView: View {
 
     /// The sidebar changes width through one path only: the user dragging its handle.
     ///
-    /// `NavigationSplitView` is given this as an exact width, so destinations, empty states, module
-    /// policies and sibling columns cannot negotiate it. Scene storage preserves the user's choice
+    /// The root `HStack` gives the sidebar this exact width, so destinations, empty states, module
+    /// policies and sibling panes cannot negotiate it. Scene storage preserves the user's choice
     /// for this window without measuring the rendered sidebar and feeding layout back into itself.
     @SceneStorage("layout.sidebar.width") private var storedSidebarWidth = Double(SidebarMetrics.defaultWidth)
     @State private var sidebarDragStart: CGFloat?
+    @State private var isWindowFullScreen = false
 
     /// The window's own width, so a restored column width can be clamped to what there is.
     @State private var windowWidth: CGFloat = 0
@@ -323,122 +323,77 @@ public struct RootView: View {
     }
 
     private var splitView: some View {
-        NavigationSplitView(columnVisibility: columnVisibilityBinding) {
-            SidebarView(navigation: navigation)
-                // Exact at both layout layers. A flexible range lets `NavigationSplitView` use the
-                // sidebar to absorb sibling-column changes even when the window itself never moves.
-                // The frame makes the content non-negotiable; the column modifier gives AppKit the
-                // same answer before it asks the content to lay out.
-                .frame(width: sidebarWidth)
-                .navigationSplitViewColumnWidth(sidebarWidth)
-                // SwiftUI's content width is not the native pane's width. Lock the actual
-                // NSSplitViewItem so sibling columns cannot rebalance the sidebar underneath us.
-                .background(SidebarSplitViewLock(width: sidebarWidth))
-                .overlay(alignment: .trailing) {
-                    Rectangle()
-                        .fill(.clear)
-                        .frame(width: 8)
-                        .contentShape(Rectangle())
-                        .gesture(sidebarResizeGesture)
-                        .help("Drag to resize the sidebar")
-                        .accessibilityLabel("Resize sidebar")
-                }
-        } content: {
-            // Time replaces the list rather than opening beside it: it *is* the middle column's
-            // contents for that destination, in the same way a project's task list is.
-            // A concrete container is essential here. `Group` is layout-transparent, so AppKit's
-            // split view can miss the width modifier below and let this column consume half the
-            // window despite the module's declared maximum.
-            ZStack {
-                if case .project(let id, let viewID) = navigation.selection {
-                    // A project replaces the middle column, on the same terms as Time, the calendar
-                    // and Today: it *is* that column's contents, and it brings its own tab bar.
-                    ProjectWorkspaceView(navigation: navigation, projectID: id, viewID: viewID)
-                } else if navigation.selection.isTaskDestination {
-                    // Tasks replace the middle column rather than filtering it. The sections, the
-                    // headings, and the inline row are all specific to the scheduling model, and
-                    // routing them through the generic item list would mean either a second copy of
-                    // those rules or a list that cannot show them.
-                    TaskWorkspaceView(navigation: navigation)
-                } else if navigation.selection == .time {
-                    switch navigation.timeSurface {
-                    case .log:
-                        TimeView(navigation: navigation)
-                    case .report:
-                        TimeReportView(navigation: navigation)
+        HStack(spacing: 0) {
+            if navigation.layoutMode.showsSidebar {
+                SidebarView(navigation: navigation)
+                    .frame(width: sidebarWidth, alignment: .topLeading)
+                    .frame(maxHeight: .infinity, alignment: .topLeading)
+                    .background(Theme.Colors.windowBackground)
+                    .overlay(alignment: .trailing) {
+                        Rectangle()
+                            .fill(.clear)
+                            .frame(width: 8)
+                            .contentShape(Rectangle())
+                            .gesture(sidebarResizeGesture)
+                            .help("Drag to resize the sidebar")
+                            .accessibilityLabel("Resize sidebar")
                     }
-                } else if navigation.selection == .calendar {
-                    // The calendar replaces the middle column rather than opening beside it, on the
-                    // same terms as Time and the People workspace: it *is* that column's contents
-                    // for this destination.
-                    CalendarWorkspaceView(navigation: navigation)
-                } else if navigation.selection == .today {
-                    // Today replaces the middle column on the same terms as the calendar and the
-                    // time sheet: it *is* that column's contents. It is not a filtered list, so
-                    // there is nothing for `ItemListView` to draw and nothing for a third column to
-                    // be about until something is picked.
-                    TodayView(navigation: navigation)
-                } else if case .people(let scope) = navigation.selection {
-                    if PeoplePerformanceIsolation.usesIsolatedList {
-                        IsolatedPeopleListView()
-                    } else {
-                        // Celebrations and My Card are not lists of people, so they replace the column
-                        // rather than filtering it — the same arrangement Time already uses.
-                        switch scope {
-                        case .celebrations:
-                            CelebrationsView(navigation: navigation)
-                        case .duplicates:
-                            DuplicatesView(navigation: navigation)
-                        default:
-                            PeopleListView(navigation: navigation, scope: scope)
+
+            }
+
+            NavigationStack {
+                contentPanes
+                    // Every destination supplies a nearer title. This keeps the unified toolbar
+                    // present during the loading frames between destinations.
+                    .navigationTitle(navigation.windowTitle)
+                    .toolbar {
+                        ToolbarItem(placement: .navigation) {
+                            Button {
+                                navigation.toggleSidebar()
+                            } label: {
+                                Label("Toggle Sidebar", systemImage: "sidebar.leading")
+                            }
+                            .help("Toggle Sidebar")
                         }
+
+                        // Keep this outside the button's toolbar item. Putting the invisible
+                        // alignment space beside the button made macOS draw one enormous rounded
+                        // control background around both views.
+                        ToolbarItem(placement: .navigation) {
+                            Color.clear
+                                .frame(
+                                    width: max(
+                                        0,
+                                        sidebarWidth - (isWindowFullScreen ? 40 : 128)
+                                    ),
+                                    height: 1
+                                )
+                                .accessibilityHidden(true)
+                        }
+                        .sharedBackgroundVisibility(.hidden)
                     }
-                } else {
-                    ItemListView(navigation: navigation)
-                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // The window-level backstop for the title bar. Every screen above declares its own
-            // title, and the nearer declaration wins — this one exists for the frames when none of
-            // them has yet. A column that renders even one title-less frame collapses the whole
-            // toolbar, the sidebar rides up into the title-bar space, and AppKit does not reliably
-            // give the inset back; that was the sidebar "jump" on the way into a project, where the
-            // workspace's first frames render before its model has loaded. With a default here the
-            // toolbar exists from the window's first frame to its last, whatever the column shows.
-            .navigationTitle(navigation.windowTitle)
-            .moduleColumnWidth(
-                .primary,
-                layout: shellLayout,
-                resolved: shellWidths.primary,
-                pinned: nil
-            )
-        } detail: {
-            // A canvas module — the calendar, the time sheet — has nothing to put in a third column,
-            // and the honest expression of that is no column rather than a narrow one. What used to
-            // be here was 720 points of "Nothing selected" sitting where the month should have been.
-            //
-            // A window too narrow to hold a usable editor gets no editor, on the same terms: a strip
-            // of wrapped fragments is not a smaller editor, it is a broken one.
-            if let detailWidth = shellWidths.detail {
-                ItemDetailView(navigation: navigation)
-                    .frame(
-                        // Focus mode caps the measure: long lines are hard to read, and the point of
-                        // the mode is reading and writing rather than filling the window.
-                        maxWidth: navigation.layoutMode == .focus ? Theme.Size.editorMaxWidth : .infinity
-                    )
-                    .frame(maxWidth: .infinity)
-                    .moduleColumnWidth(
-                        .detail,
-                        layout: shellLayout,
-                        resolved: detailWidth,
-                        pinned: nil
-                    )
-            } else {
-                Color.clear
-                    .navigationSplitViewColumnWidth(0)
-            }
         }
-        .navigationSplitViewStyle(.balanced)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        // The content begins below the unified toolbar, but the sidebar is a window region rather
+        // than page content. Paint its surface and boundary through the title bar as well.
+        .background(alignment: .leading) {
+            Theme.Colors.windowBackground
+                .frame(width: sidebarWidth)
+                .ignoresSafeArea()
+        }
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Theme.Colors.separator)
+                .frame(width: 1)
+                .offset(x: sidebarWidth)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+        }
+        .background {
+            WindowFullScreenReader(isFullScreen: $isWindowFullScreen)
+        }
         .inspector(isPresented: inspectorBinding) {
             InspectorView(navigation: navigation)
                 .inspectorColumnWidth(
@@ -478,6 +433,71 @@ public struct RootView: View {
             export: { isExportPresented = true },
             importFiles: { isImportPresented = true }
         ))
+    }
+
+    /// The sidebar is not part of this layout. These panes may redistribute all remaining space
+    /// without moving or resizing the fixed sibling at the window's leading edge.
+    @ViewBuilder
+    private var contentPanes: some View {
+        HStack(spacing: 0) {
+            if navigation.layoutMode.showsList || shellWidths.detail == nil {
+                primaryPane
+                    .frame(width: shellWidths.detail == nil ? nil : shellWidths.primary)
+                    .frame(maxHeight: .infinity)
+                    .frame(maxWidth: shellWidths.detail == nil ? .infinity : nil)
+            }
+
+            if shellWidths.detail != nil {
+                if navigation.layoutMode.showsList {
+                    Divider()
+                }
+
+                ItemDetailView(navigation: navigation)
+                    .frame(
+                        maxWidth: navigation.layoutMode == .focus
+                            ? Theme.Size.editorMaxWidth
+                            : .infinity,
+                        maxHeight: .infinity
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var primaryPane: some View {
+        if case .project(let id, let viewID) = navigation.selection {
+            ProjectWorkspaceView(navigation: navigation, projectID: id, viewID: viewID)
+        } else if navigation.selection.isTaskDestination {
+            TaskWorkspaceView(navigation: navigation)
+        } else if navigation.selection == .time {
+            switch navigation.timeSurface {
+            case .log:
+                TimeView(navigation: navigation)
+            case .report:
+                TimeReportView(navigation: navigation)
+            }
+        } else if navigation.selection == .calendar {
+            CalendarWorkspaceView(navigation: navigation)
+        } else if navigation.selection == .today {
+            TodayView(navigation: navigation)
+        } else if case .people(let scope) = navigation.selection {
+            if PeoplePerformanceIsolation.usesIsolatedList {
+                IsolatedPeopleListView()
+            } else {
+                switch scope {
+                case .celebrations:
+                    CelebrationsView(navigation: navigation)
+                case .duplicates:
+                    DuplicatesView(navigation: navigation)
+                default:
+                    PeopleListView(navigation: navigation, scope: scope)
+                }
+            }
+        } else {
+            ItemListView(navigation: navigation)
+        }
     }
 
     /// Puts the window back where it was, if there is a where.
@@ -675,28 +695,6 @@ public struct RootView: View {
     }
 
     // MARK: - Bindings
-
-    /// Layout mode drives column visibility, rather than the two states drifting apart.
-    private var columnVisibilityBinding: Binding<NavigationSplitViewVisibility> {
-        Binding(
-            get: {
-                switch navigation.layoutMode {
-                case .full: .all
-                case .twoPane: .doubleColumn
-                case .focus: .detailOnly
-                }
-            },
-            set: { visibility in
-                // A drag on the divider is a layout-mode change, so the two cannot disagree.
-                switch visibility {
-                case .all: navigation.setLayoutMode(.full)
-                case .doubleColumn: navigation.setLayoutMode(.twoPane)
-                case .detailOnly: navigation.setLayoutMode(.focus)
-                default: break
-                }
-            }
-        )
-    }
 
     private var repairSheetBinding: Binding<Bool> {
         Binding(

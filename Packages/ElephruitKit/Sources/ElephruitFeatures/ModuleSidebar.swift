@@ -49,6 +49,7 @@ struct ModuleSidebar: View {
             }
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
         // ### Why the list is held clear of the header's divider
         // The module header sits above this list with a `Divider` between them, and a `List` starts
         // its first row flush against its own bounds. A selected first row therefore drew its

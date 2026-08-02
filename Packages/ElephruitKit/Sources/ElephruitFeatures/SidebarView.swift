@@ -181,6 +181,9 @@ public struct SidebarView: View {
             crossModuleBand
         }
         .listStyle(.sidebar)
+        // The fixed root container supplies the sidebar surface. Let it show through instead of
+        // letting AppKit's sidebar list add a second, darker material over the whole column.
+        .scrollContentBackground(.hidden)
         .accessibilityIdentifier("sidebar.primary")
     }
 
