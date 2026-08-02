@@ -58,6 +58,12 @@ public struct DetailEmptyState: Sendable, Hashable {
                 message: "Choose something to read it, or put it back in your library."
             )
 
+        // A project draws its own workspace across the whole width, so nothing here is ever shown.
+        // The arm exists because the switch is exhaustive and a fallthrough would offer to open a
+        // detail pane the layout has already declared unavailable.
+        case .project, .projectInbox:
+            .generic
+
         // People. ⌘N makes a note, not a person, so it is not offered — the way to add somebody is
         // the + button above the list, and naming the wrong shortcut would teach the wrong habit.
         case .people:

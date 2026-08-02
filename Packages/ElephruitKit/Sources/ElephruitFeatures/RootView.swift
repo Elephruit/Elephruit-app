@@ -191,6 +191,12 @@ public struct RootView: View {
             // window was last left rather than being overwritten by it.
             restoreNavigation()
 
+            // Everything the sidebar reads is computed on change and never during a render, so the
+            // *first* computation has to come from somewhere — and at launch this is the only
+            // somewhere there is. Without it the Projects tree stayed empty until the user created a
+            // project, at which point the new one and every old one appeared together.
+            services?.refreshDerivedState()
+
             // On launch, when the request arrived before this window existed — which is the case
             // when a Shortcut or a link started the app rather than merely bringing it forward.
             handleCalendarRequest(pendingCalendarRequest)
@@ -329,7 +335,11 @@ public struct RootView: View {
             // split view can miss the width modifier below and let this column consume half the
             // window despite the module's declared maximum.
             ZStack {
-                if navigation.selection.isTaskDestination {
+                if case .project(let id, let viewID) = navigation.selection {
+                    // A project replaces the middle column, on the same terms as Time, the calendar
+                    // and Today: it *is* that column's contents, and it brings its own tab bar.
+                    ProjectWorkspaceView(navigation: navigation, projectID: id, viewID: viewID)
+                } else if navigation.selection.isTaskDestination {
                     // Tasks replace the middle column rather than filtering it. The sections, the
                     // headings, and the inline row are all specific to the scheduling model, and
                     // routing them through the generic item list would mean either a second copy of

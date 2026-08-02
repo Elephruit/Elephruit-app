@@ -40,7 +40,10 @@ struct ModuleSidebar: View {
             case .time:
                 TimeSidebarSection(navigation: navigation)
             case .projects:
-                ProjectsSidebarSection(navigation: navigation)
+                // Unreachable: `AppModule.projects.hasOwnSidebar` is false, so `SidebarView` never
+                // swaps levels for it — the tree lives at the top level instead. The arm stays
+                // because the switch is exhaustive and the case still exists for layout.
+                EmptyView()
             case .areas:
                 AreasSidebarSection(navigation: navigation)
             case .bookmarks, .archive, .trash:
@@ -164,49 +167,7 @@ struct TimeSidebarSection: View {
     }
 }
 
-// MARK: - Projects and Areas
-
-/// Every project, then the ones the user actually made.
-///
-/// The rows come from `TaskSidebarModel`, which already computes the container tree for the Tasks
-/// module. Reading it here rather than fetching again is what keeps "no store access while
-/// rendering" true, and means a project renamed in one module is renamed in both.
-struct ProjectsSidebarSection: View {
-    @Environment(\.services) private var services
-
-    let navigation: NavigationModel
-
-    @ScaledMetric(relativeTo: .body) private var rowHeight = SidebarMetrics.baseRowHeight
-
-    var body: some View {
-        Section {
-            ForEach(SidebarRegistry.sidebarRows(in: .projects)) { destination in
-                SidebarDestinationRow(
-                    destination: destination,
-                    isSelected: navigation.selection == destination.selection,
-                    rowHeight: rowHeight
-                )
-            }
-        }
-
-        if !rows.isEmpty {
-            Section("Yours") {
-                ForEach(rows) { row in
-                    ContainerSidebarRow(
-                        row: row,
-                        isSelected: navigation.selection == .item(id: row.id),
-                        rowHeight: rowHeight
-                    )
-                }
-            }
-        }
-    }
-
-    /// Projects and lists, with their area shown as an inset rather than repeated on every row.
-    private var rows: [TasksSidebarSection.ContainerRow] {
-        (services?.taskSidebar.containers ?? []).filter { $0.kind != .area }
-    }
-}
+// MARK: - Areas
 
 /// Standing responsibilities, and what is inside each of them.
 struct AreasSidebarSection: View {

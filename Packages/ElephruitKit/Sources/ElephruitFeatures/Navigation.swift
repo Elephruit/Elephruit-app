@@ -65,6 +65,21 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
     /// this enum and a scene restored from a newer version still decodes.
     case people(PeopleScope)
 
+    /// A project's workspace, open on one of its views.
+    ///
+    /// Carries the view so that leaving a project on its board and coming back lands on the board,
+    /// and so that a window restored from `@SceneStorage` reopens where it was. `nil` means "the
+    /// first view", which is what a fresh click means and what a link from elsewhere in the app
+    /// means — neither of them knows or should know which view the user was last on.
+    ///
+    /// **Not `.item(id:)`.** A project is not a record you inspect; it is a place you work, with its
+    /// own tab bar and its own selection inside it. Routing it through the generic item detail is
+    /// what made Projects the thinnest module in the app.
+    case project(id: UUID, viewID: UUID?)
+
+    /// Everything across all projects that is waiting to be read.
+    case projectInbox
+
     /// This selection, in its current form.
     ///
     /// The one place a superseded destination is redirected. Applied by ``NavigationModel/select(_:)``
@@ -82,6 +97,24 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
     /// Whether this selection is one an earlier build wrote and this one no longer draws.
     public var isSuperseded: Bool { canonical != self }
 
+    /// The project this selection is inside, if it is one.
+    public var projectID: UUID? {
+        if case .project(let id, _) = self { return id }
+        return nil
+    }
+
+    /// The view within that project, if one was named.
+    public var projectViewID: UUID? {
+        if case .project(_, let viewID) = self { return viewID }
+        return nil
+    }
+
+    /// Whether the middle column is a project workspace rather than a list.
+    public var isProjectWorkspace: Bool {
+        if case .project = self { return true }
+        return false
+    }
+
     /// The query this selection shows.
     ///
     /// Pure, so "what does Today mean?" is answered in one testable place rather than inside a view.
@@ -95,6 +128,13 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
             .tag(slug: slug)
         case .item(let id):
             .children(of: id)
+        case .project(let id, _):
+            // The workspace runs on the arrangement engine over the project's own descendants, not
+            // on a store query. This answers for the places that ask a selection what it contains —
+            // the count in a title, an export — and children is the honest answer to that.
+            .children(of: id)
+        case .projectInbox:
+            ItemQuery()
         case .savedSearch:
             // Saved searches run through the search engine, not a store query.
             ItemQuery()
@@ -141,6 +181,11 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .inbox: .note
         case .kind(let kind): kind
         case .tag, .savedSearch, .item, .archive, .trash: .note
+        // Inside a project, the obvious new thing is work. Which *kind* of work depends on the view
+        // you are on — a bug view makes a bug — and the workspace intercepts the command before this
+        // is reached; this is the fallback for a project opened with no view resolved yet.
+        case .project: .task
+        case .projectInbox: .task
         // A meeting, in the calendar. `⌘N` there means an event rather than a note, and the
         // workspace intercepts it before this is consulted — this is the honest fallback.
         case .calendar: .meeting
@@ -164,6 +209,8 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .time: "Time"
         case .people(let scope): scope.title
         case .taskView(let view): view.title
+        case .project: "Project"
+        case .projectInbox: "Project Inbox"
         case .smartList: "Smart List"
         case .builtInSmartList(let id): BuiltInSmartList.list(id: id)?.title ?? "Smart List"
         }
@@ -177,6 +224,8 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .tag: "number"
         case .savedSearch: "line.3.horizontal.decrease.circle"
         case .item: "square.stack.3d.up"
+        case .project: "square.stack.3d.up"
+        case .projectInbox: "tray.full"
         case .archive: "archivebox"
         case .trash: "trash"
         case .calendar: "calendar.day.timeline.left"
@@ -196,6 +245,8 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .tag(let slug): AccessibilityID.Sidebar.tag(slug: slug)
         case .savedSearch(let id): AccessibilityID.Sidebar.savedSearch(name: id.uuidString)
         case .item(let id): "sidebar.item.\(id.uuidString)"
+        case .project(let id, _): "sidebar.project.\(id.uuidString)"
+        case .projectInbox: "sidebar.projectInbox"
         case .archive: "sidebar.archive"
         case .trash: AccessibilityID.Sidebar.trash
         case .calendar: "sidebar.calendar"
@@ -286,6 +337,15 @@ public final class NavigationModel {
     /// Per window, like everything else here: two windows may be in the same module looking at
     /// different things.
     public private(set) var moduleSelections: [AppModule: SidebarSelection] = [:]
+
+    /// The open project workspace, when there is one.
+    ///
+    /// Held here rather than reached through a `@FocusedValue` because the shell asks *whether an
+    /// inspector exists at all* before anything inside it is drawn. A focused value reaches the
+    /// pane's contents and not that decision — which is how a project's work became uneditable:
+    /// `hidesWhenNothingSelected` asked only about `selectedItemID` and the calendar's event, got no
+    /// for both, and kept the pane permanently shut.
+    public var projectWorkspace: ProjectWorkspaceModel?
 
     /// Everything selected in the list.
     ///
