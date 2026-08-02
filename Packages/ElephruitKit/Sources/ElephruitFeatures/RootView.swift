@@ -449,6 +449,12 @@ public struct RootView: View {
                     max: shellWidths.inspector ?? shellLayout.inspector.width.ideal
                 )
         }
+        // The columns have explicit width policies, so their combined ideal can be narrower than a
+        // window that has just been enlarged. Without an expanding outer frame the entire native
+        // split view keeps that old intrinsic width and SwiftUI centers it, leaving matching blank
+        // gutters at both window edges. Those gutters make the leading one look like a sidebar that
+        // grew during resize even though its divider did not move.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
             guard width > 0 else { return }
             windowWidth = width
