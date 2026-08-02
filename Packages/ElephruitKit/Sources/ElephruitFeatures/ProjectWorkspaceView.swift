@@ -44,7 +44,12 @@ struct ProjectWorkspaceView: View {
         // AppKit did not always give the inset back once the title arrived. That one frame is the
         // sidebar "jump" this window had on every entry into a project.
         .navigationTitle(model?.project?.title ?? "Project")
-        .navigationSubtitle(subtitle)
+        // Keep the two-line toolbar shape on the loading frame too. An empty subtitle makes
+        // AppKit reserve only the compact title height; when the loaded model supplies the project
+        // key a frame later, the title grows but the content safe-area inset can remain compact.
+        // The result is the project's header and tabs laid out underneath its title. A real loading
+        // subtitle makes the toolbar's height stable across the transition.
+        .navigationSubtitle(model == nil ? "Loading…" : subtitle)
         .searchable(
             text: searchBinding,
             placement: .toolbar,
