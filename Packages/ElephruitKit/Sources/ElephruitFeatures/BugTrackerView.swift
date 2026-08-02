@@ -180,7 +180,23 @@ struct BugTrackerRow: View {
                 BugTrackerPill(label: "High", symbol: "exclamationmark", tint: Theme.Colors.warning)
             }
 
-            BugTrackerStatusPill(facts: facts)
+            if let assigneeName {
+                Label(assigneeName, systemImage: "person.crop.circle")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .lineLimit(1)
+                    .frame(maxWidth: 120, alignment: .trailing)
+            }
+
+            if facts.commentCount > 0 {
+                Label("\(facts.commentCount)", systemImage: "bubble.left")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .monospacedDigit()
+                    .accessibilityLabel("\(facts.commentCount) comments")
+            }
+
+            BugTrackerStatusPill(facts: facts, stageName: stageName)
                 .frame(width: 82, alignment: .trailing)
         }
         .padding(.horizontal, Theme.Spacing.medium)
@@ -217,6 +233,15 @@ struct BugTrackerRow: View {
         if isHovering { return Theme.Colors.hoverFill }
         return .clear
     }
+
+    private var assigneeName: String? {
+        model.item(facts.id)?.assignee()?.title
+    }
+
+    private var stageName: String? {
+        guard let id = facts.workflowStageID else { return nil }
+        return model.stages.first { $0.id == id }?.name
+    }
 }
 
 struct BugTrackerPill: View {
@@ -237,10 +262,11 @@ struct BugTrackerPill: View {
 
 struct BugTrackerStatusPill: View {
     let facts: TaskFacts
+    let stageName: String?
 
     private var label: String {
         if facts.status.isResolved { return facts.status.displayName }
-        return facts.stageCategory?.displayName ?? "Open"
+        return stageName ?? facts.stageCategory?.displayName ?? "Open"
     }
 
     private var symbol: String {
