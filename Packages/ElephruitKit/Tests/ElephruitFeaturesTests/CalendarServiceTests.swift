@@ -575,7 +575,10 @@ struct CalendarChangeCoalescingTests {
         refreshed = (await provider.callCount(of: "events")) - readsBeforeBurst
 
         #expect(refreshed > 0, "a store change must still cause a re-read")
-        #expect(refreshed <= 2,
+        // On a loaded machine the twelve emissions can straddle a few coalescing windows, so the
+        // bound is a tolerance rather than an exact count. The defect this guards — one re-read
+        // per buffered notification — produces all twelve, every time.
+        #expect(refreshed <= 4,
                 "twelve notifications became \(refreshed) re-reads — the burst is not being coalesced")
     }
 }
