@@ -194,11 +194,24 @@ public final class TodayModel {
         )
     }
 
-    /// Reads the calendar for the window on screen, then assembles it.
+    /// Assembles the window — immediately when the calendar can already answer for it, and again
+    /// once it has been re-read.
     ///
     /// Asynchronous because the calendar is, and only because the calendar is. The window is loaded
     /// once for the whole span and each day is then built from what is in memory — one round trip
     /// rather than one per day drawn.
+    ///
+    /// ### Why it assembles before the round trip when it can
+    /// Because the calendar and the assembler both outlive this page. On every visit after the
+    /// first, the events for the window and the library pass are already in memory, and making the
+    /// page wait for EventKit to confirm what it already knows was the difference between Today
+    /// opening instantly and Today opening behind a spinner every single time. The early assembly
+    /// is skipped only for a window the calendar has never answered for — where drawing at once
+    /// would tell somebody their day is clear before it has been read, which is the one thing this
+    /// page must never do.
+    ///
+    /// The reload after the round trip is then usually free: ``assemble(force:)`` compares its
+    /// tokens, and a calendar that answered the same thing bumps no revision.
     public func reload() async {
         reloadGeneration &+= 1
         let generation = reloadGeneration
@@ -206,6 +219,10 @@ public final class TodayModel {
         let first = firstVisibleDay
         let count = visibleDayCount
         guard let last = calendar.date(byAdding: .day, value: count - 1, to: first) else { return }
+
+        if services.dailyPlan.canAnswerForCalendar(from: first, through: last) {
+            assemble()
+        }
 
         await services.dailyPlan.loadCalendar(from: first, through: last)
 

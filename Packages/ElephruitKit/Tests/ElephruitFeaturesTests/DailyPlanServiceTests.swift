@@ -636,6 +636,54 @@ struct DailyPlanServiceTests {
         #expect(services.calendar.revision == settled, "assembling asked the calendar something")
     }
 
+    @Test("A window the calendar has answered for can be drawn without asking again")
+    func answeredWindowsAssembleImmediately() async throws {
+        let services = await Self.fixture(events: [
+            Self.event("Standup", id: "standup", from: Self.at(9), minutes: 15)
+        ])
+        let today = Self.clock.startOfToday
+        let last = Self.clock.startOfDay(daysFromToday: 4)
+
+        // Before any load, the honest answer is no: assembling now would say the day is clear
+        // before it has been read.
+        #expect(!services.dailyPlan.canAnswerForCalendar(from: today, through: last))
+
+        // The first visit loads the window. Every later visit finds it already answered — which is
+        // what lets `TodayModel.reload()` assemble before the round trip instead of holding a
+        // spinner through it.
+        await services.dailyPlan.loadCalendar(from: today, through: last)
+        #expect(services.dailyPlan.canAnswerForCalendar(from: today, through: last))
+        #expect(services.dailyPlan.canAnswerForCalendar(from: today, through: today), "a narrower span too")
+
+        // A span the load did not cover stays unanswered.
+        let nextMonth = Self.clock.startOfDay(daysFromToday: 30)
+        #expect(!services.dailyPlan.canAnswerForCalendar(from: today, through: nextMonth))
+
+        // A fresh page over the answered window — the second click on Today — has its days before
+        // any further round trip.
+        let model = TodayModel(services: services)
+        model.assemble()
+        #expect(!model.isLoadingInitially)
+        #expect(model.selectedPlan?.events.map(\.event.title) == ["Standup"])
+    }
+
+    @Test("A disabled calendar is never something to wait for")
+    func disabledCalendarAlwaysAnswers() async throws {
+        let defaults = UserDefaults(suiteName: "today.tests.\(UUID().uuidString)") ?? .standard
+        let services = AppServices.inMemory(
+            dateProvider: Self.clock,
+            populated: false,
+            defaults: defaults
+        )
+        #expect(
+            services.dailyPlan.canAnswerForCalendar(
+                from: Self.clock.startOfToday,
+                through: Self.clock.startOfDay(daysFromToday: 4)
+            ),
+            "with the feature off there is no round trip to wait behind"
+        )
+    }
+
     // MARK: - Days other than today
 
     @Test("A future day carries no follow-up suggestions and no week of birthdays")

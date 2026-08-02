@@ -50,6 +50,22 @@ public final class DailyPlanService {
         await services.calendar.load(range: start..<end)
     }
 
+    /// Whether the calendar can already answer for this span without being asked again.
+    ///
+    /// True when the feature is off — there is nothing to wait for — and when a load covering the
+    /// span has returned. What it decides is whether a page may assemble *now*, from memory, rather
+    /// than holding a spinner through a round trip. The one case that answers false is the honest
+    /// one: a window the calendar has never been asked about, where drawing immediately would tell
+    /// somebody their day is clear before it has been read.
+    public func canAnswerForCalendar(from first: Date, through last: Date) -> Bool {
+        guard services.calendar.isEnabled else { return true }
+        let start = calendar.startOfDay(for: first)
+        guard let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: last)),
+              start < end
+        else { return true }
+        return services.calendar.hasAnswered(range: start..<end)
+    }
+
     // MARK: - Assembling a day
 
     /// Everything one date holds.
