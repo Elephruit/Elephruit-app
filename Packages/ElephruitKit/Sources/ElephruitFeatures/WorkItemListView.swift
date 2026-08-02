@@ -3,20 +3,22 @@ import ElephruitDesign
 import ElephruitModel
 import SwiftUI
 
-/// The grouped list. Draws every arrangement except the board.
-///
-/// One view for list, table, bugs, calendar and timeline groupings rather than five, because they
-/// are the same rows under different groupings — and five copies is how they drift apart.
+/// The grouped list: compact rows inside the same contained sections the bug tracker uses.
 struct WorkItemListView: View {
     @Environment(\.services) private var services
     let model: ProjectWorkspaceModel
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+            LazyVStack(alignment: .leading, spacing: Theme.Spacing.medium) {
                 ForEach(model.groups) { group in
-                    Section {
-                        ForEach(group.items, id: \.id) { facts in
+                    VStack(spacing: 0) {
+                        if !group.title.isEmpty {
+                            WorkItemGroupHeader(group: group)
+                            Divider()
+                        }
+
+                        ForEach(Array(group.items.enumerated()), id: \.element.id) { index, facts in
                             WorkItemRowView(
                                 facts: facts,
                                 groupSeverity: group.severityForRows,
@@ -27,16 +29,27 @@ struct WorkItemListView: View {
                             // preserve the old row subtree, including its old severity tint. Include
                             // the group so a move creates the row that belongs to its new band.
                             .id(WorkItemGroupRowID(groupKey: group.key, itemID: facts.id))
-                        }
-                    } header: {
-                        if !group.title.isEmpty {
-                            WorkItemGroupHeader(group: group)
+
+                            if index < group.items.count - 1 {
+                                Divider()
+                                    .padding(.leading, Theme.Spacing.medium + Theme.Size.rowGlyph)
+                            }
                         }
                     }
+                    .background(
+                        Theme.Colors.contentBackground,
+                        in: RoundedRectangle(cornerRadius: Theme.Radius.large)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.Radius.large)
+                            .stroke(Theme.Colors.separator, lineWidth: 0.5)
+                    )
                 }
             }
-            .padding(.vertical, Theme.Spacing.small)
+            .padding(Theme.Spacing.large)
         }
+        .background(Theme.Colors.subtleFill.opacity(0.45))
+        .accessibilityIdentifier("project.list")
     }
 }
 
@@ -62,22 +75,17 @@ struct WorkItemGroupHeader<Accessory: View>: View {
     let group: WorkItemArrangement.Group
     @ViewBuilder var accessory: Accessory
 
-    @State private var isExpanded = true
-
     var body: some View {
         HStack(spacing: Theme.Spacing.tight) {
-            // The glyph sits in the *same* column the rows use, so the heading and its rows share a
-            // left edge. The chevron hangs outside it, in the gutter overlay below.
             Image(systemName: group.symbolName ?? "circle")
                 .frame(width: Theme.Size.rowGlyph)
                 .foregroundStyle(tint)
 
             Text(group.title)
-                .font(Theme.Text.rowTitle)
-                .foregroundStyle(tint)
+                .font(Theme.Text.rowTitleEmphasised)
 
             Text("\(group.count)")
-                .font(Theme.Text.rowSubtitle)
+                .font(Theme.Text.metadata)
                 .monospacedDigit()
                 .foregroundStyle(Theme.Colors.tertiaryText)
 
@@ -89,20 +97,16 @@ struct WorkItemGroupHeader<Accessory: View>: View {
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, Theme.Spacing.large)
-        .padding(.vertical, Theme.Spacing.tight)
-        .background(.bar)
-        // The chevron in a leading gutter rather than inline. Inline, it pushed the whole heading
-        // right and the heading ended up indented further than the rows it described.
+        .padding(.horizontal, Theme.Spacing.medium)
+        .padding(.vertical, Theme.Spacing.small)
         .overlay(alignment: .leading) {
-            Image(systemName: "chevron.down")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(Theme.Colors.tertiaryText)
-                .padding(.leading, Theme.Spacing.tight)
-                .accessibilityHidden(true)
+            Capsule()
+                .fill(tint)
+                .frame(width: 3)
+                .padding(.vertical, Theme.Spacing.small)
         }
         .overlay(alignment: .trailing) {
-            accessory.padding(.trailing, Theme.Spacing.large)
+            accessory.padding(.trailing, Theme.Spacing.medium)
         }
     }
 
@@ -124,6 +128,8 @@ struct WorkItemRowView: View {
     let groupSeverity: BugSeverity?
     let model: ProjectWorkspaceModel
 
+    @State private var isHovering = false
+
     private var isSelected: Bool { model.selectedItemIDs.contains(facts.id) }
 
     var body: some View {
@@ -142,10 +148,11 @@ struct WorkItemRowView: View {
             if facts.isBlocked { BlockedMarker() }
             if let estimate = facts.estimateMinutes { EstimateLabel(minutes: estimate) }
         }
-        .padding(.horizontal, Theme.Spacing.large)
-        .frame(height: Theme.Size.rowHeight)
-        .background(isSelected ? Theme.Colors.selectionFill : .clear)
+        .padding(.horizontal, Theme.Spacing.medium)
+        .frame(minHeight: 38)
+        .background(rowBackground)
         .contentShape(.rect)
+        .onHover { isHovering = $0 }
         // Both gestures stand down while this row's title is being edited in place — the whole
         // row is hit-testable, so without the gate a double-click meant to select a word in the
         // title threw the sheet over the editor.
@@ -159,5 +166,11 @@ struct WorkItemRowView: View {
         })
         .contextMenu { WorkItemMenu(facts: facts, model: model, services: services) }
         .accessibilityIdentifier("workItem.row.\(facts.id.uuidString)")
+    }
+
+    private var rowBackground: Color {
+        if isSelected { return Theme.Colors.selectionFill }
+        if isHovering { return Theme.Colors.hoverFill }
+        return .clear
     }
 }

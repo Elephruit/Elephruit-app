@@ -30,6 +30,8 @@ struct KanbanColumnView: View {
     let column: WorkItemArrangement.Group
     let model: ProjectWorkspaceModel
 
+    @State private var isDropTargeted = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
             header
@@ -45,10 +47,41 @@ struct KanbanColumnView: View {
 
             Spacer(minLength: 0)
         }
+        .padding(Theme.Spacing.small)
         .frame(width: 280)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.large)
+                .fill(isDropTargeted ? Theme.Colors.selectionFill : Theme.Colors.subtleFill.opacity(0.45))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.large)
+                .strokeBorder(
+                    isDropTargeted ? Theme.Colors.selection : Theme.Colors.separator,
+                    style: StrokeStyle(
+                        lineWidth: isDropTargeted ? 2 : 0.5,
+                        dash: isDropTargeted ? [6, 4] : []
+                    )
+                )
+        }
+        .overlay(alignment: .bottom) {
+            if isDropTargeted {
+                Label("Release to move to \(column.title)", systemImage: "arrow.down.to.line")
+                    .font(Theme.Text.rowSubtitle)
+                    .foregroundStyle(Theme.Colors.onAccent)
+                    .padding(.horizontal, Theme.Spacing.small)
+                    .padding(.vertical, Theme.Spacing.tight)
+                    .background(Theme.Colors.selection, in: Capsule())
+                    .padding(Theme.Spacing.small)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .accessibilityIdentifier("kanban.dropTarget.\(column.key)")
+            }
+        }
         .dropDestination(for: WorkItemTransfer.self) { payload, _ -> Bool in
             return accept(payload)
+        } isTargeted: { targeted in
+            isDropTargeted = targeted
         }
+        .animation(.easeOut(duration: 0.16), value: isDropTargeted)
     }
 
     private var header: some View {

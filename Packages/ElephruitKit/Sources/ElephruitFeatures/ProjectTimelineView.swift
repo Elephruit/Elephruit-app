@@ -16,19 +16,22 @@ struct ProjectTimelineView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+            LazyVStack(alignment: .leading, spacing: Theme.Spacing.medium) {
                 if let span = axisSpan {
                     TimelineAxisHeader(span: span, calendar: calendar)
                         .padding(.leading, Self.titleColumnWidth + Theme.Spacing.medium)
+                        .padding(.horizontal, Theme.Spacing.medium)
                 }
 
                 ForEach(model.groups) { group in
                     groupSection(group)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Theme.Spacing.large)
             .padding(.vertical, Theme.Spacing.medium)
         }
+        .background(Theme.Colors.subtleFill.opacity(0.45))
         .accessibilityIdentifier("project.timeline")
     }
 
@@ -38,29 +41,58 @@ struct ProjectTimelineView: View {
     // MARK: - Groups
 
     private func groupSection(_ group: WorkItemArrangement.Group) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+        VStack(spacing: 0) {
             if !group.title.isEmpty {
                 HStack(spacing: Theme.Spacing.tight) {
                     Image(systemName: group.symbolName ?? "flag")
+                        .frame(width: Theme.Size.rowGlyph)
                         .foregroundStyle(groupTint(group))
                     Text(group.title)
                         .font(Theme.Text.rowTitleEmphasised)
-                        .foregroundStyle(groupTint(group))
                     Text("\(group.count)")
-                        .font(Theme.Text.rowSubtitle)
+                        .font(Theme.Text.metadata)
                         .monospacedDigit()
                         .foregroundStyle(Theme.Colors.tertiaryText)
+
+                    Spacer(minLength: 0)
 
                     if let due = groupDeadline(group) {
                         DueDateLabel(date: due, dateProvider: dateProvider)
                     }
                 }
+                .padding(.horizontal, Theme.Spacing.medium)
+                .padding(.vertical, Theme.Spacing.small)
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(groupTint(group))
+                        .frame(width: 3)
+                        .padding(.vertical, Theme.Spacing.small)
+                }
+
+                Divider()
             }
 
-            ForEach(group.items, id: \.id) { facts in
-                row(facts)
+            ForEach(Array(group.items.enumerated()), id: \.element.id) { index, facts in
+                TimelineWorkItemRow(
+                    facts: facts,
+                    span: axisSpan,
+                    model: model,
+                    dateProvider: dateProvider
+                )
+
+                if index < group.items.count - 1 {
+                    Divider().padding(.leading, Self.titleColumnWidth + Theme.Spacing.medium)
+                }
             }
         }
+        .background(
+            Theme.Colors.contentBackground,
+            in: RoundedRectangle(cornerRadius: Theme.Radius.large)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.large)
+                .stroke(Theme.Colors.separator, lineWidth: 0.5)
+        )
     }
 
     /// A milestone group's own date, when the group is a milestone with one.
@@ -73,48 +105,6 @@ struct ProjectTimelineView: View {
 
     private func groupTint(_ group: WorkItemArrangement.Group) -> Color {
         Theme.Palette.color(named: group.colorName, neutral: Theme.Colors.secondaryText)
-    }
-
-    // MARK: - Rows
-
-    private func row(_ facts: TaskFacts) -> some View {
-        let isSelected = model.selectedItemIDs.contains(facts.id)
-
-        return HStack(spacing: Theme.Spacing.medium) {
-            HStack(spacing: Theme.Spacing.small) {
-                WorkItemKindGlyph(kind: facts.kind, severity: facts.severity)
-                    .frame(width: Theme.Size.rowGlyph)
-
-                Text(facts.title.isEmpty ? "Untitled" : facts.title)
-                    .font(Theme.Text.rowSubtitle)
-                    .lineLimit(1)
-                    .foregroundStyle(
-                        facts.status.isResolved ? Theme.Colors.tertiaryText : Theme.Colors.primaryText
-                    )
-                    .strikethrough(facts.status == .completed)
-
-                Spacer(minLength: 0)
-            }
-            .frame(width: Self.titleColumnWidth, alignment: .leading)
-
-            if let span = axisSpan {
-                TimelineLane(facts: facts, span: span, dateProvider: dateProvider)
-            } else {
-                // A project with no dates anywhere still deserves the grouping; there is just no
-                // axis to draw against, and a fake one would imply dates nobody set.
-                Spacer(minLength: 0)
-            }
-        }
-        .padding(.vertical, 1)
-        .padding(.horizontal, Theme.Spacing.tight)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.small)
-                .fill(isSelected ? Theme.Colors.selectionFill : .clear)
-        )
-        .contentShape(.rect)
-        .onTapGesture { model.select(facts.id) }
-        .simultaneousGesture(TapGesture(count: 2).onEnded { model.present(facts.id) })
-        .contextMenu { WorkItemMenu(facts: facts, model: model, services: services) }
     }
 
     // MARK: - The axis
@@ -140,6 +130,63 @@ struct ProjectTimelineView: View {
 
     private var dateProvider: any DateProvider {
         services?.dateProvider ?? SystemDateProvider()
+    }
+}
+
+/// One selectable timeline row, styled like the bug tracker's dense triage rows.
+struct TimelineWorkItemRow: View {
+    @Environment(\.services) private var services
+    let facts: TaskFacts
+    let span: ClosedRange<Date>?
+    let model: ProjectWorkspaceModel
+    let dateProvider: any DateProvider
+
+    @State private var isHovering = false
+
+    private var isSelected: Bool { model.selectedItemIDs.contains(facts.id) }
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.medium) {
+            HStack(spacing: Theme.Spacing.small) {
+                WorkItemKindGlyph(kind: facts.kind, severity: facts.severity)
+                    .frame(width: Theme.Size.rowGlyph)
+
+                Text(facts.title.isEmpty ? "Untitled" : facts.title)
+                    .font(Theme.Text.rowSubtitle)
+                    .lineLimit(1)
+                    .foregroundStyle(
+                        facts.status.isResolved ? Theme.Colors.tertiaryText : Theme.Colors.primaryText
+                    )
+                    .strikethrough(facts.status == .completed)
+
+                Spacer(minLength: 0)
+            }
+            .frame(width: ProjectTimelineView.titleColumnWidth, alignment: .leading)
+
+            if let span {
+                TimelineLane(facts: facts, span: span, dateProvider: dateProvider)
+            } else {
+                Text("Unscheduled")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.medium)
+        .frame(minHeight: 38)
+        .background(rowBackground)
+        .contentShape(.rect)
+        .onHover { isHovering = $0 }
+        .onTapGesture { model.select(facts.id) }
+        .simultaneousGesture(TapGesture(count: 2).onEnded { model.present(facts.id) })
+        .contextMenu { WorkItemMenu(facts: facts, model: model, services: services) }
+        .accessibilityIdentifier("timeline.row.\(facts.id.uuidString)")
+    }
+
+    private var rowBackground: Color {
+        if isSelected { return Theme.Colors.selectionFill }
+        if isHovering { return Theme.Colors.hoverFill }
+        return .clear
     }
 }
 
@@ -183,6 +230,14 @@ struct TimelineLane: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
+                ForEach(Array(monthStarts.enumerated()), id: \.offset) { _, month in
+                    let x = Self.position(of: month, in: span) * proxy.size.width
+                    Rectangle()
+                        .fill(Theme.Colors.separator.opacity(0.35))
+                        .frame(width: 1)
+                        .offset(x: x)
+                }
+
                 // The faint rule the bars sit on, so a lane with a short bar still reads as a lane.
                 Rectangle()
                     .fill(Theme.Colors.separator.opacity(0.5))
@@ -205,6 +260,12 @@ struct TimelineLane: View {
                         .fill(barColor)
                         .frame(width: 7, height: 7)
                         .offset(x: x - 3.5)
+                } else {
+                    Text("Unscheduled")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.tertiaryText)
+                        .padding(.trailing, Theme.Spacing.tight)
+                        .background(Theme.Colors.contentBackground)
                 }
             }
         }
@@ -224,6 +285,18 @@ struct TimelineLane: View {
 
     private var barStart: Date? { facts.startAt }
     private var barEnd: Date? { facts.deadlineAt }
+
+    private var monthStarts: [Date] {
+        let calendar = dateProvider.calendar
+        var months: [Date] = []
+        var cursor = calendar.dateInterval(of: .month, for: span.lowerBound)?.start ?? span.lowerBound
+        while cursor < span.upperBound, months.count < 36 {
+            months.append(cursor)
+            guard let next = calendar.date(byAdding: .month, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+        return months
+    }
 
     private var barColor: Color {
         if facts.status.isResolved { return Theme.Colors.completed }
