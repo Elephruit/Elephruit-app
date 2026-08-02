@@ -22,6 +22,20 @@ import SwiftUI
 final class TokenisedTextView: NSTextView {
     weak var coordinator: CaptureTitleField.Coordinator?
 
+    /// A represented AppKit view may be created before SwiftUI has attached it to a window. Asking
+    /// for first responder from `makeNSView` therefore races the attachment and silently does
+    /// nothing when `window` is still `nil`. Wait until the view actually has a window, then make
+    /// the title ready for the first character typed into a newly presented composer.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let window else { return }
+
+        DispatchQueue.main.async { [weak self, weak window] in
+            guard let self, self.window === window else { return }
+            window?.makeFirstResponder(self)
+        }
+    }
+
     /// The names the parser may read across a space. Kept in step with the field above.
     var vocabulary: CaptureVocabulary = .empty
 
