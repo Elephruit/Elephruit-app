@@ -123,6 +123,24 @@ struct ProjectBoardTests {
         #expect(task.workflowStageID == doing.id)
     }
 
+    @Test("A board move persists the exact position between two cards")
+    func boardMovePersistsExactPosition() throws {
+        let fixture = try WorkspaceFixture()
+        let project = try fixture.makeProject()
+        let doing = try #require(
+            fixture.workspace.stages(in: project).first { $0.category == .active }
+        )
+
+        let first = try fixture.workItems.createWorkItem(title: "First", in: project, stage: doing)
+        let moving = try fixture.workItems.createWorkItem(title: "Moving", in: project, stage: doing)
+        let last = try fixture.workItems.createWorkItem(title: "Last", in: project, stage: doing)
+
+        try fixture.workspace.move(last, to: doing, after: first, before: moving)
+
+        #expect(first.boardOrder < last.boardOrder)
+        #expect(last.boardOrder < moving.boardOrder)
+    }
+
     @Test("Dragging finished work back out reopens it")
     func leavingTerminalReopens() throws {
         // Or the board sits there disagreeing with itself: a card in "In progress" that the rest of

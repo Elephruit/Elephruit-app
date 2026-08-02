@@ -152,7 +152,7 @@ struct TimelineWorkItemRow: View {
                     .frame(width: Theme.Size.rowGlyph)
 
                 Text(facts.title.isEmpty ? "Untitled" : facts.title)
-                    .font(Theme.Text.rowSubtitle)
+                    .font(Theme.Text.rowTitle)
                     .lineLimit(1)
                     .foregroundStyle(
                         facts.status.isResolved ? Theme.Colors.tertiaryText : Theme.Colors.primaryText
