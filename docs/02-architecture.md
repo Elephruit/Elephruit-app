@@ -150,6 +150,7 @@ wrapped and confined to a named file with a comment stating the reason:
 | Need | Mechanism | Reason SwiftUI is insufficient |
 |---|---|---|
 | Editor with precise selection, ranges, and find | `NSViewRepresentable` over `NSTextView` (TextKit 2) | `TextEditor` exposes no selection or scroll API and no find bar |
+| Stable, still-resizable navigation sidebar | Zero-size `NSViewRepresentable` marker that sets the containing `NSSplitView` pane's holding priority | SwiftUI exposes column width bounds but not which pane retains its width when sibling panes reshape |
 | Quick Capture as a floating utility panel | `NSPanel` via a small window-controller bridge | `Window` scenes cannot be non-activating utility panels |
 | Quick Look previews | `QLPreviewPanel` | No SwiftUI surface |
 | Services / Share menu wiring (later) | `NSApplicationDelegate` adaptor | — |
