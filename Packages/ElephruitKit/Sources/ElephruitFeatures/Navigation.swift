@@ -703,14 +703,20 @@ public final class NavigationModel {
         public var selection: SidebarSelection
         public var moduleSelections: [AppModule: SidebarSelection]
 
+        /// Which of Time's two surfaces was open. Optional so a scene written by an earlier
+        /// build — which never recorded it — still decodes; `nil` restores to the log.
+        public var timeSurface: TimeSurface?
+
         public init(
             module: AppModule?,
             selection: SidebarSelection,
-            moduleSelections: [AppModule: SidebarSelection] = [:]
+            moduleSelections: [AppModule: SidebarSelection] = [:],
+            timeSurface: TimeSurface? = nil
         ) {
             self.module = module
             self.selection = selection
             self.moduleSelections = moduleSelections
+            self.timeSurface = timeSurface
         }
 
         /// Encoded for `@SceneStorage`, which stores strings.
@@ -735,7 +741,8 @@ public final class NavigationModel {
         RestorationState(
             module: activeModule,
             selection: selection,
-            moduleSelections: moduleSelections
+            moduleSelections: moduleSelections,
+            timeSurface: timeSurface
         )
     }
 
@@ -749,6 +756,7 @@ public final class NavigationModel {
         forwardHistory.removeAll()
         withoutRecordingHistory {
             moduleSelections = state.moduleSelections
+            timeSurface = state.timeSurface ?? .log
             select(state.selection)
 
             if let module = state.module, activeModule == nil, !GlobalDestination.contains(state.selection) {

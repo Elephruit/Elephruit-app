@@ -123,12 +123,7 @@ struct TimeReportView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem {
-            Button("Log", systemImage: "list.bullet.rectangle") {
-                navigation.timeSurface = .log
-            }
-            .help("Back to what you did, day by day")
-        }
+        TimeSurfaceSwitcher(navigation: navigation)
 
         ToolbarItem {
             Menu {

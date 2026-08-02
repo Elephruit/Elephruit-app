@@ -11,9 +11,10 @@ import SwiftUI
 /// scopes and groups, Calendar has views and calendar sets. What they share — the list style, the
 /// selection binding, the row geometry — is shared; what differs is written out.
 ///
-/// The modules whose navigation is a single destination say so with one row and stop. A module is
-/// not obliged to have a lot in it; Bookmarks genuinely is one list, and inventing three rows to
-/// make it look busier would be inventing three claims about the data.
+/// Only the modules with real navigation are here at all. The rest — Time with its two surfaces,
+/// Bookmarks, Archive and the Trash with one list each — declare ``AppModule/hasOwnSidebar`` false
+/// and keep the primary sidebar, because a column swap that buys one or two rows costs the user
+/// their whole map to show them almost nothing.
 struct ModuleSidebar: View {
     @Environment(\.services) private var services
 
@@ -37,17 +38,14 @@ struct ModuleSidebar: View {
                 }
             case .notes:
                 NotesSidebarSection(navigation: navigation)
-            case .time:
-                TimeSidebarSection(navigation: navigation)
-            case .projects:
-                // Unreachable: `AppModule.projects.hasOwnSidebar` is false, so `SidebarView` never
-                // swaps levels for it — the tree lives at the top level instead. The arm stays
-                // because the switch is exhaustive and the case still exists for layout.
-                EmptyView()
             case .areas:
                 AreasSidebarSection(navigation: navigation)
-            case .bookmarks, .archive, .trash:
-                SingleDestinationSection(module: module, navigation: navigation)
+            case .projects, .time, .bookmarks, .archive, .trash:
+                // Unreachable: these declare `hasOwnSidebar == false`, so `SidebarView` never
+                // swaps levels for them — the primary list stays, with the module's own row
+                // marked current. The arms stay because the switch is exhaustive and the cases
+                // still exist for layout.
+                EmptyView()
             }
         }
         .listStyle(.sidebar)
@@ -108,65 +106,6 @@ struct NotesSidebarSection: View {
     }
 }
 
-// MARK: - Time
-
-/// Time, and which of its two surfaces is on screen.
-///
-/// ### Why the period and the grouping left this sidebar
-/// They were here, as two sections of checkmark rows, *and* in the log's toolbar as two menus — and
-/// once Reports grew a filter rail in the view, in a third place. Three copies of one control.
-///
-/// The rail won because of what these controls are. A period is not a destination: choosing *Last
-/// Week* does not take you somewhere, it changes what the thing you are already looking at is a
-/// picture of. A sidebar is for *where am I*, and filling it with rows that answer *what am I
-/// filtering by* is what made the previous version of this whole sidebar an index. The rail sits
-/// with the content it governs, shows every option without being opened, and is one component both
-/// surfaces draw — see ``TimeFilterBar``.
-///
-/// What is left is navigation: which surface, and the running timer as a way back to it. That is
-/// genuinely all Time has to navigate.
-///
-/// ### Why there is no "Tracked Time" row
-/// The same reason Calendar has no "Calendar" row: the module header already names the module, and a
-/// front-door destination row underneath it is a second name for where you already are. It is drawn
-/// only by the modules that have no navigation of their own — see ``SingleDestinationSection`` — and
-/// Time has two surfaces and two settings, which is navigation. `.time` remains the module's
-/// ``AppModule/defaultSelection`` and what the numeric shortcut selects; it is simply not restated.
-struct TimeSidebarSection: View {
-    @Environment(\.services) private var services
-
-    let navigation: NavigationModel
-
-    @ScaledMetric(relativeTo: .body) private var rowHeight = SidebarMetrics.baseRowHeight
-
-    var body: some View {
-        if let running = services?.timer.running {
-            Section {
-                RunningTimerRow(running: running, rowHeight: rowHeight) {
-                    navigation.select(.time)
-                    navigation.timeSurface = .log
-                }
-            }
-        }
-
-        Section("View") {
-            ForEach(TimeSurface.allCases, id: \.self) { surface in
-                ModeRow(
-                    title: surface.displayName,
-                    symbolName: surface.symbolName,
-                    hint: surface.hint,
-                    isOn: navigation.timeSurface == surface,
-                    identifier: "sidebar.time.surface.\(surface.rawValue)",
-                    rowHeight: rowHeight
-                ) {
-                    navigation.select(.time)
-                    navigation.timeSurface = surface
-                }
-            }
-        }
-    }
-}
-
 // MARK: - Areas
 
 /// Standing responsibilities, and what is inside each of them.
@@ -203,78 +142,6 @@ struct AreasSidebarSection: View {
 
     private var rows: [TasksSidebarSection.ContainerRow] {
         services?.taskSidebar.containers ?? []
-    }
-}
-
-// MARK: - One-destination modules
-
-/// Bookmarks, Archive and Trash, each of which genuinely is one list.
-///
-/// ### The rule about front-door rows
-/// A module draws its own destination row **only when it has no other navigation**. Bookmarks really
-/// is one list, and a sidebar with nothing in it would be worse than one row; Calendar and Time have
-/// views, calendars, sets, periods and groupings, and a row naming the module on top of a header
-/// naming the module is the duplication this rule exists to prevent. Modules whose front door has a
-/// name of its own — *All Notes*, *All Projects* — keep it, because "All Notes" and "Notes" are not
-/// the same claim: one is a destination among four, the other is the module.
-///
-/// The Trash carries the one action that belongs beside it rather than in a menu three levels away,
-/// and it is the one action in this app that cannot be undone — so it asks first, and says why.
-struct SingleDestinationSection: View {
-    @Environment(\.services) private var services
-
-    let module: AppModule
-    let navigation: NavigationModel
-
-    @ScaledMetric(relativeTo: .body) private var rowHeight = SidebarMetrics.baseRowHeight
-    @AppStorage("confirmBeforeEmptyingTrash") private var confirmBeforeEmptyingTrash = true
-    @State private var isConfirmingEmpty = false
-
-    var body: some View {
-        Section {
-            ForEach(SidebarRegistry.sidebarRows(in: module)) { destination in
-                SidebarDestinationRow(
-                    destination: destination,
-                    isSelected: navigation.selection == destination.selection,
-                    rowHeight: rowHeight
-                )
-            }
-
-            if module == .trash {
-                Button("Empty Trash…", systemImage: "xmark.bin") {
-                    if confirmBeforeEmptyingTrash {
-                        isConfirmingEmpty = true
-                    } else {
-                        emptyTrash()
-                    }
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Theme.Colors.secondaryText)
-                .frame(minHeight: rowHeight)
-                .hoverHighlight(
-                    cornerRadius: SidebarMetrics.selectionRadius,
-                    extending: SidebarMetrics.selectionInset
-                )
-                .help("Removes everything in the Trash. This cannot be undone.")
-                .accessibilityIdentifier("sidebar.trash.empty")
-                .confirmationDialog(
-                    "Empty the Trash?",
-                    isPresented: $isConfirmingEmpty
-                ) {
-                    Button("Empty Trash", role: .destructive) { emptyTrash() }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("Everything in the Trash is removed permanently. This cannot be undone.")
-                }
-            }
-        }
-    }
-
-    private func emptyTrash() {
-        guard let services else { return }
-        services.perform { try services.items.emptyTrash() }
-        navigation.selectItem(nil)
-        Task { await services.warmSearchIndex() }
     }
 }
 
@@ -381,53 +248,5 @@ struct ModeRow: View {
         .accessibilityLabel(title)
         .accessibilityHint(hint)
         .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
-    }
-}
-
-
-/// The running timer, in the sidebar, wherever you are in the app.
-///
-/// ### Why the sidebar and not only the tracker
-/// Because the tracker is on one screen and a timer runs while you are on the others. Elephruit
-/// already puts the elapsed time in the menu bar, which covers being in a different *app*; this
-/// covers being in a different part of this one. the design spec keeps a live clock in its own sidebar for
-/// the same reason, and it is the difference between a timer you trust is going and one you keep
-/// navigating back to check.
-///
-/// Clicking it goes to the log rather than stopping anything. A stop control here would be a
-/// destructive action one pixel from a navigation row.
-struct RunningTimerRow: View {
-    let running: RunningTimer
-    let rowHeight: CGFloat
-    let onOpen: () -> Void
-
-    var body: some View {
-        Button(action: onOpen) {
-            HStack(spacing: SidebarMetrics.iconGap) {
-                Image(systemName: "record.circle")
-                    .frame(width: SidebarMetrics.iconColumn)
-                    .foregroundStyle(Theme.Colors.destructive)
-                    .symbolEffect(.pulse, options: .repeating)
-
-                Text(running.displayTitle)
-                    .lineLimit(1)
-
-                Spacer(minLength: Theme.Spacing.tight)
-
-                TimelineView(.periodic(from: running.startedAt, by: 1)) { context in
-                    Text(TimeFormatting.stopwatch(running.elapsed(at: context.date)))
-                        .font(Theme.Text.metadata)
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-                        .foregroundStyle(Theme.Colors.destructive)
-                }
-            }
-            .frame(minHeight: rowHeight)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .help("Timing “\(running.displayTitle)” since \(running.startedAt.formatted(date: .omitted, time: .shortened))")
-        .accessibilityLabel("Timer running: \(running.displayTitle)")
-        .accessibilityIdentifier("sidebar.time.running")
     }
 }

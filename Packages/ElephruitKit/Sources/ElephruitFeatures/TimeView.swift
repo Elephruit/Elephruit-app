@@ -374,6 +374,8 @@ public struct TimeView: View {
     /// how to add time by hand, and the way across to Reports.
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        TimeSurfaceSwitcher(navigation: navigation)
+
         ToolbarItem {
             // A menu rather than a bare `Toggle`, which rendered as an unlabelled filled circle —
             // a control whose only clue to what it does is whether it looks pressed.
@@ -390,13 +392,6 @@ public struct TimeView: View {
             Button("Add Time", systemImage: "plus") { isAddingManually = true }
                 .help("Record time you have already spent")
                 .accessibilityIdentifier(AccessibilityID.Time.addEntryButton)
-        }
-
-        ToolbarItem {
-            Button("Reports", systemImage: "chart.bar.xaxis") {
-                navigation.timeSurface = .report
-            }
-            .help("Totals over any period, ready to export")
         }
     }
 
