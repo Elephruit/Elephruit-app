@@ -73,7 +73,9 @@ public enum BugSeverity: String, Codable, Sendable, Hashable, CaseIterable {
         switch self {
         case .critical: "red"
         case .major: "orange"
-        case .minor: "yellow"
+        // Blue stays legible in both appearances and reads as informational rather than as the
+        // low-contrast warning yellow that previously disappeared against light list backgrounds.
+        case .minor: "blue"
         case .cosmetic: nil
         }
     }

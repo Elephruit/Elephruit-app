@@ -139,10 +139,9 @@ struct ProjectWorkspaceView: View {
                 ProjectTimelineView(model: model)
             case .overview:
                 ProjectOverviewView(model: model)
-            case .list, .bugs:
-                // One view for both, deliberately: they are the same rows under different
-                // groupings — a bug view is the list with severity leading — and two copies is
-                // how they would drift apart.
+            case .bugs:
+                BugTrackerView(model: model)
+            case .list:
                 WorkItemListView(model: model)
             }
         }

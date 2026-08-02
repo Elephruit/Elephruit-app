@@ -22,6 +22,15 @@ private func makeServices() -> AppServices {
 @MainActor
 @Suite("Work item editing")
 struct WorkItemEditingTests {
+    @Test("Moving an item to another group gives its row a new identity")
+    func rowIdentityIncludesGroup() {
+        let itemID = UUID()
+        let minor = WorkItemGroupRowID(groupKey: "severity.minor", itemID: itemID)
+        let cosmetic = WorkItemGroupRowID(groupKey: "severity.cosmetic", itemID: itemID)
+
+        #expect(minor != cosmetic)
+    }
+
     // MARK: - The report
 
     @Test("Opening the editor never creates the record; the first write does")

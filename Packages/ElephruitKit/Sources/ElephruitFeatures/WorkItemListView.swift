@@ -22,6 +22,11 @@ struct WorkItemListView: View {
                                 groupSeverity: group.severityForRows,
                                 model: model
                             )
+                            // An item changing severity moves between two nested `ForEach` trees.
+                            // Its item ID alone is not enough identity for that move: SwiftUI can
+                            // preserve the old row subtree, including its old severity tint. Include
+                            // the group so a move creates the row that belongs to its new band.
+                            .id(WorkItemGroupRowID(groupKey: group.key, itemID: facts.id))
                         }
                     } header: {
                         if !group.title.isEmpty {
@@ -33,6 +38,11 @@ struct WorkItemListView: View {
             .padding(.vertical, Theme.Spacing.small)
         }
     }
+}
+
+struct WorkItemGroupRowID: Hashable {
+    let groupKey: String
+    let itemID: UUID
 }
 
 extension WorkItemArrangement.Group {
