@@ -493,6 +493,7 @@ public struct RootView: View {
             // was left rather than a competitor to it. See ``DesignReviewLaunch``.
             DesignReviewLaunch.applyStart(to: navigation)
             DesignReviewLaunch.applySelection(to: navigation, using: services)
+            DesignReviewLaunch.applyProjectSelection(to: navigation, using: services)
         }
 
         guard !storedNavigationState.isEmpty,
