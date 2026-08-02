@@ -40,6 +40,12 @@ public final class ProjectWorkspaceModel {
     /// One identifier serving both means every click throws a sheet over the board.
     public var presentedItemID: UUID?
 
+    /// The bug report opened inside the Bugs queue rather than in the general-purpose sheet.
+    ///
+    /// This lives beside presentation state so every opening route — row, keyboard, quick add, or
+    /// health concern — reaches the same inline surface when the Bugs view is active.
+    public var expandedBugID: UUID?
+
     /// Whether a text field in the workspace currently has focus.
     ///
     /// **The keyboard shortcuts are gated on this**, and that gate is not optional. The handlers are
@@ -96,6 +102,7 @@ public final class ProjectWorkspaceModel {
             return
         }
         activeView = match
+        expandedBugID = nil
         // A search belongs to the moment, not to the view. Carrying it across a tab change would
         // make the next view look mysteriously empty.
         searchText = ""
@@ -127,6 +134,9 @@ public final class ProjectWorkspaceModel {
         // sitting over a ghost.
         if let presentedItemID, itemsByID[presentedItemID] == nil {
             self.presentedItemID = nil
+        }
+        if let expandedBugID, itemsByID[expandedBugID] == nil {
+            self.expandedBugID = nil
         }
         selectedItemIDs.formIntersection(itemsByID.keys)
     }
@@ -293,7 +303,13 @@ public final class ProjectWorkspaceModel {
     }
 
     public func present(_ id: UUID) {
-        presentedItemID = id
+        if activeView?.kind == .bugs, itemsByID[id]?.kind == .bug {
+            presentedItemID = nil
+            expandedBugID = id
+        } else {
+            expandedBugID = nil
+            presentedItemID = id
+        }
     }
 
     public func dismissPresentedItem() {

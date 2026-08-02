@@ -196,6 +196,23 @@ struct WorkItemEditingTests {
         #expect(model.presentedItemID == id)
     }
 
+    @Test("Opening a bug from the Bugs view expands it instead of presenting a sheet")
+    func bugsViewUsesInlinePresentation() throws {
+        let services = makeServices()
+        let project = try services.items.create(ItemDraft(kind: .project, title: "P"))
+        let bug = try services.workItems.createWorkItem(title: "It breaks", kind: .bug, in: project)
+
+        let model = ProjectWorkspaceModel(services: services)
+        model.load(projectID: project.id, viewID: nil)
+        let bugsView = try #require(model.views.first { $0.kind == .bugs })
+        model.selectView(bugsView.id)
+
+        model.present(bug.id)
+
+        #expect(model.expandedBugID == bug.id)
+        #expect(model.presentedItemID == nil)
+    }
+
     @Test("The verification concern opens the completed bug that can clear it")
     func verificationConcernOpensItsFix() throws {
         let services = makeServices()

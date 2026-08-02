@@ -18,7 +18,14 @@ struct BugTrackerView: View {
                 BugTrackerSummaryBar(facts: bugs)
 
                 ForEach(model.groups) { group in
-                    BugTrackerSeveritySection(group: group, model: model)
+                    BugTrackerSeveritySection(
+                        group: group,
+                        model: model,
+                        expandedBugID: Binding(
+                            get: { model.expandedBugID },
+                            set: { model.expandedBugID = $0 }
+                        )
+                    )
                 }
             }
             .padding(Theme.Spacing.large)
@@ -73,8 +80,10 @@ struct BugTrackerSummaryBar: View {
 }
 
 struct BugTrackerSeveritySection: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let group: WorkItemArrangement.Group
     let model: ProjectWorkspaceModel
+    @Binding var expandedBugID: UUID?
 
     private var severity: BugSeverity? { group.severityForRows }
     private var tint: Color {
@@ -88,8 +97,30 @@ struct BugTrackerSeveritySection: View {
             Divider()
 
             ForEach(Array(group.items.enumerated()), id: \.element.id) { index, facts in
-                BugTrackerRow(facts: facts, severity: severity, model: model)
-                    .id(WorkItemGroupRowID(groupKey: group.key, itemID: facts.id))
+                VStack(spacing: 0) {
+                    BugTrackerRow(
+                        facts: facts,
+                        severity: severity,
+                        model: model,
+                        isExpanded: expandedBugID == facts.id,
+                        toggleExpanded: { toggle(facts.id) }
+                    )
+
+                    if expandedBugID == facts.id, let item = model.item(facts.id) {
+                        BugInlineDetailView(item: item, model: model) {
+                            withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) {
+                                expandedBugID = nil
+                            }
+                        }
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .top)),
+                                removal: .opacity.combined(with: .scale(scale: 0.985, anchor: .top))
+                            )
+                        )
+                    }
+                }
+                .id(WorkItemGroupRowID(groupKey: group.key, itemID: facts.id))
 
                 if index < group.items.count - 1 {
                     Divider().padding(.leading, 118)
@@ -101,6 +132,14 @@ struct BugTrackerSeveritySection: View {
             RoundedRectangle(cornerRadius: Theme.Radius.large)
                 .stroke(Theme.Colors.separator, lineWidth: 0.5)
         )
+    }
+
+    private func toggle(_ id: UUID) {
+        guard model.rowGesturesAreActive(for: id) else { return }
+        model.select(id)
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.34, extraBounce: 0.04)) {
+            expandedBugID = expandedBugID == id ? nil : id
+        }
     }
 
     private var header: some View {
@@ -144,6 +183,8 @@ struct BugTrackerRow: View {
     let facts: TaskFacts
     let severity: BugSeverity?
     let model: ProjectWorkspaceModel
+    let isExpanded: Bool
+    let toggleExpanded: () -> Void
 
     @State private var isHovering = false
 
@@ -198,6 +239,22 @@ struct BugTrackerRow: View {
 
             BugTrackerStatusPill(facts: facts, stageName: stageName)
                 .frame(width: 82, alignment: .trailing)
+
+            Button(action: toggleExpanded) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(isExpanded ? Theme.Colors.selection : Theme.Colors.secondaryText)
+                    .frame(width: 22, height: 22)
+                    .background(
+                        isExpanded ? Theme.Colors.selectionFill : Theme.Colors.subtleFill,
+                        in: Circle()
+                    )
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+            }
+            .buttonStyle(.plain)
+            .help(isExpanded ? "Collapse bug details" : "Expand bug details")
+            .accessibilityLabel(isExpanded ? "Collapse bug details" : "Expand bug details")
+            .accessibilityIdentifier("bug.row.expand.\(facts.id.uuidString)")
         }
         .padding(.horizontal, Theme.Spacing.medium)
         .frame(minHeight: 38)
@@ -210,7 +267,7 @@ struct BugTrackerRow: View {
         }
         .simultaneousGesture(TapGesture(count: 2).onEnded {
             guard model.rowGesturesAreActive(for: facts.id) else { return }
-            model.present(facts.id)
+            toggleExpanded()
         })
         .contextMenu { WorkItemMenu(facts: facts, model: model, services: services) }
         .accessibilityIdentifier("bug.row.\(facts.id.uuidString)")
