@@ -38,33 +38,16 @@ public struct RootView: View {
     /// in this window is where the next window and the next launch find it. See ``ModuleLayoutStore``.
     @State private var moduleLayout = ModuleLayoutStore()
 
+    /// The sidebar changes width through one path only: the user dragging its handle.
+    ///
+    /// `NavigationSplitView` is given this as an exact width, so destinations, empty states, module
+    /// policies and sibling columns cannot negotiate it. Scene storage preserves the user's choice
+    /// for this window without measuring the rendered sidebar and feeding layout back into itself.
+    @SceneStorage("layout.sidebar.width") private var storedSidebarWidth = Double(SidebarMetrics.defaultWidth)
+    @State private var sidebarDragStart: CGFloat?
+
     /// The window's own width, so a restored column width can be clamped to what there is.
     @State private var windowWidth: CGFloat = 0
-
-    /// The sidebar's width as it actually is, not as its declared range imagines it.
-    ///
-    /// The shell's arithmetic used to budget the sidebar at its *minimum*, which handed the other
-    /// columns more of the window than the window had spare whenever the sidebar sat wider than
-    /// that. Pinning those columns then took the difference out of the only flexible column left —
-    /// the sidebar — and AppKit held it wherever it landed. Every module change squeezed it by a
-    /// different amount, which the user saw as the sidebar's text sliding sideways as they moved
-    /// between Today and Inbox.
-    @State private var sidebarWidth: CGFloat = 0
-
-    /// Widths held fixed for one turn of the run loop while a module change lands.
-    ///
-    /// AppKit's split view keeps its divider position across everything: changing the constraints
-    /// alone moves a column only when its *current* width breaks them, so a People pane at 520 would
-    /// happily sit at 520 in Notes, which allows up to 960. Pinning min, ideal and max to the value
-    /// this module wants forces the move; relaxing them a moment later gives the divider back.
-    @State private var pinnedWidths: [ModuleShellLayout.Column: CGFloat] = [:]
-
-    /// Watches the columns and records only the widths the user chose.
-    ///
-    /// A reference type rather than a dictionary in `@State`, and that is the point: it is written
-    /// to on every frame of every animation the shell runs, and writing to `@State` would invalidate
-    /// this view each time. See ``PaneWidthRecorder``.
-    @State private var widthRecorder = PaneWidthRecorder()
 
     @State private var isExportPresented = false
     @State private var isImportPresented = false
@@ -284,38 +267,33 @@ public struct RootView: View {
     /// The column widths whatever this window is showing has asked for.
     private var shellLayout: ModuleShellLayout { navigation.shellLayout }
 
-    /// What the shell's shape depends on.
+    /// The user's sidebar width, bounded only to keep the column usable.
+    private var sidebarWidth: CGFloat {
+        let stored = storedSidebarWidth.isFinite
+            ? CGFloat(storedSidebarWidth)
+            : SidebarMetrics.defaultWidth
+        return min(max(stored, SidebarMetrics.floorWidth), SidebarMetrics.maximumWidth)
+    }
+
+    /// A deliberate replacement for the split view's automatic divider negotiation.
     ///
-    /// The module, and — because Today is a canvas where the rest of primary navigation is a list —
-    /// whether Today is what is on screen. Watching the module alone meant moving between Inbox and
-    /// Today changed every column without the shell being told, so the width recorder read the snap
-    /// as a drag and stored the day's full width as somebody's preferred Inbox list.
-    private struct ShellShape: Equatable {
-        var module: AppModule?
-        var isToday: Bool
-    }
+    /// The start is captured once so every update uses the gesture's total translation rather than
+    /// accumulating deltas. Nothing outside this gesture writes `storedSidebarWidth`.
+    private var sidebarResizeGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let start = sidebarDragStart ?? sidebarWidth
+                if sidebarDragStart == nil { sidebarDragStart = start }
 
-    private var shellShape: ShellShape {
-        ShellShape(
-            module: navigation.activeModule,
-            isToday: navigation.activeModule == nil && navigation.selection.canonical == .today
-        )
-    }
-
-    /// What primary navigation needs, at the current text size.
-    private var sidebarWidths: SidebarWidths {
-        SidebarMetrics.widths(fittingTitles: SidebarRegistry.nonTruncatingTitles)
-    }
-
-    /// The sidebar range while the shell is moving its other dividers into place.
-    ///
-    /// A `NavigationSplitView` must make every column add up to the window. If the primary and
-    /// detail columns are briefly fixed while the sidebar is still flexible, AppKit balances the
-    /// transition by moving the sidebar divider. It then remembers that accidental position after
-    /// the constraints relax, which makes primary navigation jump on every Today/Inbox switch.
-    private var effectiveSidebarWidths: SidebarWidths {
-        guard let pinned = pinnedWidths[.sidebar] else { return sidebarWidths }
-        return SidebarWidths(minimum: pinned, ideal: pinned, maximum: pinned)
+                let proposed = start + value.translation.width
+                storedSidebarWidth = Double(min(
+                    max(proposed, SidebarMetrics.floorWidth),
+                    SidebarMetrics.maximumWidth
+                ))
+            }
+            .onEnded { _ in
+                sidebarDragStart = nil
+            }
     }
 
     /// Every column's width, decided together.
@@ -334,11 +312,9 @@ public struct RootView: View {
             // a window of no width holds no columns, and the first frame would drop the editor and
             // then put it back.
             windowWidth: windowWidth > 0 ? windowWidth : Theme.Size.assumedWindowWidth,
-            // The measured width, not the minimum — see `sidebarWidth`. The ideal stands in until
-            // the first measurement lands, because that is where a fresh window puts the divider.
-            sidebarWidth: navigation.layoutMode.showsSidebar
-                ? (sidebarWidth > 0 ? sidebarWidth : sidebarWidths.ideal)
-                : nil,
+            // The sidebar is intentionally fixed. Budget the same width the view is given below so
+            // no column can borrow from it while the shell changes shape.
+            sidebarWidth: navigation.layoutMode.showsSidebar ? sidebarWidth : nil,
             showsList: navigation.layoutMode.showsList,
             userWantsInspector: navigation.isInspectorVisible,
             hasSelection: hasInspectableSelection,
@@ -349,18 +325,23 @@ public struct RootView: View {
     private var splitView: some View {
         NavigationSplitView(columnVisibility: columnVisibilityBinding) {
             SidebarView(navigation: navigation)
-                // Derived, not fixed: the minimum is whatever primary navigation needs at the current
-                // text size, so a long or localised title widens the sidebar rather than truncating.
-                // Derived *once* per text size, because this runs on every evaluation of this body
-                // and measuring twenty-five titles is not free — see ``SidebarMetrics/widths(fittingTitles:)``.
-                .navigationSplitViewColumnWidth(
-                    min: effectiveSidebarWidths.minimum,
-                    ideal: effectiveSidebarWidths.ideal,
-                    max: effectiveSidebarWidths.maximum
-                )
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
-                    guard width > 0 else { return }
-                    sidebarWidth = width
+                // Exact at both layout layers. A flexible range lets `NavigationSplitView` use the
+                // sidebar to absorb sibling-column changes even when the window itself never moves.
+                // The frame makes the content non-negotiable; the column modifier gives AppKit the
+                // same answer before it asks the content to lay out.
+                .frame(width: sidebarWidth)
+                .navigationSplitViewColumnWidth(sidebarWidth)
+                // SwiftUI's content width is not the native pane's width. Lock the actual
+                // NSSplitViewItem so sibling columns cannot rebalance the sidebar underneath us.
+                .background(SidebarSplitViewLock(width: sidebarWidth))
+                .overlay(alignment: .trailing) {
+                    Rectangle()
+                        .fill(.clear)
+                        .frame(width: 8)
+                        .contentShape(Rectangle())
+                        .gesture(sidebarResizeGesture)
+                        .help("Drag to resize the sidebar")
+                        .accessibilityLabel("Resize sidebar")
                 }
         } content: {
             // Time replaces the list rather than opening beside it: it *is* the middle column's
@@ -429,11 +410,8 @@ public struct RootView: View {
                 .primary,
                 layout: shellLayout,
                 resolved: shellWidths.primary,
-                pinned: pinnedWidths[.primary]
+                pinned: nil
             )
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
-                sample(width, of: .primary)
-            }
         } detail: {
             // A canvas module — the calendar, the time sheet — has nothing to put in a third column,
             // and the honest expression of that is no column rather than a narrow one. What used to
@@ -453,11 +431,8 @@ public struct RootView: View {
                         .detail,
                         layout: shellLayout,
                         resolved: detailWidth,
-                        pinned: pinnedWidths[.detail]
+                        pinned: nil
                     )
-                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
-                        sample(width, of: .detail)
-                    }
             } else {
                 Color.clear
                     .navigationSplitViewColumnWidth(0)
@@ -476,11 +451,6 @@ public struct RootView: View {
             guard width > 0 else { return }
             windowWidth = width
         }
-        // Applying a module's own widths on arrival is the whole point: AppKit's split view keeps
-        // its divider wherever it was last put, so without this, widening the pane to read somebody's
-        // profile also moved the calendar's divider — and the calendar had no say in it.
-        .task(id: shellShape) { await applyModuleLayout() }
-        .onAppear { wireWidthRecorder() }
         // Anything that happened in Reminders while the app was in the background arrives when it
         // comes back. `reconcile()` is idempotent, so a pass that finds nothing writes nothing.
         .onChange(of: scenePhase) { _, phase in
@@ -496,15 +466,6 @@ public struct RootView: View {
                 return
             }
             reminderRefresh?.start()
-        }
-        // Hiding the sidebar makes every other column wider without the window changing size, which
-        // is precisely what the drag test mistakes for a preference. Saying so in advance is what
-        // stops collapsing the sidebar from rewriting the width of the pane beside it.
-        .onChange(of: navigation.layoutMode) { _, _ in
-            widthRecorder.expectShellMove(of: [.primary, .detail])
-        }
-        .onChange(of: inspectorBinding.wrappedValue) { _, _ in
-            widthRecorder.expectShellMove(of: [.primary, .detail])
         }
         // A pane that closed itself for want of anything to show comes back when there is something.
         // A pane the *user* closed stays closed — see `shouldOpenAfterSelection`.
@@ -711,87 +672,6 @@ public struct RootView: View {
         ])
 
         return commands
-    }
-
-    // MARK: - Module layout
-
-    /// Snaps every column to what the module being entered asks for, then hands the dividers back.
-    ///
-    /// The pause is a single turn of the run loop rather than an animation: the split view needs one
-    /// layout pass to adopt the pinned constraints, and relaxing them in the same pass would leave
-    /// the old width in place. It is short enough to read as the module arriving rather than as the
-    /// window rearranging itself afterwards.
-    private func applyModuleLayout() async {
-        // A drag detector that saw the old module's widths would read the snap as a preference.
-        widthRecorder.expectShellMove(of: [.primary, .detail])
-
-        // Pinned to what the *shell* worked out, not to what the store remembers.
-        //
-        // These two answers are not the same, and the difference is the whole of a bug. The store
-        // knows one column's remembered width, or the module's ideal where there is none. The shell
-        // knows what every column should be *given the window* — which columns fit, what each is
-        // entitled to, and where any spare width goes. Pinning the store's answer therefore snapped
-        // the list back to its ideal and threw the spare room away: a Notes list declared a maximum
-        // of 480, was computed at 480 for a 1710-point window, and was then pinned to 340 by this
-        // line, with the remaining 140 points going to a detail pane whose editor caps its own
-        // measure at 720 and could not use them.
-        //
-        // `shellWidths` already reads the store — it passes it into `widths(…)` as `stored:` — so
-        // nothing is forgotten by going through it. What is gained is that there is one calculation
-        // rather than two that agree until they do not.
-        let widths = shellWidths
-        var pinned: [ModuleShellLayout.Column: CGFloat] = [
-            // Hold the divider exactly where the user sees it while Today adds or removes the detail
-            // column. Otherwise the sidebar is the only flexible column in this layout pass and
-            // absorbs the difference between the two shell shapes.
-            .sidebar: sidebarWidth > 0 ? sidebarWidth : sidebarWidths.ideal,
-            .primary: widths.primary,
-        ]
-        if let detail = widths.detail { pinned[.detail] = detail }
-        pinnedWidths = pinned
-
-        try? await Task.sleep(for: .milliseconds(50))
-        guard !Task.isCancelled else { return }
-        pinnedWidths = [:]
-    }
-
-    /// Hands a column's current width to the recorder, which decides later whether it was a choice.
-    ///
-    /// Nothing is stored here and nothing is invalidated: the recorder is a reference type precisely
-    /// so that a stream of widths arriving one per frame does not redraw the window that produced
-    /// them. Samples taken while the shell has the columns pinned are dropped outright — those
-    /// widths are the shell's, and it already knows what it asked for.
-    private func sample(_ width: CGFloat, of column: ModuleShellLayout.Column) {
-        guard pinnedWidths.isEmpty else { return }
-
-        // AppKit's split view restores its remembered divider *asynchronously* — the
-        // "NSSplitView Subview Frames" autosave arrives a beat after the window is up — and that
-        // late restoration does not honour `navigationSplitViewColumnWidth`. When it lands inside
-        // the 50 ms pin that `applyModuleLayout` holds, the pin wins; when it lands after, a list
-        // with a declared maximum of 340 opens at a thousand points and stays there. The samples
-        // are where the loss shows up, so this is where it is corrected: a settled width past the
-        // module's own ceiling is never something the user chose — the divider cannot be dragged
-        // past a maximum that is being honoured — and is re-pinned rather than recorded.
-        if width > shellLayout.declaredCeiling(of: column) + 1 {
-            Task { await applyModuleLayout() }
-            return
-        }
-
-        widthRecorder.sample(width, of: column, windowWidth: windowWidth)
-    }
-
-    /// Says what to do with a width once the recorder has decided it was one the user chose.
-    ///
-    /// The two models are captured by name rather than through `self`, deliberately: the recorder
-    /// holds this closure for the window's lifetime, and capturing the view would mean the closure
-    /// held the `@State` that holds the recorder.
-    private func wireWidthRecorder() {
-        let layout = moduleLayout
-        let navigation = navigation
-
-        widthRecorder.onDrag = { column, width, windowWidth in
-            layout.setWidth(width, of: column, in: navigation.activeModule, available: windowWidth)
-        }
     }
 
     // MARK: - Bindings
