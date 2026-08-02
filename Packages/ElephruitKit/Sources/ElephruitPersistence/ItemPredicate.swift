@@ -48,7 +48,8 @@ enum ItemPredicateBuilder {
         dueFrom: Date?,
         dueBefore: Date?,
         isPinned: Bool? = nil,
-        parent: ParentFilter? = nil
+        parent: ParentFilter? = nil,
+        tagSlug: String? = nil
     ) -> Predicate<Item> {
         let filterByKind = !kindRaws.isEmpty
         let filterByStatus = !statusRaws.isEmpty
@@ -81,6 +82,14 @@ enum ItemPredicateBuilder {
             default:
                 break  // Archived and Trash are small; the post-filter answers there.
             }
+        }
+
+        // One tag, on the same terms. A tag page post-filtered its slugs, which fetched every
+        // active content item to keep the tagged few. The store narrows by *one* slug — for a
+        // multi-tag query, any one of them — and the post-filter still requires them all, so the
+        // clause only ever shrinks what is materialised.
+        if scope == .active, let tagSlug {
+            return activeTagged(filterByKind, kindRaws, filterByStatus, statusRaws, tagSlug)
         }
 
         // The pinned clause rides along on the same terms as the due bound, and for the same
@@ -186,6 +195,23 @@ enum ItemPredicateBuilder {
                 && item.archivedAt == nil
                 && item.dueSortKey >= dueFrom
                 && item.dueSortKey < dueBefore
+                && (!filterByKind || kindRaws.contains(item.kindRaw))
+                && (!filterByStatus || statusRaws.contains(item.statusRaw))
+        }
+    }
+
+    /// Active, restricted to items carrying one tag. Five clauses and a subquery.
+    private static func activeTagged(
+        _ filterByKind: Bool,
+        _ kindRaws: [String],
+        _ filterByStatus: Bool,
+        _ statusRaws: [String],
+        _ tagSlug: String
+    ) -> Predicate<Item> {
+        #Predicate<Item> { item in
+            item.deletedAt == nil
+                && item.archivedAt == nil
+                && item.tags.contains { $0.slug == tagSlug }
                 && (!filterByKind || kindRaws.contains(item.kindRaw))
                 && (!filterByStatus || statusRaws.contains(item.statusRaw))
         }

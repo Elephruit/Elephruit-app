@@ -260,7 +260,21 @@ extension ItemQuery {
     /// optionals and SwiftData translates neither `??` nor `flatMap` to SQL, so avoiding
     /// them is what keeps this both translatable and free of the guarded-unwrap idiom.
     public func predicate() -> Predicate<Item> {
-        ItemPredicateBuilder.make(
+        // The Inbox's store-side shape: a strict superset of `isUnprocessedCapture`, so the
+        // post-filter — which still runs — keeps exactly what it always kept, over a fetch that no
+        // longer materialises every active item to find the handful that are unprocessed. Only when
+        // nothing store-side-only would be dropped by taking this predicate instead: kinds,
+        // statuses, and the due bound all live in the store predicate alone, so any of them present
+        // means the general builder must answer.
+        if unprocessedCapturesOnly, scope == .active,
+           kinds.isEmpty, statuses.isEmpty, dayKey == nil, dueFrom == nil, dueBefore == nil {
+            return CountPredicates.inboxShaped(
+                ineligibleKindRaws: ItemKind.allCases.filter { !$0.appearsInInbox }.map(\.rawValue),
+                filedRaw: LinkKind.filedUnder.rawValue
+            )
+        }
+
+        return ItemPredicateBuilder.make(
             scope: scope,
             kindRaws: effectiveKindRaws,
             statusRaws: statuses.map { $0.rawValue },
@@ -276,7 +290,12 @@ extension ItemQuery {
             // post-filtering them meant materialising the library to keep a dozen rows. Pushed in
             // the two scopes hot paths use; the post-filter still re-applies either clause, so the
             // scopes and combinations the store does not carry answer exactly as before.
-            parent: storeParentFilter()
+            parent: storeParentFilter(),
+            // A tag page narrows by one of its slugs; the post-filter still requires all of them.
+            // Sorted first, so the same query always produces the same SQL.
+            tagSlug: scope == .active && dueFrom == nil && dueBefore == nil
+                ? tagSlugs.sorted().first
+                : nil
         )
     }
 

@@ -83,6 +83,54 @@ struct ChildrenQueryBenchmarks {
         }
     }
 
+    @Test("A tag page and the Inbox cost their rows, not the library")
+    func taggedAndInboxScaling() throws {
+        // 5,000 filed-away notes (tagged, so out of the Inbox), 20 notes on the tag being asked
+        // about, 20 loose captures. Both questions used to fetch all 5,040 rows.
+        let stack = try PersistenceStack.open(mode: .onDisk(BenchmarkWorkspace.storeLocation(named: "tag-inbox")))
+        let context = ModelContext(stack.container)
+        let clock = SystemDateProvider()
+        let tags = SwiftDataTagRepository(context: context, dateProvider: clock)
+        let items = SwiftDataItemRepository(context: context, dateProvider: clock, tags: tags)
+
+        let seedTag = ElephruitModel.Tag(name: "seed")
+        let specialTag = ElephruitModel.Tag(name: "special")
+        context.insert(seedTag)
+        context.insert(specialTag)
+
+        let now = Date()
+        for index in 0..<5_000 {
+            let note = Item(kind: .note, title: "Filed note \(index)", createdAt: now.addingTimeInterval(-Double(index)))
+            note.tags = [seedTag]
+            note.refreshSearchText()
+            context.insert(note)
+            if index % 1_000 == 999 { try context.save() }
+        }
+        for index in 0..<20 {
+            let special = Item(kind: .note, title: "Special \(index)", createdAt: now)
+            special.tags = [specialTag]
+            special.refreshSearchText()
+            context.insert(special)
+
+            let capture = Item(kind: .note, title: "Capture \(index)", createdAt: now)
+            capture.refreshSearchText()
+            context.insert(capture)
+        }
+        try context.save()
+
+        let tagged = try Benchmark.measure("tagPage@5000", budget: .milliseconds(10), iterations: 10) {
+            let rows = try items.items(matching: .tag(slug: "special"))
+            precondition(rows.count == 20)
+        }
+        #expect(tagged.passes, "\(tagged.report)")
+
+        let inbox = try Benchmark.measure("inbox@5000", budget: .milliseconds(10), iterations: 10) {
+            let rows = try items.items(matching: .inbox())
+            precondition(rows.count == 20)
+        }
+        #expect(inbox.passes, "\(inbox.report)")
+    }
+
     @Test("Top-level rows cost the top level, not the trash and the archive")
     func topLevelScaling() throws {
         // `hasNoParent` matches almost everything in this store, so the point here is not row
