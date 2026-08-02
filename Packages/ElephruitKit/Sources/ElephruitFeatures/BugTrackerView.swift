@@ -114,7 +114,10 @@ struct BugTrackerSeveritySection: View {
                         }
                         .transition(
                             .asymmetric(
-                                insertion: .opacity.combined(with: .move(edge: .top)),
+                                insertion: .modifier(
+                                    active: BugInlineRevealModifier(progress: 0),
+                                    identity: BugInlineRevealModifier(progress: 1)
+                                ),
                                 removal: .opacity.combined(with: .scale(scale: 0.985, anchor: .top))
                             )
                         )
@@ -137,7 +140,7 @@ struct BugTrackerSeveritySection: View {
     private func toggle(_ id: UUID) {
         guard model.rowGesturesAreActive(for: id) else { return }
         model.select(id)
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.34, extraBounce: 0.04)) {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.26)) {
             expandedBugID = expandedBugID == id ? nil : id
         }
     }
@@ -175,6 +178,24 @@ struct BugTrackerSeveritySection: View {
                 .padding(.vertical, Theme.Spacing.small)
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Uncovers the detail panel downward from the row without translating its contents.
+///
+/// A top-edge move transition starts a full panel-height above its destination, which reads as a
+/// card falling in from elsewhere on the page. The mask keeps the panel fixed directly beneath its
+/// row and grows only the visible region; opacity softens the leading edge as it opens.
+private struct BugInlineRevealModifier: ViewModifier {
+    let progress: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(progress)
+            .mask(alignment: .top) {
+                Rectangle()
+                    .scaleEffect(y: progress, anchor: .top)
+            }
     }
 }
 
