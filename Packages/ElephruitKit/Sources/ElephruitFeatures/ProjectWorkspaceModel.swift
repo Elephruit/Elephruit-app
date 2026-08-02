@@ -276,6 +276,22 @@ public final class ProjectWorkspaceModel {
 
     // MARK: Presenting
 
+    /// Opens one completed bug whose fix still needs checking.
+    ///
+    /// The project health summary deliberately stores counts rather than item identifiers. Resolve
+    /// the destination from the same facts the summary counted so its verification concern is a
+    /// route to the work, not a status message with no next step.
+    @discardableResult
+    public func presentFixAwaitingVerification() -> Bool {
+        guard let fix = allFacts.first(where: {
+            $0.kind == .bug && $0.status == .completed && !$0.isVerified
+        }) else { return false }
+
+        select(fix.id)
+        present(fix.id)
+        return true
+    }
+
     public func present(_ id: UUID) {
         presentedItemID = id
     }

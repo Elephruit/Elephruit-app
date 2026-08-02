@@ -251,11 +251,7 @@ struct ProjectWorkspaceHeader: View {
             // zero is one people stop looking at.
             ElephruitDesign.FlowLayout(spacing: Theme.Spacing.small, lineSpacing: Theme.Spacing.tight) {
                 ForEach(model.health.concerns.prefix(3)) { concern in
-                    Label(concern.sentence, systemImage: concern.symbolName)
-                        .font(Theme.Text.rowSubtitle)
-                        .foregroundStyle(
-                            concern.isUrgent ? Theme.Colors.overdue : Theme.Colors.secondaryText
-                        )
+                    ProjectConcernRow(concern: concern, model: model)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
