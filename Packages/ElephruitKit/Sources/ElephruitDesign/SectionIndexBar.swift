@@ -135,7 +135,13 @@ public struct SectionIndexBar: View {
         // Tab reaches the rail, and the system draws its own focus ring around it — which is the
         // right ring, in the user's accent, correct under Increase Contrast, and one this file does
         // not have to keep true.
-        .focusable(isEnabled)
+        //
+        // `.activate` interactions only: a plain `.focusable()` also takes focus from a *click*,
+        // which left the ring wrapped around the rail after every use of it — a control that keeps
+        // announcing itself after it has done its job. Clicking now scrubs and nothing more, which
+        // is how every other mouse-first control on the platform behaves; the ring appears only
+        // for somebody who tabbed here on purpose.
+        .focusable(isEnabled, interactions: .activate)
         .focused($isFocused)
         // Arrow keys step through the sections, which is the same thing the adjustable action does
         // for VoiceOver and the same thing dragging does for a pointer.
