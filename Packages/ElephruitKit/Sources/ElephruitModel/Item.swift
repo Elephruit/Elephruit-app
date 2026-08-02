@@ -649,6 +649,40 @@ extension Item {
         return result
     }
 
+    /// Every work item beneath this one, descending through **any** container.
+    ///
+    /// The difference from ``descendantTasks(limit:)`` is one line and it matters. That one stops at
+    /// a container boundary, which is right for a project: a project's progress is its own work, not
+    /// the work of whatever happens to be filed inside it. An **area** asking "is anything under me
+    /// late?" has to go further, because being the level you check is the entire purpose of an area
+    /// — and an area that reads as calm while a project inside it is three weeks overdue is worse
+    /// than no indicator at all.
+    ///
+    /// Bounded on the same terms, so a containment cycle introduced by a bug cannot hang the
+    /// interface.
+    public func descendantWork(limit: Int = 10_000) -> [Item] {
+        var result: [Item] = []
+        var seen: Set<UUID> = [id]
+        var queue = children
+
+        while let next = queue.popLast(), result.count < limit {
+            guard next.deletedAt == nil, seen.insert(next.id).inserted else { continue }
+            if next.kind.isWorkItem { result.append(next) }
+            if next.kind.supportedFields.contains(.children) {
+                queue.append(contentsOf: next.children)
+            }
+        }
+
+        return result
+    }
+
+    /// The milestones and releases directly inside this project, in order.
+    public func planningMarkers() -> [Item] {
+        children
+            .filter { ItemKind.planningMarkerKinds.contains($0.kind) && $0.deletedAt == nil }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
     /// Completed and total task counts.
     ///
     /// Headings are excluded on both sides — a heading is scaffolding, never work — so a project
