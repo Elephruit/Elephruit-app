@@ -66,7 +66,19 @@ struct TaskRow: View {
     /// readable column down the list instead of interrupting each row.
     ///
     /// The rule for *what* appears is unchanged: only what is currently true. What changed is where.
+    ///
+    /// ### Why the metadata is computed once and passed in
+    /// Because it was computed three times per row — for the emptiness check, for the `ForEach`, and
+    /// again for the accessibility label — and each one calls
+    /// ``ElephruitModel/Item/taskFacts()``, which walks the ancestor chain, traverses `outgoingLinks`
+    /// twice faulting every target, and decodes the checklist JSON twice. Three of those per row,
+    /// times every visible row, times every pass the list makes. A computed property cannot cache;
+    /// a parameter can.
     private var summary: some View {
+        summary(metadata)
+    }
+
+    private func summary(_ pieces: [MetadataPiece]) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
             completionControl
 
@@ -74,8 +86,8 @@ struct TaskRow: View {
 
             Spacer(minLength: Theme.Spacing.small)
 
-            if !metadata.isEmpty {
-                metadataLine
+            if !pieces.isEmpty {
+                metadataLine(pieces)
             }
         }
         .padding(.vertical, Theme.Spacing.tight)
@@ -83,7 +95,7 @@ struct TaskRow: View {
         .hoverHighlight(isEnabled: !isSelected, extending: Theme.Spacing.small)
         .help(tooltip)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityDescription)
+        .accessibilityLabel(accessibilityDescription(pieces))
         .accessibilityAddTraits(task.status == .completed ? [.isSelected] : [])
     }
 
@@ -138,9 +150,9 @@ struct TaskRow: View {
     /// A piece with no text draws as a bare glyph. That is how notes, a repeat and — once it is
     /// ticked off — a checklist appear: the presence of the symbol is the whole message, and
     /// "Notes" written beside a document icon is the icon's own name read back.
-    private var metadataLine: some View {
+    private func metadataLine(_ pieces: [MetadataPiece]) -> some View {
         HStack(spacing: Theme.Spacing.small) {
-            ForEach(metadata) { piece in
+            ForEach(pieces) { piece in
                 if let slugs = piece.tagSlugs {
                     // Tags are the one piece that is not grey text. They carry the user's own
                     // colours and they are the same component Today and the library draw, so a tag
@@ -333,12 +345,12 @@ struct TaskRow: View {
     /// Notes, a repeat and a tag chip say what they are by being seen. VoiceOver cannot see them, so
     /// each one is named — from its identity rather than from its text, because several of them now
     /// have no text at all and reading the empty string aloud is silence where a fact should be.
-    private var accessibilityDescription: String {
+    private func accessibilityDescription(_ pieces: [MetadataPiece]) -> String {
         var parts = [task.displayTitle]
         if task.status == .completed { parts.append("completed") }
         if task.isFlagged { parts.append("flagged") }
 
-        parts.append(contentsOf: metadata.map { piece in
+        parts.append(contentsOf: pieces.map { piece in
             if let slugs = piece.tagSlugs { return "tagged " + slugs.joined(separator: ", ") }
             if !piece.text.isEmpty { return piece.text }
             switch piece.id {

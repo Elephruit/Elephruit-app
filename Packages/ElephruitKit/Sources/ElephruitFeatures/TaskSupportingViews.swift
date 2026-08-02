@@ -23,6 +23,11 @@ struct UpcomingAgendaView: View {
     @Environment(\.services) private var services
     let navigation: NavigationModel
     let groups: [AgendaGroup]
+
+    /// The rows the workspace already loaded, so drawing one is a dictionary lookup rather than a
+    /// fetch. See ``task(for:)``.
+    var tasksByID: [UUID: Item] = [:]
+
     let onChange: () -> Void
 
     @State private var dropTarget: Date?
@@ -213,8 +218,19 @@ struct UpcomingAgendaView: View {
         return moved
     }
 
+    /// ### Why this reads an index rather than fetching
+    /// It fetched. `items.item(id:)` is a store round-trip, and this is called once per entry while
+    /// the agenda's body is being evaluated — so a four-month agenda performed hundreds of fetches
+    /// per layout pass, and did it again on every pass. That is the shape `FetchAudit` exists to
+    /// catch, and the reason the flat list of tasks is loaded alongside the groups in the first
+    /// place: ``TaskWorkspaceView`` already has every one of these rows in memory.
+    ///
+    /// The fallback stays because the two are not guaranteed to agree: the agenda is built over a
+    /// fixed horizon and the flat list over the view's own membership rule, so an entry at the far
+    /// edge of one may be absent from the other. A miss costs what every row used to cost.
     private func task(for id: UUID) -> Item? {
-        try? services?.items.item(id: id)
+        if let known = tasksByID[id] { return known }
+        return try? services?.items.item(id: id)
     }
 
     private func toggle(_ task: Item) {

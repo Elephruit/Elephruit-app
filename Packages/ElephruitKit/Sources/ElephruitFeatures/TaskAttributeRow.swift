@@ -32,43 +32,57 @@ struct TaskAttributeRow: View {
     @State private var isShowingTags = false
     @State private var isShowingPeople = false
 
+    /// ### Why the layout is computed once and handed down
+    /// Because it is expensive and it was being asked for seven times. `TaskAttributes.layout` reads
+    /// ``ElephruitModel/Item/taskFacts()``, which walks the ancestor chain, traverses `outgoingLinks`
+    /// twice faulting every target, touches `children` and `attachments`, and decodes the checklist
+    /// JSON — twice, once for the total and once for the completed count. Referring to `attributes`
+    /// from each of the seven `if` statements below ran all of that seven times per body pass, and a
+    /// card sits inside a `List` that re-evaluates its rows freely.
+    ///
+    /// A computed property cannot cache; a `let` in a function can. So the body is one call and the
+    /// content is a function of the answer.
     var body: some View {
+        content(attributes)
+            .accessibilityIdentifier("task.attributes")
+    }
+
+    private func content(_ layout: TaskAttributes.Layout) -> some View {
         ElephruitDesign.FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
-            ForEach(attributes.chips) { chip in
+            ForEach(layout.chips) { chip in
                 TaskValueChip(chip: chip) { clear(chip.kind) }
             }
 
-            if attributes.buttons.contains(.when) {
+            if layout.buttons.contains(.when) {
                 TaskWhenControl(task: task, onChange: onChange)
             }
 
-            if attributes.buttons.contains(.tags) {
+            if layout.buttons.contains(.tags) {
                 attributeButton("Tags", symbolName: "tag", kind: .tags) { isShowingTags = true }
                     .popover(isPresented: $isShowingTags, arrowEdge: .bottom) {
                         TaskTagPopover(task: task) { isShowingTags = false }
                     }
             }
 
-            if attributes.buttons.contains(.checklist), let onAddChecklist {
+            if layout.buttons.contains(.checklist), let onAddChecklist {
                 attributeButton("Checklist", symbolName: "checklist", kind: .checklist, action: onAddChecklist)
             }
 
-            if attributes.buttons.contains(.deadline) {
+            if layout.buttons.contains(.deadline) {
                 TaskDeadlineControl(task: task, onChange: onChange)
             }
 
-            if attributes.buttons.contains(.people) {
+            if layout.buttons.contains(.people) {
                 attributeButton("People", symbolName: "person.2", kind: .people) { isShowingPeople = true }
                     .popover(isPresented: $isShowingPeople, arrowEdge: .bottom) {
                         TaskPeoplePopover(task: task) { isShowingPeople = false }
                     }
             }
 
-            if attributes.buttons.contains(.priority) {
+            if layout.buttons.contains(.priority) {
                 priorityMenu
             }
         }
-        .accessibilityIdentifier("task.attributes")
     }
 
     /// A menu rather than a popover, because the three values fit in one and a menu is what macOS
@@ -103,14 +117,28 @@ struct TaskAttributeRow: View {
             .accessibilityIdentifier("task.button.\(kind.rawValue)")
     }
 
+    /// The names are looked up only for the chips that will actually exist.
+    ///
+    /// `linkedPeople` and `waitingOnPerson` each walk `outgoingLinks` and fault every target, and
+    /// `taskFacts()` has already walked the same collection to produce the identifiers. Resolving
+    /// both unconditionally meant three traversals for the ordinary task, which has nobody on it and
+    /// is not waiting on anyone — so both are now guarded by the fact that decides whether their chip
+    /// is drawn at all.
     private var attributes: TaskAttributes.Layout {
         let clock = services?.dateProvider ?? SystemDateProvider()
+        let facts = task.taskFacts()
+
+        var names = TaskAttributes.Names()
+        if !facts.relatedPersonIDs.isEmpty {
+            names.people = task.linkedPeople(kinds: [.mentions]).map(\.displayTitle)
+        }
+        if facts.lifecycle == .waiting {
+            names.waitingOn = task.waitingOnPerson()?.displayTitle
+        }
+
         return TaskAttributes.layout(
-            for: task.taskFacts(),
-            names: TaskAttributes.Names(
-                people: task.linkedPeople(kinds: [.mentions]).map(\.displayTitle),
-                waitingOn: task.waitingOnPerson()?.displayTitle
-            ),
+            for: facts,
+            names: names,
             now: clock.now,
             calendar: clock.calendar,
             offersChecklist: onAddChecklist != nil
@@ -138,13 +166,18 @@ struct TaskAttributeRow: View {
         }
     }
 
+    /// ### Why this does not also call `onChange`
+    /// `services.noteChange(to:)` already bumps `AppServices.changeToken`, which is half of the
+    /// workspace's `reloadToken` — so the list reloads on its own, through the same path every other
+    /// change in the app uses. Calling `onChange` here as well ran the whole reload twice per tick of
+    /// a checkbox: two fetches of the destination and two passes of the scheduling rules over
+    /// everything in it, for one edit.
     private func act(_ work: (AppServices) throws -> Void) {
         guard let services else { return }
         services.perform {
             try work(services)
             services.noteChange(to: task)
         }
-        onChange()
     }
 }
 

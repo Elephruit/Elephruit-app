@@ -389,7 +389,17 @@ struct TodayTaskRow: View {
     @State private var isHovering = false
     @FocusState private var isFocused: Bool
 
+    /// ### Why the metadata is computed once and passed in
+    /// It was computed three times per row — the emptiness check, the `ForEach`, and the
+    /// accessibility label — and each pass builds the reason, resolves the container by walking the
+    /// ancestor chain, and faults the waiting-on person out of `outgoingLinks`. Three of those per
+    /// row, times every row in the day, times every pass the view makes. A computed property cannot
+    /// cache; a parameter can.
     var body: some View {
+        row(metadata)
+    }
+
+    private func row(_ pieces: [Piece]) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
             if pinnedAt != nil {
                 timeGutter
@@ -410,7 +420,7 @@ struct TodayTaskRow: View {
             //
             // What stays different is what is genuinely different: a time gutter for work pinned to
             // an hour, the reason the task is here today, and the actions this page offers on hover.
-            if !metadata.isEmpty { metadataLine }
+            if !pieces.isEmpty { metadataLine(pieces) }
 
             // Focus reveals them too. A control that only exists under a pointer is a control
             // somebody navigating by keyboard cannot know about, let alone reach.
@@ -442,7 +452,7 @@ struct TodayTaskRow: View {
         .contextMenu { TodayTaskMenu(task: task, item: item, plan: plan, actions: actions) }
         .help(tooltip)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityLabel)
+        .accessibilityLabel(accessibilityLabel(pieces))
         .accessibilityAddTraits(item.status == .completed ? [.isSelected] : [])
     }
 
@@ -484,9 +494,9 @@ struct TodayTaskRow: View {
         }
     }
 
-    private var metadataLine: some View {
+    private func metadataLine(_ pieces: [Piece]) -> some View {
         HStack(spacing: Theme.Spacing.small) {
-            ForEach(metadata) { piece in
+            ForEach(pieces) { piece in
                 HStack(spacing: Theme.Spacing.hairline) {
                     Image(systemName: piece.symbolName)
                         .font(.system(size: 9))
@@ -614,12 +624,12 @@ struct TodayTaskRow: View {
         return lines.joined(separator: "\n")
     }
 
-    private var accessibilityLabel: String {
+    private func accessibilityLabel(_ pieces: [Piece]) -> String {
         var parts = [item.displayTitle]
         if item.status == .completed { parts.append("completed") }
         if item.isFlagged { parts.append("flagged") }
         if item.priority != .normal { parts.append("\(item.priority.displayName) priority") }
-        parts.append(contentsOf: metadata.map(\.text))
+        parts.append(contentsOf: pieces.map(\.text))
         return parts.joined(separator: ", ")
     }
 }

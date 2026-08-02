@@ -420,13 +420,18 @@ struct TaskCard: View {
         }
     }
 
+    /// ### Why this does not also call `onChange`
+    /// `services.noteChange(to:)` already bumps `AppServices.changeToken`, which is half of the
+    /// workspace's `reloadToken` — so the list reloads on its own, through the same path every other
+    /// change in the app uses. Calling `onChange` here as well ran the whole reload twice per tick of
+    /// a checkbox: two fetches of the destination and two passes of the scheduling rules over
+    /// everything in it, for one edit.
     private func act(_ work: (AppServices) throws -> Void) {
         guard let services else { return }
         services.perform {
             try work(services)
             services.noteChange(to: task)
         }
-        onChange()
     }
 }
 

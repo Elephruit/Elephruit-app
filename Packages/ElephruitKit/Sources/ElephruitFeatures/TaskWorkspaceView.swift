@@ -66,7 +66,7 @@ struct TaskWorkspaceView: View {
     @ViewBuilder
     private var content: some View {
         if navigation.selection == .taskView(.upcoming) {
-            UpcomingAgendaView(navigation: navigation, groups: agenda, onChange: reload)
+            UpcomingAgendaView(navigation: navigation, groups: agenda, tasksByID: tasksByID, onChange: reload)
         } else if sections.isEmpty, flatTasks.isEmpty, draftSectionID == nil {
             emptyState
         } else {
@@ -159,22 +159,21 @@ struct TaskWorkspaceView: View {
                     ? Theme.Colors.selection.opacity(0.16)
                     : Color.clear)
         )
-        // ### The three ways in
-        // A click on a row that is already selected, Return on the selection, or a double-click.
-        // The first is the one people find by accident and then keep using; the second is the one
-        // that makes the list usable without the mouse; the third is what everybody tries first.
+        // ### The two ways in, and why there is no longer a third
+        // Double-click, or Return on the selection. There used to also be "click a row that is
+        // already selected", and it cost more than it was worth.
         //
-        // A single click on an *unselected* row deliberately only selects it. Opening on first click
-        // would mean arrowing through a list left a trail of cards behind it, and the list would
-        // stop being something you can scan.
-        .onTapGesture {
-            if navigation.selectedItemIDs == [task.id] {
-                open(task)
-            } else {
-                navigation.selectedItemIDs = [task.id]
-            }
-        }
-        .onTapGesture(count: 2) { open(task) }
+        // Implementing it meant a single-tap `onTapGesture` beside the double-tap one, and two tap
+        // gestures on one view force SwiftUI to disambiguate: it cannot fire the single until the
+        // double-click interval has elapsed without a second click. So *every* click in the list
+        // paid a quarter-second before anything happened, and the gesture swallowed the click on its
+        // way past the `List`, which is what actually performs selection — so selection went through
+        // SwiftUI state instead of AppKit and lost its immediacy too.
+        //
+        // A lone `simultaneousGesture` does neither. It does not consume the click, so the list
+        // selects on mouse-up exactly as it always did, and with no single-tap gesture to
+        // disambiguate against there is nothing to wait for.
+        .simultaneousGesture(TapGesture(count: 2).onEnded { open(task) })
         .contextMenu { TaskContextMenu(task: task, navigation: navigation, onChange: reload) }
         // Every one of these is on the context menu too, and reachable from the keyboard. A gesture
         // is a shortcut for something that must already be possible without it.
@@ -520,12 +519,13 @@ struct TaskWorkspaceView: View {
     }
 
     /// A heading divides a project or a list, so it is offered inside one and nowhere else.
-    private var allowsHeadings: Bool {
-        guard case .item(let id) = navigation.selection,
-              let container = services.flatMap({ (try? $0.items.item(id: id)) ?? nil })
-        else { return false }
-        return container.kind.canContain(.heading)
-    }
+    ///
+    /// Stored rather than computed, because working it out means fetching the container from the
+    /// store — and this is read by the bottom bar, which sits in the list's `safeAreaInset` and is
+    /// therefore re-evaluated on every pass the list makes. A fetch per render is the shape of
+    /// problem `FetchAudit` exists to catch; it is answered once per load instead, beside the rows
+    /// it describes.
+    @State private var allowsHeadings = false
 
     private func createHeading() {
         guard let services, case .item(let id) = navigation.selection else { return }
@@ -587,6 +587,12 @@ struct TaskWorkspaceView: View {
             }
 
             tasksByID = Dictionary(flatTasks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+
+            if case .item(let id) = navigation.selection, let container = try services.items.item(id: id) {
+                allowsHeadings = container.kind.canContain(.heading)
+            } else {
+                allowsHeadings = false
+            }
         }
     }
 
@@ -619,10 +625,14 @@ struct TaskWorkspaceView: View {
             && !expandedSectionIDs.contains(section.id)
     }
 
+    /// Resolves only the rows that will be drawn.
+    ///
+    /// The prefix is taken over the *identifiers*, before they are looked up. Taking it afterwards
+    /// materialised the whole section — five hundred rows for a large project — and then threw all
+    /// but five away, which made truncation cost more than not truncating.
     private func visibleTasks(in section: TaskSectionGroup) -> [Item] {
-        let all = tasks(in: section)
-        guard truncates(section) else { return all }
-        return Array(all.prefix(Self.sectionRowLimit))
+        guard truncates(section) else { return tasks(in: section) }
+        return section.taskIDs.prefix(Self.sectionRowLimit).compactMap { tasksByID[$0] }
     }
 
     @ViewBuilder
