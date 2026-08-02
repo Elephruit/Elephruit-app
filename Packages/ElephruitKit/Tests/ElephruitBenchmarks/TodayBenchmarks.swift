@@ -140,6 +140,21 @@ struct TodayBenchmarks {
         return services
     }
 
+    /// ### What running this actually found, and what the budgets therefore mean
+    /// On the reference corpus, cold assembly measured ~465 ms and is dominated by one thing: the
+    /// open-items fetch (~185 ms) materialises every open work item so `couldAppearOnSomeDay` can
+    /// keep the few hundred with a day anchor. The budgets are set from those measurements with
+    /// headroom, not invented.
+    ///
+    /// The warm figure is the important ratio: a reassembly with the caches warm — a filter toggle,
+    /// a tick — measured ~20 ms, and it staying an order of magnitude under cold is asserted below.
+    /// It used to be ~110 ms, all of it container lookups run once per task instead of once per
+    /// container.
+    ///
+    /// If cold ever needs to come down further, the escalation path is the one `dueSortKey` already
+    /// took for the same reason: a derived column ("has any day anchor"), refreshed on save beside
+    /// the other projections, so the fetch narrows in SQL — not a bigger predicate, and not caching
+    /// that can go stale.
     @Test("Assembling the Today window over a heavy library")
     func todayWindow() async throws {
         let services = try await Self.makeFixture()
@@ -147,28 +162,28 @@ struct TodayBenchmarks {
         let today = Self.clock.startOfToday
         let last = Self.clock.startOfDay(daysFromToday: 4)
 
-        // The calendar read the page awaits before it can assemble anything, including the index
-        // absorb that rides along with it.
+        // The calendar read the page awaits before it can assemble anything. The index absorb no
+        // longer rides inside it — that write lands behind the answer, off the spinner path.
         let loadCalendar = await Benchmark.measure(
-            "today.loadCalendar", budget: .milliseconds(150), iterations: 3
+            "today.loadCalendar", budget: .milliseconds(50), iterations: 3
         ) {
             await plan.loadCalendar(from: today, through: last)
         }
 
         // The spinner: everything between clicking Today and seeing the day, calendar aside.
-        let cold = Benchmark.measure("today.window.cold", budget: .milliseconds(500), iterations: 3) {
+        let cold = Benchmark.measure("today.window.cold", budget: .milliseconds(600), iterations: 3) {
             plan.invalidateEverything()
             _ = try? plan.window(from: today, count: 5)
         }
 
-        // A reassembly with the caches warm — a filter toggle, a tick. Must be far below cold.
-        let warm = Benchmark.measure("today.window.warm", budget: .milliseconds(100), iterations: 5) {
+        // A reassembly with the caches warm — a filter toggle, a tick.
+        let warm = Benchmark.measure("today.window.warm", budget: .milliseconds(60), iterations: 5) {
             _ = try? plan.window(from: today, count: 5)
         }
 
         // The pieces, so a regression names its culprit.
         let celebrations = Benchmark.measure(
-            "today.celebrations", budget: .milliseconds(200), iterations: 3
+            "today.celebrations", budget: .milliseconds(60), iterations: 3
         ) {
             _ = try? services.persons.allCelebrations()
         }
@@ -188,7 +203,7 @@ struct TodayBenchmarks {
 
         let identities = services.calendar.events.map { $0.identity }
         let meetings = Benchmark.measure(
-            "today.meetingContext", budget: .milliseconds(100), iterations: 3
+            "today.meetingContext", budget: .milliseconds(20), iterations: 3
         ) {
             _ = try? services.eventLinks.meetingContext(for: identities)
         }
@@ -196,5 +211,13 @@ struct TodayBenchmarks {
         for measurement in [loadCalendar, cold, warm, celebrations, contexts, fetch, meetings] {
             #expect(measurement.passes, "\(measurement.report)")
         }
+
+        // The shape, asserted rather than left in a comment: a warm reassembly reads nothing from
+        // the store that matters, so it must stay far below a cold one. Approaching it means a
+        // per-call fetch has crept back into the assembly path.
+        #expect(
+            warm.rawSeconds < cold.rawSeconds / 5,
+            "A warm reassembly is fetching again — \(warm.report) vs \(cold.report)"
+        )
     }
 }
