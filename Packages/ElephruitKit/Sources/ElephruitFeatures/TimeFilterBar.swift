@@ -2,31 +2,53 @@ import ElephruitCore
 import ElephruitDesign
 import SwiftUI
 
-/// Log or Reports, switched in the toolbar both surfaces share.
+/// Log or Reports, switched at the top of the content it switches.
 ///
-/// A segmented control rather than a sidebar level. Time's sidebar held exactly this choice — two
-/// buttons — and swapping the whole first column to offer it cost the user their map and moved the
-/// window's layout every time they entered the module. Two modes of one surface are a toolbar
-/// control everywhere else on the platform, and now here too. It also replaces the pair of one-way
-/// buttons — "Reports" on the log, "Log" on the report — whose labels each named the *other*
-/// surface and so read as actions rather than as a mode with two ends.
-struct TimeSurfaceSwitcher: ToolbarContent {
+/// Tabs in the view rather than a segmented control in the toolbar. The toolbar version was the
+/// second attempt: the first swapped the whole sidebar for two buttons, which cost the user their
+/// map, and the toolbar put the choice next to the window's *title* — a control floating beside
+/// "Time Reports" with nothing visibly connecting it to the page it changes. Two ways of looking at
+/// one body of work is exactly what a project workspace has, and it answers with a tab row at the
+/// top of the content — see `ProjectViewTabBar`. Time now does the same, in the same clothes, so
+/// the choice sits on the thing it chooses and the toolbar is left to genuine commands.
+struct TimeSurfaceTabs: View {
     let navigation: NavigationModel
 
-    var body: some ToolbarContent {
-        ToolbarItem(placement: .navigation) {
-            Picker("View", selection: Binding(
-                get: { navigation.timeSurface },
-                set: { navigation.timeSurface = $0 }
-            )) {
-                ForEach(TimeSurface.allCases, id: \.self) { surface in
-                    Text(surface.displayName).tag(surface)
-                }
+    var body: some View {
+        HStack(spacing: Theme.Spacing.tight) {
+            ForEach(TimeSurface.allCases, id: \.self) { surface in
+                tab(surface)
             }
-            .pickerStyle(.segmented)
-            .help("Log is what you did, day by day. Reports are totals over any period.")
-            .accessibilityIdentifier("time.surfaceSwitcher")
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, Theme.Spacing.large)
+        .padding(.top, Theme.Spacing.small)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("time.surfaceSwitcher")
+    }
+
+    private func tab(_ surface: TimeSurface) -> some View {
+        let isActive = navigation.timeSurface == surface
+        return Button {
+            navigation.timeSurface = surface
+        } label: {
+            HStack(spacing: Theme.Spacing.tight) {
+                Image(systemName: surface.symbolName)
+                    .foregroundStyle(isActive ? Theme.Colors.selection : Theme.Colors.secondaryText)
+                Text(surface.displayName)
+            }
+            .font(Theme.Text.rowTitle)
+            .padding(.horizontal, Theme.Spacing.small)
+            .padding(.vertical, Theme.Spacing.tight)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                    .fill(isActive ? Theme.Colors.selection.opacity(0.14) : .clear)
+            )
+        }
+        .buttonStyle(.plain)
+        .help(surface.hint)
+        .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : .isButton)
+        .accessibilityIdentifier("time.surface.\(surface.rawValue)")
     }
 }
 

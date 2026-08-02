@@ -82,6 +82,11 @@ public struct TimeView: View {
             // it to the whole page rather than to the parts means the parts cannot disagree, and
             // the list's separators stop where the content stops.
             VStack(spacing: 0) {
+                // Above the tracker, because it is not *of* this surface at all: it is the way
+                // between the two surfaces, and it sits at the same point on both so switching
+                // changes the page under it rather than moving it.
+                TimeSurfaceTabs(navigation: navigation)
+
                 VStack(spacing: Theme.Spacing.small) {
                     TimeTrackerCard(
                         onChange: { bump() },
@@ -369,13 +374,12 @@ public struct TimeView: View {
     /// one control, two of which hid their options behind a click, on the surface where flipping
     /// between periods is most of the activity.
     ///
-    /// They live in ``TimeFilterBar`` now, in the view, which both Time surfaces share. What stays
-    /// here is what is genuinely about the *log* rather than about the period: how it is displayed,
-    /// how to add time by hand, and the way across to Reports.
+    /// They live in ``TimeFilterBar`` now, in the view, which both Time surfaces share. The way
+    /// across to Reports has moved too — see ``TimeSurfaceTabs``. What stays here is what is
+    /// genuinely about the *log* rather than about the period: how it is displayed, and how to add
+    /// time by hand.
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        TimeSurfaceSwitcher(navigation: navigation)
-
         ToolbarItem {
             // A menu rather than a bare `Toggle`, which rendered as an unlabelled filled circle —
             // a control whose only clue to what it does is whether it looks pressed.
