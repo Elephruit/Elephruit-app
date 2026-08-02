@@ -59,15 +59,9 @@ public final class BugService {
             title: title,
             kind: .bug,
             in: project,
-            severity: severity
+            severity: severity,
+            bugFacts: facts
         )
-        if let facts, let record = try record(for: item) {
-            var updated = facts
-            updated.severity = severity
-            record.facts = updated
-            record.updatedAt = dateProvider.now
-            try save()
-        }
         return item
     }
 

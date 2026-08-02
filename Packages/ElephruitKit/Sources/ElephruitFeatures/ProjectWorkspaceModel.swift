@@ -303,7 +303,12 @@ public final class ProjectWorkspaceModel {
     }
 
     public func present(_ id: UUID) {
-        if activeView?.kind == .bugs, itemsByID[id]?.kind == .bug {
+        if itemsByID[id]?.kind == .bug, let bugsView = views.first(where: { $0.kind == .bugs }) {
+            if activeView?.id != bugsView.id {
+                activeView = bugsView
+                searchText = ""
+                rearrange()
+            }
             presentedItemID = nil
             expandedBugID = id
         } else {

@@ -18,7 +18,10 @@ import Observation
 @Observable
 public final class WorkItemEditorModel {
     private let services: AppServices
+    private let cachedItem: Item?
     public let itemID: UUID
+
+    public private(set) var isVerified: Bool
 
     /// Called after every committed change, so the workspace redraws the row the sheet is editing.
     public var onChange: () -> Void = {}
@@ -26,12 +29,15 @@ public final class WorkItemEditorModel {
     public init(services: AppServices, itemID: UUID) {
         self.services = services
         self.itemID = itemID
+        let item = try? services.items.item(id: itemID)
+        cachedItem = item
+        isVerified = item.map(services.bugs.isVerified) ?? false
     }
 
     // MARK: - Reading
 
     public var item: Item? {
-        try? services.items.item(id: itemID)
+        cachedItem
     }
 
     /// The report as it stands, whether or not a record exists yet.
@@ -43,12 +49,8 @@ public final class WorkItemEditorModel {
         item?.bugRecord?.facts ?? BugFacts()
     }
 
-    public var isVerified: Bool {
-        guard let item else { return false }
-        return services.bugs.isVerified(item)
-    }
-
-    /// Everyone an item could be assigned to.
+    /// Everyone an item could be assigned to. Inline editors ask after their first frame so this
+    /// potentially large list never delays the opening animation.
     public var assignableCandidates: [Item] {
         (try? services.persons.allPeople(includingPlaceholders: false)) ?? []
     }
@@ -139,20 +141,23 @@ public final class WorkItemEditorModel {
 
     public func setVerified(_ verified: Bool) {
         guard let item, item.kind == .bug else { return }
-        commit {
+        guard commit({
             if verified {
                 try services.bugs.markVerified(item)
             } else {
                 try services.bugs.clearVerification(item)
             }
-        }
+        }) else { return }
+        isVerified = verified
     }
 
     // MARK: - Committing
 
-    private func commit(_ work: () throws -> Void) {
-        guard services.perform(work) else { return }
+    @discardableResult
+    private func commit(_ work: () throws -> Void) -> Bool {
+        guard services.perform(work) else { return false }
         if let item { services.noteChange(to: item) }
         onChange()
+        return true
     }
 }

@@ -14,6 +14,7 @@ struct BugInlineDetailView: View {
     let collapse: () -> Void
 
     @State private var editor: WorkItemEditorModel?
+    @State private var assigneeCandidates: [Item] = []
     @State private var notes = ""
     @State private var steps = ""
     @State private var expected = ""
@@ -114,72 +115,98 @@ struct BugInlineDetailView: View {
     }
 
     private var triageStrip: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: Theme.Spacing.small) {
-                primaryTriageControls
-                secondaryTriageControls
-                Spacer(minLength: 0)
-            }
+        FlowLayout(spacing: Theme.Spacing.small, lineSpacing: Theme.Spacing.small) {
+            statusControl
+            priorityControl
+            severityControl
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                HStack(alignment: .top, spacing: Theme.Spacing.small) {
-                    primaryTriageControls
-                    Spacer(minLength: 0)
-                }
-                HStack(alignment: .top, spacing: Theme.Spacing.small) {
-                    secondaryTriageControls
-                    Spacer(minLength: 0)
-                }
-            }
+            if !model.stages.isEmpty { stageControl }
+            assigneeControl
+            signalsControl
         }
     }
 
-    @ViewBuilder
-    private var primaryTriageControls: some View {
-        menuField("Status", value: statusBinding) {
-            ForEach([ItemStatus.open, .completed, .cancelled], id: \.self) {
-                Text($0.displayName).tag($0)
+    private var statusControl: some View {
+        controlGroup("Status") {
+            Picker("Status", selection: statusBinding) {
+                ForEach([ItemStatus.open, .completed, .cancelled], id: \.self) { status in
+                    Label(status.displayName, systemImage: status.symbolName).tag(status)
+                }
             }
-        }
-
-        if !model.stages.isEmpty {
-            menuField("Stage", value: stageBinding) {
-                Text("No Stage").tag(UUID?.none)
-                ForEach(model.stages) { Text($0.name).tag(UUID?.some($0.id)) }
-            }
-        }
-
-        menuField("Priority", value: priorityBinding) {
-            ForEach(Priority.allCases, id: \.self) { Text($0.displayName).tag($0) }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: 250)
         }
     }
 
-    @ViewBuilder
-    private var secondaryTriageControls: some View {
-        menuField("Severity", value: severityBinding) {
-            ForEach(BugSeverity.allCases, id: \.self) { Text($0.displayName).tag($0) }
+    private var priorityControl: some View {
+        controlGroup("Priority") {
+            Picker("Priority", selection: priorityBinding) {
+                ForEach(Priority.allCases, id: \.self) { priority in
+                    Text(priority.displayName).tag(priority)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: 190)
         }
+    }
 
+    private var severityControl: some View {
+        controlGroup("Severity") {
+            Picker("Severity", selection: severityBinding) {
+                ForEach(BugSeverity.allCases, id: \.self) { severity in
+                    Text(severity.displayName).tag(severity)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: 300)
+            .help(currentFacts.severity.hint)
+        }
+    }
+
+    private var stageControl: some View {
+        menuField("Stage", value: stageBinding) {
+            Text("No Stage").tag(UUID?.none)
+            ForEach(model.stages) { Text($0.name).tag(UUID?.some($0.id)) }
+        }
+    }
+
+    private var assigneeControl: some View {
         menuField("Assignee", value: assigneeBinding) {
             Text("Nobody").tag(UUID?.none)
-            ForEach(editor?.assignableCandidates ?? []) {
+            ForEach(assigneeCandidates) {
                 Text($0.title).tag(UUID?.some($0.id))
             }
         }
+    }
 
-        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-            Text("Signals")
-                .font(Theme.Text.metadata)
-                .foregroundStyle(Theme.Colors.tertiaryText)
-            HStack(spacing: Theme.Spacing.medium) {
+    private var signalsControl: some View {
+        controlGroup("Signals") {
+            HStack(spacing: Theme.Spacing.large) {
                 Toggle("Regression", isOn: regressionBinding)
                 Toggle("Verified", isOn: verifiedBinding)
             }
-            .toggleStyle(.checkbox)
+            .toggleStyle(.switch)
+            .controlSize(.small)
             .font(Theme.Text.metadata)
+        }
+    }
+
+    private func controlGroup<Content: View>(
+        _ label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+            Text(label)
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.tertiaryText)
+            content()
         }
         .padding(.horizontal, Theme.Spacing.small)
         .padding(.vertical, Theme.Spacing.tight)
+        .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
     }
 
     private func menuField<Value: Hashable, Content: View>(
@@ -187,18 +214,13 @@ struct BugInlineDetailView: View {
         value: Binding<Value>,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-            Text(label)
-                .font(Theme.Text.metadata)
-                .foregroundStyle(Theme.Colors.tertiaryText)
+        controlGroup(label) {
             Picker(label, selection: value, content: content)
                 .labelsHidden()
                 .pickerStyle(.menu)
+                .controlSize(.small)
                 .fixedSize()
         }
-        .padding(.horizontal, Theme.Spacing.small)
-        .padding(.vertical, Theme.Spacing.tight)
-        .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
     }
 
     private var narrative: some View {
@@ -244,21 +266,22 @@ struct BugInlineDetailView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
             Text(label)
                 .font(Theme.Text.rowTitleEmphasised)
-            ZStack(alignment: .topLeading) {
-                if text.wrappedValue.isEmpty {
-                    Text(prompt)
-                        .font(Theme.Text.rowTitle)
-                        .foregroundStyle(Theme.Colors.placeholderText)
-                        .padding(.horizontal, Theme.Spacing.small + 1)
-                        .padding(.vertical, Theme.Spacing.small + 2)
-                        .allowsHitTesting(false)
+            TextEditor(text: text)
+                .font(Theme.Text.rowTitle)
+                .scrollContentBackground(.hidden)
+                .contentMargins(.horizontal, Theme.Spacing.medium, for: .scrollContent)
+                .contentMargins(.vertical, Theme.Spacing.small, for: .scrollContent)
+                .focused($focusedField, equals: field)
+                .overlay(alignment: .topLeading) {
+                    if text.wrappedValue.isEmpty {
+                        Text(prompt)
+                            .font(Theme.Text.rowTitle)
+                            .foregroundStyle(Theme.Colors.placeholderText)
+                            .padding(.horizontal, Theme.Spacing.medium)
+                            .padding(.vertical, Theme.Spacing.small)
+                            .allowsHitTesting(false)
+                    }
                 }
-                TextEditor(text: text)
-                    .font(Theme.Text.rowTitle)
-                    .scrollContentBackground(.hidden)
-                    .padding(Theme.Spacing.tight)
-                    .focused($focusedField, equals: field)
-            }
             .frame(maxWidth: .infinity, minHeight: minHeight)
             .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
             .overlay {
@@ -273,27 +296,32 @@ struct BugInlineDetailView: View {
     }
 
     private var environmentStrip: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: Theme.Spacing.medium) { environmentFields }
-            VStack(alignment: .leading, spacing: Theme.Spacing.small) { environmentFields }
-        }
-    }
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            HStack(spacing: Theme.Spacing.medium) {
+                compactField(
+                    "Environment",
+                    placeholder: "Machine and macOS",
+                    text: $environmentText,
+                    field: .environment
+                )
+                compactField(
+                    "Affected",
+                    placeholder: "App version and build",
+                    text: $affectedVersion,
+                    field: .affected
+                )
+                compactField("Fix", placeholder: "Fixed in version", text: $fixVersion, field: .fix)
+            }
 
-    @ViewBuilder
-    private var environmentFields: some View {
-        compactField("Environment", placeholder: "Machine, OS, build", text: $environmentText, field: .environment)
-        compactField("Affected", placeholder: "Found in version", text: $affectedVersion, field: .affected)
-        compactField("Fix", placeholder: "Fixed in version", text: $fixVersion, field: .fix)
-
-        if !currentFacts.missingFieldNames.isEmpty {
-            Label(
-                "Missing " + currentFacts.missingFieldNames.formatted(.list(type: .and)),
-                systemImage: "circle.dashed"
-            )
-            .font(Theme.Text.metadata)
-            .foregroundStyle(Theme.Colors.tertiaryText)
-            .lineLimit(2)
-            .frame(maxWidth: 260, alignment: .leading)
+            if !currentFacts.missingFieldNames.isEmpty {
+                Label(
+                    "Missing " + currentFacts.missingFieldNames.formatted(.list(type: .and)),
+                    systemImage: "circle.dashed"
+                )
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.tertiaryText)
+                .lineLimit(2)
+            }
         }
     }
 
@@ -349,7 +377,7 @@ struct BugInlineDetailView: View {
             get: { item.assignee()?.id },
             set: { id in
                 editor?.setAssignee(id.flatMap { target in
-                    editor?.assignableCandidates.first { $0.id == target }
+                    assigneeCandidates.first { $0.id == target }
                 })
             }
         )
@@ -371,6 +399,11 @@ struct BugInlineDetailView: View {
         let editor = WorkItemEditorModel(services: services, itemID: item.id)
         editor.onChange = { model.refresh() }
         self.editor = editor
+
+        Task { @MainActor in
+            await Task.yield()
+            assigneeCandidates = editor.assignableCandidates
+        }
 
         notes = item.body
         let facts = item.bugRecord?.facts ?? BugFacts()
