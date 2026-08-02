@@ -44,6 +44,7 @@ public struct RootView: View {
     /// for this window without measuring the rendered sidebar and feeding layout back into itself.
     @SceneStorage("layout.sidebar.width") private var storedSidebarWidth = Double(SidebarMetrics.defaultWidth)
     @State private var sidebarDragStart: CGFloat?
+    @State private var isWindowFullScreen = false
 
     /// The window's own width, so a restored column width can be clamped to what there is.
     @State private var windowWidth: CGFloat = 0
@@ -338,7 +339,6 @@ public struct RootView: View {
                             .accessibilityLabel("Resize sidebar")
                     }
 
-                Divider()
             }
 
             NavigationStack {
@@ -361,7 +361,13 @@ public struct RootView: View {
                         // control background around both views.
                         ToolbarItem(placement: .navigation) {
                             Color.clear
-                                .frame(width: max(0, sidebarWidth - 128), height: 1)
+                                .frame(
+                                    width: max(
+                                        0,
+                                        sidebarWidth - (isWindowFullScreen ? 40 : 128)
+                                    ),
+                                    height: 1
+                                )
                                 .accessibilityHidden(true)
                         }
                         .sharedBackgroundVisibility(.hidden)
@@ -370,6 +376,24 @@ public struct RootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        // The content begins below the unified toolbar, but the sidebar is a window region rather
+        // than page content. Paint its surface and boundary through the title bar as well.
+        .background(alignment: .leading) {
+            Theme.Colors.windowBackground
+                .frame(width: sidebarWidth)
+                .ignoresSafeArea()
+        }
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Theme.Colors.separator)
+                .frame(width: 1)
+                .offset(x: sidebarWidth)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+        }
+        .background {
+            WindowFullScreenReader(isFullScreen: $isWindowFullScreen)
+        }
         .inspector(isPresented: inspectorBinding) {
             InspectorView(navigation: navigation)
                 .inspectorColumnWidth(
