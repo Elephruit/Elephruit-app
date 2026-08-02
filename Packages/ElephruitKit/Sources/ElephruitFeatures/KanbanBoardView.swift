@@ -116,12 +116,11 @@ struct KanbanColumnView: View {
                                     }
                                 )
                             )
-                        case .ended, .dataTransferCompleted:
-                            // `performDrop` ends first on a successful move. This is the matching
-                            // cancellation path when the pointer is released outside the board.
-                            drag.end()
-                        case .active:
-                            break
+                        case .ended, .active, .dataTransferCompleted:
+                            // Data transfer finishing means the payload is ready for a destination;
+                            // it does not mean the pointer gesture finished. Clearing here made a
+                            // cross-column drag lose its item midway through the gesture.
+                            drag.updateSession(session.phase)
                         @unknown default:
                             break
                         }
@@ -221,6 +220,12 @@ final class KanbanDragCoordinator {
     private var lastReorderPointerY: CGFloat?
 
     var isDragging: Bool { draggedItemID != nil }
+
+    func updateSession(_ phase: DragSession.Phase) {
+        // `performDrop` ends first on a successful move. The session's true ended phase is the
+        // matching cancellation path when the pointer is released outside the board.
+        if case .ended = phase { end() }
+    }
 
     func begin(itemID: UUID, columns: [String: [UUID]]) {
         guard draggedItemID != itemID else { return }

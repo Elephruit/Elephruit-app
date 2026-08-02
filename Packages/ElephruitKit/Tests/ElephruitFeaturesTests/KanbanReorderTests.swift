@@ -123,4 +123,17 @@ struct KanbanReorderTests {
         )
         #expect(drag.itemIDs(in: "doing") == [first, moving, last])
     }
+
+    @Test("Payload transfer is not the end of a drag session")
+    func dataTransferDoesNotEndDrag() {
+        let item = UUID()
+        let drag = KanbanDragCoordinator()
+        drag.begin(itemID: item, columns: ["todo": [item]])
+
+        drag.updateSession(.dataTransferCompleted)
+        #expect(drag.isDragging)
+
+        drag.updateSession(.ended(.move))
+        #expect(!drag.isDragging)
+    }
 }
