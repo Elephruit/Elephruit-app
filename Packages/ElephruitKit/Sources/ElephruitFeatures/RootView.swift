@@ -348,21 +348,23 @@ public struct RootView: View {
                     .navigationTitle(navigation.windowTitle)
                     .toolbar {
                         ToolbarItem(placement: .navigation) {
-                            HStack(spacing: 0) {
-                                Button {
-                                    navigation.toggleSidebar()
-                                } label: {
-                                    Label("Toggle Sidebar", systemImage: "sidebar.leading")
-                                }
-                                .help("Toggle Sidebar")
-
-                                // A custom root split has no native sidebar item for the unified
-                                // toolbar to align against. Reserve the rest of the fixed sidebar's
-                                // title-bar share so the destination title begins over content.
-                                Color.clear
-                                    .frame(width: max(0, sidebarWidth - 128), height: 1)
+                            Button {
+                                navigation.toggleSidebar()
+                            } label: {
+                                Label("Toggle Sidebar", systemImage: "sidebar.leading")
                             }
+                            .help("Toggle Sidebar")
                         }
+
+                        // Keep this outside the button's toolbar item. Putting the invisible
+                        // alignment space beside the button made macOS draw one enormous rounded
+                        // control background around both views.
+                        ToolbarItem(placement: .navigation) {
+                            Color.clear
+                                .frame(width: max(0, sidebarWidth - 128), height: 1)
+                                .accessibilityHidden(true)
+                        }
+                        .sharedBackgroundVisibility(.hidden)
                     }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
