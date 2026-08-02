@@ -182,9 +182,12 @@ public final class SwiftDataItemRepository: ItemRepository {
     }
 
     private func fetch(_ descriptor: FetchDescriptor<Item>) throws(AppError) -> [Item] {
-        audit?.record(.itemFetch)
         do {
-            return try context.fetch(descriptor)
+            let rows = try context.fetch(descriptor)
+            // Recorded with the row count, so a test can pin how much a query *materialises* —
+            // the figure a bare fetch count cannot see. See `FetchAudit.Tally.itemRowsMaterialized`.
+            audit?.record(.itemFetch, rows: rows.count)
+            return rows
         } catch {
             throw .storeUnavailable(underlying: error.localizedDescription)
         }

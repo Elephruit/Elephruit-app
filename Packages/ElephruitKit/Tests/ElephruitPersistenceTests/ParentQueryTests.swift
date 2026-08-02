@@ -107,7 +107,7 @@ struct ParentQueryTests {
         #expect(parentedTitles == ["Open child", "Done child", "Section", "Stranger"])
     }
 
-    @Test("A children query fetches the children, not the library")
+    @Test("A children query materialises the children, not the library")
     func childrenFetchShape() throws {
         let audit = FetchAudit()
         let fixture = try StoreFixture(audit: audit)
@@ -117,13 +117,43 @@ struct ParentQueryTests {
             _ = try fixture.makeNote(title: "Unrelated \(index)")
         }
 
-        // The audit counts fetches, not rows, so the row-count guard is the benchmark; this pins
-        // that the question is still answered in one fetch.
+        // The row tally is the deterministic guard for the query's *shape*: the old post-filter
+        // was also one fetch, but it returned all thirty-one rows to keep one. It cannot see
+        // relationship faults or per-row cost — ChildrenQueryBenchmarks holds the scaling curve
+        // itself and is the authoritative guard.
         let (rows, tally) = try audit.measure {
             try fixture.items.items(matching: .children(of: project.id))
         }
         #expect(rows.count == 1)
         #expect(tally.itemFetches == 1)
+        #expect(tally.itemRowsMaterialized == 1,
+                "the store returned \(tally.itemRowsMaterialized) rows for one child — \(tally.description)")
+    }
+
+    @Test("Tag and Inbox queries materialise their rows, not the library")
+    func tagAndInboxFetchShape() throws {
+        let audit = FetchAudit()
+        let fixture = try StoreFixture(audit: audit)
+        _ = try fixture.makeNote(title: "Tagged", tags: ["work"])
+        let project = try fixture.makeProject(title: "Project")
+        for index in 0..<30 {
+            // Filed away, so out of the Inbox and off the tag.
+            let filed = try fixture.makeNote(title: "Filed \(index)")
+            try fixture.items.fileItem(filed, under: project)
+        }
+
+        let (tagRows, tagTally) = try audit.measure {
+            try fixture.items.items(matching: .tag(slug: "work"))
+        }
+        #expect(tagRows.count == 1)
+        #expect(tagTally.itemRowsMaterialized == 1, "\(tagTally.description)")
+
+        let (inboxRows, inboxTally) = try audit.measure {
+            try fixture.items.items(matching: .inbox())
+        }
+        // The tagged note is out (a tag is a home); only nothing-shaped rows come back.
+        #expect(inboxRows.isEmpty)
+        #expect(inboxTally.itemRowsMaterialized == 0, "\(inboxTally.description)")
     }
 
     @Test("Exhausting the gap between two neighbours renumbers every sibling and keeps the order")
