@@ -133,6 +133,17 @@ struct KanbanColumnView: View {
         }
         .animation(.easeOut(duration: 0.16), value: isDropTargeted)
         .animation(.snappy(duration: 0.12), value: displayedItems.map(\.id))
+        // The precise card targets above choose an exact slot. This outer target is the fallback
+        // for every other point in the column — including the add field and the empty space below
+        // it — so entering a column never depends on finding a narrow strip between controls.
+        .onDrop(
+            of: [.elephruitTaskDrag],
+            delegate: KanbanEndDropDelegate(
+                columnKey: column.key,
+                drag: drag,
+                performMove: accept
+            )
+        )
     }
 
     private var header: some View {
