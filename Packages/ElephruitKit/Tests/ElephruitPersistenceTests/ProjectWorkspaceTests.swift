@@ -68,6 +68,27 @@ private struct WorkspaceFixture {
 @Suite("Project board")
 @MainActor
 struct ProjectBoardTests {
+    @Test("Setting a board item's due date makes it eligible for Today")
+    func dueDateRefreshesTodayIndex() throws {
+        let fixture = try WorkspaceFixture()
+        let project = try fixture.makeProject()
+        let task = try fixture.workItems.createWorkItem(title: "Redesign tasks", in: project)
+        let today = fixture.store.dateProvider.startOfToday
+
+        #expect(task.dayRelevanceKey == .distantFuture)
+
+        try fixture.workItems.setDueDate(today, on: task)
+
+        #expect(task.dayRelevanceKey == today)
+
+        var query = ItemQuery()
+        query.kinds = ItemKind.workItemKindSet
+        query.statuses = [.open]
+        query.dayRelevantBefore = fixture.store.dateProvider.startOfTomorrow
+
+        #expect(try fixture.store.items.items(matching: query).map(\.id).contains(task.id))
+    }
+
     @Test("Dropping into a terminal column resolves the work")
     func terminalColumnWritesStatus() throws {
         let fixture = try WorkspaceFixture()
