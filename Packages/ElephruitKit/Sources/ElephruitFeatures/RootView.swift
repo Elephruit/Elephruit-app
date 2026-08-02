@@ -718,6 +718,20 @@ public struct RootView: View {
     /// widths are the shell's, and it already knows what it asked for.
     private func sample(_ width: CGFloat, of column: ModuleShellLayout.Column) {
         guard pinnedWidths.isEmpty else { return }
+
+        // AppKit's split view restores its remembered divider *asynchronously* — the
+        // "NSSplitView Subview Frames" autosave arrives a beat after the window is up — and that
+        // late restoration does not honour `navigationSplitViewColumnWidth`. When it lands inside
+        // the 50 ms pin that `applyModuleLayout` holds, the pin wins; when it lands after, a list
+        // with a declared maximum of 340 opens at a thousand points and stays there. The samples
+        // are where the loss shows up, so this is where it is corrected: a settled width past the
+        // module's own ceiling is never something the user chose — the divider cannot be dragged
+        // past a maximum that is being honoured — and is re-pinned rather than recorded.
+        if width > shellLayout.declaredCeiling(of: column) + 1 {
+            Task { await applyModuleLayout() }
+            return
+        }
+
         widthRecorder.sample(width, of: column, windowWidth: windowWidth)
     }
 
