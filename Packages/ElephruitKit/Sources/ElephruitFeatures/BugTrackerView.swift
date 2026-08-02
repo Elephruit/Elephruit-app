@@ -15,7 +15,7 @@ struct BugTrackerView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-                BugTrackerSummaryBar(facts: bugs)
+                BugTrackerSummaryBar(facts: bugs, model: model)
 
                 ForEach(model.groups) { group in
                     BugTrackerSeveritySection(
@@ -37,6 +37,7 @@ struct BugTrackerView: View {
 
 struct BugTrackerSummaryBar: View {
     let facts: [TaskFacts]
+    let model: ProjectWorkspaceModel
 
     private var openCount: Int { facts.count { !$0.status.isResolved } }
     private var urgentCount: Int {
@@ -52,7 +53,36 @@ struct BugTrackerSummaryBar: View {
             Divider().frame(height: 18)
             summary("Critical or major", value: urgentCount, symbol: "exclamationmark.triangle.fill")
             Divider().frame(height: 18)
-            summary("Awaiting verification", value: awaitingVerification, symbol: "checkmark.seal")
+            if model.isReviewingFixesAwaitingVerification {
+                Button("Exit review", systemImage: "xmark") {
+                    model.endVerificationReview()
+                }
+                .buttonStyle(.borderless)
+                .font(Theme.Text.rowSubtitle)
+                .help("Return to the open bugs list")
+                .accessibilityIdentifier("bug.verificationReview.exit")
+            } else {
+                Button {
+                    model.presentFixAwaitingVerification()
+                } label: {
+                    HStack(spacing: Theme.Spacing.tight) {
+                        summary(
+                            "Awaiting verification",
+                            value: awaitingVerification,
+                            symbol: "checkmark.seal"
+                        )
+                        Image(systemName: "chevron.right")
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(awaitingVerification == 0)
+                .help(awaitingVerification == 0 ? "No fixes need verification" : "Review fixes awaiting verification")
+                .accessibilityHint("Opens the completed fixes that can be marked verified")
+                .accessibilityIdentifier("bug.verificationReview.start")
+            }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, Theme.Spacing.medium)
@@ -62,7 +92,7 @@ struct BugTrackerSummaryBar: View {
             RoundedRectangle(cornerRadius: Theme.Radius.medium)
                 .stroke(Theme.Colors.separator, lineWidth: 0.5)
         )
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
     }
 
     private func summary(_ label: String, value: Int, symbol: String) -> some View {

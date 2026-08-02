@@ -101,6 +101,16 @@ struct BugInlineDetailView: View {
 
             Spacer(minLength: 0)
 
+            if item.status == .completed, editor?.isVerified == false {
+                Button("Mark Verified", systemImage: "checkmark.seal.fill") {
+                    editor?.setVerified(true)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.Colors.completed)
+                .help("Confirm this completed fix and remove it from the verification queue")
+                .accessibilityIdentifier("bug.markVerified")
+            }
+
             Button("Move to Trash", role: .destructive) { showsDeleteConfirmation = true }
                 .buttonStyle(.plain)
                 .font(Theme.Text.metadata)
