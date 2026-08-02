@@ -156,16 +156,18 @@ public struct ItemDetailView: View {
             NoteDetailView(
                 item: item,
                 navigation: navigation,
-                title: titleBinding,
-                bodyText: bodyBinding,
-                pendingInsertion: $pendingInsertion,
-                completionContext: completionContext,
-                completionSuggestions: completionSuggestions,
-                onCompletionContextChange: handleCompletionContextChange,
-                onAcceptCompletion: acceptCompletion
+                title: titleBinding
             )
         }
     }
+
+    /// The kinds whose body is the rich document, saved by the note page itself.
+    ///
+    /// This view must not write `body` for them: `setNoteDocument` derives it from the document,
+    /// and a stale `bodyText` written on a title change would silently undo the derivation.
+    private static let richBodyKinds: Set<ItemKind> = [
+        .note, .idea, .reference, .decision, .interaction, .meeting, .dailyEntry,
+    ]
 
     // MARK: - Toolbar
 
@@ -321,8 +323,10 @@ public struct ItemDetailView: View {
               !item.isInTrash
         else { return }
 
+        let bodyIsRich = Self.richBodyKinds.contains(item.kind)
+
         // Nothing changed; do not touch `updatedAt`.
-        guard item.title != title || item.body != bodyText else { return }
+        guard item.title != title || (!bodyIsRich && item.body != bodyText) else { return }
 
         let newTitle = title
         let newBody = bodyText
@@ -330,8 +334,9 @@ public struct ItemDetailView: View {
         services.perform {
             try services.items.update(item) { subject in
                 subject.title = newTitle
-                // A heading has no body, so writing one would fail validation.
-                if subject.kind.supportedFields.contains(.body) {
+                // A heading has no body, so writing one would fail validation — and a rich-text
+                // kind's body is a derived projection this view has no business writing.
+                if subject.kind.supportedFields.contains(.body), !bodyIsRich {
                     subject.body = newBody
                 }
             }

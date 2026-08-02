@@ -51,6 +51,13 @@ protocol NoteProseTextViewCoordinator: AnyObject {
     /// The caret tried to leave the segment — arrow up on the first line, down on the last.
     func prose(_ view: NoteProseTextView, caretLeavesTowards edge: NoteProseTextView.Edge)
 
+    /// Backspace at the segment's very start, on plain prose: the page decides what sits above.
+    func proseBackspaceAtSegmentStart(_ view: NoteProseTextView)
+
+    /// A `/` command chosen with the mouse — routed through the coordinator so the keyboard and
+    /// the pointer take one path.
+    func prose(_ view: NoteProseTextView, performsInsertion command: NoteInsertionCommand)
+
     /// The selection moved; the inspector wants the new state.
     func proseSelectionDidChange(_ view: NoteProseTextView, state: NoteSelectionState)
 }
@@ -520,6 +527,12 @@ final class NoteProseTextView: NSTextView {
             }
             if attribute.kind != .paragraph {
                 applyParagraphKind(.paragraph)
+                return
+            }
+            if selection.location == 0 {
+                // The very start of the segment: whatever sits above is an object, and deleting
+                // backwards into it is the page's decision, not this view's.
+                noteCoordinator?.proseBackspaceAtSegmentStart(self)
                 return
             }
         }
