@@ -41,6 +41,16 @@ public struct RootView: View {
     /// The window's own width, so a restored column width can be clamped to what there is.
     @State private var windowWidth: CGFloat = 0
 
+    /// The sidebar's width as it actually is, not as its declared range imagines it.
+    ///
+    /// The shell's arithmetic used to budget the sidebar at its *minimum*, which handed the other
+    /// columns more of the window than the window had spare whenever the sidebar sat wider than
+    /// that. Pinning those columns then took the difference out of the only flexible column left —
+    /// the sidebar — and AppKit held it wherever it landed. Every module change squeezed it by a
+    /// different amount, which the user saw as the sidebar's text sliding sideways as they moved
+    /// between Today and Inbox.
+    @State private var sidebarWidth: CGFloat = 0
+
     /// Widths held fixed for one turn of the run loop while a module change lands.
     ///
     /// AppKit's split view keeps its divider position across everything: changing the constraints
@@ -313,7 +323,11 @@ public struct RootView: View {
             // a window of no width holds no columns, and the first frame would drop the editor and
             // then put it back.
             windowWidth: windowWidth > 0 ? windowWidth : Theme.Size.assumedWindowWidth,
-            sidebarWidth: navigation.layoutMode.showsSidebar ? sidebarWidths.minimum : nil,
+            // The measured width, not the minimum — see `sidebarWidth`. The ideal stands in until
+            // the first measurement lands, because that is where a fresh window puts the divider.
+            sidebarWidth: navigation.layoutMode.showsSidebar
+                ? (sidebarWidth > 0 ? sidebarWidth : sidebarWidths.ideal)
+                : nil,
             showsList: navigation.layoutMode.showsList,
             userWantsInspector: navigation.isInspectorVisible,
             hasSelection: hasInspectableSelection,
@@ -333,6 +347,10 @@ public struct RootView: View {
                     ideal: sidebarWidths.ideal,
                     max: sidebarWidths.maximum
                 )
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                    guard width > 0 else { return }
+                    sidebarWidth = width
+                }
         } content: {
             // Time replaces the list rather than opening beside it: it *is* the middle column's
             // contents for that destination, in the same way a project's task list is.
@@ -388,6 +406,14 @@ public struct RootView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // The window-level backstop for the title bar. Every screen above declares its own
+            // title, and the nearer declaration wins — this one exists for the frames when none of
+            // them has yet. A column that renders even one title-less frame collapses the whole
+            // toolbar, the sidebar rides up into the title-bar space, and AppKit does not reliably
+            // give the inset back; that was the sidebar "jump" on the way into a project, where the
+            // workspace's first frames render before its model has loaded. With a default here the
+            // toolbar exists from the window's first frame to its last, whatever the column shows.
+            .navigationTitle(navigation.windowTitle)
             .moduleColumnWidth(
                 .primary,
                 layout: shellLayout,
@@ -494,6 +520,7 @@ public struct RootView: View {
             DesignReviewLaunch.applyStart(to: navigation)
             DesignReviewLaunch.applySelection(to: navigation, using: services)
             DesignReviewLaunch.applyProjectSelection(to: navigation, using: services)
+            DesignReviewLaunch.applyReviewHops(to: navigation)
         }
 
         guard !storedNavigationState.isEmpty,

@@ -17,16 +17,39 @@ struct ProjectWorkspaceView: View {
 
     var body: some View {
         Group {
-            if let model, model.project != nil {
-                content(model)
+            if let model {
+                if model.project != nil {
+                    content(model)
+                } else {
+                    EmptyStateView(
+                        symbolName: "square.stack.3d.up",
+                        headline: "Project not found",
+                        message: "It may have been deleted. Choose another from the sidebar."
+                    )
+                }
             } else {
-                EmptyStateView(
-                    symbolName: "square.stack.3d.up",
-                    headline: "Project not found",
-                    message: "It may have been deleted. Choose another from the sidebar."
-                )
+                // Loading, not missing. This branch is on screen for however long the model takes
+                // to walk the project — a moment on a small library, visibly long on a big one —
+                // and it used to say "Project not found" for all of it.
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityLabel("Loading")
             }
         }
+        // On the `Group`, NOT on `content`. The workspace's first frame renders before `start()`
+        // has built the model, and on that frame the other branch is on screen. When the toolbar
+        // lived on `content`, that frame declared no title at all — so the window's toolbar
+        // collapsed to its title-less height, the sidebar rode up into the title-bar space, and
+        // AppKit did not always give the inset back once the title arrived. That one frame is the
+        // sidebar "jump" this window had on every entry into a project.
+        .navigationTitle(model?.project?.title ?? "Project")
+        .navigationSubtitle(subtitle)
+        .searchable(
+            text: searchBinding,
+            placement: .toolbar,
+            prompt: "Search this project"
+        )
         .task(id: projectID) { start() }
         .onChange(of: viewID) { _, newValue in
             guard let model, let newValue else { return }
@@ -63,18 +86,6 @@ struct ProjectWorkspaceView: View {
             Divider()
             body(for: model)
         }
-        // The window title *is* the project's name. Without it the toolbar fell back to the app's
-        // own name — "Elephruit" sitting over "Elephruit App" — and, worse, the toolbar collapsed
-        // to its title-less height, so entering a project nudged the whole sidebar upward. Every
-        // other middle-column surface declares a title; this one now does too, and the toolbar
-        // keeps one height everywhere.
-        .navigationTitle(model.project?.title ?? "Project")
-        .navigationSubtitle(subtitle(for: model))
-        .searchable(
-            text: searchBinding(model),
-            placement: .toolbar,
-            prompt: "Search this project"
-        )
         // The keyboard the workspace always claimed to have. Every handler goes through
         // ``ProjectWorkspaceModel/guarded(_:)`` so none of them fires while a title or the sheet
         // has the keyboard — the gate that was built for exactly these and then never used.
@@ -138,7 +149,8 @@ struct ProjectWorkspaceView: View {
     /// This is where "EA" went. As a monospaced badge beside the title it read as clutter —
     /// three names stacked at the top of every project — and as a subtitle it is what a subtitle
     /// is for: present, quiet, and out of the title's way.
-    private func subtitle(for model: ProjectWorkspaceModel) -> String {
+    private var subtitle: String {
+        guard let model else { return "" }
         var parts: [String] = []
         if let key = model.project?.projectKey {
             parts.append(key)
@@ -153,11 +165,11 @@ struct ProjectWorkspaceView: View {
     ///
     /// The model always knew how to search — ``ProjectWorkspaceModel/searchText`` was folded into
     /// every arrangement — but nothing on screen wrote to it. This is the field that does.
-    private func searchBinding(_ model: ProjectWorkspaceModel) -> Binding<String> {
+    private var searchBinding: Binding<String> {
         Binding(
-            get: { model.searchText },
+            get: { model?.searchText ?? "" },
             set: { newValue in
-                guard model.searchText != newValue else { return }
+                guard let model, model.searchText != newValue else { return }
                 model.searchText = newValue
                 model.rearrange()
             }

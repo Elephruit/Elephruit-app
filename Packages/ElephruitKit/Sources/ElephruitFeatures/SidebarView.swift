@@ -68,6 +68,10 @@ public struct SidebarView: View {
                 newListFooter
                 statusLine
             }
+            // Opaque, because the list scrolls behind this inset. Without a surface of its own the
+            // status line printed straight over "Across Everything" whenever the sidebar was taller
+            // than the window — two lines of text through each other, reading as a rendering fault.
+            .background(.bar)
         }
         .confirmationDialog(
             "Delete “\(pendingSavedSearchDeletion?.title ?? "")”?",

@@ -69,18 +69,64 @@ public enum DesignReviewLaunch {
         guard let raw = value(for: "-ElephruitStartModule", in: arguments)?.lowercased() else {
             return nil
         }
+        guard let parsed = destination(named: raw) else {
+            Diagnostics.shell.error("Unknown -ElephruitStartModule \(raw, privacy: .public)")
+            return nil
+        }
+        return parsed
+    }
 
+    /// One name from the shared vocabulary, or `nil` for a name that is in nobody's.
+    static func destination(named raw: String) -> Start? {
         switch raw {
         case "home": return .destination(.home)
         case "today": return .destination(.today)
         case "upcoming": return .destination(.upcoming)
         case "inbox": return .destination(.inbox)
         default:
-            guard let module = AppModule(rawValue: raw) else {
-                Diagnostics.shell.error("Unknown -ElephruitStartModule \(raw, privacy: .public)")
+            guard let module = AppModule(rawValue: raw) else { return nil }
+            return .module(module)
+        }
+    }
+
+    /// A comma-separated itinerary — `today,inbox,today` — walked one stop every two seconds.
+    ///
+    /// The delayed project selection proved the pattern: bugs that live in the *transition* are
+    /// invisible to a review that launches at its destination. This is the general form, because
+    /// the next transition bug was between two ordinary destinations and the project arguments
+    /// could not express it.
+    static func reviewHops(in arguments: [String]) -> [Start] {
+        guard let raw = value(for: "-ElephruitReviewHops", in: arguments)?.lowercased() else {
+            return []
+        }
+        return raw.split(separator: ",").compactMap { token in
+            let name = token.trimmingCharacters(in: .whitespaces)
+            guard let parsed = destination(named: name) else {
+                Diagnostics.shell.error("Unknown hop \(name, privacy: .public)")
                 return nil
             }
-            return .module(module)
+            return parsed
+        }
+    }
+
+    /// Walks the itinerary, if one was asked for.
+    @MainActor
+    public static func applyReviewHops(to navigation: NavigationModel) {
+        guard isDevelopmentMode else { return }
+        let hops = reviewHops(in: ProcessInfo.processInfo.arguments)
+        guard !hops.isEmpty else { return }
+
+        Task { @MainActor in
+            for hop in hops {
+                try? await Task.sleep(for: .seconds(2))
+                Diagnostics.shell.info("Design review: hopping")
+                switch hop {
+                case .module(let module): navigation.enterModule(module)
+                case .destination(let selection):
+                    navigation.leaveModule()
+                    navigation.select(selection)
+                }
+            }
         }
     }
 
@@ -252,9 +298,39 @@ public enum DesignReviewLaunch {
         return kind
     }
 
+    /// Seconds to wait before applying the project selection, so a review can photograph the
+    /// *transition* into the workspace rather than only the workspace.
+    ///
+    /// This exists because the sidebar-jump bug was invisible to a review that launched straight
+    /// into a project: the collapse happened on the way in, and a launch that starts at the
+    /// destination never travels. With a delay the window restores wherever it was, sits there,
+    /// and then navigates — the same code path as a click on the sidebar row.
+    static func selectionDelay(in arguments: [String]) -> Double? {
+        guard let raw = value(for: "-ElephruitSelectDelay", in: arguments) else { return nil }
+        guard let seconds = Double(raw), seconds > 0 else {
+            Diagnostics.shell.error("Unreadable -ElephruitSelectDelay \(raw, privacy: .public)")
+            return nil
+        }
+        return seconds
+    }
+
     /// Opens the named project's workspace, on the asked-for view when there is one.
     @MainActor
     public static func applyProjectSelection(to navigation: NavigationModel, using services: AppServices?) {
+        if let delay = selectionDelay(in: ProcessInfo.processInfo.arguments) {
+            Diagnostics.shell.info("Design review: delaying project selection by \(delay, privacy: .public)s")
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(delay))
+                Diagnostics.shell.info("Design review: applying delayed project selection")
+                applyProjectSelectionNow(to: navigation, using: services)
+            }
+        } else {
+            applyProjectSelectionNow(to: navigation, using: services)
+        }
+    }
+
+    @MainActor
+    private static func applyProjectSelectionNow(to navigation: NavigationModel, using services: AppServices?) {
         guard isDevelopmentMode,
               let name = selectedProjectName(in: ProcessInfo.processInfo.arguments)?.lowercased(),
               let services
