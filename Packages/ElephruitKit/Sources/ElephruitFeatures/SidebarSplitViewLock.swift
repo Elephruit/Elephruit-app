@@ -15,8 +15,14 @@ struct SidebarSplitViewLock: NSViewRepresentable {
     }
 
     func updateNSView(_ marker: SidebarSplitViewLockMarker, context: Context) {
-        guard marker.width != width else { return }
-        marker.width = width
+        if marker.width != width {
+            marker.width = width
+        } else {
+            // Window resizing can make SwiftUI rebuild the native split item while retaining this
+            // representable. Recheck the constraints on every update; `lockContainingPane()` is
+            // idempotent and requests a layout only when AppKit has actually reset them.
+            marker.lockContainingPane()
+        }
     }
 }
 

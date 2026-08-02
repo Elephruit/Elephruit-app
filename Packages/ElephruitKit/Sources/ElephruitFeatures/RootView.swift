@@ -331,6 +331,7 @@ public struct RootView: View {
                 // item width centers an oversized view and clips section headings on the leading
                 // edge. Let the sidebar fill the usable proposal while the two layout layers below
                 // keep the divider itself immovable.
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .navigationSplitViewColumnWidth(sidebarWidth)
                 // SwiftUI's content width is not the native pane's width. Lock the actual
                 // NSSplitViewItem so sibling columns cannot rebalance the sidebar underneath us.
