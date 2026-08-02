@@ -69,18 +69,64 @@ public enum DesignReviewLaunch {
         guard let raw = value(for: "-ElephruitStartModule", in: arguments)?.lowercased() else {
             return nil
         }
+        guard let parsed = destination(named: raw) else {
+            Diagnostics.shell.error("Unknown -ElephruitStartModule \(raw, privacy: .public)")
+            return nil
+        }
+        return parsed
+    }
 
+    /// One name from the shared vocabulary, or `nil` for a name that is in nobody's.
+    static func destination(named raw: String) -> Start? {
         switch raw {
         case "home": return .destination(.home)
         case "today": return .destination(.today)
         case "upcoming": return .destination(.upcoming)
         case "inbox": return .destination(.inbox)
         default:
-            guard let module = AppModule(rawValue: raw) else {
-                Diagnostics.shell.error("Unknown -ElephruitStartModule \(raw, privacy: .public)")
+            guard let module = AppModule(rawValue: raw) else { return nil }
+            return .module(module)
+        }
+    }
+
+    /// A comma-separated itinerary — `today,inbox,today` — walked one stop every two seconds.
+    ///
+    /// The delayed project selection proved the pattern: bugs that live in the *transition* are
+    /// invisible to a review that launches at its destination. This is the general form, because
+    /// the next transition bug was between two ordinary destinations and the project arguments
+    /// could not express it.
+    static func reviewHops(in arguments: [String]) -> [Start] {
+        guard let raw = value(for: "-ElephruitReviewHops", in: arguments)?.lowercased() else {
+            return []
+        }
+        return raw.split(separator: ",").compactMap { token in
+            let name = token.trimmingCharacters(in: .whitespaces)
+            guard let parsed = destination(named: name) else {
+                Diagnostics.shell.error("Unknown hop \(name, privacy: .public)")
                 return nil
             }
-            return .module(module)
+            return parsed
+        }
+    }
+
+    /// Walks the itinerary, if one was asked for.
+    @MainActor
+    public static func applyReviewHops(to navigation: NavigationModel) {
+        guard isDevelopmentMode else { return }
+        let hops = reviewHops(in: ProcessInfo.processInfo.arguments)
+        guard !hops.isEmpty else { return }
+
+        Task { @MainActor in
+            for hop in hops {
+                try? await Task.sleep(for: .seconds(2))
+                Diagnostics.shell.info("Design review: hopping")
+                switch hop {
+                case .module(let module): navigation.enterModule(module)
+                case .destination(let selection):
+                    navigation.leaveModule()
+                    navigation.select(selection)
+                }
+            }
         }
     }
 
