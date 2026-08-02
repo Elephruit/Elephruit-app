@@ -143,12 +143,9 @@ public struct TimeView: View {
                 log
             }
             .frame(maxWidth: Self.measure)
-            // Leading, not centred. The window title sits at the column's left edge, and a
-            // measured page floating in the middle of a wide column reads as content that has
-            // escaped its space — a title in one place and the thing it titles somewhere else.
-            // Anchored left, the measure still caps the reading width and the page starts where
-            // the title says it does.
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Match Reports exactly: both Time surfaces share one centred reading column, so the
+            // tabs, controls, and content stay put when switching between them.
+            .frame(maxWidth: .infinity)
         }
         .navigationTitle(navigation.windowTitle)
         .navigationSubtitle(subtitle)
