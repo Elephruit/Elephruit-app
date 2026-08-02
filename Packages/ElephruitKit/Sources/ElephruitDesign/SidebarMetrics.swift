@@ -18,7 +18,7 @@ public enum SidebarMetrics {
     // MARK: Widths
 
     /// What the sidebar opens at, absent a restored width.
-    public static let defaultWidth: CGFloat = 200
+    public static let defaultWidth: CGFloat = 240
 
     /// The narrowest the sidebar is ever allowed to be, before content is considered.
     ///

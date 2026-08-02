@@ -41,16 +41,6 @@ public struct RootView: View {
     /// The window's own width, so a restored column width can be clamped to what there is.
     @State private var windowWidth: CGFloat = 0
 
-    /// The sidebar's width as it actually is, not as its declared range imagines it.
-    ///
-    /// The shell's arithmetic used to budget the sidebar at its *minimum*, which handed the other
-    /// columns more of the window than the window had spare whenever the sidebar sat wider than
-    /// that. Pinning those columns then took the difference out of the only flexible column left —
-    /// the sidebar — and AppKit held it wherever it landed. Every module change squeezed it by a
-    /// different amount, which the user saw as the sidebar's text sliding sideways as they moved
-    /// between Today and Inbox.
-    @State private var sidebarWidth: CGFloat = 0
-
     /// Widths held fixed for one turn of the run loop while a module change lands.
     ///
     /// AppKit's split view keeps its divider position across everything: changing the constraints
@@ -323,11 +313,9 @@ public struct RootView: View {
             // a window of no width holds no columns, and the first frame would drop the editor and
             // then put it back.
             windowWidth: windowWidth > 0 ? windowWidth : Theme.Size.assumedWindowWidth,
-            // The measured width, not the minimum — see `sidebarWidth`. The ideal stands in until
-            // the first measurement lands, because that is where a fresh window puts the divider.
-            sidebarWidth: navigation.layoutMode.showsSidebar
-                ? (sidebarWidth > 0 ? sidebarWidth : sidebarWidths.ideal)
-                : nil,
+            // The sidebar is intentionally fixed. Budget the same width the view is given below so
+            // no column can borrow from it while the shell changes shape.
+            sidebarWidth: navigation.layoutMode.showsSidebar ? sidebarWidths.ideal : nil,
             showsList: navigation.layoutMode.showsList,
             userWantsInspector: navigation.isInspectorVisible,
             hasSelection: hasInspectableSelection,
@@ -338,22 +326,12 @@ public struct RootView: View {
     private var splitView: some View {
         NavigationSplitView(columnVisibility: columnVisibilityBinding) {
             SidebarView(navigation: navigation)
-                // Derived, not fixed: the minimum is whatever primary navigation needs at the current
-                // text size, so a long or localised title widens the sidebar rather than truncating.
-                // Derived *once* per text size, because this runs on every evaluation of this body
-                // and measuring twenty-five titles is not free — see ``SidebarMetrics/widths(fittingTitles:)``.
-                .navigationSplitViewColumnWidth(
-                    min: sidebarWidths.minimum,
-                    ideal: sidebarWidths.ideal,
-                    max: sidebarWidths.maximum
-                )
-                // Width constraints still leave AppKit free to move this divider when sibling
-                // panes reshape. Holding priority is the missing native instruction.
-                .background(SidebarSplitViewStability())
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
-                    guard width > 0 else { return }
-                    sidebarWidth = width
-                }
+                // Exact at both layout layers. A flexible range lets `NavigationSplitView` use the
+                // sidebar to absorb sibling-column changes even when the window itself never moves.
+                // The frame makes the content non-negotiable; the column modifier gives AppKit the
+                // same answer before it asks the content to lay out.
+                .frame(width: sidebarWidths.ideal)
+                .navigationSplitViewColumnWidth(sidebarWidths.ideal)
         } content: {
             // Time replaces the list rather than opening beside it: it *is* the middle column's
             // contents for that destination, in the same way a project's task list is.
