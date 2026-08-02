@@ -10,6 +10,7 @@ struct CalendarSetListView: View {
     @State private var sets: [CalendarSetDefinition] = []
     @State private var editing: CalendarSetDefinition?
     @State private var isOfferingSuggestions = false
+    @State private var pendingDeletion: CalendarSetDefinition?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -51,7 +52,7 @@ struct CalendarSetListView: View {
                             .onTapGesture { editing = set }
                             .contextMenu {
                                 Button("Edit…") { editing = set }
-                                Button("Delete", role: .destructive) { delete(set) }
+                                Button("Delete…", role: .destructive) { pendingDeletion = set }
                             }
                     }
                     .onMove(perform: move)
@@ -75,6 +76,21 @@ struct CalendarSetListView: View {
         }
         .frame(width: 480, height: 460)
         .task { reload() }
+        // A set cannot be trashed — it is configuration, not content — so it gets the structural
+        // rule instead: a confirmation that names the consequence.
+        .confirmationDialog(
+            "Delete “\(pendingDeletion?.name ?? "")”?",
+            isPresented: Binding(
+                get: { pendingDeletion != nil },
+                set: { if !$0 { pendingDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Set", role: .destructive) { confirmDeletion() }
+            Button("Cancel", role: .cancel) { pendingDeletion = nil }
+        } message: {
+            Text("The set is only a way of looking. Your calendars and their events are untouched.")
+        }
         .sheet(item: $editing) { set in
             CalendarSetEditorView(definition: set) { saved in
                 save(saved)
@@ -112,8 +128,9 @@ struct CalendarSetListView: View {
         Task { await services.calendar.refreshSets() }
     }
 
-    private func delete(_ set: CalendarSetDefinition) {
-        guard let services else { return }
+    private func confirmDeletion() {
+        defer { pendingDeletion = nil }
+        guard let services, let set = pendingDeletion else { return }
         services.perform { try services.calendarSets.delete(id: set.id) }
         reload()
         Task { await services.calendar.refreshSets() }

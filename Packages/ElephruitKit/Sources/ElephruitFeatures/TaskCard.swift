@@ -238,6 +238,18 @@ struct TaskCard: View {
                         onToggle: { act { try $0.items.toggleCompletion(subtask) } },
                         onOpen: { navigation.selectItem(subtask.id) }
                     )
+                    // A subtask is a task; it gets the task's canonical deletion. This row was the
+                    // one place a task could be seen and completed but not deleted.
+                    .contextMenu {
+                        Button("Open") { navigation.selectItem(subtask.id) }
+                        Divider()
+                        Button("Move to Trash", systemImage: "trash", role: .destructive) {
+                            guard let services else { return }
+                            services.perform { try services.undo.moveToTrash([subtask]) }
+                            services.refreshDerivedState()
+                            services.noteRemoval(of: subtask.id)
+                        }
+                    }
                 }
 
                 Button("New Subtask", systemImage: "plus") { addSubtask() }

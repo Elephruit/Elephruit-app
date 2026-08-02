@@ -702,6 +702,26 @@ struct TodayTaskMenu: View {
             actions.setFlagged(!item.isFlagged, on: item)
         }
         Button("Start Timer", systemImage: "play.circle") { actions.startTimer(on: item) }
+
+        Divider()
+
+        // The canonical deletion, which every other task list already had. Linked tasks follow the
+        // task list's two-command rule — see `TaskRowMenu` for why that is never a dialog.
+        if item.syncState == .local {
+            Button("Move to Trash", systemImage: "trash", role: .destructive) {
+                actions.moveToTrash(item)
+            }
+        } else {
+            Button("Remove from Elephruit Only", systemImage: "trash", role: .destructive) {
+                actions.deleteLinked(item, choice: .removeLocally)
+            }
+            .help("The reminder stays exactly where it is.")
+
+            Button("Delete Here and in Reminders", systemImage: "trash.slash", role: .destructive) {
+                actions.deleteLinked(item, choice: .deleteBoth)
+            }
+            .help("Removes the reminder from Reminders too, on every device it syncs to.")
+        }
     }
 
     private var clock: any DateProvider { services?.dateProvider ?? SystemDateProvider() }

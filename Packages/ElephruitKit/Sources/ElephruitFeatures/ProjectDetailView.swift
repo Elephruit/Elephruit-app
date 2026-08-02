@@ -378,11 +378,15 @@ public struct ProjectDetailView: View {
     }
 
     private func apply(_ pending: HeadingActionConfirmation) {
-        perform { repository in
-            switch pending.action {
-            case .archive: try repository.setArchived(pending.heading, true)
-            case .trash: try repository.moveToTrash(pending.heading)
-            }
+        switch pending.action {
+        case .archive:
+            perform { try $0.setArchived(pending.heading, true) }
+        case .trash:
+            // Through the undo coordinator: the dialog names the tasks that go with the heading,
+            // and ⌘Z is what forgives answering it too fast.
+            guard let services else { return }
+            services.perform { try services.undo.moveToTrash([pending.heading]) }
+            services.noteChange(to: project)
         }
     }
 

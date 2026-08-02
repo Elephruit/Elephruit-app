@@ -147,6 +147,11 @@ public struct RootView: View {
         .sheet(isPresented: newPersonBinding) {
             NewPersonSheet(navigation: navigation)
         }
+        // The sheet the sidebar's "All Tags…" button always promised. The flag existed and was
+        // set; nothing observed it, so the button was the one control in the app that did nothing.
+        .sheet(isPresented: tagBrowserBinding) {
+            TagBrowserView()
+        }
         .sheet(isPresented: $isExportPresented) {
             ExportSheet()
         }
@@ -565,6 +570,22 @@ public struct RootView: View {
             }
         )
 
+        // Time's two surfaces, by name. The segmented control in Time's toolbar is the pointer
+        // route; this is the keyboard one, and it works from anywhere.
+        for surface in TimeSurface.allCases {
+            commands.append(
+                PaletteCommand(
+                    id: "go-time-\(surface.rawValue)",
+                    title: "Go to Time \(surface.displayName)",
+                    category: .navigate,
+                    symbolName: surface.symbolName
+                ) {
+                    navigation.select(.time)
+                    navigation.timeSurface = surface
+                }
+            )
+        }
+
         if let projectSidebar = services?.projectSidebar {
             var listed = Set<UUID>()
             for row in projectSidebar.favourites + projectSidebar.rows
@@ -787,6 +808,10 @@ public struct RootView: View {
 
     private var taskEntryBinding: Binding<Bool> {
         Binding(get: { navigation.isTaskEntryVisible }, set: { navigation.isTaskEntryVisible = $0 })
+    }
+
+    private var tagBrowserBinding: Binding<Bool> {
+        Binding(get: { navigation.isTagBrowserVisible }, set: { navigation.isTagBrowserVisible = $0 })
     }
 
     private var peopleCommandBarBinding: Binding<Bool> {

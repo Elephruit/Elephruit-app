@@ -280,7 +280,10 @@ struct ProjectsSidebarSection: View {
               let row = pendingDeletion,
               let item = try? services.items.item(id: row.id)
         else { return }
-        try? services.items.moveToTrash(item)
+        // Through the undo coordinator: confirming a dialog does not waive ⌘Z. The confirmation
+        // is there because a project takes its descendants with it; the undo is there because the
+        // dialog can still be answered on autopilot.
+        services.perform { try services.undo.moveToTrash([item]) }
         services.refreshDerivedState()
         if navigation.selection.projectID == row.id { navigation.select(.today) }
     }

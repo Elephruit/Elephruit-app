@@ -101,6 +101,7 @@ struct EventTemplateListView: View {
 
     @State private var templates: [EventTemplate] = []
     @State private var editing: EventTemplate?
+    @State private var pendingDeletion: EventTemplate?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -165,7 +166,7 @@ struct EventTemplateListView: View {
                         .onTapGesture { editing = template }
                         .contextMenu {
                             Button("Edit…") { editing = template }
-                            Button("Delete", role: .destructive) { delete(template) }
+                            Button("Delete…", role: .destructive) { pendingDeletion = template }
                         }
                         .accessibilityElement(children: .combine)
                     }
@@ -185,6 +186,20 @@ struct EventTemplateListView: View {
         }
         .frame(width: 460, height: 420)
         .task { reload() }
+        // Configuration, not content, so the structural rule applies: confirm, and say what goes.
+        .confirmationDialog(
+            "Delete “\(pendingDeletion?.name ?? "")”?",
+            isPresented: Binding(
+                get: { pendingDeletion != nil },
+                set: { if !$0 { pendingDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Template", role: .destructive) { confirmDeletion() }
+            Button("Cancel", role: .cancel) { pendingDeletion = nil }
+        } message: {
+            Text("Events already created from it are not affected.")
+        }
         .sheet(item: $editing) { template in
             EventTemplateEditorView(template: template) { saved in
                 save(saved)
@@ -212,8 +227,9 @@ struct EventTemplateListView: View {
         reload()
     }
 
-    private func delete(_ template: EventTemplate) {
-        guard let services else { return }
+    private func confirmDeletion() {
+        defer { pendingDeletion = nil }
+        guard let services, let template = pendingDeletion else { return }
         services.perform { try services.eventTemplates.delete(id: template.id) }
         reload()
     }

@@ -31,6 +31,11 @@ public struct ItemListView: View {
     /// because nothing brings this one back.
     @State private var pendingPermanentDeletion: Item?
 
+    /// The same preference the sidebar's Empty Trash honours. The toolbar button used to skip it,
+    /// which made the safer-looking of the two buttons the dangerous one.
+    @AppStorage("confirmBeforeEmptyingTrash") private var confirmBeforeEmptyingTrash = true
+    @State private var isConfirmingEmptyTrash = false
+
     @FocusState private var isSearchFieldFocused: Bool
 
 
@@ -363,8 +368,23 @@ public struct ItemListView: View {
 
         if navigation.selection == .trash, !items.isEmpty {
             ToolbarItem {
-                Button("Empty Trash", systemImage: "trash.slash") { emptyTrash() }
-                    .accessibilityIdentifier(AccessibilityID.Trash.emptyTrashButton)
+                Button("Empty Trash…", systemImage: "trash.slash") {
+                    if confirmBeforeEmptyingTrash {
+                        isConfirmingEmptyTrash = true
+                    } else {
+                        emptyTrash()
+                    }
+                }
+                .accessibilityIdentifier(AccessibilityID.Trash.emptyTrashButton)
+                .confirmationDialog(
+                    "Empty the Trash?",
+                    isPresented: $isConfirmingEmptyTrash
+                ) {
+                    Button("Empty Trash", role: .destructive) { emptyTrash() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Everything in the Trash is removed permanently. This cannot be undone.")
+                }
             }
         } else {
             ToolbarItem {
@@ -736,7 +756,8 @@ public struct ItemListView: View {
 
     private func restore(_ item: Item) {
         guard let services else { return }
-        services.perform { try services.items.restore(item) }
+        // The same door the batch bar uses, so a restore is undoable however it was asked for.
+        services.perform { try services.undo.restore(ids: [item.id]) }
         services.noteChange(to: item)
         Task { await reload() }
     }

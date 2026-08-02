@@ -642,8 +642,11 @@ struct PeopleListView: View {
         let successor = ids.drop { !removed.contains($0) }.first { !removed.contains($0) }
             ?? ids.last { !removed.contains($0) }
 
+        // Through the undo coordinator, as one step. This path — the context menu and both delete
+        // keys — used to go straight at the repository while the swipe went through undo, which
+        // made ⌘Z work for one of the four ways of doing the same thing.
+        services.perform { try services.undo.moveToTrash(people) }
         for person in people {
-            services.perform { try services.items.moveToTrash(person) }
             services.noteRemoval(of: person.id)
         }
 

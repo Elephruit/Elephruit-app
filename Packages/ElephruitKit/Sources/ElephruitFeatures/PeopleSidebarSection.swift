@@ -26,6 +26,13 @@ struct PeopleSidebarSection: View {
     @State private var isExpanded = true
     @State private var isShowingContactImport = false
 
+    private struct GroupDeletion {
+        let id: UUID
+        let name: String
+    }
+
+    @State private var pendingGroupDeletion: GroupDeletion?
+
     var body: some View {
         Section {
             ForEach(Self.scopes, id: \.self) { scope in
@@ -141,8 +148,23 @@ struct PeopleSidebarSection: View {
         .accessibilityHint(scope.hint)
         .contextMenu {
             if case .group(let id) = scope {
-                Button("Delete group", role: .destructive) { deleteGroup(id) }
+                Button("Delete Group…", role: .destructive) {
+                    pendingGroupDeletion = GroupDeletion(id: id, name: title ?? scope.title)
+                }
             }
+        }
+        .confirmationDialog(
+            "Delete “\(pendingGroupDeletion?.name ?? "")”?",
+            isPresented: Binding(
+                get: { pendingGroupDeletion != nil },
+                set: { if !$0 { pendingGroupDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Group", role: .destructive) { confirmGroupDeletion() }
+            Button("Cancel", role: .cancel) { pendingGroupDeletion = nil }
+        } message: {
+            Text("The group is only a grouping. The people in it are not affected.")
         }
     }
 
@@ -174,9 +196,13 @@ struct PeopleSidebarSection: View {
         scopeCounts = counts
     }
 
-    private func deleteGroup(_ id: UUID) {
-        guard let services else { return }
-        services.perform { try services.personGroups.deleteGroup(id: id) }
+    private func confirmGroupDeletion() {
+        defer { pendingGroupDeletion = nil }
+        guard let services, let pending = pendingGroupDeletion else { return }
+        services.perform { try services.personGroups.deleteGroup(id: pending.id) }
+        if navigation.selection == .people(.group(id: pending.id)) {
+            navigation.select(.people(.all))
+        }
         reload()
     }
 }

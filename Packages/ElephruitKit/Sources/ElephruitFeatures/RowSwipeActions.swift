@@ -122,7 +122,7 @@ enum RowSwipeActions {
         return [
             SwipeAction(
                 id: "task.trash",
-                title: "Delete",
+                title: "Trash",
                 systemImage: "trash",
                 armedSystemImage: "trash.fill",
                 role: .destructive,
@@ -161,7 +161,7 @@ enum RowSwipeActions {
                     systemImage: "arrow.uturn.backward",
                     tint: Theme.Colors.completed
                 ) {
-                    services.perform { try services.items.restore(item) }
+                    services.perform { try services.undo.restore(ids: [item.id]) }
                     services.noteChange(to: item)
                     onChange()
                 }
@@ -247,7 +247,7 @@ enum RowSwipeActions {
         return [
             SwipeAction(
                 id: "item.trash",
-                title: "Delete",
+                title: "Trash",
                 systemImage: "trash",
                 armedSystemImage: "trash.fill",
                 role: .destructive,
@@ -306,7 +306,7 @@ enum RowSwipeActions {
         return [
             SwipeAction(
                 id: "person.trash",
-                title: "Delete",
+                title: "Trash",
                 systemImage: "trash",
                 armedSystemImage: "trash.fill",
                 role: .destructive,

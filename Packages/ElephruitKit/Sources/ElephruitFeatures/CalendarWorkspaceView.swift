@@ -14,6 +14,7 @@ public struct CalendarWorkspaceView: View {
     @State private var editorRequest: EditorRequest?
     @State private var quickEntryStart: Date?
     @State private var pendingChange: ScopedChangeRequest?
+    @State private var pendingSingleDeletion: ScopedChange?
     @State private var annotatedKeys: Set<String> = []
     @State private var isShowingSetEditor = false
     @State private var isShowingTemplates = false
@@ -136,6 +137,23 @@ public struct CalendarWorkspaceView: View {
                     editorRequest = EditorRequest(existing: nil, draft: draft)
                 }
             )
+        }
+        .confirmationDialog(
+            "Delete “\(pendingSingleDeletion?.event.displayTitle ?? "")”?",
+            isPresented: Binding(
+                get: { pendingSingleDeletion != nil },
+                set: { if !$0 { pendingSingleDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Event", role: .destructive) {
+                guard let change = pendingSingleDeletion else { return }
+                pendingSingleDeletion = nil
+                Task { await perform(change, scope: .thisEvent, services: services, workspace: workspace) }
+            }
+            Button("Cancel", role: .cancel) { pendingSingleDeletion = nil }
+        } message: {
+            Text("The event is removed from your calendar everywhere it syncs. This cannot be undone.")
         }
         .sheet(item: $pendingChange) { request in
             EventScopeSheet(
@@ -366,7 +384,14 @@ public struct CalendarWorkspaceView: View {
         let event = change.event
 
         guard event.isRecurring else {
-            Task { await perform(change, scope: .thisEvent, services: services, workspace: workspace) }
+            // A deletion asks even for a single event: it writes to the system calendar on every
+            // device it syncs to, and nothing in this app can bring it back. Moves and resizes
+            // stay immediate — they are direct manipulation, and their result is on screen.
+            if change.isDeletion {
+                pendingSingleDeletion = change
+            } else {
+                Task { await perform(change, scope: .thisEvent, services: services, workspace: workspace) }
+            }
             return
         }
 

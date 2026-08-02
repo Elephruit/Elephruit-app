@@ -705,6 +705,21 @@ public final class AppServices {
         lastError = nil
     }
 
+    /// Soft-deletes a saved search or smart list — the two share the record and the rule.
+    ///
+    /// A search is only its definition, so deleting one touches none of the items it finds. It is
+    /// not moved to the Trash either — the Trash holds content, and a query string among somebody's
+    /// deleted notes is filing noise — which is why every caller confirms before calling this.
+    public func deleteSavedSearch(id: UUID) {
+        perform {
+            let descriptor = FetchDescriptor<SavedSearch>(predicate: #Predicate { $0.id == id })
+            guard let search = try context.fetch(descriptor).first else { return }
+            search.deletedAt = dateProvider.now
+            try context.save()
+        }
+        refreshDerivedState()
+    }
+
     // MARK: - Index
 
     /// Builds the search index. Called once after the window appears, never blocking launch.

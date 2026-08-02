@@ -81,6 +81,24 @@ struct TodayActions {
         services.timer.switchTo(item: task)
     }
 
+    /// Sends a task to the Trash, undoably — the canonical deletion every list already offers,
+    /// which Today alone did not: a task could be completed, rescheduled, reprioritised and
+    /// flagged from the day it was planned on, but never deleted from there.
+    func moveToTrash(_ task: Item) {
+        services.perform { try services.undo.moveToTrash([task]) }
+        services.refreshDerivedState()
+        services.noteRemoval(of: task.id)
+    }
+
+    /// Removes a Reminders-linked task, here alone or in both places. Mirrors the task list's
+    /// two-command pattern — see `TaskRowMenu` for why this is never a dialog.
+    func deleteLinked(_ task: Item, choice: LinkedDeletionChoice) {
+        Task {
+            _ = await services.reminderSync.delete(task, choice: choice)
+            services.noteRemoval(of: task.id)
+        }
+    }
+
     /// Opens the record itself, in the inspector beside the day.
     ///
     /// Selecting rather than navigating: leaving Today to read one task's fields is a round trip out
