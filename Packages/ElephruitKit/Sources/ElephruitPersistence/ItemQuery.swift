@@ -271,8 +271,26 @@ extension ItemQuery {
             // The pinned clause rides along in the active scope on the same terms — and never
             // beside a due bound, where the builder would be over its clause ceiling. Post-filtering
             // re-applies it either way, so the store clause only shrinks what is materialised.
-            isPinned: scope == .active && dueFrom == nil && dueBefore == nil ? isPinned : nil
+            isPinned: scope == .active && dueFrom == nil && dueBefore == nil ? isPinned : nil,
+            // Containment too: a project's contents and the top level are asked constantly, and
+            // post-filtering them meant materialising the library to keep a dozen rows. Pushed in
+            // the two scopes hot paths use; the post-filter still re-applies either clause, so the
+            // scopes and combinations the store does not carry answer exactly as before.
+            parent: storeParentFilter()
         )
+    }
+
+    /// The containment clause the store can carry for this query, if any.
+    ///
+    /// `nil` whenever the predicate already carries a due bound — stacking riders would pass the
+    /// builder's clause ceiling — and for `hasNoParent == false`, which nothing hot asks and which
+    /// stays a post-filter.
+    private func storeParentFilter() -> ItemPredicateBuilder.ParentFilter? {
+        guard scope == .active || scope == .all else { return nil }
+        guard dueFrom == nil, dueBefore == nil else { return nil }
+        if let parentID { return .id(parentID) }
+        if hasNoParent == true { return .unparented }
+        return nil
     }
 
     /// Sort descriptors for the fetch.
