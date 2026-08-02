@@ -49,21 +49,6 @@ public struct RootView: View {
     /// The window's own width, so a restored column width can be clamped to what there is.
     @State private var windowWidth: CGFloat = 0
 
-    /// Widths held fixed for one turn of the run loop while a module change lands.
-    ///
-    /// AppKit's split view keeps its divider position across everything: changing the constraints
-    /// alone moves a column only when its *current* width breaks them, so a People pane at 520 would
-    /// happily sit at 520 in Notes, which allows up to 960. Pinning min, ideal and max to the value
-    /// this module wants forces the move; relaxing them a moment later gives the divider back.
-    @State private var pinnedWidths: [ModuleShellLayout.Column: CGFloat] = [:]
-
-    /// Watches the columns and records only the widths the user chose.
-    ///
-    /// A reference type rather than a dictionary in `@State`, and that is the point: it is written
-    /// to on every frame of every animation the shell runs, and writing to `@State` would invalidate
-    /// this view each time. See ``PaneWidthRecorder``.
-    @State private var widthRecorder = PaneWidthRecorder()
-
     @State private var isExportPresented = false
     @State private var isImportPresented = false
     @State private var transferSummary: String?
@@ -282,24 +267,6 @@ public struct RootView: View {
     /// The column widths whatever this window is showing has asked for.
     private var shellLayout: ModuleShellLayout { navigation.shellLayout }
 
-    /// What the shell's shape depends on.
-    ///
-    /// The module, and — because Today is a canvas where the rest of primary navigation is a list —
-    /// whether Today is what is on screen. Watching the module alone meant moving between Inbox and
-    /// Today changed every column without the shell being told, so the width recorder read the snap
-    /// as a drag and stored the day's full width as somebody's preferred Inbox list.
-    private struct ShellShape: Equatable {
-        var module: AppModule?
-        var isToday: Bool
-    }
-
-    private var shellShape: ShellShape {
-        ShellShape(
-            module: navigation.activeModule,
-            isToday: navigation.activeModule == nil && navigation.selection.canonical == .today
-        )
-    }
-
     /// The user's sidebar width, bounded only to keep the column usable.
     private var sidebarWidth: CGFloat {
         let stored = storedSidebarWidth.isFinite
@@ -443,11 +410,8 @@ public struct RootView: View {
                 .primary,
                 layout: shellLayout,
                 resolved: shellWidths.primary,
-                pinned: pinnedWidths[.primary]
+                pinned: nil
             )
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
-                sample(width, of: .primary)
-            }
         } detail: {
             // A canvas module — the calendar, the time sheet — has nothing to put in a third column,
             // and the honest expression of that is no column rather than a narrow one. What used to
@@ -467,11 +431,8 @@ public struct RootView: View {
                         .detail,
                         layout: shellLayout,
                         resolved: detailWidth,
-                        pinned: pinnedWidths[.detail]
+                        pinned: nil
                     )
-                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
-                        sample(width, of: .detail)
-                    }
             } else {
                 Color.clear
                     .navigationSplitViewColumnWidth(0)
@@ -490,14 +451,6 @@ public struct RootView: View {
             guard width > 0 else { return }
             windowWidth = width
         }
-        // A shell change moves columns without the window moving. Tell the recorder before its next
-        // settled sample, but do not force a second layout pass: the column modifiers above already
-        // carry the new policy, and pinning then relaxing them made empty destinations visibly
-        // bounce between two arrangements.
-        .onChange(of: shellShape, initial: true) { _, _ in
-            widthRecorder.expectShellMove(of: [.primary, .detail])
-        }
-        .onAppear { wireWidthRecorder() }
         // Anything that happened in Reminders while the app was in the background arrives when it
         // comes back. `reconcile()` is idempotent, so a pass that finds nothing writes nothing.
         .onChange(of: scenePhase) { _, phase in
@@ -513,15 +466,6 @@ public struct RootView: View {
                 return
             }
             reminderRefresh?.start()
-        }
-        // Hiding the sidebar makes every other column wider without the window changing size, which
-        // is precisely what the drag test mistakes for a preference. Saying so in advance is what
-        // stops collapsing the sidebar from rewriting the width of the pane beside it.
-        .onChange(of: navigation.layoutMode) { _, _ in
-            widthRecorder.expectShellMove(of: [.primary, .detail])
-        }
-        .onChange(of: inspectorBinding.wrappedValue) { _, _ in
-            widthRecorder.expectShellMove(of: [.primary, .detail])
         }
         // A pane that closed itself for want of anything to show comes back when there is something.
         // A pane the *user* closed stays closed — see `shouldOpenAfterSelection`.
@@ -728,90 +672,6 @@ public struct RootView: View {
         ])
 
         return commands
-    }
-
-    // MARK: - Module layout
-
-    /// Corrects a divider AppKit restored outside the active module's declared range.
-    ///
-    /// This is deliberately not run during ordinary navigation. The active column modifiers apply
-    /// those policy changes directly; a pin-and-relax cycle there created two layouts 50 ms apart.
-    /// The temporary pin remains only for an invalid asynchronous AppKit restoration detected by
-    /// `sample`, where one forced pass is necessary to bring the divider back inside its ceiling.
-    private func correctInvalidColumnWidths() async {
-        widthRecorder.expectShellMove(of: [.primary, .detail])
-
-        // Pinned to what the *shell* worked out, not to what the store remembers.
-        //
-        // These two answers are not the same, and the difference is the whole of a bug. The store
-        // knows one column's remembered width, or the module's ideal where there is none. The shell
-        // knows what every column should be *given the window* — which columns fit, what each is
-        // entitled to, and where any spare width goes. Pinning the store's answer therefore snapped
-        // the list back to its ideal and threw the spare room away: a Notes list declared a maximum
-        // of 480, was computed at 480 for a 1710-point window, and was then pinned to 340 by this
-        // line, with the remaining 140 points going to a detail pane whose editor caps its own
-        // measure at 720 and could not use them.
-        //
-        // `shellWidths` already reads the store — it passes it into `widths(…)` as `stored:` — so
-        // nothing is forgotten by going through it. What is gained is that there is one calculation
-        // rather than two that agree until they do not.
-        let widths = shellWidths
-        var pinned: [ModuleShellLayout.Column: CGFloat] = [.primary: widths.primary]
-        if let detail = widths.detail { pinned[.detail] = detail }
-        pinnedWidths = pinned
-
-        try? await Task.sleep(for: .milliseconds(50))
-        guard !Task.isCancelled else { return }
-        pinnedWidths = [:]
-    }
-
-    /// Hands a column's current width to the recorder, which decides later whether it was a choice.
-    ///
-    /// Nothing is stored here and nothing is invalidated: the recorder is a reference type precisely
-    /// so that a stream of widths arriving one per frame does not redraw the window that produced
-    /// them. Samples taken while the shell has the columns pinned are dropped outright — those
-    /// widths are the shell's, and it already knows what it asked for.
-    private func sample(_ width: CGFloat, of column: ModuleShellLayout.Column) {
-        guard pinnedWidths.isEmpty else { return }
-
-        // AppKit's split view restores its remembered divider *asynchronously* — the
-        // "NSSplitView Subview Frames" autosave arrives a beat after the window is up — and that
-        // late restoration does not honour `navigationSplitViewColumnWidth`. A list with a declared
-        // maximum of 340 can therefore open at a thousand points and stay there. The samples are
-        // where the loss shows up, so this is where it is corrected. The shell's elastic pane is
-        // allowed to exceed its declared preference in order to fill the window, however; checking
-        // only the declared ceiling made Inbox and Notes continuously pin and release that valid
-        // width every 50 ms.
-        let resolvedWidth: CGFloat = switch column {
-        case .primary: shellWidths.primary
-        case .detail: shellWidths.detail ?? 0
-        case .sidebar: shellWidths.sidebar ?? 0
-        case .inspector: shellWidths.inspector ?? 0
-        }
-        let restorationCeiling = shellLayout.restorationCeiling(
-            of: column,
-            resolvedWidth: resolvedWidth
-        )
-        if width > restorationCeiling + 1 {
-            Task { await correctInvalidColumnWidths() }
-            return
-        }
-
-        widthRecorder.sample(width, of: column, windowWidth: windowWidth)
-    }
-
-    /// Says what to do with a width once the recorder has decided it was one the user chose.
-    ///
-    /// The two models are captured by name rather than through `self`, deliberately: the recorder
-    /// holds this closure for the window's lifetime, and capturing the view would mean the closure
-    /// held the `@State` that holds the recorder.
-    private func wireWidthRecorder() {
-        let layout = moduleLayout
-        let navigation = navigation
-
-        widthRecorder.onDrag = { column, width, windowWidth in
-            layout.setWidth(width, of: column, in: navigation.activeModule, available: windowWidth)
-        }
     }
 
     // MARK: - Bindings

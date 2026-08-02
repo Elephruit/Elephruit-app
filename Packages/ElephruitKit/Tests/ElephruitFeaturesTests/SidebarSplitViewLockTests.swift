@@ -26,6 +26,17 @@ struct SidebarSplitViewLockTests {
         #expect(fixture.sidebarItem.maximumThickness == 272)
     }
 
+    @Test("Repeated SwiftUI updates do not relayout an unchanged split view")
+    func unchangedLockIsIdempotent() {
+        let fixture = fixture()
+        fixture.marker.lockContainingPane()
+        let adjustments = fixture.marker.adjustmentCount
+
+        fixture.marker.lockContainingPane()
+
+        #expect(fixture.marker.adjustmentCount == adjustments)
+    }
+
     private func fixture() -> (
         controller: NSSplitViewController,
         sidebarItem: NSSplitViewItem,

@@ -15,13 +15,15 @@ struct SidebarSplitViewLock: NSViewRepresentable {
     }
 
     func updateNSView(_ marker: SidebarSplitViewLockMarker, context: Context) {
+        guard marker.width != width else { return }
         marker.width = width
-        marker.lockContainingPane()
     }
 }
 
 @MainActor
 final class SidebarSplitViewLockMarker: NSView {
+    private(set) var adjustmentCount = 0
+
     var width: CGFloat {
         didSet {
             guard width != oldValue else { return }
@@ -63,11 +65,22 @@ final class SidebarSplitViewLockMarker: NSView {
             if let splitView = view as? NSSplitView,
                let index = splitView.arrangedSubviews.firstIndex(where: { isDescendant(of: $0) }),
                let controller = splitViewController(for: splitView),
-               controller.splitViewItems.indices.contains(index) {
+                controller.splitViewItems.indices.contains(index) {
                 let item = controller.splitViewItems[index]
+                let constraintsChanged = item.minimumThickness != width
+                    || item.maximumThickness != width
+                    || item.holdingPriority != .required
+
+                // `updateNSView` can run for any state change in the window. Calling
+                // `adjustSubviews()` unconditionally turns those updates into new split-layout
+                // passes, which can feed back into another SwiftUI update. Once the pane is locked
+                // there is nothing to do; AppKit itself enforces the equal min/max constraints.
+                guard constraintsChanged else { return true }
+
                 item.minimumThickness = width
                 item.maximumThickness = width
                 item.holdingPriority = .required
+                adjustmentCount += 1
                 splitView.adjustSubviews()
                 return true
             }
