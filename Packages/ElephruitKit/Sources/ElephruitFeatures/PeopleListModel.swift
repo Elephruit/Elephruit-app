@@ -155,7 +155,9 @@ public final class PeopleListModel {
             id: person.id,
             displayName: person.displayTitle,
             organizationName: person.personProfile?.organizationName,
-            lastInteraction: lastInteraction[person.id]
+            lastInteraction: lastInteraction[person.id],
+            isFavorite: person.isFavorite,
+            colorName: person.colorName
         )
     }
 }

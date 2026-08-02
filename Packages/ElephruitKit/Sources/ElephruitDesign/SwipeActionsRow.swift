@@ -48,8 +48,6 @@ struct SwipeActionsModifier: ViewModifier {
     let trailing: [SwipeAction]
     let allowsFullSwipe: Bool
 
-    @State private var rowWidth: CGFloat = 0
-
     func body(content: Content) -> some View {
         if coordinator == nil || (leading.isEmpty && trailing.isEmpty) {
             // Nothing to reveal, or nowhere to reveal it. The row is returned untouched rather than
@@ -83,12 +81,11 @@ struct SwipeActionsModifier: ViewModifier {
                 }
         }
         .clipped()
-        .background {
-            GeometryReader { proxy in
-                Color.clear
-                    .onAppear { publish(width: proxy.size.width) }
-                    .onChange(of: proxy.size.width) { _, width in publish(width: width) }
-            }
+        // `onGeometryChange` rather than a `GeometryReader` in the background: the reader is a
+        // whole extra layout host per row, and rows are built by the dozen while a list scrolls.
+        // This costs a callback on appear and on resize, which is all the reader was being used for.
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            publish(width: width)
         }
         .onHover { coordinator?.setHovered(rowID, $0) }
         .onDisappear { coordinator?.forget(rowID) }
@@ -152,7 +149,6 @@ struct SwipeActionsModifier: ViewModifier {
     private var isOpen: Bool { coordinator?.isOpen(rowID) ?? false }
 
     private func publish(width: CGFloat) {
-        rowWidth = width
         coordinator?.setGeometry(
             SwipeGesture(
                 leadingCount: leading.count,

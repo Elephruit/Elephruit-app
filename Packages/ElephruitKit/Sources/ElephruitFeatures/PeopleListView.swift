@@ -251,7 +251,7 @@ struct PeopleListView: View {
                 Section {
                     ForEach(section.entries) { entry in
                         if let person = model.person(id: entry.id) {
-                            row(for: person, reason: model.matchReasons[entry.id])
+                            row(for: entry, person: person, reason: model.matchReasons[entry.id])
                                 .id(entry.id)
                         }
                     }
@@ -294,10 +294,11 @@ struct PeopleListView: View {
         }
     }
 
-    private func row(for person: Item, reason: String?) -> some View {
+    /// The entry draws the row; the record is only for the actions, which read it lazily.
+    private func row(for entry: PersonListEntry, person: Item, reason: String?) -> some View {
         PersonRow(
-            person: person,
-            isSelected: selection.contains(person.id),
+            entry: entry,
+            isSelected: selection.contains(entry.id),
             matchReason: reason
         )
         .tag(person.id)
@@ -660,8 +661,19 @@ struct PeopleListView: View {
 ///
 /// Contact details, role, location, and relationship history belong on the person's page. Keeping
 /// them out of the list also keeps row construction proportional to what the list actually shows.
+///
+/// ### Why the row holds values rather than the record
+/// Because a `List` builds rows as they scroll into view, and this row used to read everything it
+/// drew off the live `@Model` — the title (which trims, and falls back to inferring one from the
+/// body), the star, the avatar colour, and the organisation, which meant faulting the profile
+/// relationship. Every one of those is a store-backed read, so the most expensive moment in the
+/// module was *scrolling*, per row, on the main thread. ``PersonListEntry`` already computes all
+/// four when the list is built; the row draws what it is handed and touches nothing.
 struct PersonRow: View {
-    let person: Item
+    let name: String
+    let company: String?
+    let colorName: String?
+    let isFavorite: Bool
 
     /// Suppresses the hover fill on a row that already carries the selection fill.
     var isSelected: Bool = false
@@ -669,21 +681,40 @@ struct PersonRow: View {
     /// Why this person matched the search, when the list is answering one.
     var matchReason: String?
 
+    init(entry: PersonListEntry, isSelected: Bool = false, matchReason: String? = nil) {
+        self.name = entry.displayName
+        self.company = entry.organizationName
+        self.colorName = entry.colorName
+        self.isFavorite = entry.isFavorite
+        self.isSelected = isSelected
+        self.matchReason = matchReason
+    }
+
+    /// For the places that hold a record and no entry. The reads happen once, here, at
+    /// construction — never in `body`.
+    init(person: Item, isSelected: Bool = false, matchReason: String? = nil) {
+        self.name = person.displayTitle
+        self.company = person.personProfile?.organizationName
+        self.colorName = person.colorName
+        self.isFavorite = person.isFavorite
+        self.isSelected = isSelected
+        self.matchReason = matchReason
+    }
+
     var body: some View {
-        let profile = person.personProfile
-        let company = profile?.organizationName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let company = company?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         HStack(alignment: .top, spacing: Theme.Spacing.small) {
-            PersonAvatar(name: person.displayTitle, colorName: person.colorName, size: 28)
+            PersonAvatar(name: name, colorName: colorName, size: 28)
 
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 HStack(spacing: Theme.Spacing.tight) {
-                    Text(person.displayTitle)
+                    Text(name)
                         .font(Theme.Text.rowTitle)
                         .rowForeground(.primary)
                         .lineLimit(1)
 
-                    if person.isFavorite {
+                    if isFavorite {
                         Image(systemName: "star.fill")
                             .font(.system(size: 8))
                             .rowTint(Theme.Colors.dueToday)
@@ -704,10 +735,10 @@ struct PersonRow: View {
         .padding(.vertical, Theme.Spacing.tight)
         .frame(minHeight: Theme.Size.rowHeightExpanded)
         .hoverHighlight(isEnabled: !isSelected, extending: Theme.Spacing.small)
-        .help([person.displayTitle, company].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n"))
+        .help([name, company].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n"))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            [person.displayTitle, company, matchReason]
+            [name, company, matchReason]
                 .compactMap { $0 }
                 .filter { !$0.isEmpty }
                 .joined(separator: ", ")

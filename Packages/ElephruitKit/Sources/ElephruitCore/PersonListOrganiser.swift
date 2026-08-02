@@ -55,16 +55,29 @@ public struct PersonListEntry: Sendable, Hashable, Identifiable {
     /// When this person was last interacted with, for ``PersonListSort/recentInteraction``.
     public var lastInteraction: Date?
 
+    /// Carried here so a row can draw its star and its avatar tint without touching the record.
+    ///
+    /// An entry is everything a list row *shows*, computed once when the list is built. The row
+    /// used to read these two — and the organisation, which meant faulting the profile
+    /// relationship — straight off the live model, which put a store read inside every row body
+    /// and made appearing rows the most expensive thing a scroll did.
+    public var isFavorite: Bool
+    public var colorName: String?
+
     public init(
         id: UUID,
         displayName: String,
         organizationName: String? = nil,
-        lastInteraction: Date? = nil
+        lastInteraction: Date? = nil,
+        isFavorite: Bool = false,
+        colorName: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
         self.organizationName = organizationName
         self.lastInteraction = lastInteraction
+        self.isFavorite = isFavorite
+        self.colorName = colorName
     }
 }
 
