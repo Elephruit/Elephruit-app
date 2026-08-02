@@ -525,6 +525,14 @@ extension Item {
 
 // MARK: - ContentItem
 
+extension String {
+    /// `nil` rather than `""`, so an absent contribution to the search projection does not become an
+    /// empty string that then has to be filtered out again downstream.
+    fileprivate var nilWhenEmpty: String? {
+        isEmpty ? nil : self
+    }
+}
+
 extension Item: ContentItem {
     public var tagSlugs: [String] {
         tags.map(\.slug).sorted()
@@ -547,7 +555,14 @@ extension Item {
             title: title,
             body: body,
             tagSlugs: tags.map(\.slug),
-            extra: personProfile?.searchableText
+            // The reference and the bug report join the projection. A handle is what people paste
+            // into a search box, and reproduction steps are where the searchable words actually
+            // live: "the crash when the list is empty" is written in the steps, never in the title.
+            extra: [referenceKey, personProfile?.searchableText, bugRecord?.searchableText]
+                .compactMap { $0 }
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+                .nilWhenEmpty
         )
     }
 
