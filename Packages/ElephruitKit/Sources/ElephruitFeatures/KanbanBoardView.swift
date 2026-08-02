@@ -1,3 +1,4 @@
+import AppKit
 import ElephruitCore
 import ElephruitDesign
 import ElephruitModel
@@ -212,9 +213,12 @@ struct KanbanColumnView: View {
 @MainActor
 @Observable
 final class KanbanDragCoordinator {
+    static let minimumPointerMovement: CGFloat = 12
+
     private(set) var draggedItemID: UUID?
     private(set) var targetedColumnKey: String?
     private(set) var itemIDsByColumn: [String: [UUID]] = [:]
+    private var lastReorderPointerY: CGFloat?
 
     var isDragging: Bool { draggedItemID != nil }
 
@@ -230,7 +234,12 @@ final class KanbanDragCoordinator {
     }
 
     /// Moves the ghost card immediately as the pointer crosses the upper or lower half of a card.
-    func move(to columnKey: String, relativeTo targetID: UUID?, placeAfter: Bool) {
+    func move(
+        to columnKey: String,
+        relativeTo targetID: UUID?,
+        placeAfter: Bool,
+        pointerY: CGFloat? = nil
+    ) {
         guard let draggedItemID, targetID != draggedItemID else { return }
 
         var next = itemIDsByColumn
@@ -246,8 +255,21 @@ final class KanbanDragCoordinator {
         }
 
         guard next[columnKey] != destination || targetedColumnKey != columnKey else { return }
+
+        // Reflow moves cards underneath a pointer that may not have moved at all. Without a latch,
+        // the newly-arrived card can immediately report the opposite insertion and undo the move.
+        // Measure the physical pointer in screen coordinates so layout animation cannot fake the
+        // movement needed to unlock another reorder. Entering a different column always unlocks.
+        if targetedColumnKey == columnKey,
+           let pointerY,
+           let lastReorderPointerY,
+           abs(pointerY - lastReorderPointerY) < Self.minimumPointerMovement {
+            return
+        }
+
         next[columnKey] = destination
         itemIDsByColumn = next
+        lastReorderPointerY = pointerY
         targetedColumnKey = columnKey
     }
 
@@ -272,6 +294,7 @@ final class KanbanDragCoordinator {
         draggedItemID = nil
         targetedColumnKey = nil
         itemIDsByColumn = [:]
+        lastReorderPointerY = nil
     }
 }
 
@@ -296,7 +319,12 @@ struct KanbanCardDropDelegate: DropDelegate {
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
         if let placeAfter = Self.placeAfter(at: info.location.y) {
-            drag.move(to: columnKey, relativeTo: targetID, placeAfter: placeAfter)
+            drag.move(
+                to: columnKey,
+                relativeTo: targetID,
+                placeAfter: placeAfter,
+                pointerY: NSEvent.mouseLocation.y
+            )
         }
         return DropProposal(operation: .move)
     }

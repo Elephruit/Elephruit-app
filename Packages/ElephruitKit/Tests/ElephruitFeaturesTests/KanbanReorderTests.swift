@@ -63,4 +63,38 @@ struct KanbanReorderTests {
         #expect(KanbanCardDropDelegate.placeAfter(at: 24) == nil)
         #expect(KanbanCardDropDelegate.placeAfter(at: 38) == true)
     }
+
+    @Test("Reflow under a stationary pointer cannot reverse itself")
+    func layoutMovementDoesNotUnlockAnotherMove() {
+        let moving = UUID()
+        let neighbour = UUID()
+        let drag = KanbanDragCoordinator()
+
+        drag.begin(itemID: moving, columns: ["doing": [moving, neighbour]])
+        drag.move(
+            to: "doing",
+            relativeTo: neighbour,
+            placeAfter: true,
+            pointerY: 100
+        )
+        #expect(drag.itemIDs(in: "doing") == [neighbour, moving])
+
+        // The local target may have jumped by a whole card, but the mouse moved only four points.
+        drag.move(
+            to: "doing",
+            relativeTo: neighbour,
+            placeAfter: false,
+            pointerY: 104
+        )
+        #expect(drag.itemIDs(in: "doing") == [neighbour, moving])
+
+        // A deliberate twelve-point movement unlocks the reverse placement.
+        drag.move(
+            to: "doing",
+            relativeTo: neighbour,
+            placeAfter: false,
+            pointerY: 112
+        )
+        #expect(drag.itemIDs(in: "doing") == [moving, neighbour])
+    }
 }
