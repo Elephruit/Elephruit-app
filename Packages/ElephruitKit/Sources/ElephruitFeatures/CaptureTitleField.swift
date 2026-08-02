@@ -86,10 +86,12 @@ struct CaptureTitleField: NSViewRepresentable {
         // Write back only when something *other than typing* changed the text: a lift, an accepted
         // suggestion, a reset after saving. Never mid-edit, and never while an input method is
         // composing — replacing the string then destroys the marked text and the user's word with it.
+        let cameFromOutsideEditor = composition.titleText != context.coordinator.lastEditorText
         if textView.string != composition.titleText,
-           !context.coordinator.isEditing || context.coordinator.isApplyingLift,
+           !context.coordinator.isEditing || context.coordinator.isApplyingLift || cameFromOutsideEditor,
            !textView.hasMarkedText() {
             textView.string = composition.titleText
+            context.coordinator.lastEditorText = composition.titleText
             let location = CaptureHighlight.utf16Offset(ofCharacter: caret, in: composition.titleText)
             textView.setSelectedRange(NSRange(location: location, length: 0))
         }
@@ -108,8 +110,13 @@ struct CaptureTitleField: NSViewRepresentable {
         /// through mid-typing — it is a consequence of the keystroke, not a stale value racing it.
         var isApplyingLift = false
 
+        /// The last value reported by this editor. A differing binding value therefore came from a
+        /// completion or reset and is safe to apply even while the field remains first responder.
+        var lastEditorText: String
+
         init(_ parent: CaptureTitleField) {
             self.parent = parent
+            self.lastEditorText = parent.composition.titleText
         }
 
         func textDidBeginEditing(_ notification: Notification) { isEditing = true }
@@ -124,6 +131,7 @@ struct CaptureTitleField: NSViewRepresentable {
 
             let selection = textView.selectedRange()
             let text = textView.string
+            lastEditorText = text
             parent.composition.titleText = text
             parent.caret = CaptureHighlight.characterOffset(ofUTF16: selection.location, in: text)
 
@@ -173,6 +181,7 @@ struct CaptureTitleField: NSViewRepresentable {
             defer { isApplyingLift = false }
 
             textView.textStorage?.replaceCharacters(in: whole, with: replacement)
+            lastEditorText = replacement
             textView.didChangeText()
             textView.setSelectedRange(
                 NSRange(location: CaptureHighlight.utf16Offset(ofCharacter: newCaret, in: replacement), length: 0)

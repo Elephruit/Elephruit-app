@@ -144,14 +144,18 @@ final class TokenisedTextView: NSTextView {
         guard string.isEmpty, !placeholder.isEmpty else { return }
 
         let origin = textContainerOrigin
-        let inset = textContainerInset
+        // `textContainerOrigin` already includes `textContainerInset`. The caret additionally sits
+        // after the container's line-fragment padding, so the placeholder must do the same. Adding
+        // the inset twice and omitting that padding put the insertion point through the middle of
+        // the placeholder's first letter.
+        let fragmentPadding = textContainer?.lineFragmentPadding ?? 0
         NSAttributedString(
             string: placeholder,
             attributes: [
                 .font: font ?? .preferredFont(forTextStyle: .body),
                 .foregroundColor: NSColor.placeholderTextColor,
             ]
-        ).draw(at: NSPoint(x: origin.x + inset.width, y: origin.y + inset.height))
+        ).draw(at: NSPoint(x: origin.x + fragmentPadding, y: origin.y))
     }
 
     /// Where a range of characters is on screen — one rect per line it spans.

@@ -84,6 +84,10 @@ struct ProjectWorkspaceView: View {
             ProjectWorkspaceHeader(model: model)
             ProjectViewTabBar(model: model, navigation: navigation, projectID: projectID)
             Divider()
+            if model.activeView?.kind == .bugs {
+                ProjectBugAddBar(model: model)
+                Divider()
+            }
             body(for: model)
         }
         // The keyboard the workspace always claimed to have. Every handler goes through
@@ -185,6 +189,43 @@ struct ProjectWorkspaceView: View {
             get: { model.presentedItem.map(PresentedWorkItem.init) },
             set: { if $0 == nil { model.dismissPresentedItem() } }
         )
+    }
+}
+
+/// The direct filing path for a project's Bugs view.
+///
+/// A bug view that can only receive work through global Quick Jot is a report, not a workspace.
+/// Keeping this above both the populated list and its empty state also means the first bug is no
+/// harder to add than the fiftieth.
+struct ProjectBugAddBar: View {
+    @Environment(\.services) private var services
+    let model: ProjectWorkspaceModel
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.small) {
+            Image(systemName: ItemKind.bug.symbolName)
+                .foregroundStyle(Theme.Colors.warning)
+                .accessibilityHidden(true)
+            QuickAddRow(placeholder: "Add a bug", model: model, onCommit: add)
+        }
+        .padding(.horizontal, Theme.Spacing.large)
+        .padding(.vertical, Theme.Spacing.tight)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("project.bugs.add")
+    }
+
+    private func add(_ title: String) {
+        guard let services, let project = model.project else { return }
+        guard let bug = try? services.workItems.createWorkItem(
+            title: title,
+            kind: .bug,
+            in: project
+        ) else { return }
+
+        services.noteChange(to: bug)
+        model.refresh()
+        model.select(bug.id)
+        model.present(bug.id)
     }
 }
 

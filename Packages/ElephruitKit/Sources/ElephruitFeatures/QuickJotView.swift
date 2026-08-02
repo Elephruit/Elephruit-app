@@ -12,6 +12,7 @@ public struct CaptureCompletion: Sendable, Hashable {
         case tag
         case person
         case project
+        case bang
         case dueDate
         case followDate
 
@@ -21,6 +22,7 @@ public struct CaptureCompletion: Sendable, Hashable {
             case .tag: "#"
             case .person: "@"
             case .project: ">"
+            case .bang: "!"
             case .dueDate: "due:"
             case .followDate: "follow:"
             }
@@ -101,7 +103,7 @@ extension CaptureCompletion {
             return trigger
         }
 
-        for trigger in [Trigger.tag, .person, .project] where span.hasPrefix(trigger.prefix) {
+        for trigger in [Trigger.tag, .person, .project, .bang] where span.hasPrefix(trigger.prefix) {
             return trigger
         }
 

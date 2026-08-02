@@ -58,30 +58,36 @@ struct CaptureChip: View {
 /// same row makes the user find the difference for themselves.
 struct CaptureChipRow: View {
     @Binding var draft: QuickJotDraft
+    var displayDraft: QuickJotDraft? = nil
 
     /// Tag colours, so a chip here matches the same tag in a list. Absent is fine — an uncoloured tag
     /// is the common case.
     var tagColors: [String: String] = [:]
+    var onBeforeRemoving: () -> Void = {}
+
+    private var shown: QuickJotDraft { displayDraft ?? draft }
 
     var body: some View {
         FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
-            ForEach(draft.tagSlugs, id: \.self) { slug in
+            ForEach(shown.tagSlugs, id: \.self) { slug in
                 CaptureChip(
                     symbolName: "number",
                     label: TextNormalizer.slugComponents(slug).last ?? slug,
                     tint: tagColors[slug].map(Theme.Palette.color(named:)),
                     removalDescription: "Remove the tag \(slug)"
                 ) {
+                    onBeforeRemoving()
                     draft.removeTag(slug)
                 }
             }
 
-            ForEach(draft.personHints, id: \.self) { name in
+            ForEach(shown.personHints, id: \.self) { name in
                 CaptureChip(
                     symbolName: "person",
                     label: name,
                     removalDescription: "Stop mentioning \(name)"
                 ) {
+                    onBeforeRemoving()
                     draft.removePerson(name)
                 }
             }
@@ -90,32 +96,35 @@ struct CaptureChipRow: View {
             // arrangement the user already knows from elsewhere. The two must never share a glyph:
             // one brings the item into Today and the other can go overdue, and an interface that drew
             // them alike would be conflating exactly what the grammar went to trouble to separate.
-            if let follow = draft.followDate {
+            if let follow = shown.followDate {
                 CaptureChip(
                     symbolName: "calendar",
                     label: follow.summary,
                     removalDescription: "Clear when this starts"
                 ) {
+                    onBeforeRemoving()
                     draft.setFollow(nil)
                 }
             }
 
-            if let due = draft.dueInterpretation {
+            if let due = shown.dueInterpretation {
                 CaptureChip(
                     symbolName: "flag",
                     label: "Deadline: \(due.summary)",
                     removalDescription: "Clear the deadline"
                 ) {
+                    onBeforeRemoving()
                     draft.setDue(nil)
                 }
             }
 
-            if let priority = draft.priority, let symbol = priority.symbolName {
+            if let priority = shown.priority, let symbol = priority.symbolName {
                 CaptureChip(
                     symbolName: symbol,
                     label: priority.displayName,
                     removalDescription: "Clear the priority"
                 ) {
+                    onBeforeRemoving()
                     draft.setPriority(nil)
                 }
             }
@@ -148,23 +157,42 @@ struct CaptureChipRow: View {
 /// recorded, so it happens identically whether the date came from an icon or from the sentence.
 struct CaptureKindToggle: View {
     @Binding var draft: QuickJotDraft
+    var displayedKind: ItemKind? = nil
 
-    private var isTask: Bool { draft.kind == .task }
+    private var shownKind: ItemKind { displayedKind ?? draft.kind }
+    private var isTask: Bool { shownKind == .task }
+    private var isNote: Bool { shownKind == .note }
 
     var body: some View {
         Button {
             draft.choose(isTask ? .note : .task)
         } label: {
-            Label(isTask ? "Task" : "Note", systemImage: isTask ? "checkmark.square" : "text.alignleft")
+            Label(kindName, systemImage: kindSymbol)
                 .font(Theme.Text.metadata)
                 .foregroundStyle(Theme.Colors.secondaryText)
                 .lineLimit(1)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(isTask ? "A task. Click to make it a note." : "A note. Click to make it a task.")
+        .help(helpText)
         .accessibilityIdentifier(AccessibilityID.QuickCapture.kindToggle)
-        .accessibilityLabel(isTask ? "Task" : "Note")
-        .accessibilityHint("Switches between a task and a note")
+        .accessibilityLabel(kindName)
+        .accessibilityHint(helpText)
+    }
+
+    /// Grammar can choose more than Task and Note. Naming the actual kind here is the durable
+    /// confirmation that `#bug` became a tracked bug rather than disappearing as punctuation.
+    private var kindName: String { shownKind.displayName }
+
+    private var kindSymbol: String {
+        if isTask { return "checkmark.square" }
+        if isNote { return "text.alignleft" }
+        return shownKind.symbolName
+    }
+
+    private var helpText: String {
+        if isTask { return "A task. Click to make it a note." }
+        if isNote { return "A note. Click to make it a task." }
+        return "A \(kindName.lowercased()). Click to make it a task."
     }
 }

@@ -17,6 +17,7 @@ struct CaptureCompletionTests {
             ("Call #wo", .tag, "wo"),
             ("Call @Pri", .person, "Pri"),
             ("Call >Q3", .project, "Q3"),
+            ("Ship !hi", .bang, "hi"),
             ("Call due:fri", .dueDate, "fri"),
             ("Call follow:tue", .followDate, "tue"),
         ]
@@ -29,6 +30,26 @@ struct CaptureCompletionTests {
             #expect(completion.trigger == trigger)
             #expect(completion.query == query)
         }
+    }
+
+    @Test("Grammar entered in Notes is captured without rewriting the note body")
+    func notesGrammarIsCaptured() {
+        let composition = QuickJotComposition(
+            titleText: "The launch screen crashes",
+            notesText: "Seen on beta #bug >Elephruit @Mike !high"
+        )
+        let vocabulary = CaptureVocabulary(
+            projects: ["Elephruit"],
+            people: ["Mike"]
+        )
+
+        let captured = composition.captured(knowing: vocabulary)
+
+        #expect(captured.kind == .bug)
+        #expect(captured.projectHint == "Elephruit")
+        #expect(captured.personHints == ["Mike"])
+        #expect(captured.priority == .high)
+        #expect(captured.body == "Seen on beta #bug >Elephruit @Mike !high")
     }
 
     /// `due:` starts with a letter, so a sigil-first test would never see it and would offer tag
@@ -200,6 +221,24 @@ struct QuickJotControllerTests {
         )
         #expect(item.body == "The excess went up again")
         #expect(item.tags.contains { $0.slug == "admin" })
+    }
+
+    @Test("Saving strips visible Notes grammar after applying it")
+    func savingCleansNotesGrammar() throws {
+        let (controller, services) = makeController()
+        controller.composition.titleText = "Testing"
+        controller.composition.notesText = "test #bug due:today"
+
+        #expect(controller.save())
+
+        let item = try #require(
+            try services.items.items(matching: .everything())
+                .first { $0.title == "Testing" }
+        )
+        #expect(item.kind == .bug)
+        #expect(item.body == "test")
+        #expect(!item.body.contains("#bug"))
+        #expect(!item.body.contains("due:today"))
     }
 
     @Test("An empty composition saves nothing")

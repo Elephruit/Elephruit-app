@@ -23,6 +23,7 @@ import SwiftUI
 /// and the only one that is genuinely rare; `!high` remains how you say it.
 struct CaptureActionRow: View {
     @Binding var draft: QuickJotDraft
+    var displayDraft: QuickJotDraft? = nil
 
     var source: CaptureSuggestionSource
 
@@ -31,13 +32,15 @@ struct CaptureActionRow: View {
     /// see ``QuickJotComposition/flush(knowing:)``.
     var onBeforeChoosing: () -> Void
 
+    private var shown: QuickJotDraft { displayDraft ?? draft }
+
     var body: some View {
         HStack(spacing: Theme.Spacing.small) {
             CaptureDateButton(
                 symbolName: "calendar",
                 title: "When",
                 clearTitle: "Clear When",
-                expression: draft.followDate,
+                expression: shown.followDate,
                 calendar: source.services?.dateProvider.calendar ?? .current,
                 onBeforeChoosing: onBeforeChoosing
             ) { draft.setFollow($0) }
@@ -51,7 +54,7 @@ struct CaptureActionRow: View {
                 symbolName: "flag",
                 title: "Deadline",
                 clearTitle: "Clear Deadline",
-                expression: draft.dueDate,
+                expression: shown.dueDate,
                 calendar: source.services?.dateProvider.calendar ?? .current,
                 onBeforeChoosing: onBeforeChoosing
             ) { draft.setDue($0.map { DateInterpretation(day: $0) }) }
@@ -76,12 +79,12 @@ struct CaptureActionRow: View {
                         onBeforeChoosing()
                         if draft.tagSlugs.contains(slug) { draft.removeTag(slug) } else { draft.addTag(slug) }
                     } label: {
-                        Label(slug, systemImage: draft.tagSlugs.contains(slug) ? "checkmark" : "number")
+                        Label(slug, systemImage: shown.tagSlugs.contains(slug) ? "checkmark" : "number")
                     }
                 }
             }
         } label: {
-            CaptureActionGlyph(symbolName: "tag", isActive: !draft.tagSlugs.isEmpty)
+            CaptureActionGlyph(symbolName: "tag", isActive: !shown.tagSlugs.isEmpty)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -96,7 +99,7 @@ struct CaptureActionRow: View {
     private var personButton: some View {
         CapturePopoverButton(
             symbolName: "person",
-            isActive: !draft.personHints.isEmpty,
+            isActive: !shown.personHints.isEmpty,
             help: "Mention someone",
             onBeforeChoosing: onBeforeChoosing
         ) { dismiss in
@@ -238,18 +241,21 @@ struct CaptureDateButton: View {
 /// resolves. Only a name typed by hand can fail to.
 struct CaptureDestinationButton: View {
     @Binding var draft: QuickJotDraft
+    var displayDraft: QuickJotDraft? = nil
 
     var source: CaptureSuggestionSource
     var onBeforeChoosing: () -> Void
 
     @State private var isPresented = false
 
+    private var shown: QuickJotDraft { displayDraft ?? draft }
+
     private var resolved: Item? {
-        guard let hint = draft.projectHint else { return nil }
+        guard let hint = shown.projectHint else { return nil }
         return (try? source.services?.capture.resolveContainer(named: hint)) ?? nil
     }
 
-    private var isUnresolved: Bool { draft.projectHint != nil && resolved == nil }
+    private var isUnresolved: Bool { shown.projectHint != nil && resolved == nil }
 
     var body: some View {
         Button {
@@ -272,7 +278,7 @@ struct CaptureDestinationButton: View {
         .accessibilityLabel("Filed under \(label)")
         .popover(isPresented: $isPresented, arrowEdge: .top) {
             VStack(alignment: .leading, spacing: 0) {
-                if draft.projectHint != nil {
+                if shown.projectHint != nil {
                     Button {
                         draft.setProject(nil)
                         isPresented = false
@@ -301,11 +307,11 @@ struct CaptureDestinationButton: View {
     }
 
     private var label: String {
-        resolved?.title ?? draft.projectHint ?? "Inbox"
+        resolved?.title ?? shown.projectHint ?? "Inbox"
     }
 
     private var symbolName: String {
         if isUnresolved { return "questionmark.square.dashed" }
-        return draft.projectHint == nil ? "tray" : "square.stack.3d.up"
+        return shown.projectHint == nil ? "tray" : "square.stack.3d.up"
     }
 }

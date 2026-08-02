@@ -97,6 +97,16 @@ struct QuickJotDraftTests {
         #expect(draft.tagSlugs == ["admin"])
     }
 
+    @Test("Choosing the bug tag records a bug kind instead of a decorative tag")
+    func bugTagIsSemantic() {
+        var draft = QuickJotDraft()
+        draft.addTag("#Bug")
+
+        #expect(draft.kind == .bug)
+        #expect(draft.kindIsExplicit)
+        #expect(!draft.tagSlugs.contains("bug"))
+    }
+
     /// Otherwise picking "Sarah" from the menu and then typing `@sarah` links her twice, because
     /// `CaptureService` resolves both spellings to the same person.
     @Test("The same person under a different spelling is not mentioned twice")
@@ -282,5 +292,47 @@ struct QuickJotDraftTests {
         draft.setDue(DateInterpretation(day: .tomorrow))
 
         #expect(draft.merged(with: CaptureParser.parse("")).isEmpty)
+    }
+}
+
+@Suite("Quick Jot composition preview")
+struct QuickJotCompositionPreviewTests {
+    private let vocabulary = CaptureVocabulary(
+        projects: ["Elephruit App"],
+        people: ["Mike Zehrer"]
+    )
+
+    @Test("Visible Notes grammar is reflected in the live preview without changing the text")
+    func previewReadsNotes() {
+        let composition = QuickJotComposition(
+            titleText: "Testing",
+            notesText: "test >Elephruit App @Mike Zehrer\n#bug due:today"
+        )
+
+        let preview = composition.previewDraft(knowing: vocabulary)
+
+        #expect(preview.projectHint == "Elephruit App")
+        #expect(preview.personHints == ["Mike Zehrer"])
+        #expect(preview.kind == .bug)
+        #expect(preview.dueDate == .today)
+        #expect(composition.notesText.contains(">Elephruit App"))
+    }
+
+    @Test("Settling strips Notes grammar while preserving its prose")
+    func flushCleansNotes() {
+        var composition = QuickJotComposition(
+            titleText: "Testing",
+            notesText: "test >Elephruit App @Mike Zehrer\n#bug due:today"
+        )
+
+        let didFlush = composition.flush(knowing: vocabulary)
+        #expect(didFlush)
+        #expect(composition.notesText.trimmingCharacters(in: .whitespacesAndNewlines) == "test")
+        #expect(!composition.notesText.contains(">"))
+        #expect(!composition.notesText.contains("#bug"))
+        #expect(composition.draft.projectHint == "Elephruit App")
+        #expect(composition.draft.personHints == ["Mike Zehrer"])
+        #expect(composition.draft.kind == .bug)
+        #expect(composition.draft.dueDate == .today)
     }
 }

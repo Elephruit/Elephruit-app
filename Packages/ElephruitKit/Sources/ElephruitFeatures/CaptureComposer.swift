@@ -45,6 +45,8 @@ struct CaptureComposer: View {
     @State private var caret = 0
     @State private var suggestions: [String] = []
     @State private var selection = 0
+    @State private var suggestionField: Field = .title
+    @State private var notesCaret = 0
     @FocusState private var focus: Field?
 
     /// The project and person names the grammar may spell out without quotes.
@@ -57,7 +59,16 @@ struct CaptureComposer: View {
     @State private var tagColors: [String: String] = [:]
 
     private var completion: CaptureCompletion? {
-        CaptureCompletion.active(in: composition.titleText, caretAt: caret)
+        switch focus ?? suggestionField {
+        case .title:
+            CaptureCompletion.active(in: composition.titleText, caretAt: caret)
+        case .notes:
+            CaptureCompletion.active(in: composition.notesText, caretAt: notesCaret)
+        }
+    }
+
+    private var previewDraft: QuickJotDraft {
+        composition.previewDraft(knowing: vocabulary)
     }
 
     var body: some View {
@@ -111,7 +122,16 @@ struct CaptureComposer: View {
             .accessibilityIdentifier(AccessibilityID.QuickCapture.textField)
             .accessibilityLabel("What would you like to capture?")
 
-            CaptureNotesField(text: $composition.notesText, onCancel: onCancel)
+            CaptureNotesField(
+                text: $composition.notesText,
+                caret: $notesCaret,
+                vocabulary: vocabulary,
+                onSubmit: onSave,
+                onCancel: onCancel,
+                onMove: { direction in moveSelection(direction) },
+                onAccept: { acceptSuggestion() }
+            )
+                .frame(minHeight: 44, maxHeight: 96)
                 .focused($focus, equals: .notes)
 
             if !suggestions.isEmpty {
@@ -119,7 +139,19 @@ struct CaptureComposer: View {
             }
 
             if !composition.draft.isEmpty {
-                CaptureChipRow(draft: $composition.draft, tagColors: tagColors)
+                CaptureChipRow(
+                    draft: $composition.draft,
+                    displayDraft: previewDraft,
+                    tagColors: tagColors,
+                    onBeforeRemoving: settleWhatWasTyped
+                )
+            } else if !previewDraft.isEmpty {
+                CaptureChipRow(
+                    draft: $composition.draft,
+                    displayDraft: previewDraft,
+                    tagColors: tagColors,
+                    onBeforeRemoving: settleWhatWasTyped
+                )
             }
 
             CaptureGrammarHints(hints: CaptureParser.grammarHints)
@@ -160,18 +192,29 @@ struct CaptureComposer: View {
         .accessibilityLabel("\(suggestions.count) suggestions. Use the arrow keys, then Tab to accept.")
     }
 
-    private func moveSelection(_ direction: Int) {
-        guard !suggestions.isEmpty else { return }
+    @discardableResult
+    private func moveSelection(_ direction: Int) -> Bool {
+        guard !suggestions.isEmpty else { return false }
         selection = max(0, min(suggestions.count - 1, selection + direction))
+        return true
     }
 
     /// Returns whether a suggestion was taken, so the field knows whether to swallow the key.
     @discardableResult
     private func acceptSuggestion() -> Bool {
         guard let completion, suggestions.indices.contains(selection) else { return false }
-        let applied = completion.applying(suggestions[selection], to: composition.titleText, caretAt: caret)
-        composition.titleText = applied.text
-        caret = applied.caret
+        let value = suggestions[selection]
+
+        switch suggestionField {
+        case .title:
+            let applied = completion.applying(value, to: composition.titleText, caretAt: caret)
+            composition.titleText = applied.text
+            caret = applied.caret
+        case .notes:
+            let applied = completion.applying(value, to: composition.notesText, caretAt: notesCaret)
+            composition.notesText = applied.text
+            notesCaret = applied.caret
+        }
         suggestions = []
         return true
     }
@@ -188,6 +231,7 @@ struct CaptureComposer: View {
         }
 
         selection = 0
+        suggestionField = focus ?? suggestionField
         let query = completion.query
 
         switch completion.trigger {
@@ -199,6 +243,12 @@ struct CaptureComposer: View {
 
         case .project:
             suggestions = source.containers(matching: query, limit: 6)
+
+        case .bang:
+            let values = ["high", "medium", "low", "today", "tomorrow", "friday", "+1w"]
+            suggestions = Array(
+                values.filter { query.isEmpty || $0.hasPrefix(query.lowercased()) }.prefix(6)
+            )
 
         case .dueDate, .followDate:
             let examples = NaturalDateParser.recognisedExamples
@@ -239,10 +289,11 @@ struct CaptureComposer: View {
 
     private var footer: some View {
         HStack(spacing: Theme.Spacing.medium) {
-            CaptureKindToggle(draft: $composition.draft)
+            CaptureKindToggle(draft: $composition.draft, displayedKind: previewDraft.kind)
 
             CaptureDestinationButton(
                 draft: $composition.draft,
+                displayDraft: previewDraft,
                 source: source,
                 onBeforeChoosing: settleWhatWasTyped
             )
@@ -251,6 +302,7 @@ struct CaptureComposer: View {
 
             CaptureActionRow(
                 draft: $composition.draft,
+                displayDraft: previewDraft,
                 source: source,
                 onBeforeChoosing: settleWhatWasTyped
             )

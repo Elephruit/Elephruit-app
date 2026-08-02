@@ -12,9 +12,9 @@ public struct QuickJotComposition: Sendable, Hashable {
     /// is a field editor, and a pasted newline is split off into ``notesText``.
     public var titleText: String
 
-    /// Everything below the title. No grammar is read from it: the parser has only ever looked at the
-    /// first line, and a note that says `due: tomorrow` in prose is describing something, not
-    /// instructing anybody.
+    /// Everything below the title. Grammar chosen from completions is lifted into ``draft`` as it is
+    /// entered. Unselected tokens are also recognised on save, so keyboard-only entry in Notes has
+    /// the same result as entry in the title field.
     public var notesText: String
 
     /// What has been decided — by clicking, or by typing something that then settled.
@@ -82,17 +82,53 @@ public struct QuickJotComposition: Sendable, Hashable {
     /// before the menu opens puts the two in the order they actually happened.
     @discardableResult
     public mutating func flush(knowing vocabulary: CaptureVocabulary) -> Bool {
-        let result = CaptureLift.lift(
+        var didLift = false
+
+        let titleResult = CaptureLift.lift(
             titleText,
             caretAt: titleText.count,
             knowing: vocabulary,
             flushing: true
         )
-        guard result.didLift else { return false }
+        if titleResult.didLift {
+            titleText = titleResult.text
+            draft.apply(titleResult.lifted)
+            didLift = true
+        }
 
-        titleText = result.text
-        draft.apply(result.lifted)
-        return true
+        // Notes use the same grammar line by line. Strip only what the parser understood, keeping
+        // all prose and line breaks, and move those decisions into the durable draft before save.
+        var cleanedLines: [String] = []
+        for line in notesText.split(separator: "\n", omittingEmptySubsequences: false) {
+            let text = String(line)
+            let result = CaptureLift.lift(
+                text,
+                caretAt: text.count,
+                knowing: vocabulary,
+                flushing: true
+            )
+            cleanedLines.append(result.text)
+            if result.didLift {
+                draft.apply(result.lifted)
+                didLift = true
+            }
+        }
+        if didLift {
+            notesText = cleanedLines.joined(separator: "\n")
+        }
+
+        return didLift
+    }
+
+    /// The decisions the footer should show right now, including grammar that deliberately remains
+    /// visible in either editor until the next settling point.
+    public func previewDraft(knowing vocabulary: CaptureVocabulary) -> QuickJotDraft {
+        var preview = draft
+        preview.apply(CaptureParser.parse(titleText, knowing: vocabulary))
+        for line in notesText.split(separator: "\n", omittingEmptySubsequences: false) {
+            preview.apply(CaptureParser.parse(String(line), knowing: vocabulary))
+        }
+        return preview
     }
 
     // MARK: - Becoming something that can be saved
@@ -104,6 +140,25 @@ public struct QuickJotComposition: Sendable, Hashable {
     /// the residual holding only what could never be lifted — an unclosed quote, a sigil the parser
     /// did not recognise, a bare URL.
     public func captured(knowing vocabulary: CaptureVocabulary) -> CaptureDraft {
-        draft.merged(with: CaptureParser.parse(combinedText, knowing: vocabulary))
+        var decisions = draft
+
+        // `CaptureParser` treats only its first line as grammar. Feed each notes line through that
+        // same grammar to collect decisions, while preserving the notes verbatim as the item's body.
+        // This lets `#`, `@`, `!` and `>` work in either editor without turning ordinary note prose
+        // into a rewritten, whitespace-normalised document.
+        for line in notesText.split(separator: "\n", omittingEmptySubsequences: false) {
+            decisions.apply(CaptureParser.parse(String(line), knowing: vocabulary))
+        }
+
+        var captured = decisions.merged(
+            with: CaptureParser.parse(titleText, knowing: vocabulary)
+        )
+        captured.originalText = combinedText
+        captured.body = notesText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if captured.title.isEmpty, !captured.body.isEmpty {
+            captured.title = TextNormalizer.inferredTitle(fromBody: captured.body)
+        }
+        return captured
     }
 }

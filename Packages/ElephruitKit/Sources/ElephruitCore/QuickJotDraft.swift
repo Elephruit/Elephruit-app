@@ -100,8 +100,20 @@ public struct QuickJotDraft: Sendable, Hashable {
     }
 
     public mutating func addTag(_ slug: String) {
-        guard TextNormalizer.isValidSlug(slug), !tagSlugs.contains(slug) else { return }
-        tagSlugs.append(slug)
+        let normalised = TextNormalizer.slug(slug)
+        guard TextNormalizer.isValidSlug(normalised) else { return }
+
+        // The tag picker and the typed grammar must agree about the handful of `#` words that
+        // describe what an item is. In particular, choosing `bug` from the tag menu must create a
+        // real bug (with severity, verification and reporting), not a task that merely wears a
+        // decorative "bug" label.
+        if let kind = CaptureKindWords.kind(for: normalised) {
+            choose(kind)
+            return
+        }
+
+        guard !tagSlugs.contains(normalised) else { return }
+        tagSlugs.append(normalised)
     }
 
     public mutating func removeTag(_ slug: String) {
