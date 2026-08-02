@@ -187,6 +187,34 @@ struct WorkItemEditingTests {
         #expect(model.presentedItemID == id)
     }
 
+    @Test("The verification concern opens the completed bug that can clear it")
+    func verificationConcernOpensItsFix() throws {
+        let services = makeServices()
+        let project = try services.items.create(ItemDraft(kind: .project, title: "P"))
+        let openBug = try services.workItems.createWorkItem(
+            title: "Still broken", kind: .bug, in: project
+        )
+        let fixedBug = try services.workItems.createWorkItem(
+            title: "Ready to check", kind: .bug, in: project
+        )
+        _ = try services.tasks.complete(fixedBug)
+
+        let model = ProjectWorkspaceModel(services: services)
+        model.load(projectID: project.id, viewID: nil)
+
+        #expect(model.health.bugsAwaitingVerification == 1)
+        #expect(model.presentFixAwaitingVerification())
+        #expect(model.presentedItemID == fixedBug.id)
+        #expect(model.selectedItemIDs == [fixedBug.id])
+        #expect(model.presentedItemID != openBug.id)
+
+        try services.bugs.markVerified(fixedBug)
+        model.refresh()
+
+        #expect(model.health.bugsAwaitingVerification == 0)
+        #expect(!model.presentFixAwaitingVerification())
+    }
+
     @Test("Deleting from the workspace lands the selection on the nearest survivor")
     func deletionMovesTheSelectionPredictably() throws {
         let services = makeServices()

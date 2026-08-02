@@ -105,11 +105,7 @@ struct ProjectOverviewView: View {
             SectionHeader("Needs attention")
 
             ForEach(model.health.concerns) { concern in
-                Label(concern.sentence, systemImage: concern.symbolName)
-                    .font(Theme.Text.rowSubtitle)
-                    .foregroundStyle(
-                        concern.isUrgent ? Theme.Colors.overdue : Theme.Colors.secondaryText
-                    )
+                ProjectConcernRow(concern: concern, model: model)
             }
         }
     }
@@ -207,6 +203,46 @@ struct ProjectOverviewView: View {
 
     private var dateProvider: any DateProvider {
         services?.dateProvider ?? SystemDateProvider()
+    }
+}
+
+/// A health concern, with a direct route to the work when the concern has one.
+///
+/// Verification is intentionally a separate claim from completion. Completed bugs are hidden from
+/// the default Bugs list, so telling somebody a fix needs checking without opening that bug leaves
+/// the only clearing action effectively undiscoverable.
+struct ProjectConcernRow: View {
+    let concern: ProjectHealth.Concern
+    let model: ProjectWorkspaceModel
+
+    var body: some View {
+        if concern.id == "verify" {
+            Button {
+                model.presentFixAwaitingVerification()
+            } label: {
+                HStack(spacing: Theme.Spacing.tight) {
+                    concernLabel
+                    Image(systemName: "chevron.right")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.tertiaryText)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Open a fix to check it")
+            .accessibilityHint("Opens a completed bug so its fix can be marked verified")
+            .accessibilityIdentifier("project.concern.verify")
+        } else {
+            concernLabel
+        }
+    }
+
+    private var concernLabel: some View {
+        Label(concern.sentence, systemImage: concern.symbolName)
+            .font(Theme.Text.rowSubtitle)
+            .foregroundStyle(
+                concern.isUrgent ? Theme.Colors.overdue : Theme.Colors.secondaryText
+            )
     }
 }
 
