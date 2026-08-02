@@ -97,4 +97,30 @@ struct KanbanReorderTests {
         )
         #expect(drag.itemIDs(in: "doing") == [moving, neighbour])
     }
+
+    @Test("The full-column fallback cannot bypass pointer hysteresis")
+    func fallbackCannotReverseAStationaryCardTarget() {
+        let moving = UUID()
+        let first = UUID()
+        let last = UUID()
+        let drag = KanbanDragCoordinator()
+
+        drag.begin(itemID: moving, columns: ["doing": [moving, first, last]])
+        drag.move(
+            to: "doing",
+            relativeTo: first,
+            placeAfter: true,
+            pointerY: 100
+        )
+        #expect(drag.itemIDs(in: "doing") == [first, moving, last])
+
+        // A competing fallback update at the same physical pointer position must not append it.
+        drag.move(
+            to: "doing",
+            relativeTo: nil,
+            placeAfter: true,
+            pointerY: 100
+        )
+        #expect(drag.itemIDs(in: "doing") == [first, moving, last])
+    }
 }

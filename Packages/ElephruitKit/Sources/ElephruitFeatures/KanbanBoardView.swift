@@ -356,7 +356,15 @@ struct KanbanEndDropDelegate: DropDelegate {
     func validateDrop(info: DropInfo) -> Bool { drag.isDragging }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        drag.move(to: columnKey, relativeTo: nil, placeAfter: true)
+        // The fallback must use the same physical-pointer latch as card targets. Leaving this
+        // coordinate nil let the background and a card alternate placements under a stationary
+        // mouse, bypassing the anti-oscillation gate on every background update.
+        drag.move(
+            to: columnKey,
+            relativeTo: nil,
+            placeAfter: true,
+            pointerY: NSEvent.mouseLocation.y
+        )
         return DropProposal(operation: .move)
     }
 
