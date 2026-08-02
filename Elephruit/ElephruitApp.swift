@@ -315,6 +315,12 @@ struct ElephruitCommands: Commands {
             Button("Inbox") { navigation?.select(.inbox) }
                 .shortcut(.goInbox, in: shortcuts)
 
+            // Projects is not a module — the tree lives at the top level of the sidebar — so its
+            // shortcut lives here with the other top-level destinations rather than in the Module
+            // menu below, whose loop iterates `displayOrder` and rightly never sees it.
+            Button("All Projects") { navigation?.select(.kind(.project)) }
+                .shortcut(.goProjects, in: shortcuts)
+
             Divider()
 
             // Every module, in the order the sidebar lists them. This is the keyboard route into a
@@ -396,7 +402,6 @@ struct ElephruitCommands: Commands {
         let command: ShortcutCommand? = switch module {
         case .calendar: .goCalendar
         case .notes: .goNotes
-        case .projects: .goProjects
         case .people: .goPeople
         default: nil
         }

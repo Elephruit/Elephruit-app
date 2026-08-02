@@ -41,6 +41,7 @@ public enum AccessibilityID {
         public static let emptyState = "detail.emptyState"
         public static let backlinksSection = "detail.backlinks"
         public static let inspectorToggle = "detail.inspectorToggle"
+        public static let moveToTrash = "detail.moveToTrash"
     }
 
     public enum Inspector {

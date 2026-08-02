@@ -280,7 +280,10 @@ struct ProjectsSidebarSection: View {
               let row = pendingDeletion,
               let item = try? services.items.item(id: row.id)
         else { return }
-        try? services.items.moveToTrash(item)
+        // Through the undo coordinator: confirming a dialog does not waive ⌘Z. The confirmation
+        // is there because a project takes its descendants with it; the undo is there because the
+        // dialog can still be answered on autopilot.
+        services.perform { try services.undo.moveToTrash([item]) }
         services.refreshDerivedState()
         if navigation.selection.projectID == row.id { navigation.select(.today) }
     }
@@ -336,9 +339,6 @@ struct ProjectSidebarRowView: View {
     }
 
     private var glyphColor: Color {
-        guard let name = row.colorName, let entry = Theme.Palette(rawValue: name) else {
-            return Theme.Colors.secondaryText
-        }
-        return entry.color
+        Theme.Palette.color(named: row.colorName, neutral: Theme.Colors.secondaryText)
     }
 }

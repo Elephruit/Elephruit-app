@@ -195,7 +195,7 @@ struct PortraitCardView: View {
             RoundedRectangle(cornerRadius: 15)
                 .strokeBorder(category.tint.opacity(0.16))
         }
-        .shadow(color: .black.opacity(0.025), radius: 8, y: 2)
+        .shadow(color: Theme.Colors.shadow.opacity(0.025), radius: 8, y: 2)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(card.attribute.displayName)
     }

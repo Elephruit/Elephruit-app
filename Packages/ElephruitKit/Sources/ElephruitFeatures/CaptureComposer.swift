@@ -150,7 +150,7 @@ struct CaptureComposer: View {
                 .padding(.vertical, 3)
                 .padding(.horizontal, Theme.Spacing.small)
                 .background(
-                    index == selection ? Theme.Colors.selection.opacity(0.18) : Color.clear,
+                    index == selection ? Theme.Colors.selectionFill : Color.clear,
                     in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
                 )
                 .contentShape(Rectangle())

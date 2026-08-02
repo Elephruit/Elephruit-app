@@ -115,6 +115,17 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         return false
     }
 
+    /// The form of this selection a sidebar row is tagged with.
+    ///
+    /// A project row is tagged `.project(id:viewID: nil)` — the row neither knows nor cares which
+    /// of the project's views is open. The live selection *does* carry the view, so that leaving
+    /// and returning lands on the same tab. Matching the row against the selection therefore drops
+    /// the view, or the highlight would vanish the moment a tab was chosen.
+    public var sidebarRowForm: SidebarSelection {
+        if case .project(let id, _) = self { return .project(id: id, viewID: nil) }
+        return self
+    }
+
     /// The query this selection shows.
     ///
     /// Pure, so "what does Today mean?" is answered in one testable place rather than inside a view.
@@ -692,14 +703,20 @@ public final class NavigationModel {
         public var selection: SidebarSelection
         public var moduleSelections: [AppModule: SidebarSelection]
 
+        /// Which of Time's two surfaces was open. Optional so a scene written by an earlier
+        /// build — which never recorded it — still decodes; `nil` restores to the log.
+        public var timeSurface: TimeSurface?
+
         public init(
             module: AppModule?,
             selection: SidebarSelection,
-            moduleSelections: [AppModule: SidebarSelection] = [:]
+            moduleSelections: [AppModule: SidebarSelection] = [:],
+            timeSurface: TimeSurface? = nil
         ) {
             self.module = module
             self.selection = selection
             self.moduleSelections = moduleSelections
+            self.timeSurface = timeSurface
         }
 
         /// Encoded for `@SceneStorage`, which stores strings.
@@ -724,7 +741,8 @@ public final class NavigationModel {
         RestorationState(
             module: activeModule,
             selection: selection,
-            moduleSelections: moduleSelections
+            moduleSelections: moduleSelections,
+            timeSurface: timeSurface
         )
     }
 
@@ -738,6 +756,7 @@ public final class NavigationModel {
         forwardHistory.removeAll()
         withoutRecordingHistory {
             moduleSelections = state.moduleSelections
+            timeSurface = state.timeSurface ?? .log
             select(state.selection)
 
             if let module = state.module, activeModule == nil, !GlobalDestination.contains(state.selection) {

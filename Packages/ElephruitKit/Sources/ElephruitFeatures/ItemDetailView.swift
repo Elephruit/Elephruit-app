@@ -200,6 +200,32 @@ public struct ItemDetailView: View {
             }
             .accessibilityIdentifier(AccessibilityID.Detail.inspectorToggle)
         }
+
+        // The delete that was missing entirely: the item open in front of you was the one item
+        // the surface would not let you delete. Not shown in the Trash, where the banner already
+        // offers Put Back and permanence belongs to the Trash's own controls.
+        if !item.isInTrash {
+            ToolbarItem {
+                Button {
+                    moveToTrash(item)
+                } label: {
+                    Label("Move to Trash", systemImage: "trash")
+                }
+                .accessibilityIdentifier(AccessibilityID.Detail.moveToTrash)
+            }
+        }
+    }
+
+    /// Through the undo coordinator, like every list. The detail pane then shows the selection's
+    /// empty state rather than a stale editor over a trashed item.
+    private func moveToTrash(_ item: Item) {
+        guard let services else { return }
+        let id = item.id
+        services.perform { try services.undo.moveToTrash([item]) }
+        navigation.selectedItemIDs.remove(id)
+        if navigation.selectedItemID == id { navigation.selectItem(nil) }
+        services.refreshDerivedState()
+        services.noteRemoval(of: id)
     }
 
     // MARK: - Link completion

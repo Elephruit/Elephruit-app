@@ -34,6 +34,8 @@ public struct SidebarView: View {
     @SceneStorage("sidebar.tags.expanded") private var isTagsExpanded = false
     @SceneStorage("sidebar.searches.expanded") private var isSearchesExpanded = false
 
+    @State private var pendingSavedSearchDeletion: SidebarDerivedRow?
+
     /// Grows with the system text-size and control-size preferences.
     @ScaledMetric(relativeTo: .body) private var rowHeight = SidebarMetrics.baseRowHeight
 
@@ -41,9 +43,19 @@ public struct SidebarView: View {
         self.navigation = navigation
     }
 
+    /// Whether the sidebar swaps to a module's own level for this active module.
+    ///
+    /// One answer, asked by the header and the levels alike. The regression this guards against was
+    /// precisely the two drifting apart: the header checked ``AppModule/hasOwnSidebar`` and the
+    /// levels did not, so entering a project suppressed the header *and* swapped the list for a
+    /// module sidebar that draws nothing — a blank column with no way back.
+    static func showsModuleLevel(for module: AppModule?) -> Bool {
+        module?.hasOwnSidebar == true
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
-            if let module = navigation.activeModule, module.hasOwnSidebar {
+            if let module = navigation.activeModule, Self.showsModuleLevel(for: module) {
                 ModuleHeader(module: module, navigation: navigation)
                 Divider()
             }
@@ -57,6 +69,29 @@ public struct SidebarView: View {
                 statusLine
             }
         }
+        .confirmationDialog(
+            "Delete “\(pendingSavedSearchDeletion?.title ?? "")”?",
+            isPresented: Binding(
+                get: { pendingSavedSearchDeletion != nil },
+                set: { if !$0 { pendingSavedSearchDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Saved Search", role: .destructive) { confirmSavedSearchDeletion() }
+            Button("Cancel", role: .cancel) { pendingSavedSearchDeletion = nil }
+        } message: {
+            Text("The search is only its text. Nothing it finds is affected.")
+        }
+    }
+
+    private func confirmSavedSearchDeletion() {
+        defer { pendingSavedSearchDeletion = nil }
+        guard let services,
+              let row = pendingSavedSearchDeletion,
+              case .savedSearch(let id) = row.selection
+        else { return }
+        services.deleteSavedSearch(id: id)
+        if navigation.selection == row.selection { navigation.select(.today) }
     }
 
     // MARK: - Making a container
@@ -120,7 +155,7 @@ public struct SidebarView: View {
     /// happens with no movement at all.
     private var levels: some View {
         ZStack {
-            if let module = navigation.activeModule {
+            if let module = navigation.activeModule, Self.showsModuleLevel(for: module) {
                 ModuleSidebar(module: module, navigation: navigation)
                     .transition(.push(from: .trailing))
             } else {
@@ -270,6 +305,13 @@ public struct SidebarView: View {
                         isSelected: navigation.selection == row.selection,
                         rowHeight: rowHeight
                     )
+                    // The delete a saved search never had: once made, one was permanent. Confirmed
+                    // rather than trashed — a search is configuration, and the dialog says so.
+                    .contextMenu {
+                        Button("Delete Saved Search…", role: .destructive) {
+                            pendingSavedSearchDeletion = row
+                        }
+                    }
                 }
             } label: {
                 Label("Saved Searches", systemImage: "line.3.horizontal.decrease.circle")
@@ -332,7 +374,7 @@ public struct SidebarView: View {
 
     private var selectionBinding: Binding<SidebarSelection?> {
         Binding(
-            get: { navigation.selection },
+            get: { navigation.selection.sidebarRowForm },
             set: { newValue in
                 guard let newValue else { return }
                 navigation.select(newValue)
@@ -458,6 +500,15 @@ struct ModuleRow: View {
     let navigation: NavigationModel
     var rowHeight: CGFloat
 
+    /// Whether this row is where the window currently is.
+    ///
+    /// Only answered for modules that keep the primary sidebar on screen: their row is the one
+    /// place "you are here" can show. A module with its own sidebar never needs this — entering it
+    /// replaces the list, and the module header names it.
+    private var isCurrent: Bool {
+        navigation.activeModule == module && !module.hasOwnSidebar
+    }
+
     var body: some View {
         Button {
             navigation.enterModule(module)
@@ -472,16 +523,25 @@ struct ModuleRow: View {
 
                 Spacer(minLength: 0)
 
-                Image(systemName: "chevron.forward")
-                    .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.tertiaryText)
-                    .accessibilityHidden(true)
+                // The chevron promises a level to descend into. Only drawn where that is true.
+                if module.hasOwnSidebar {
+                    Image(systemName: "chevron.forward")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.tertiaryText)
+                        .accessibilityHidden(true)
+                }
             }
             .frame(minHeight: rowHeight)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: SidebarMetrics.selectionRadius)
+                .fill(isCurrent ? Theme.Colors.selectionFill : .clear)
+                .padding(.horizontal, -SidebarMetrics.selectionInset)
+        )
         .hoverHighlight(
+            isEnabled: !isCurrent,
             cornerRadius: SidebarMetrics.selectionRadius,
             extending: SidebarMetrics.selectionInset
         )
@@ -489,7 +549,7 @@ struct ModuleRow: View {
         .accessibilityIdentifier(module.accessibilityIdentifier)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Opens the \(module.title) module. \(module.hint)")
-        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(isCurrent ? [.isButton, .isSelected] : .isButton)
     }
 
     /// The one number worth carrying up to the module list.
@@ -520,7 +580,7 @@ struct SidebarDerivedRowView: View {
         HStack(spacing: SidebarMetrics.iconGap) {
             Image(systemName: row.symbolName)
                 .frame(width: SidebarMetrics.iconColumn)
-                .rowTint(row.colorName == nil ? Theme.Colors.secondaryText : Theme.Palette.color(named: row.colorName))
+                .rowTint(Theme.Palette.color(named: row.colorName, neutral: Theme.Colors.secondaryText))
                 .accessibilityHidden(true)
 
             Text(row.title)

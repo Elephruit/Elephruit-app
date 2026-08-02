@@ -156,7 +156,7 @@ struct TaskWorkspaceView: View {
         .listRowBackground(
             RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
                 .fill(navigation.selectedItemIDs.contains(task.id)
-                    ? Theme.Colors.selection.opacity(0.16)
+                    ? Theme.Colors.selectionFill
                     : Color.clear)
         )
         // ### The two ways in, and why there is no longer a third

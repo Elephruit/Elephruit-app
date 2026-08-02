@@ -205,8 +205,15 @@ struct SourceHygieneTests {
         // `Color.whiteboardTint` is not.
         // Written out in full: `Color.white`, `Color.purple`. A literal rather than a regex built
         // from the list at runtime, so it is checked at compile time and needs no `try`.
+        // The trailing check is a lookahead for identifier characters rather than `\b`. Swift
+        // Regex's default `\b` is the Unicode word boundary, and Unicode word segmentation treats
+        // a dot between letters as *mid-word* — "black.opacity" is one word to it, the way
+        // "example.com" is. So `.shadow(color: .black.opacity(0.1))` sailed through the boundary
+        // check for as long as the literal had a method chained onto it, which shadows always do.
+        // The lookahead keeps what the boundary was for: `.reduce` and `CharacterSet.whitespaces`
+        // still do not match, because `u` and `s` are identifier characters.
         let explicitColour =
-            /\bColor\.(pink|red|blue|green|orange|yellow|purple|gray|grey|brown|teal|cyan|indigo|mint|black|white)\b/
+            /\bColor\.(pink|red|blue|green|orange|yellow|purple|gray|grey|brown|teal|cyan|indigo|mint|black|white)(?![A-Za-z0-9_])/
 
         // And the *implicit* form, which the first version of this missed entirely. Swift infers the
         // base type in an argument or a return, so `tint: .purple` and `.shadow(color: .black…)` are
@@ -224,7 +231,7 @@ struct SourceHygieneTests {
         //   and `.red` matches `.reduce`, which is most of this codebase.
         // A leading group rather than a look-behind, which Swift Regex does not support.
         let implicitColour =
-            /(^|[^A-Za-z0-9_])\.(pink|red|blue|green|orange|yellow|purple|gray|grey|brown|teal|cyan|indigo|mint|black|white)\b/
+            /(^|[^A-Za-z0-9_])\.(pink|red|blue|green|orange|yellow|purple|gray|grey|brown|teal|cyan|indigo|mint|black|white)(?![A-Za-z0-9_])/
 
         for file in Self.swiftFiles() {
             // The tokens file is where the palette is *defined*; everywhere else consumes it.

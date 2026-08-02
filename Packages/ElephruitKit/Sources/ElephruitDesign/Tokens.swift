@@ -236,8 +236,42 @@ extension Theme {
         public static let link = Color.accentColor
         /// A link whose target does not exist yet.
         public static let unresolvedLink = Color(nsColor: .systemOrange)
-        /// A destructive action.
+        /// A destructive action, and nothing else.
+        ///
+        /// Reserved for the moment something is about to be removed — a Move to Trash button, a
+        /// Delete row. It shares a hue with ``overdue`` and ``recording``, but not a meaning, and
+        /// the tokens stay separate so any of the three can be retuned without repainting the
+        /// other two.
         public static let destructive = Color(nsColor: .systemRed)
+
+        /// A timer that is running or paused — the live-recording signal.
+        ///
+        /// This used to be ``destructive`` at eight call sites, which made every running timer
+        /// look like a deletion in progress. Red is still right — it is the platform's recording
+        /// convention — but it is its own claim, made by its own token.
+        public static let recording = Color(nsColor: .systemRed)
+
+        /// A favourite's star and a flag.
+        ///
+        /// One token for the three surfaces that draw it, which previously split between
+        /// ``dueToday`` and ``warning`` — the same orange from two different meanings, so a
+        /// retune of either would have broken the pair.
+        public static let favorite = Color(nsColor: .systemOrange)
+
+        /// The umbra under a floating card or panel.
+        ///
+        /// The one place black is allowed to be black: a shadow is an absence of light in both
+        /// appearances, and routing it through the palette would make it a colour. Callers apply
+        /// their own opacity — the depth is the surface's decision, the hue is not.
+        public static let shadow = Color.black
+
+        /// The quiet accent fill behind a selected or current row, chip, or mode.
+        ///
+        /// One alpha, defined once. Before this token the same "this is where you are" fill was
+        /// drawn at eight different opacities between 0.06 and 0.18, one per screen that needed
+        /// it, which is how the selection read stronger in some lists than others for no reason
+        /// anybody chose.
+        public static var selectionFill: Color { selection.opacity(0.15) }
 
         /// Something the app could not interpret and has told the user about.
         ///
@@ -311,8 +345,23 @@ extension Theme {
         }
 
         /// Resolves a stored name, falling back to the accent colour.
+        ///
+        /// The accent fallback suits the places where "uncoloured" should still read as alive — a
+        /// calendar with no recorded colour. For a glyph beside content, prefer
+        /// ``color(named:neutral:)``: an accent fallback there makes an *unchosen* colour
+        /// indistinguishable from a *selected* row.
         public static func color(named name: String?) -> Color {
             guard let name, let entry = Palette(rawValue: name) else { return Color.accentColor }
+            return entry.color
+        }
+
+        /// Resolves a stored name, falling back to the neutral the caller sits in.
+        ///
+        /// This is the helper seven call sites had privately reimplemented — the same
+        /// guard-let-else-grey, once per file — because the accent-fallback variant above was the
+        /// only one offered.
+        public static func color(named name: String?, neutral: Color) -> Color {
+            guard let name, let entry = Palette(rawValue: name) else { return neutral }
             return entry.color
         }
     }

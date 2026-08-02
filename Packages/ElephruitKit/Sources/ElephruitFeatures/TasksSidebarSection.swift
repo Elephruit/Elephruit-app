@@ -102,6 +102,13 @@ public struct TasksSidebarSection: View {
 
     @ScaledMetric(relativeTo: .body) private var rowHeight = SidebarMetrics.baseRowHeight
 
+    private struct SmartListDeletion {
+        let id: UUID
+        let name: String
+    }
+
+    @State private var pendingSmartListDeletion: SmartListDeletion?
+
     public var body: some View {
         ForEach(Array(TasksSidebarComposition.bands.enumerated()), id: \.offset) { _, band in
             Section {
@@ -200,7 +207,37 @@ public struct TasksSidebarSection: View {
                     hint: "A list you built. Membership is worked out each time you open it.",
                     selection: .smartList(id: saved.id)
                 )
+                // The delete a smart list never had — the built-in lists above rightly have none,
+                // but one the user made was just as permanent. Confirmed, not trashed: a list is
+                // its rules, and the dialog says the tasks stay.
+                .contextMenu {
+                    Button("Delete Smart List…", role: .destructive) {
+                        pendingSmartListDeletion = SmartListDeletion(id: saved.id, name: saved.displayName)
+                    }
+                }
             }
+        }
+        .confirmationDialog(
+            "Delete “\(pendingSmartListDeletion?.name ?? "")”?",
+            isPresented: Binding(
+                get: { pendingSmartListDeletion != nil },
+                set: { if !$0 { pendingSmartListDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Smart List", role: .destructive) { confirmSmartListDeletion() }
+            Button("Cancel", role: .cancel) { pendingSmartListDeletion = nil }
+        } message: {
+            Text("The list is only its rules. The tasks it shows stay where they are.")
+        }
+    }
+
+    private func confirmSmartListDeletion() {
+        defer { pendingSmartListDeletion = nil }
+        guard let services, let pending = pendingSmartListDeletion else { return }
+        services.deleteSavedSearch(id: pending.id)
+        if navigation.selection == .smartList(id: pending.id) {
+            navigation.select(.taskView(.today))
         }
     }
 

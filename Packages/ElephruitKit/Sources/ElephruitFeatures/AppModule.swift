@@ -54,11 +54,18 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
 
     /// Whether this module draws its own second-level sidebar when you are inside it.
     ///
-    /// `false` for projects alone. Everything else replaces the sidebar's contents on entry;
-    /// a project replaces the *middle column* and leaves the sidebar — including the project tree
-    /// you just clicked in — exactly where it was.
+    /// The rule: a module swaps the sidebar only when it has real navigation to put there.
+    /// Calendar brings its views, calendars and sets; Tasks its system views and containers;
+    /// People its scopes and groups; Notes and Areas their kind rows. The rest were paying a
+    /// whole column swap for almost nothing — Time for a two-button mode toggle whose job the
+    /// toolbar already does, and Bookmarks, Archive and Trash for a single front-door row naming
+    /// the module the header had just named. Projects is the founding case: its tree lives at the
+    /// top level of the primary sidebar, and swapping that away was taking the navigation with it.
     public var hasOwnSidebar: Bool {
-        self != .projects
+        switch self {
+        case .calendar, .tasks, .people, .notes, .areas: true
+        case .projects, .time, .bookmarks, .archive, .trash: false
+        }
     }
 
     public var title: String {

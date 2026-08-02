@@ -2,6 +2,34 @@ import ElephruitCore
 import ElephruitDesign
 import SwiftUI
 
+/// Log or Reports, switched in the toolbar both surfaces share.
+///
+/// A segmented control rather than a sidebar level. Time's sidebar held exactly this choice — two
+/// buttons — and swapping the whole first column to offer it cost the user their map and moved the
+/// window's layout every time they entered the module. Two modes of one surface are a toolbar
+/// control everywhere else on the platform, and now here too. It also replaces the pair of one-way
+/// buttons — "Reports" on the log, "Log" on the report — whose labels each named the *other*
+/// surface and so read as actions rather than as a mode with two ends.
+struct TimeSurfaceSwitcher: ToolbarContent {
+    let navigation: NavigationModel
+
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            Picker("View", selection: Binding(
+                get: { navigation.timeSurface },
+                set: { navigation.timeSurface = $0 }
+            )) {
+                ForEach(TimeSurface.allCases, id: \.self) { surface in
+                    Text(surface.displayName).tag(surface)
+                }
+            }
+            .pickerStyle(.segmented)
+            .help("Log is what you did, day by day. Reports are totals over any period.")
+            .accessibilityIdentifier("time.surfaceSwitcher")
+        }
+    }
+}
+
 /// The two questions both Time surfaces are asked: over what period, and cut how.
 ///
 /// ### Why this is one component and not two similar ones

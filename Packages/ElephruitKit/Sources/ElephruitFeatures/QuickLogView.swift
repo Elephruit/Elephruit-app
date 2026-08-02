@@ -77,7 +77,7 @@ struct QuickLogView: View {
         HStack(spacing: Theme.Spacing.small) {
             Label(headline, systemImage: "record.circle")
                 .font(.system(.headline, design: .default, weight: .medium))
-                .foregroundStyle(running == nil ? Theme.Colors.secondaryText : Theme.Colors.destructive)
+                .foregroundStyle(running == nil ? Theme.Colors.secondaryText : Theme.Colors.recording)
                 .symbolEffect(.pulse, options: running == nil ? .nonRepeating : .repeating)
 
             Spacer(minLength: Theme.Spacing.small)

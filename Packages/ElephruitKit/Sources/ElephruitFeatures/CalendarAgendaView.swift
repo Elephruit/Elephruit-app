@@ -267,7 +267,7 @@ struct AgendaEventRow: View {
         .background {
             if isSelected {
                 RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                    .fill(Theme.Colors.selection.opacity(0.15))
+                    .fill(Theme.Colors.selectionFill)
             }
         }
         .hoverHighlight(isEnabled: !isSelected, extending: Theme.Spacing.small)
