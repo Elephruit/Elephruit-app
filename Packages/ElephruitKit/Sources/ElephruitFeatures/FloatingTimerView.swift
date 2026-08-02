@@ -147,15 +147,21 @@ struct FloatingTimerView: View {
                 Text(TimeFormatting.stopwatch(state.accumulated + max(0, context.date.timeIntervalSince(since))))
                     .font(clockFont)
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize()
                     .contentTransition(.numericText())
             }
-            .frame(width: clockWidth, alignment: .trailing)
+            // A floor rather than a fixed column: once the stopwatch reaches an extra digit, the
+            // pill grows with it instead of folding the last digit onto a second line.
+            .frame(minWidth: clockWidth, alignment: .trailing)
         } else {
             Text(TimeFormatting.stopwatch(state.accumulated))
                 .font(clockFont)
                 .monospacedDigit()
+                .lineLimit(1)
+                .fixedSize()
                 .foregroundStyle(Theme.Colors.secondaryText)
-                .frame(width: clockWidth, alignment: .trailing)
+                .frame(minWidth: clockWidth, alignment: .trailing)
         }
     }
 
@@ -163,9 +169,10 @@ struct FloatingTimerView: View {
         .system(.title3, design: .rounded, weight: .medium)
     }
 
-    /// A fixed column while the description is showing, so the clock does not shuffle sideways as
-    /// the digits change — and `nil` when compact, where a column wide enough for `10:05:59` around
-    /// a reading of `2:56` is just a gap.
+    /// A minimum column while the description is showing, so the clock does not shuffle sideways
+    /// as the digits change — and `nil` when compact, where a column wide enough for `10:05:59`
+    /// around a reading of `2:56` is just a gap. It is deliberately only a minimum: timers can run
+    /// beyond the width anticipated here and must grow rather than wrap.
     private var clockWidth: CGFloat? {
         isCompact ? nil : 84
     }
