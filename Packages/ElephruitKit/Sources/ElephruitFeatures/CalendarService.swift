@@ -82,6 +82,14 @@ public final class CalendarService {
 
     private var loadedRange: Range<Date>?
 
+    /// The span ``events`` currently answers for — set when an answer *lands*, not when one is
+    /// asked for, so an in-flight load never makes a window look answered before it is.
+    private var answeredRange: Range<Date>?
+
+    /// The absorb currently writing to the index, so absorbs stay ordered without the page that
+    /// triggered the load having to wait for one. See ``reload()``.
+    private var pendingAbsorb: Task<Void, Never>?
+
     static let enabledKey = "calendar.isEnabled"
     static let displayZoneKey = "calendar.displayTimeZone"
     static let secondaryZoneKey = "calendar.secondaryTimeZone"
@@ -168,6 +176,7 @@ public final class CalendarService {
         events = []
         calendars = []
         loadedRange = nil
+        answeredRange = nil
         authorization = .notRequested
         isShowingCachedEvents = false
 
@@ -336,6 +345,17 @@ public final class CalendarService {
         await reload()
     }
 
+    /// Whether ``events`` already answers for a span.
+    ///
+    /// True only once a load covering the span has actually *returned* — an in-flight load does
+    /// not count. This is what lets a page that finds its window already answered draw at once
+    /// from memory instead of holding a spinner through a round trip that will change nothing.
+    public func hasAnswered(range: Range<Date>) -> Bool {
+        guard isEnabled, let answeredRange else { return false }
+        return answeredRange.lowerBound <= range.lowerBound
+            && range.upperBound <= answeredRange.upperBound
+    }
+
     /// Bumped when ``events`` comes back **different**.
     ///
     /// ### Why a counter beside an observable array
@@ -361,6 +381,7 @@ public final class CalendarService {
 
         guard isEnabled, let range = loadedRange else {
             events = []
+            answeredRange = nil
             isShowingCachedEvents = false
             return
         }
@@ -377,20 +398,42 @@ public final class CalendarService {
         let fetched = await provider.events(in: range, calendarIdentifiers: identifiers)
 
         events = applyingSetRules(to: fetched)
+        answeredRange = range
         isShowingCachedEvents = false
 
-        await absorbIntoIndex(fetched, window: range, calendarIdentifiers: identifiers)
+        // The index write rides behind the answer rather than in front of it: a page awaiting this
+        // load needs the events, and making it also wait for a search-index write was seconds of
+        // spinner spent on something no page reads. Chained on the previous absorb so two loads
+        // cannot land in the index out of order; anything that *reads* the cache awaits the chain.
+        let priorAbsorb = pendingAbsorb
+        pendingAbsorb = Task {
+            await priorAbsorb?.value
+            await self.absorbIntoIndex(fetched, window: range, calendarIdentifiers: identifiers)
+        }
+    }
+
+    /// Waits for any index write still in flight.
+    ///
+    /// For readers that go to the cache directly rather than through ``events`` — a test asserting
+    /// what the cache holds, or anything else owed rows a load has answered but not yet written.
+    public func flushIndexWrites() async {
+        await pendingAbsorb?.value
     }
 
     /// Falls back to what was last read.
     private func loadFromCache() async {
         guard let index, let range = loadedRange else {
             events = []
+            answeredRange = nil
             return
         }
 
+        // Any absorb still in flight holds rows this read is owed.
+        await pendingAbsorb?.value
+
         let cached = await index.cachedEvents(in: range, calendarIdentifiers: visibleCalendarIdentifiers)
         events = applyingSetRules(to: cached.map(Self.summary(from:)))
+        answeredRange = range
         isShowingCachedEvents = !events.isEmpty
     }
 

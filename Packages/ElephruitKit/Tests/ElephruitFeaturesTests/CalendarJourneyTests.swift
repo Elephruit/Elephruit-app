@@ -341,6 +341,10 @@ struct CalendarJourneyTests {
         let titles = Set(services.calendar.events.map(\.title))
         #expect(!titles.isEmpty)
 
+        // The write rides behind the load rather than in front of it — see `CalendarService.reload()`
+        // — so a direct cache read waits for it the same way `loadFromCache` does.
+        await services.calendar.flushIndexWrites()
+
         let cached = await services.calendarSearch.cachedEvents(in: Self.week, calendarIdentifiers: nil)
         #expect(!cached.isEmpty, """
             Everything read is written to the cache as it arrives, which is what makes the offline \

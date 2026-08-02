@@ -356,6 +356,23 @@ public final class AppServices {
 
         self.tags = tags
         self.items = items
+
+        // Converge any rows written before the day-relevance projection existed. One real pass on
+        // the first launch after the column arrived; an empty fetch on every launch after. Failure
+        // is logged and swallowed — the sentinel default means an unconverged row is over-fetched,
+        // never hidden, so this can never be worth refusing to open the library over.
+        do {
+            let converged = try DayRelevanceBackfill.apply(in: context)
+            if converged > 0 {
+                Diagnostics.persistence.info(
+                    "Day-relevance backfill converged \(converged, privacy: .public) rows"
+                )
+            }
+        } catch {
+            Diagnostics.persistence.error(
+                "Day-relevance backfill failed: \(error.localizedDescription, privacy: .public)"
+            )
+        }
         // An in-memory stack has no location — previews and tests — so the index gets a throwaway
         // file. It is derived either way; the only thing that changes is where it is thrown away.
         let indexURL = stack.location?.searchIndexURL

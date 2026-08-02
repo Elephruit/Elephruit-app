@@ -856,8 +856,11 @@ struct PersonModuleTests {
             try fixture.people.allCelebrations()
         }
 
-        #expect(tally.itemFetches == 1, "people should be loaded in one fetch: \(tally.description)")
-        #expect(tally.otherFetches == 1, "celebrations should be loaded in one fetch: \(tally.description)")
+        // Two record fetches — the profiles holding a birthday, and the stored celebration rows —
+        // and no item fetch at all: people arrive prefetched on the records that name them, so the
+        // count cannot grow with the size of the library.
+        #expect(tally.itemFetches == 0, "no per-person item fetches: \(tally.description)")
+        #expect(tally.otherFetches == 2, "profiles and celebrations, one fetch each: \(tally.description)")
         #expect(tally.total == 2, "the fetch count must not grow with the number of people: \(tally.description)")
     }
 

@@ -109,7 +109,10 @@ let package = Package(
         // ordinary `swift test` never runs them and a busy machine never reddens a build.
         .testTarget(
             name: "ElephruitBenchmarks",
-            dependencies: ["ElephruitCore", "ElephruitModel", "ElephruitPersistence", "ElephruitSearch"],
+            dependencies: [
+                "ElephruitCore", "ElephruitModel", "ElephruitPersistence", "ElephruitSearch",
+                "ElephruitFeatures", "ElephruitIntegrations",
+            ],
             swiftSettings: .strict
         ),
         .testTarget(

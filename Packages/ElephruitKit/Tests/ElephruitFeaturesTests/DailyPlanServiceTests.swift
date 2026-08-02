@@ -456,6 +456,46 @@ struct DailyPlanServiceTests {
         )
     }
 
+    @Test("A preparation task with no date of its own still reaches the day")
+    func undatedPreparationTasksAreFound() async throws {
+        // The library read is windowed on the day-relevance key, and a task attached to a meeting
+        // has no date to be windowed by — it is read by identifier off the meeting instead. This
+        // is the case that would silently vanish if that rescue ever regressed.
+        let event = Self.event(
+            "Board prep", id: "board", from: Self.at(14), minutes: 30,
+            attendees: [EventAttendee(name: "Maya Chen")]
+        )
+        let services = await Self.fixture(events: [event])
+
+        let meeting = try #require(try services.eventLinks.meetingItem(for: event))
+        let prepare = try services.items.create(ItemDraft(kind: .task, title: "Print the pack"))
+        try services.items.link(prepare, to: meeting, kind: .related)
+
+        let day = try await plan(services)
+        let task = try #require(day.tasks.first { $0.taskID == prepare.id })
+        #expect(
+            task.reasons.contains {
+                if case .meetingPrep = $0 { return true }
+                return false
+            }
+        )
+    }
+
+    @Test("A flagged task with no date still earns its place on today")
+    func undatedFlaggedTasksAreFound() async throws {
+        // A flag is not a date, so it is outside the windowed fetch and arrives through a fetch of
+        // its own. Losing that second fetch would lose exactly the tasks whose only claim is the
+        // flag the user set.
+        let services = await Self.fixture()
+
+        let flagged = try services.items.create(ItemDraft(kind: .task, title: "Come back to this"))
+        try services.tasks.setFlagged(true, on: flagged)
+
+        let day = try await plan(services)
+        let task = try #require(day.tasks.first { $0.taskID == flagged.id })
+        #expect(task.reasons == [.flagged])
+    }
+
     // MARK: - What it costs
 
     /// The regression that shipped once and must not again.
@@ -634,6 +674,54 @@ struct DailyPlanServiceTests {
         }
 
         #expect(services.calendar.revision == settled, "assembling asked the calendar something")
+    }
+
+    @Test("A window the calendar has answered for can be drawn without asking again")
+    func answeredWindowsAssembleImmediately() async throws {
+        let services = await Self.fixture(events: [
+            Self.event("Standup", id: "standup", from: Self.at(9), minutes: 15)
+        ])
+        let today = Self.clock.startOfToday
+        let last = Self.clock.startOfDay(daysFromToday: 4)
+
+        // Before any load, the honest answer is no: assembling now would say the day is clear
+        // before it has been read.
+        #expect(!services.dailyPlan.canAnswerForCalendar(from: today, through: last))
+
+        // The first visit loads the window. Every later visit finds it already answered — which is
+        // what lets `TodayModel.reload()` assemble before the round trip instead of holding a
+        // spinner through it.
+        await services.dailyPlan.loadCalendar(from: today, through: last)
+        #expect(services.dailyPlan.canAnswerForCalendar(from: today, through: last))
+        #expect(services.dailyPlan.canAnswerForCalendar(from: today, through: today), "a narrower span too")
+
+        // A span the load did not cover stays unanswered.
+        let nextMonth = Self.clock.startOfDay(daysFromToday: 30)
+        #expect(!services.dailyPlan.canAnswerForCalendar(from: today, through: nextMonth))
+
+        // A fresh page over the answered window — the second click on Today — has its days before
+        // any further round trip.
+        let model = TodayModel(services: services)
+        model.assemble()
+        #expect(!model.isLoadingInitially)
+        #expect(model.selectedPlan?.events.map(\.event.title) == ["Standup"])
+    }
+
+    @Test("A disabled calendar is never something to wait for")
+    func disabledCalendarAlwaysAnswers() async throws {
+        let defaults = UserDefaults(suiteName: "today.tests.\(UUID().uuidString)") ?? .standard
+        let services = AppServices.inMemory(
+            dateProvider: Self.clock,
+            populated: false,
+            defaults: defaults
+        )
+        #expect(
+            services.dailyPlan.canAnswerForCalendar(
+                from: Self.clock.startOfToday,
+                through: Self.clock.startOfDay(daysFromToday: 4)
+            ),
+            "with the feature off there is no round trip to wait behind"
+        )
     }
 
     // MARK: - Days other than today

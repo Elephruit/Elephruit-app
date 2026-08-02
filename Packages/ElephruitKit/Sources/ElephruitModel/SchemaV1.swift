@@ -407,6 +407,33 @@ public enum SchemaV12: VersionedSchema {
     }
 }
 
+/// The thirteenth schema: the day-relevance projection.
+///
+/// One defaulted date column — `Item.dayRelevanceKey` — and nothing else. Additive, non-optional
+/// with a default, so a store opened under this version gains a column and keeps every byte it had.
+///
+/// ### Why the default is `.distantPast` and not `.distantFuture`
+/// The column is a *fetch bound*: Today reads open work with `dayRelevanceKey < end-of-window`
+/// instead of materialising every open item. `.distantFuture` would make every pre-existing row
+/// match no window — dated work silently vanishing from Today the moment the store migrated, which
+/// is the one failure this page must never have. `.distantPast` makes every pre-existing row match
+/// *every* window: the fetch over-reads until each row's first save recomputes its key, and
+/// `DayRelevanceBackfill` converges the whole library in one pass. A wrong key can only cost
+/// milliseconds, never work.
+///
+/// ### Why lightweight inference is still right
+/// The same argument as every version since `SchemaV4`, at its weakest scale: no new entity, no
+/// rename, no type change, and the value is derived — recomputed on every save beside `dueSortKey`
+/// — so nothing has to be computed *from old data at migration time*. ADR 0005 still reserves the
+/// model-type freeze for the first change that cannot be inferred, and this is not it.
+public enum SchemaV13: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 13) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV12.models
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -419,7 +446,7 @@ public enum SchemaV12: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV12.self]
+        [SchemaV13.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -439,9 +466,9 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV12.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV13.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV12.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV13.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {

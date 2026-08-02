@@ -607,31 +607,38 @@ public final class SwiftDataPersonRepository: PersonRepository {
     }
 
     public func allCelebrations() throws(AppError) -> [Celebration] {
-        var descriptor = FetchDescriptor<PersonCelebration>()
-        descriptor.relationshipKeyPathsForPrefetching = [\.person]
-        let storedByPersonID = Dictionary(
-            grouping: try fetch(descriptor),
-            by: { $0.person?.id }
-        )
         var result: [Celebration] = []
 
-        for person in try allPeople(includingPlaceholders: true) {
-            // A birthday on the profile is the one Contacts reconciles against, so it stays there
-            // and is lifted into the same list rather than being copied into a second row that would
-            // then need keeping in step.
-            if let birthday = person.personProfile?.birthdayDate(calendar: dateProvider.calendar) {
-                result.append(
-                    Celebration(
-                        id: person.personProfile?.id ?? person.id,
-                        personID: person.id,
-                        personName: person.displayTitle,
-                        kind: .birthday,
-                        date: birthday
-                    )
+        // A birthday on the profile is the one Contacts reconciles against, so it stays there
+        // and is lifted into the same list rather than being copied into a second row that would
+        // then need keeping in step. Read from the profiles that *have* one rather than by walking
+        // every person to ask each: this list is assembled on every Today pass, and materialising
+        // the whole of a large library to find the third of it with a birthday was one of the
+        // bigger costs on that path. No order is promised — every caller feeds
+        // ``ElephruitCore/CelebrationCalendar/upcoming(from:within:asOf:calendar:)``, which sorts.
+        var profiles = FetchDescriptor<PersonProfile>(predicate: #Predicate { $0.birthday != nil })
+        profiles.relationshipKeyPathsForPrefetching = [\.item]
+        for profile in try fetch(profiles) {
+            guard let person = profile.item, person.deletedAt == nil, person.archivedAt == nil,
+                  let birthday = profile.birthdayDate(calendar: dateProvider.calendar)
+            else { continue }
+            result.append(
+                Celebration(
+                    id: profile.id,
+                    personID: person.id,
+                    personName: person.displayTitle,
+                    kind: .birthday,
+                    date: birthday
                 )
-            }
+            )
+        }
 
-            result.append(contentsOf: (storedByPersonID[person.id] ?? []).compactMap { $0.asValue() })
+        var stored = FetchDescriptor<PersonCelebration>()
+        stored.relationshipKeyPathsForPrefetching = [\.person]
+        for celebration in try fetch(stored) {
+            guard let person = celebration.person, person.deletedAt == nil, person.archivedAt == nil
+            else { continue }
+            if let value = celebration.asValue() { result.append(value) }
         }
 
         return result
