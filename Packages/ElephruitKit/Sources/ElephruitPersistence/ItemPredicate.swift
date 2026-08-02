@@ -48,6 +48,8 @@ enum ItemPredicateBuilder {
         dueFrom: Date?,
         dueBefore: Date?,
         isPinned: Bool? = nil,
+        dayRelevantBefore: Date? = nil,
+        isFlagged: Bool? = nil,
         parent: ParentFilter? = nil,
         tagSlug: String? = nil
     ) -> Predicate<Item> {
@@ -99,6 +101,19 @@ enum ItemPredicateBuilder {
         // every combination stays correct.
         if scope == .active, let isPinned {
             return activePinned(filterByKind, kindRaws, filterByStatus, statusRaws, isPinned)
+        }
+
+        // The Today window's riders, on the same terms as the pinned clause: one focused variant
+        // each, never stacked with another rider, and the caller keeps post-filtering either way.
+        // Two variants rather than one carrying `key < end || flagged`, because that disjunction
+        // would sit at the measured clause ceiling where compilation is unreliable — the caller
+        // that wants both runs both queries and unions the rows.
+        if scope == .active, let dayRelevantBefore {
+            return activeDayRelevant(filterByKind, kindRaws, filterByStatus, statusRaws, dayRelevantBefore)
+        }
+
+        if scope == .active, let isFlagged {
+            return activeFlagged(filterByKind, kindRaws, filterByStatus, statusRaws, isFlagged)
         }
 
         switch scope {
@@ -212,6 +227,44 @@ enum ItemPredicateBuilder {
             item.deletedAt == nil
                 && item.archivedAt == nil
                 && item.tags.contains { $0.slug == tagSlug }
+                && (!filterByKind || kindRaws.contains(item.kindRaw))
+                && (!filterByStatus || statusRaws.contains(item.statusRaw))
+        }
+    }
+
+    /// Active, bounded by the day-relevance projection. Five clauses.
+    ///
+    /// Compares against `dayRelevanceKey` — a non-optional mirror, like `dueSortKey`, so there is
+    /// no optional comparison. Rows from before the column existed carry `.distantPast` and match
+    /// every bound, which is the safe direction: over-fetched, never hidden.
+    private static func activeDayRelevant(
+        _ filterByKind: Bool,
+        _ kindRaws: [String],
+        _ filterByStatus: Bool,
+        _ statusRaws: [String],
+        _ before: Date
+    ) -> Predicate<Item> {
+        #Predicate<Item> { item in
+            item.deletedAt == nil
+                && item.archivedAt == nil
+                && item.dayRelevanceKey < before
+                && (!filterByKind || kindRaws.contains(item.kindRaw))
+                && (!filterByStatus || statusRaws.contains(item.statusRaw))
+        }
+    }
+
+    /// Active, restricted by the task flag. Five clauses.
+    private static func activeFlagged(
+        _ filterByKind: Bool,
+        _ kindRaws: [String],
+        _ filterByStatus: Bool,
+        _ statusRaws: [String],
+        _ isFlagged: Bool
+    ) -> Predicate<Item> {
+        #Predicate<Item> { item in
+            item.deletedAt == nil
+                && item.archivedAt == nil
+                && item.isFlagged == isFlagged
                 && (!filterByKind || kindRaws.contains(item.kindRaw))
                 && (!filterByStatus || statusRaws.contains(item.statusRaw))
         }

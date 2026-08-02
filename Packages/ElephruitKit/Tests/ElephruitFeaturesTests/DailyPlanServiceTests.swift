@@ -456,6 +456,46 @@ struct DailyPlanServiceTests {
         )
     }
 
+    @Test("A preparation task with no date of its own still reaches the day")
+    func undatedPreparationTasksAreFound() async throws {
+        // The library read is windowed on the day-relevance key, and a task attached to a meeting
+        // has no date to be windowed by — it is read by identifier off the meeting instead. This
+        // is the case that would silently vanish if that rescue ever regressed.
+        let event = Self.event(
+            "Board prep", id: "board", from: Self.at(14), minutes: 30,
+            attendees: [EventAttendee(name: "Maya Chen")]
+        )
+        let services = await Self.fixture(events: [event])
+
+        let meeting = try #require(try services.eventLinks.meetingItem(for: event))
+        let prepare = try services.items.create(ItemDraft(kind: .task, title: "Print the pack"))
+        try services.items.link(prepare, to: meeting, kind: .related)
+
+        let day = try await plan(services)
+        let task = try #require(day.tasks.first { $0.taskID == prepare.id })
+        #expect(
+            task.reasons.contains {
+                if case .meetingPrep = $0 { return true }
+                return false
+            }
+        )
+    }
+
+    @Test("A flagged task with no date still earns its place on today")
+    func undatedFlaggedTasksAreFound() async throws {
+        // A flag is not a date, so it is outside the windowed fetch and arrives through a fetch of
+        // its own. Losing that second fetch would lose exactly the tasks whose only claim is the
+        // flag the user set.
+        let services = await Self.fixture()
+
+        let flagged = try services.items.create(ItemDraft(kind: .task, title: "Come back to this"))
+        try services.tasks.setFlagged(true, on: flagged)
+
+        let day = try await plan(services)
+        let task = try #require(day.tasks.first { $0.taskID == flagged.id })
+        #expect(task.reasons == [.flagged])
+    }
+
     // MARK: - What it costs
 
     /// The regression that shipped once and must not again.

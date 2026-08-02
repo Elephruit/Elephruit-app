@@ -141,20 +141,20 @@ struct TodayBenchmarks {
     }
 
     /// ### What running this actually found, and what the budgets therefore mean
-    /// On the reference corpus, cold assembly measured ~465 ms and is dominated by one thing: the
-    /// open-items fetch (~185 ms) materialises every open work item so `couldAppearOnSomeDay` can
-    /// keep the few hundred with a day anchor. The budgets are set from those measurements with
-    /// headroom, not invented.
+    /// Cold assembly first measured ~465 ms, dominated by one thing: the open-items fetch (~185 ms)
+    /// materialised every open work item so `couldAppearOnSomeDay` could keep the few hundred with
+    /// a day anchor. That escalation has now been taken — `Item.dayRelevanceKey`, the same shape as
+    /// `dueSortKey`, narrows the fetch in the store — and cold measured ~270 ms after it. The
+    /// budgets are set from those measurements with headroom, not invented.
+    ///
+    /// `today.fetch.unwindowed` is kept as the floor this replaced: the windowed read staying well
+    /// under it is the whole point of the column, and the gap collapsing means the key has stopped
+    /// narrowing anything.
     ///
     /// The warm figure is the important ratio: a reassembly with the caches warm — a filter toggle,
     /// a tick — measured ~20 ms, and it staying an order of magnitude under cold is asserted below.
     /// It used to be ~110 ms, all of it container lookups run once per task instead of once per
     /// container.
-    ///
-    /// If cold ever needs to come down further, the escalation path is the one `dueSortKey` already
-    /// took for the same reason: a derived column ("has any day anchor"), refreshed on save beside
-    /// the other projections, so the fetch narrows in SQL — not a bigger predicate, and not caching
-    /// that can go stale.
     @Test("Assembling the Today window over a heavy library")
     func todayWindow() async throws {
         let services = try await Self.makeFixture()
@@ -171,7 +171,7 @@ struct TodayBenchmarks {
         }
 
         // The spinner: everything between clicking Today and seeing the day, calendar aside.
-        let cold = Benchmark.measure("today.window.cold", budget: .milliseconds(600), iterations: 3) {
+        let cold = Benchmark.measure("today.window.cold", budget: .milliseconds(400), iterations: 3) {
             plan.invalidateEverything()
             _ = try? plan.window(from: today, count: 5)
         }
@@ -194,11 +194,21 @@ struct TodayBenchmarks {
             _ = try? services.people.allContexts()
         }
 
+        // The floor the day-relevance key replaced, kept for the comparison below.
         var open = ItemQuery()
         open.kinds = ItemKind.workItemKindSet
         open.statuses = [.open]
-        let fetch = Benchmark.measure("today.fetch.open", budget: .milliseconds(300), iterations: 3) {
+        let unwindowed = Benchmark.measure(
+            "today.fetch.unwindowed", budget: .milliseconds(300), iterations: 3
+        ) {
             _ = try? services.items.items(matching: open)
+        }
+
+        // What the assembly actually runs: the same query bounded by the window's end.
+        var windowed = open
+        windowed.dayRelevantBefore = Self.clock.startOfDay(daysFromToday: 5)
+        let fetch = Benchmark.measure("today.fetch.window", budget: .milliseconds(120), iterations: 3) {
+            _ = try? services.items.items(matching: windowed)
         }
 
         let identities = services.calendar.events.map { $0.identity }
@@ -208,7 +218,7 @@ struct TodayBenchmarks {
             _ = try? services.eventLinks.meetingContext(for: identities)
         }
 
-        for measurement in [loadCalendar, cold, warm, celebrations, contexts, fetch, meetings] {
+        for measurement in [loadCalendar, cold, warm, celebrations, contexts, unwindowed, fetch, meetings] {
             #expect(measurement.passes, "\(measurement.report)")
         }
 
@@ -218,6 +228,14 @@ struct TodayBenchmarks {
         #expect(
             warm.rawSeconds < cold.rawSeconds / 5,
             "A warm reassembly is fetching again — \(warm.report) vs \(cold.report)"
+        )
+
+        // The windowed read must stay well under the full scan it replaced. The two converging
+        // means `dayRelevanceKey` has stopped narrowing anything — a regression the absolute
+        // budgets above could absorb without anyone noticing.
+        #expect(
+            fetch.rawSeconds < unwindowed.rawSeconds / 2,
+            "The window bound has stopped narrowing the fetch — \(fetch.report) vs \(unwindowed.report)"
         )
     }
 }

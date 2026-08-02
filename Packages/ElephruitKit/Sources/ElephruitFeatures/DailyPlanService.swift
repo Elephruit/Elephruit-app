@@ -73,9 +73,15 @@ public final class DailyPlanService {
     /// Throws only what the store throws. A missing calendar, a person with no profile, or a day
     /// with nothing in it are all ordinary and produce an ordinary, empty-ish plan.
     public func plan(for date: Date, filters: TodayFilters = .standard) throws(AppError) -> DayPlan {
-        var sources = try sources(filters: filters)
+        var sources = try sources(filters: filters, windowEnd: windowEnd(from: date, count: 1))
         sources.dailyNotes = notes(from: date, count: 1, reusing: sources)
         return try plan(for: date, filters: filters, sources: sources)
+    }
+
+    /// The exclusive end of a window of days, for the relevance bound.
+    private func windowEnd(from first: Date, count: Int) -> Date {
+        let start = calendar.startOfDay(for: first)
+        return calendar.date(byAdding: .day, value: max(1, count), to: start) ?? Date.distantFuture
     }
 
     /// Everything one pass over the library found, shared by every day on screen.
@@ -130,22 +136,30 @@ public final class DailyPlanService {
     private struct CachedSources {
         var changeToken: Int
         var calendarRevision: Int
+
+        /// The relevance bound the candidates were fetched under. A pass read for a *later* bound
+        /// answers for any earlier one — the rules narrow per day either way — so the cache is
+        /// reusable whenever it covers the window being asked about, not only when it matches.
+        var windowEnd: Date
+
         var sources: LibrarySources
     }
 
     private var cachedSources: CachedSources?
 
-    private func sources(filters: TodayFilters) throws(AppError) -> LibrarySources {
+    private func sources(filters: TodayFilters, windowEnd: Date) throws(AppError) -> LibrarySources {
         if let cached = cachedSources,
            cached.changeToken == services.changeToken,
-           cached.calendarRevision == services.calendar.revision {
+           cached.calendarRevision == services.calendar.revision,
+           cached.windowEnd >= windowEnd {
             return cached.sources
         }
 
-        let fresh = try readSources()
+        let fresh = try readSources(windowEnd: windowEnd)
         cachedSources = CachedSources(
             changeToken: services.changeToken,
             calendarRevision: services.calendar.revision,
+            windowEnd: windowEnd,
             sources: fresh
         )
         return fresh
@@ -168,7 +182,16 @@ public final class DailyPlanService {
     /// only reach a day through a deadline, a start date, a commitment, a reminder, a follow-up
     /// date, a flag, or a meeting it is attached to — every one of which is a stored value that
     /// costs nothing to test. Of fifteen hundred open tasks, a working week touches a few dozen.
-    private func readSources() throws(AppError) -> LibrarySources {
+    ///
+    /// ### And narrowed in the store before that
+    /// The column test used to run over rows already materialised, which meant the fetch itself was
+    /// the cost: every open item brought into memory to keep the few with a date. The dates now
+    /// have a derived floor — ``ElephruitModel/Item/dayRelevanceKey``, the same shape as
+    /// `dueSortKey` — so the store hands back only work that could matter before the window ends,
+    /// plus the flagged (a flag is not a date, so it is a second small fetch), plus anything a
+    /// meeting in the window named, read by identifier. `couldAppearOnSomeDay` still runs over the
+    /// result: the store clauses are a superset by construction, never the decision.
+    private func readSources(windowEnd: Date) throws(AppError) -> LibrarySources {
         var sources = LibrarySources()
 
         if services.calendar.isEnabled {
@@ -186,14 +209,33 @@ public final class DailyPlanService {
         }
 
         do {
-            var open = ItemQuery()
-            open.kinds = ItemKind.workItemKindSet
-            open.statuses = [.open]
-            open.sort = .manual
-            let prepared = Set(sources.meetingTaskIDs.keys)
+            var relevant = ItemQuery()
+            relevant.kinds = ItemKind.workItemKindSet
+            relevant.statuses = [.open]
+            relevant.sort = .manual
+            relevant.dayRelevantBefore = windowEnd
 
-            for task in try services.items.items(matching: open) {
+            var flagged = relevant
+            flagged.dayRelevantBefore = nil
+            flagged.isFlagged = true
+
+            let prepared = Set(sources.meetingTaskIDs.keys)
+            var seen = Set<UUID>()
+
+            for task in try services.items.items(matching: relevant) + services.items.items(matching: flagged) {
+                guard seen.insert(task.id).inserted else { continue }
                 guard Self.couldAppearOnSomeDay(task) || prepared.contains(task.id) else { continue }
+                sources.candidates.append((item: task, facts: task.taskFacts()))
+            }
+
+            // A task attached to a meeting has no date of its own, so neither windowed fetch may
+            // have seen it. A window's meetings name a handful of tasks at most, read by identifier.
+            for id in prepared where !seen.contains(id) {
+                guard let task = try? services.items.item(id: id),
+                      task.kind.isWorkItem, task.status == .open, task.deletedAt == nil,
+                      task.archivedAt == nil
+                else { continue }
+                seen.insert(id)
                 sources.candidates.append((item: task, facts: task.taskFacts()))
             }
 
@@ -372,7 +414,7 @@ public final class DailyPlanService {
         count: Int,
         filters: TodayFilters = .standard
     ) throws(AppError) -> DayWindow {
-        var sources = try sources(filters: filters)
+        var sources = try sources(filters: filters, windowEnd: windowEnd(from: first, count: count))
         sources.dailyNotes = notes(from: first, count: count, reusing: sources)
 
         var window = DayWindow()

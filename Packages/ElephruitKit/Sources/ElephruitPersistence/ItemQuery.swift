@@ -108,6 +108,17 @@ public struct ItemQuery: Sendable, Hashable {
     /// has explicitly postponed.
     public var notDeferredAfter: Date?
 
+    /// Only items whose ``ElephruitModel/Item/dayRelevanceKey`` falls before this instant.
+    ///
+    /// The Today window's fetch bound: every route a task has onto a day is a stored date, the key
+    /// is the minimum of them, and rows written before the key existed carry `.distantPast` and so
+    /// always match. Flagged tasks have no date and are deliberately *not* folded into the key —
+    /// a caller that wants them asks a second query with ``isFlagged``.
+    public var dayRelevantBefore: Date?
+
+    /// Restrict by the task flag, on the same terms as ``isPinned``.
+    public var isFlagged: Bool?
+
     /// Free text. Matched against `searchText` by the fetch as a fallback; the search
     /// module's index is the fast path.
     public var text: String?
@@ -230,6 +241,8 @@ extension ItemQuery {
             || hasNoParent != nil
             || isFavorite != nil
             || isPinned != nil
+            || isFlagged != nil
+            || dayRelevantBefore != nil
             || notDeferredAfter != nil
             || unprocessedCapturesOnly
             || (text?.isEmpty == false)
@@ -286,6 +299,14 @@ extension ItemQuery {
             // beside a due bound, where the builder would be over its clause ceiling. Post-filtering
             // re-applies it either way, so the store clause only shrinks what is materialised.
             isPinned: scope == .active && dueFrom == nil && dueBefore == nil ? isPinned : nil,
+            // The Today window's two riders, on the same terms as the others: active scope only,
+            // never stacked with another rider, and re-applied by the post-filter regardless.
+            dayRelevantBefore: scope == .active && dueFrom == nil && dueBefore == nil
+                ? dayRelevantBefore
+                : nil,
+            isFlagged: scope == .active && dueFrom == nil && dueBefore == nil && dayRelevantBefore == nil
+                ? isFlagged
+                : nil,
             // Containment too: a project's contents and the top level are asked constantly, and
             // post-filtering them meant materialising the library to keep a dozen rows. Pushed in
             // the two scopes hot paths use; the post-filter still re-applies either clause, so the
@@ -372,6 +393,14 @@ extension ItemQuery {
 
         if let isPinned {
             result = result.filter { $0.isPinned == isPinned }
+        }
+
+        if let isFlagged {
+            result = result.filter { $0.isFlagged == isFlagged }
+        }
+
+        if let dayRelevantBefore {
+            result = result.filter { $0.dayRelevanceKey < dayRelevantBefore }
         }
 
         // Applied here only for the scopes the predicate does not cover; in the active scope the

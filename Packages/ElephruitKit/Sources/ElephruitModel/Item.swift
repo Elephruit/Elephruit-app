@@ -101,6 +101,26 @@ public final class Item {
     /// Derived, refreshed on every save alongside the other projections.
     public var dueSortKey: Date = Date.distantFuture
 
+    /// The earliest day this item could appear on a day's plan, or a sentinel.
+    ///
+    /// A task reaches a day through six routes — deadline, start date, defer date, commitment,
+    /// reminder, follow-up — and every one of the day rules places it *at or after* the stored
+    /// date: an overdue deadline collapses onto today, never onto yesterday. So the minimum of
+    /// those dates is a true lower bound, and "every open task that could matter before the end
+    /// of the window" becomes one store-side comparison instead of materialising the whole open
+    /// library to ask each row. Same argument, same shape, as ``dueSortKey``.
+    ///
+    /// The seventh route, a flag, is deliberately not folded in: a flag is not a date, and it has
+    /// its own store clause — see `ItemQuery.isFlagged`.
+    ///
+    /// Sentinels, chosen so every wrong answer fails safe:
+    /// - `.distantFuture` — no route onto any day (or parked as someday). Never fetched, and the
+    ///   rules would have rejected it anyway.
+    /// - `.distantPast` — the **default**, meaning *not yet computed*. A row written before this
+    ///   column existed matches every window until its first save, so a stale key can only ever
+    ///   over-fetch, never hide work. `DayRelevanceBackfill` converges old libraries once.
+    public var dayRelevanceKey: Date = Date.distantPast
+
     // MARK: Timestamps
 
     public var createdAt: Date = Date()
@@ -614,6 +634,15 @@ extension Item {
     public func refreshSearchText() {
         titleMatchKey = TextNormalizer.foldedForMatching(title)
         dueSortKey = dueAt ?? Date.distantFuture
+        dayRelevanceKey = Self.projectedDayRelevance(
+            dueAt: dueAt,
+            startAt: startAt,
+            deferUntil: deferUntil,
+            todayCommittedOn: todayCommittedOn,
+            reminderAt: reminderAt,
+            followUpAt: followUpAt,
+            isSomeday: isSomeday
+        )
         searchText = Self.projectedSearchText(
             title: title,
             body: body,
@@ -627,6 +656,25 @@ extension Item {
                 .joined(separator: " ")
                 .nilWhenEmpty
         )
+    }
+
+    /// The relevance projection, as a pure function so it can be tested without a store.
+    ///
+    /// `deferUntil` still participates even though nothing writes it any more: a library that has
+    /// not run `TaskDateMigration` yet reads availability through it, and dropping it here would
+    /// hide exactly those rows from the windowed fetch.
+    public static func projectedDayRelevance(
+        dueAt: Date?,
+        startAt: Date?,
+        deferUntil: Date?,
+        todayCommittedOn: Date?,
+        reminderAt: Date?,
+        followUpAt: Date?,
+        isSomeday: Bool
+    ) -> Date {
+        guard !isSomeday else { return .distantFuture }
+        let anchors = [dueAt, startAt, deferUntil, todayCommittedOn, reminderAt, followUpAt]
+        return anchors.compactMap { $0 }.min() ?? .distantFuture
     }
 
     /// The projection, as a pure function so it can be tested without a store.
