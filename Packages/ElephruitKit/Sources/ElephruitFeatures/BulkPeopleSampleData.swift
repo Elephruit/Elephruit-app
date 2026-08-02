@@ -95,4 +95,32 @@ public enum BulkPeopleSampleData {
             }
         }
     }
+
+    /// Whether this record is one ``populate(services:count:)`` invented.
+    ///
+    /// ### Why a seeding must be reversible
+    /// Because it was once run against a real library — development mode redirects nothing on its
+    /// own, and a launch that carried `-ElephruitPeopleCount` without `-ElephruitUseTemporaryStore`
+    /// planted seventeen hundred invented people among somebody's actual contacts. A seeder whose
+    /// output cannot be told apart from user data afterwards is a booby trap; this is the telling
+    /// apart.
+    ///
+    /// The match is the generator run backwards, not a heuristic. The trailing number in the name
+    /// *is* the seed index, so every other field is derived from it and checked against what the
+    /// generator would have produced: the given name, the family name at its coprime stride, the
+    /// organisation, the role, and the place, all at once. A real person would have to match all
+    /// six formulas simultaneously to be misidentified, which is not a coincidence that occurs.
+    public static func isSeeded(_ person: Item) -> Bool {
+        let parts = person.title.split(separator: " ")
+        guard parts.count == 3, let number = Int(parts[2]), number >= 1 else { return false }
+
+        let index = number - 1
+        let profile = person.personProfile
+
+        return parts[0] == givenNames[index % givenNames.count]
+            && parts[1] == familyNames[(index * 7) % familyNames.count]
+            && profile?.organizationName == organizations[index % organizations.count]
+            && profile?.roleTitle == roles[index % roles.count]
+            && profile?.locationText == places[index % places.count]
+    }
 }

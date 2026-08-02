@@ -184,6 +184,9 @@ final class AppEnvironment {
             if let peopleCount = DesignReviewLaunch.peopleCount {
                 services.seedPeople(upTo: peopleCount)
             }
+            if DesignReviewLaunch.removesSeededPeople {
+                services.removeSeededPeople()
+            }
 
             state = .ready(services)
 

@@ -81,6 +81,22 @@ struct ModuleLayoutTests {
         #expect(bounds.ideal < AppModule.people.shellLayout.detail.width.ideal)
     }
 
+    /// The complaint this answers: AppKit restores its remembered divider a beat after the window
+    /// is up, without consulting the declared constraints, so the People list could open at a
+    /// thousand points against a declared maximum of 340. The shell corrects a settled width that
+    /// exceeds this ceiling; a column with no declared maximum must never be "corrected".
+    @Test("The ceiling a laid-out column is checked against is the declared maximum")
+    func declaredCeilingMatchesThePolicy() {
+        let people = AppModule.people.shellLayout
+
+        #expect(people.declaredCeiling(of: .primary) == 340)
+        // The profile is unbounded on purpose — no laid-out width of it is ever a violation.
+        #expect(people.declaredCeiling(of: .detail) == .greatestFiniteMagnitude)
+
+        // A canvas module's primary column takes the window; it has no ceiling to enforce.
+        #expect(AppModule.calendar.shellLayout.declaredCeiling(of: .primary) == .greatestFiniteMagnitude)
+    }
+
     /// The complaint this answers: the list was excessively wide, the profile was cramped, and the
     /// pane on the far right took a permanent slice of both.
     @Test("A person's profile is the column that takes the spare width")

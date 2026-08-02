@@ -191,6 +191,16 @@ extension ModuleShellLayout {
         return kept
     }
 
+    /// The widest this column is ever allowed to be, or infinity for an unbounded one.
+    ///
+    /// What the shell checks a *laid-out* width against. `widths(windowWidth:…)` says what each
+    /// column should get; this says what no column may exceed however the split view got there —
+    /// which matters because AppKit restores its remembered divider asynchronously, without
+    /// consulting the constraints, and the only reliable answer is to notice and re-pin.
+    public func declaredCeiling(of column: Column) -> CGFloat {
+        bounds(of: column).maximum ?? .greatestFiniteMagnitude
+    }
+
     /// The narrowest this column is ever allowed to be.
     ///
     /// The sidebar's is passed in rather than declared here: it is primary navigation, it is the
