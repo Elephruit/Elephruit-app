@@ -252,9 +252,39 @@ public enum DesignReviewLaunch {
         return kind
     }
 
+    /// Seconds to wait before applying the project selection, so a review can photograph the
+    /// *transition* into the workspace rather than only the workspace.
+    ///
+    /// This exists because the sidebar-jump bug was invisible to a review that launched straight
+    /// into a project: the collapse happened on the way in, and a launch that starts at the
+    /// destination never travels. With a delay the window restores wherever it was, sits there,
+    /// and then navigates — the same code path as a click on the sidebar row.
+    static func selectionDelay(in arguments: [String]) -> Double? {
+        guard let raw = value(for: "-ElephruitSelectDelay", in: arguments) else { return nil }
+        guard let seconds = Double(raw), seconds > 0 else {
+            Diagnostics.shell.error("Unreadable -ElephruitSelectDelay \(raw, privacy: .public)")
+            return nil
+        }
+        return seconds
+    }
+
     /// Opens the named project's workspace, on the asked-for view when there is one.
     @MainActor
     public static func applyProjectSelection(to navigation: NavigationModel, using services: AppServices?) {
+        if let delay = selectionDelay(in: ProcessInfo.processInfo.arguments) {
+            Diagnostics.shell.info("Design review: delaying project selection by \(delay, privacy: .public)s")
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(delay))
+                Diagnostics.shell.info("Design review: applying delayed project selection")
+                applyProjectSelectionNow(to: navigation, using: services)
+            }
+        } else {
+            applyProjectSelectionNow(to: navigation, using: services)
+        }
+    }
+
+    @MainActor
+    private static func applyProjectSelectionNow(to navigation: NavigationModel, using services: AppServices?) {
         guard isDevelopmentMode,
               let name = selectedProjectName(in: ProcessInfo.processInfo.arguments)?.lowercased(),
               let services

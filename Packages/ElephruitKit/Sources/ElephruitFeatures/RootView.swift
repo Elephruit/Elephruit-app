@@ -388,6 +388,14 @@ public struct RootView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // The window-level backstop for the title bar. Every screen above declares its own
+            // title, and the nearer declaration wins — this one exists for the frames when none of
+            // them has yet. A column that renders even one title-less frame collapses the whole
+            // toolbar, the sidebar rides up into the title-bar space, and AppKit does not reliably
+            // give the inset back; that was the sidebar "jump" on the way into a project, where the
+            // workspace's first frames render before its model has loaded. With a default here the
+            // toolbar exists from the window's first frame to its last, whatever the column shows.
+            .navigationTitle(navigation.windowTitle)
             .moduleColumnWidth(
                 .primary,
                 layout: shellLayout,
