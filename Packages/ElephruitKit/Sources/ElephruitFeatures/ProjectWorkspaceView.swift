@@ -63,6 +63,18 @@ struct ProjectWorkspaceView: View {
             Divider()
             body(for: model)
         }
+        // The window title *is* the project's name. Without it the toolbar fell back to the app's
+        // own name — "Elephruit" sitting over "Elephruit App" — and, worse, the toolbar collapsed
+        // to its title-less height, so entering a project nudged the whole sidebar upward. Every
+        // other middle-column surface declares a title; this one now does too, and the toolbar
+        // keeps one height everywhere.
+        .navigationTitle(model.project?.title ?? "Project")
+        .navigationSubtitle(subtitle(for: model))
+        .searchable(
+            text: searchBinding(model),
+            placement: .toolbar,
+            prompt: "Search this project"
+        )
         // The keyboard the workspace always claimed to have. Every handler goes through
         // ``ProjectWorkspaceModel/guarded(_:)`` so none of them fires while a title or the sheet
         // has the keyboard — the gate that was built for exactly these and then never used.
@@ -104,13 +116,52 @@ struct ProjectWorkspaceView: View {
             switch model.activeView?.kind ?? .list {
             case .board:
                 KanbanBoardView(model: model)
-            default:
-                // The list draws every grouped arrangement. The board is the one view whose layout
-                // genuinely differs; the rest are the same rows under different groupings, and
-                // giving each its own view is how they drift apart.
+            case .table:
+                WorkItemTableView(model: model)
+            case .calendar:
+                ProjectCalendarView(model: model)
+            case .timeline:
+                ProjectTimelineView(model: model)
+            case .overview:
+                ProjectOverviewView(model: model)
+            case .list, .bugs:
+                // One view for both, deliberately: they are the same rows under different
+                // groupings — a bug view is the list with severity leading — and two copies is
+                // how they would drift apart.
                 WorkItemListView(model: model)
             }
         }
+    }
+
+    /// The toolbar's second line: the project key and the round figure, when either exists.
+    ///
+    /// This is where "EA" went. As a monospaced badge beside the title it read as clutter —
+    /// three names stacked at the top of every project — and as a subtitle it is what a subtitle
+    /// is for: present, quiet, and out of the title's way.
+    private func subtitle(for model: ProjectWorkspaceModel) -> String {
+        var parts: [String] = []
+        if let key = model.project?.projectKey {
+            parts.append(key)
+        }
+        if model.health.completionFraction != nil {
+            parts.append("\(model.health.completedWork) of \(model.health.totalWork) done")
+        }
+        return parts.joined(separator: " — ")
+    }
+
+    /// The toolbar search field, folded into the arrangement as a transient rule.
+    ///
+    /// The model always knew how to search — ``ProjectWorkspaceModel/searchText`` was folded into
+    /// every arrangement — but nothing on screen wrote to it. This is the field that does.
+    private func searchBinding(_ model: ProjectWorkspaceModel) -> Binding<String> {
+        Binding(
+            get: { model.searchText },
+            set: { newValue in
+                guard model.searchText != newValue else { return }
+                model.searchText = newValue
+                model.rearrange()
+            }
+        )
     }
 
     /// The sheet's binding.
@@ -133,56 +184,31 @@ struct PresentedWorkItem: Identifiable {
 
 // MARK: - Header
 
+/// The concerns line, and nothing else.
+///
+/// The name, the key, and the progress figure all used to be here too, stacked under the window
+/// title's fallback — three lines saying where you are before the tabs said what you're looking
+/// at. The name is the window title now, the key and the figure are its subtitle, and what remains
+/// is the one thing the toolbar cannot carry: the sentences about what needs attention.
 struct ProjectWorkspaceHeader: View {
     let model: ProjectWorkspaceModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-            HStack(spacing: Theme.Spacing.small) {
-                Text(model.project?.title ?? "")
-                    .font(Theme.Text.title)
-
-                if let key = model.project?.projectKey {
-                    Text(key)
+        if !model.health.concerns.isEmpty {
+            // Sentences, not a row of counters. A dashboard of eleven figures where eight read
+            // zero is one people stop looking at.
+            ElephruitDesign.FlowLayout(spacing: Theme.Spacing.small, lineSpacing: Theme.Spacing.tight) {
+                ForEach(model.health.concerns.prefix(3)) { concern in
+                    Label(concern.sentence, systemImage: concern.symbolName)
                         .font(Theme.Text.rowSubtitle)
-                        .monospaced()
-                        .foregroundStyle(Theme.Colors.tertiaryText)
-                }
-
-                Spacer(minLength: 0)
-                progress
-            }
-
-            if !model.health.concerns.isEmpty {
-                // Sentences, not a row of counters. A dashboard of eleven figures where eight read
-                // zero is one people stop looking at.
-                ElephruitDesign.FlowLayout(spacing: Theme.Spacing.small, lineSpacing: Theme.Spacing.tight) {
-                    ForEach(model.health.concerns.prefix(3)) { concern in
-                        Label(concern.sentence, systemImage: concern.symbolName)
-                            .font(Theme.Text.rowSubtitle)
-                            .foregroundStyle(
-                                concern.isUrgent ? Theme.Colors.overdue : Theme.Colors.secondaryText
-                            )
-                    }
+                        .foregroundStyle(
+                            concern.isUrgent ? Theme.Colors.overdue : Theme.Colors.secondaryText
+                        )
                 }
             }
-        }
-        .padding(.horizontal, Theme.Spacing.large)
-        .padding(.top, Theme.Spacing.medium)
-        .padding(.bottom, Theme.Spacing.small)
-    }
-
-    /// In words, and absent when there is nothing to describe.
-    ///
-    /// This is where the progress figure lives, rather than as a ring beside the project's name in
-    /// the sidebar — see `ProjectSidebarRow.hasIndicators`.
-    @ViewBuilder
-    private var progress: some View {
-        if let fraction = model.health.completionFraction {
-            Text("\(model.health.completedWork) of \(model.health.totalWork) done")
-                .font(Theme.Text.rowSubtitle)
-                .foregroundStyle(Theme.Colors.secondaryText)
-                .accessibilityLabel("\(Int(fraction * 100)) per cent complete")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Theme.Spacing.large)
+            .padding(.top, Theme.Spacing.small)
         }
     }
 }
@@ -205,7 +231,7 @@ struct ProjectViewTabBar: View {
                 }
             }
             .padding(.horizontal, Theme.Spacing.large)
-            .padding(.bottom, Theme.Spacing.small)
+            .padding(.vertical, Theme.Spacing.small)
         }
         .scrollIndicators(.never)
         .confirmationDialog(
