@@ -5,20 +5,13 @@ import Foundation
 import SwiftData
 import Testing
 
-/// What happens when a timer was running and the app was not.
+/// What happens when a timer was running while the app was closed.
 ///
-/// ### How the crash is produced
-/// By writing the state a crash leaves behind: a running entry whose heartbeat stopped, in an
-/// on-disk store, read back through a fresh container. That is precisely what `kill -9` during a
-/// timer leaves on disk — the process dies without stopping anything — so the recovery path is
-/// exercised against real bytes rather than a mock.
-///
-/// **The limit, stated:** this does not spawn and kill a real process. What is proven is that the
-/// on-disk state a crash produces is detected and recoverable; what is not proven is that no other
-/// state can result from a kill at some unlucky instant. Autosave and the single-transaction writes
-/// in `TimeEntryRepository` are what bound that, and they are tested separately.
+/// A timer is an explicit user decision and closing the app is not a stop command. These tests
+/// recreate the on-disk state left by a quit or crash, reopen it in a fresh container, and prove the
+/// same entry continues from its original start date without a recovery question.
 @MainActor
-@Suite("Timer recovery", .serialized)
+@Suite("Timer continuity", .serialized)
 struct TimerRecoveryTests {
     private struct CrashedStore {
         let location: StoreLocation
@@ -73,67 +66,8 @@ struct TimerRecoveryTests {
         return (TimerService(entries: entries, dateProvider: clock), entries)
     }
 
-    // MARK: - Detection
-
-    @Test("A timer running when the app died is offered for recovery")
-    func crashOffersRecovery() throws {
-        let clock = FixedDateProvider.reference
-        let crashed = try crash(silentFor: 3 * 3_600, ranFor: 1_800, clock: clock)
-        defer { crashed.location.removeForTesting() }
-
-        let (service, _) = try reopen(crashed, clock: clock)
-        service.start()
-        defer { service.shutDown() }
-
-        let recovery = try #require(service.pendingRecovery)
-        #expect(recovery.id == crashed.entryID)
-        #expect(recovery.displayTitle == "Drafting the brief")
-        #expect(recovery.confirmedDuration == 1_800, "The time up to the last heartbeat is vouched for")
-        #expect(recovery.unaccountedFor == 3 * 3_600, "The silence is what the user has to decide about")
-    }
-
-    @Test("Nothing is decided on the user's behalf")
-    func recoveryIsNeverAutomatic() throws {
-        let clock = FixedDateProvider.reference
-        let crashed = try crash(silentFor: 3 * 3_600, clock: clock)
-        defer { crashed.location.removeForTesting() }
-
-        let (service, entries) = try reopen(crashed, clock: clock)
-        service.start()
-        defer { service.shutDown() }
-
-        // Opening the app resolved nothing: the entry is exactly as the crash left it.
-        let entry = try #require(try entries.entry(id: crashed.entryID))
-        #expect(entry.isRunning, "Launching must not stop a timer")
-        #expect(entry.deletedAt == nil, "Launching must not discard one either")
-        #expect(entry.lastHeartbeatAt == crashed.lastHeartbeatAt, "Nor quietly re-date it")
-        #expect(service.pendingRecovery != nil, "It asks")
-    }
-
-    @Test("A timer that has been beating recently is not disturbed")
-    func freshTimerIsNotOfferedForRecovery() throws {
-        let clock = FixedDateProvider.reference
-        let crashed = try crash(silentFor: 20, clock: clock)
-        defer { crashed.location.removeForTesting() }
-
-        let (service, _) = try reopen(crashed, clock: clock)
-        service.start()
-        defer { service.shutDown() }
-
-        #expect(service.pendingRecovery == nil, "Twenty seconds of silence is a busy machine, not a crash")
-        #expect(service.isRunning, "…and the timer simply carries on")
-    }
-
-    @Test("All three choices are offered, and they are genuinely different")
-    func threeDistinctChoices() {
-        #expect(TimerRecoveryChoice.allCases.count == 3)
-        #expect(Set(TimerRecoveryChoice.allCases.map(\.displayName)).count == 3)
-    }
-
-    // MARK: - Resolution
-
-    @Test("Stopping at last activity keeps the time the app can vouch for")
-    func stopAtLastActivity() throws {
+    @Test("A timer keeps running for the entire time the app is closed")
+    func timerContinuesAcrossLaunches() throws {
         let clock = FixedDateProvider.reference
         let crashed = try crash(silentFor: 3 * 3_600, ranFor: 1_800, clock: clock)
         defer { crashed.location.removeForTesting() }
@@ -141,84 +75,18 @@ struct TimerRecoveryTests {
         let (service, entries) = try reopen(crashed, clock: clock)
         service.start()
         defer { service.shutDown() }
-
-        service.resolveRecovery(.stopAtLastActivity)
-
-        let entry = try #require(try entries.entry(id: crashed.entryID))
-        #expect(entry.endedAt == crashed.lastHeartbeatAt)
-        #expect(entry.duration() == 1_800, "The three silent hours are not billed")
-        #expect(service.pendingRecovery == nil)
-        #expect(!service.isRunning)
-    }
-
-    @Test("Keeping it running counts the gap and does not ask again")
-    func keepRunning() throws {
-        let clock = FixedDateProvider.reference
-        let crashed = try crash(silentFor: 3 * 3_600, ranFor: 1_800, clock: clock)
-        defer { crashed.location.removeForTesting() }
-
-        let (service, entries) = try reopen(crashed, clock: clock)
-        service.start()
-        defer { service.shutDown() }
-
-        service.resolveRecovery(.keepRunning)
 
         let entry = try #require(try entries.entry(id: crashed.entryID))
         #expect(entry.isRunning)
-        #expect(entry.lastHeartbeatAt == clock.now, "The heartbeat moves, so the prompt does not loop")
-        #expect(try entries.staleRunningEntry(tolerance: TimerService.stalenessTolerance, now: clock.now) == nil)
+        #expect(entry.startedAt == crashed.startedAt, "Reopening must not move the start date")
         #expect(service.isRunning)
+        #expect(service.running?.id == crashed.entryID)
+        #expect(service.elapsed == 3 * 3_600 + 1_800, "The closed-app interval counts as elapsed time")
+        #expect(service.pendingRecovery == nil, "Continuing a timer does not require a recovery choice")
     }
 
-    @Test("Discarding is recoverable, because discard should not mean destroyed")
-    func discardIsSoft() throws {
-        let clock = FixedDateProvider.reference
-        let crashed = try crash(silentFor: 3 * 3_600, clock: clock)
-        defer { crashed.location.removeForTesting() }
-
-        let (service, entries) = try reopen(crashed, clock: clock)
-        service.start()
-        defer { service.shutDown() }
-
-        service.resolveRecovery(.discard)
-
-        let entry = try #require(try entries.entry(id: crashed.entryID))
-        #expect(entry.deletedAt != nil)
-        #expect(try entries.runningEntry() == nil)
-        #expect(!service.isRunning)
-
-        // And it can come back.
-        try entries.restore(entry)
-        #expect(entry.deletedAt == nil)
-        #expect(entry.endedAt != nil, "Restoring closes it rather than resurrecting a second timer")
-    }
-
-    @Test("Dismissing without deciding changes nothing and asks again next time")
-    func deferringIsAllowed() throws {
-        let clock = FixedDateProvider.reference
-        let crashed = try crash(silentFor: 3 * 3_600, clock: clock)
-        defer { crashed.location.removeForTesting() }
-
-        let (service, entries) = try reopen(crashed, clock: clock)
-        service.start()
-        service.deferRecovery()
-        service.shutDown()
-
-        #expect(service.pendingRecovery == nil, "The banner goes away")
-
-        let entry = try #require(try entries.entry(id: crashed.entryID))
-        #expect(entry.isRunning, "The timer does not")
-        #expect(entry.lastHeartbeatAt == crashed.lastHeartbeatAt)
-
-        // Next launch asks again, because the question was never answered.
-        let (second, _) = try reopen(crashed, clock: clock)
-        second.start()
-        defer { second.shutDown() }
-        #expect(second.pendingRecovery?.id == crashed.entryID)
-    }
-
-    @Test("An entry with no heartbeat at all falls back to its start")
-    func missingHeartbeatDegradesGracefully() throws {
+    @Test("A timer from an older build without a heartbeat also keeps running")
+    func missingHeartbeatStillContinues() throws {
         let clock = FixedDateProvider.reference
         let location = StoreLocation.temporary()
         defer { location.removeForTesting() }
@@ -228,7 +96,7 @@ struct TimerRecoveryTests {
         do {
             let stack = try PersistenceStack.open(mode: .onDisk(location))
             let context = ModelContext(stack.container)
-            // No heartbeat: written by a build that predates them, or crashed within the first tick.
+            // No heartbeat: written by a build that predates them, or closed within the first tick.
             context.insert(TimeEntry(startedAt: startedAt, entryDescription: "Old entry"))
             try context.save()
         }
@@ -242,10 +110,9 @@ struct TimerRecoveryTests {
         service.start()
         defer { service.shutDown() }
 
-        let recovery = try #require(service.pendingRecovery)
-        #expect(recovery.lastHeartbeatAt == startedAt)
-        #expect(recovery.confirmedDuration == 0, "Nothing can be vouched for, and it says so")
-        #expect(recovery.unaccountedFor == 7_200)
+        #expect(service.isRunning)
+        #expect(service.elapsed == 7_200)
+        #expect(service.pendingRecovery == nil)
     }
 
     // MARK: - The invariant, on launch

@@ -6,8 +6,8 @@ import Observation
 
 /// The running timer, as the rest of the app sees it.
 ///
-/// Owns three things the repository deliberately does not: the tick that makes a clock move, the
-/// heartbeat that makes a crash survivable, and the recovery the user has not answered yet.
+/// Owns the tick that makes a clock move and the idle observations that the user has not answered
+/// yet.
 ///
 /// ### Why the heartbeat exists
 /// Without one, a timer found running after a crash leaves only two honest options — count the whole
@@ -162,11 +162,14 @@ public final class TimerService {
 
     /// Called once, after the store opens.
     ///
-    /// Repairs the invariant if it is broken, offers a stale timer for recovery, and starts ticking
-    /// if something is genuinely running.
+    /// Repairs the invariant if it is broken, adopts any persisted running timer, and starts
+    /// ticking.
+    ///
+    /// A running entry is intentionally continuous across launches. Quitting the app is not the
+    /// same action as stopping a timer, so startup never asks the user to account for the time the
+    /// app was closed and never changes the entry's start date.
     public func start() {
         reconcile()
-        detectStaleTimer()
         refresh()
         observeSleep()
         startTicking()
@@ -200,20 +203,6 @@ public final class TimerService {
     private func reconcile() {
         do {
             reconciledTimerCount = try entries.reconcileConcurrentTimers()
-        } catch {
-            lastError = error
-        }
-    }
-
-    /// Looks for a timer that was running when the app stopped.
-    private func detectStaleTimer() {
-        do {
-            guard let stale = try entries.staleRunningEntry(
-                tolerance: Self.stalenessTolerance,
-                now: dateProvider.now
-            ) else { return }
-
-            pendingRecovery = stale.recovery(at: dateProvider.now)
         } catch {
             lastError = error
         }
@@ -899,11 +888,10 @@ public final class TimerService {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                // The gap is offered rather than absorbed, on exactly the same terms as a crash —
-                // and by crash recovery rather than by idle detection, which is told to forget the
-                // sleep so the same minutes are not queried twice.
+                // Sleeping does not stop a timer. Forget the system-idle sample so waking cannot
+                // turn the sleep interval into a question, then recompute the continuously running
+                // timer from its original start date.
                 self.idleDetector.reset()
-                self.detectStaleTimer()
                 self.refresh()
             }
         }
