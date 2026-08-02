@@ -39,17 +39,21 @@ final class QuickJotPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// Owns the one panel, the text in it, and where focus goes when it closes.
+/// Owns the one panel, what has been composed in it, and where focus goes when it closes.
 ///
 /// ### Why the draft lives here rather than in the view
-/// The view is destroyed when the panel closes, so `@State` on it means the text is gone the moment
+/// The view is destroyed when the panel closes, so `@State` on it means the work is gone the moment
 /// the panel loses its window — which turns an accidental dismissal into lost work. Holding it here
 /// makes "reopening gets your text back" the default rather than a feature.
+///
+/// That argument got stronger when the composer stopped being a string. What is now at stake on an
+/// accidental dismissal is a title, a body, and a set of chips that may have taken four trips through
+/// a menu to assemble.
 @MainActor
 @Observable
 public final class QuickJotController {
-    /// What is in the field. Survives the panel being closed.
-    public var text: String = ""
+    /// What has been composed. Survives the panel being closed.
+    public var composition = QuickJotComposition()
 
     /// The most recent failure, kept so the panel can stay open and explain itself.
     public var lastError: AppError?
@@ -122,7 +126,7 @@ public final class QuickJotController {
 
     /// Hides and clears — what a successful save does.
     public func hideAfterSaving() {
-        text = ""
+        composition = QuickJotComposition()
         hide()
     }
 
@@ -143,18 +147,26 @@ public final class QuickJotController {
         NSApp.yieldActivation(to: previousApplication)
     }
 
-    /// Captures what is in the field.
+    /// Captures what has been composed.
     ///
     /// Returns whether anything was saved, so the caller can decide what to do next. On failure the
-    /// panel stays open with the text intact — losing someone's sentence because the store was busy
+    /// panel stays open with everything intact — losing someone's sentence because the store was busy
     /// would be the worst possible response to a recoverable error.
-    /// Whether there is anything to save is decided by ``CaptureService``, which returns `nil` for a
-    /// capture with nothing in it. Deciding it here as well would mean a second parse that does not
-    /// know which projects exist, and so a second opinion about what the text means.
+    ///
+    /// The flush happens first and is kept even if the save then fails. It is the last chance for a
+    /// token the user finished typing but never terminated — `Prep due:friday` with the caret still
+    /// against the `y` — to become a chip rather than nothing, and having done it there is no reason
+    /// to undo it. Whether there is anything worth saving is decided by ``AppServices/captureDraft``,
+    /// which returns `nil` for a capture with nothing in it.
     @discardableResult
     public func save() -> Bool {
+        let vocabulary = (try? services.capture.vocabulary()) ?? .empty
+        composition.flush(knowing: vocabulary)
+
         do {
-            guard try services.captureText(text) != nil else { return false }
+            guard try services.captureDraft(composition.captured(knowing: vocabulary)) != nil else {
+                return false
+            }
             hideAfterSaving()
             return true
         } catch {

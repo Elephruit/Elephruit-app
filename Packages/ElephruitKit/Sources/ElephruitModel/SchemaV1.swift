@@ -335,7 +335,40 @@ public enum SchemaV10: VersionedSchema {
     }
 }
 
-/// The eleventh schema: a project becomes a workspace.
+/// The eleventh schema: a note's rich text.
+///
+/// One nullable `Data` column — `Item.noteDocumentData` — and nothing else. Additive, optional,
+/// defaulted to `nil`, so a store opened under this version gains a nullable column and keeps every
+/// byte it had.
+///
+/// ### Why there is no data migration, and why that is the safe direction
+/// Because `nil` already means something true: *this note has not been opened since rich text
+/// existed*, and its `body` is still the whole of it. Conversion happens on read, one note at a
+/// time, through `NoteBodyImport` — which adopts structure only when re-projecting the result gives
+/// back the original string character for character, and otherwise keeps the note as plain
+/// paragraphs.
+///
+/// A custom stage would have to rewrite every note in the library at once, on the strength of a
+/// parser that has never been run against *these* notes, at the one moment the user is least able to
+/// judge the result and least able to undo it. ADR 0006's consequence 6 asks for the legacy read
+/// path to stay until the conversion has been validated and a rollback window has passed, and a
+/// nullable column that means "not yet" is what keeps that promise available. Nothing is rewritten
+/// until the user opens a note and edits it.
+///
+/// ### Why it is a version at all
+/// For the reason spelled out on ``SchemaV3``: the version identifier is what the `.schema-version`
+/// stamp beside the store is compared against, and a mismatch is what triggers the backup in
+/// `PersistenceStack`. A schema change that did not bump the version would migrate real user data
+/// with no backup taken.
+public enum SchemaV11: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 11) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV10.models
+    }
+}
+
+/// The twelfth schema: a project becomes a workspace.
 ///
 /// Eight new entities — `WorkflowStage`, `ProjectViewRecord`, `BugRecord`, `ItemComment`,
 /// `ItemActivity`, `AutomationRule`, `CustomFieldDefinition`, `InboxNotification` — and nine
@@ -349,15 +382,19 @@ public enum SchemaV10: VersionedSchema {
 /// — but the decision of record is that deferring sync must not make adopting it harder later, and
 /// eight entities is exactly the scale at which retrofitting would hurt.
 ///
+/// Numbered twelfth rather than eleventh because the rich-text column landed on `main` while
+/// this work was in a worktree, and took eleven. Nothing about the change is different for it;
+/// the two are independent additive stages that happen to have been written at the same time.
+///
 /// The one design note worth reading here rather than at the call site: **custom fields add no
 /// storage.** `CustomFieldDefinition` names and types a key; the values live in `Item.userMetadata`,
 /// which has been in the schema since v1. That is why renaming a field is a service operation that
 /// moves values rather than a single write.
-public enum SchemaV11: VersionedSchema {
-    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 11) }
+public enum SchemaV12: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 12) }
 
     public static var models: [any PersistentModel.Type] {
-        SchemaV10.models + [
+        SchemaV11.models + [
             WorkflowStage.self,
             ProjectViewRecord.self,
             BugRecord.self,
@@ -382,7 +419,7 @@ public enum SchemaV11: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV11.self]
+        [SchemaV12.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -402,9 +439,9 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV11.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV12.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV11.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV12.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {

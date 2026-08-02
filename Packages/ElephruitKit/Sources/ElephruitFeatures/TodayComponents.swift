@@ -252,7 +252,7 @@ struct TodayBriefingView: View {
             HStack(spacing: Theme.Spacing.tight) {
                 Image(systemName: today[0].celebration.kind.symbolName)
                     .font(.system(size: 11))
-                    .foregroundStyle(Theme.Colors.personalDetail)
+                    .foregroundStyle(Theme.Colors.secondaryText)
                     .accessibilityHidden(true)
 
                 Text(ListPhrase.joined(today.map(\.summaryLine)))

@@ -43,9 +43,32 @@ public final class Item {
 
     public var title: String = ""
 
-    /// Markdown-compatible plain text. Always plain text — see the editor's scope note
-    /// in `docs/08-risks.md`.
+    /// Markdown-compatible plain text, and the **projection** of ``noteDocumentData``.
+    ///
+    /// Still a plain `String`, still what the FTS index receives, what the Markdown export writes,
+    /// and what wiki-link reconciliation parses — ADR 0006 keeps it exactly as it was, on purpose.
+    /// What changed is where it comes from: for a note carrying a rich document this is regenerated
+    /// from that document on every write and is not the place to edit text. For everything else — a
+    /// task's notes, a project's brief, a person's body — it is still the whole of the content.
     public var body: String = ""
+
+    /// A note's rich text, as the encoded ``NoteDocument`` described by ADR 0006.
+    ///
+    /// ### Why a payload column rather than making `body` attributed
+    /// Because `body` has three readers that all work today, and attributing it would break the FTS
+    /// projection, the round-trip tests and index-backed wiki-link reconciliation simultaneously, to
+    /// gain nothing the projection does not already give. So the document is the source of truth and
+    /// `body` is derived from it — the same arrangement `searchText`, `titleMatchKey` and
+    /// `dueSortKey` already have.
+    ///
+    /// ### Why it is nullable, and stays nullable
+    /// A `nil` here does not mean an empty note. It means *this note has not been opened since rich
+    /// text existed*, and its `body` is still the whole truth. Conversion happens on read, per note,
+    /// through ``NoteBodyImport`` — which refuses to adopt any structure that would cost a character
+    /// — rather than in a migration stage that rewrites everybody's library at once on the strength
+    /// of a parser nobody has run against their notes yet. The legacy read path stays until that has
+    /// been validated in the field, which is what ADR 0006's consequence 6 asks for.
+    public var noteDocumentData: Data?
 
     /// Denormalised projection of title, body, tag slugs, and person names.
     ///
@@ -541,6 +564,46 @@ extension Item: ContentItem {
     public var parentTitle: String? {
         guard let parent else { return nil }
         return parent.displayTitle
+    }
+}
+
+// MARK: - Rich text
+
+extension Item {
+    /// This note's contents, converting the legacy body on first read.
+    ///
+    /// Reading is total: a note that has never been opened since rich text existed is read through
+    /// ``NoteBodyImport``, a payload written by a newer build that this one cannot decode falls back
+    /// to the body rather than to nothing, and a note with neither gets a document with one empty
+    /// paragraph — because an editor with no paragraphs has nowhere to put the caret.
+    ///
+    /// Nothing here writes. A read that repaired the column would turn opening a note into a store
+    /// mutation, which means opening a library in a newer build would rewrite every note in it
+    /// before the user had touched one — and would do so on a background read where a failure has
+    /// nowhere to be reported.
+    public var noteDocument: NoteDocument {
+        if let noteDocumentData {
+            if let decoded = try? JSONDecoder().decode(NoteDocument.self, from: noteDocumentData) {
+                return decoded
+            }
+            // A payload this build cannot read is not a reason to show an empty note. `body` is
+            // still the projection of whatever wrote it, so it is still the text.
+            Diagnostics.persistence.error("A note's rich text could not be decoded; falling back to its body.")
+        }
+
+        return body.isEmpty ? .empty : NoteBodyImport.document(from: body)
+    }
+
+    /// Replaces this note's contents, and regenerates everything derived from them.
+    ///
+    /// The one sanctioned way to write a note's text. `body` is *always* rewritten from the document
+    /// here, which is what stops the two disagreeing — and it has to happen in the same call, because
+    /// a body left stale for even one save is a body the search index and wiki-link reconciliation
+    /// have already read.
+    public func setNoteDocument(_ document: NoteDocument) {
+        noteDocumentData = try? JSONEncoder().encode(document)
+        body = document.projectedBody
+        refreshSearchText()
     }
 }
 

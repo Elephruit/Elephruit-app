@@ -154,7 +154,38 @@ struct TaskBenchmarks {
             _ = try? views.contents(of: .today)
         }
 
-        for measurement in [fetch, today, anytime, upcoming, smartList, contents] {
+        // ### What a *layout pass* asks of the model, as opposed to assembling the view
+        //
+        // Everything above happens when the destination changes. This happens continuously: SwiftUI
+        // re-evaluates a row's `body` whenever anything it observes changes, and a row's body asks
+        // the model what is currently true about its task. A factor here is felt as lag; a factor
+        // above is felt as a pause.
+        //
+        // What it found: `taskFacts()` was the whole cost, and it was being asked for far more often
+        // than once per row. `TaskRow` and `TodayTaskRow` each called it three times per body — the
+        // emptiness check, the `ForEach`, and the accessibility label — and `TaskAttributeRow` called
+        // it **seven** times, once for the chips and once for each of the six `if` statements
+        // deciding which buttons to draw. A computed property cannot cache, so every reference
+        // recomputed everything. Inside the function, two more multipliers: the checklist decoded
+        // from JSON twice, and `outgoingLinks` walked twice with every target faulted in both times.
+        //
+        // The budget is per five thousand rows, far more than a list draws. What matters is that it
+        // stays proportional: a regression here is a caller that started asking twice.
+        let rows = (try? fixture.items.items(matching: query)) ?? []
+        let facts = Benchmark.measure("tasks.row.facts", budget: .milliseconds(400)) {
+            for row in rows { _ = row.taskFacts() }
+        }
+
+        let precomputed = rows.map { $0.taskFacts() }
+        let now = fixture.dateProvider.now
+        let calendar = fixture.dateProvider.calendar
+        let attributes = Benchmark.measure("tasks.row.attributes", budget: .milliseconds(200)) {
+            for facts in precomputed {
+                _ = TaskAttributes.layout(for: facts, now: now, calendar: calendar)
+            }
+        }
+
+        for measurement in [fetch, today, anytime, upcoming, smartList, contents, facts, attributes] {
             print(measurement.report)
             #expect(measurement.passes, "\(measurement.report)")
         }

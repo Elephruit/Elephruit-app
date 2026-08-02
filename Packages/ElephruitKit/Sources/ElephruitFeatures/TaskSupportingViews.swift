@@ -23,6 +23,11 @@ struct UpcomingAgendaView: View {
     @Environment(\.services) private var services
     let navigation: NavigationModel
     let groups: [AgendaGroup]
+
+    /// The rows the workspace already loaded, so drawing one is a dictionary lookup rather than a
+    /// fetch. See ``task(for:)``.
+    var tasksByID: [UUID: Item] = [:]
+
     let onChange: () -> Void
 
     @State private var dropTarget: Date?
@@ -61,7 +66,13 @@ struct UpcomingAgendaView: View {
             }
             .listStyle(.inset)
             .alternatingRowBackgrounds(.disabled)
+            .scrollContentBackground(.hidden)
             .background { linkedDeletionDialog }
+            // The same capped, centred column the rest of Tasks uses. Upcoming is the one view a
+            // person scrolls a long way through, so a row whose date is a foot from its title is the
+            // most costly here.
+            .frame(maxWidth: Theme.Size.editorMaxWidth)
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -116,6 +127,7 @@ struct UpcomingAgendaView: View {
                     task: task,
                     showsContainer: true,
                     isSelected: navigation.selectedItemIDs.contains(task.id),
+                    navigation: navigation,
                     onToggle: { toggle(task) }
                 )
             }
@@ -147,15 +159,30 @@ struct UpcomingAgendaView: View {
         }
     }
 
+    /// A day gets the large-number form; a week or a month keeps a title.
+    ///
+    /// The distinction is what the band *is*. A day is a landmark you are scrolling to find, and a
+    /// numeral is what makes it findable on the way past. A week further out is a bucket, and giving
+    /// a bucket a big number would be pointing at the Monday as though it meant something.
     @ViewBuilder
     private func header(for group: AgendaGroup) -> some View {
         switch group.span {
         case .day(let date):
-            SectionHeader(dayTitle(date), count: group.entries.isEmpty ? nil : group.entries.count)
+            TaskDayHeader(
+                date: date,
+                calendar: services?.dateProvider.calendar ?? .current,
+                isToday: services.map { $0.dateProvider.calendar.isDate($0.dateProvider.now, inSameDayAs: date) } ?? false
+            )
         case .week(let start):
-            SectionHeader("Week of " + start.formatted(.dateTime.day().month(.abbreviated)), count: group.entries.count)
+            TaskSectionHeader(
+                title: "Week of " + start.formatted(.dateTime.day().month(.abbreviated)),
+                count: group.entries.count
+            )
         case .month(let start):
-            SectionHeader(start.formatted(.dateTime.month(.wide).year()), count: group.entries.count)
+            TaskSectionHeader(
+                title: start.formatted(.dateTime.month(.wide).year()),
+                count: group.entries.count
+            )
         }
     }
 
@@ -191,8 +218,19 @@ struct UpcomingAgendaView: View {
         return moved
     }
 
+    /// ### Why this reads an index rather than fetching
+    /// It fetched. `items.item(id:)` is a store round-trip, and this is called once per entry while
+    /// the agenda's body is being evaluated — so a four-month agenda performed hundreds of fetches
+    /// per layout pass, and did it again on every pass. That is the shape `FetchAudit` exists to
+    /// catch, and the reason the flat list of tasks is loaded alongside the groups in the first
+    /// place: ``TaskWorkspaceView`` already has every one of these rows in memory.
+    ///
+    /// The fallback stays because the two are not guaranteed to agree: the agenda is built over a
+    /// fixed horizon and the flat list over the view's own membership rule, so an entry at the far
+    /// edge of one may be absent from the other. A miss costs what every row used to cost.
     private func task(for id: UUID) -> Item? {
-        try? services?.items.item(id: id)
+        if let known = tasksByID[id] { return known }
+        return try? services?.items.item(id: id)
     }
 
     private func toggle(_ task: Item) {
@@ -280,7 +318,13 @@ struct TodayPlanningSection: View {
         Section {
             ForEach(suggestions, id: \.id) { task in
                 HStack(spacing: Theme.Spacing.small) {
-                    TaskRow(task: task, showsContainer: true, isSelected: false, onToggle: { complete(task) })
+                    TaskRow(
+                        task: task,
+                        showsContainer: true,
+                        isSelected: false,
+                        navigation: navigation,
+                        onToggle: { complete(task) }
+                    )
 
                     Button("Today") { commit(task) }
                         .buttonStyle(.borderless)
@@ -475,55 +519,3 @@ struct TaskContextMenu: View {
 }
 
 // MARK: - Batch actions
-
-/// What can be done to several tasks at once.
-///
-/// Each button is **one** undo step, because each is one thing the user did. Anything that would
-/// reach a system reminder is not here: a batch that silently wrote to somebody's iCloud account is
-/// exactly the kind of thing this integration promises not to do.
-struct TaskBatchBar: View {
-    @Environment(\.services) private var services
-    let navigation: NavigationModel
-    let tasks: [Item]
-    let onChange: () -> Void
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.medium) {
-            Text("\(tasks.count) selected")
-                .font(Theme.Text.rowSubtitle)
-                .foregroundStyle(Theme.Colors.secondaryText)
-
-            Spacer()
-
-            Button("Complete", systemImage: "checkmark.circle") {
-                apply { services, task in _ = try services.tasks.complete(task) }
-            }
-            Button("Today", systemImage: "sun.horizon") {
-                apply { services, task in try services.tasks.commitToToday(task) }
-            }
-            Button("Flag", systemImage: "flag") {
-                apply { services, task in try services.tasks.setFlagged(true, on: task) }
-            }
-            Button("Someday", systemImage: "archivebox") {
-                apply { services, task in try services.tasks.setSomeday(true, on: task) }
-            }
-            Button("Clear", systemImage: "xmark") { navigation.selectedItemIDs = [] }
-        }
-        .labelStyle(.titleAndIcon)
-        .buttonStyle(.borderless)
-        .font(Theme.Text.metadata)
-        .padding(.horizontal, Theme.Spacing.medium)
-        .padding(.vertical, Theme.Spacing.small)
-        .background(.bar)
-        .accessibilityIdentifier("tasks.batchBar")
-    }
-
-    private func apply(_ work: (AppServices, Item) throws -> Void) {
-        guard let services else { return }
-        services.perform {
-            for task in tasks { try work(services, task) }
-        }
-        services.refreshDerivedState()
-        onChange()
-    }
-}

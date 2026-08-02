@@ -101,6 +101,45 @@ extension CaptureHighlight {
             .sorted { $0.utf16Range.lowerBound < $1.utf16Range.lowerBound }
     }
 
+    /// Converts an insertion point from characters to UTF-16 code units.
+    ///
+    /// The mirror of ``characterOffset(ofUTF16:in:)``, and the pair exist because a caret has to cross
+    /// the same boundary the highlights do. Everything above AppKit — the parser, the completion
+    /// rule, the lifter — counts grapheme clusters; every `NSRange` counts UTF-16. Converting at the
+    /// one place they meet is what keeps a family emoji in a title from moving the caret four
+    /// characters away from where the user is looking.
+    ///
+    /// Clamped rather than optional, unlike the range conversion above. A highlight that does not fit
+    /// is better missing than misplaced, but a caret has to be *somewhere*, and the end of the text is
+    /// the only answer that cannot crash.
+    public static func utf16Offset(ofCharacter offset: Int, in text: String) -> Int {
+        let clamped = min(max(0, offset), text.count)
+        return text.index(text.startIndex, offsetBy: clamped).utf16Offset(in: text)
+    }
+
+    /// Converts an insertion point from UTF-16 code units to characters.
+    ///
+    /// A UTF-16 offset that lands *inside* a grapheme cluster — which AppKit will not normally
+    /// produce, but which arithmetic on one might — reports the character it is inside, since that is
+    /// the only whole thing the caret can be said to be at.
+    public static func characterOffset(ofUTF16 offset: Int, in text: String) -> Int {
+        let utf16 = text.utf16
+        var clamped = min(max(0, offset), utf16.count)
+
+        // Step back to the nearest character boundary rather than forward. Rounding down lands on
+        // the character the offset is inside, which is where the user is; rounding up would put the
+        // caret past a glyph they have not finished.
+        while clamped > 0 {
+            if let index = utf16.index(utf16.startIndex, offsetBy: clamped, limitedBy: utf16.endIndex),
+               let boundary = String.Index(index, within: text) {
+                return text.distance(from: text.startIndex, to: boundary)
+            }
+            clamped -= 1
+        }
+
+        return 0
+    }
+
     /// Converts a range of characters into a range of UTF-16 code units.
     ///
     /// Returns `nil` rather than clamping when the range does not fit, because a highlight that has

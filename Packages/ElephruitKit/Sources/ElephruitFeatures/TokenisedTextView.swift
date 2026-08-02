@@ -3,116 +3,6 @@ import ElephruitCore
 import ElephruitDesign
 import SwiftUI
 
-/// The capture field.
-///
-/// An `NSTextView` rather than SwiftUI's `TextEditor` for the same reason the note editor is one:
-/// `TextEditor` exposes no caret position and no key interception, and this field needs both —
-/// the caret to know what is being completed, and the keys so that `Tab` accepts a suggestion
-/// instead of inserting a tab character.
-///
-/// It also needs a third thing `TextEditor` cannot give it: the ability to draw *behind* stretches
-/// of its own text, and to treat those stretches as single objects when Delete arrives. See
-/// ``TokenisedTextView``.
-struct CaptureTextField: NSViewRepresentable {
-    @Binding var text: String
-    @Binding var caret: Int
-
-    /// The names the grammar may spell out without quotes, so a two-word project draws as one token.
-    var vocabulary: CaptureVocabulary = .empty
-
-    var onSubmit: () -> Void
-    var onCancel: () -> Void
-    /// `-1` for up, `1` for down.
-    var onMove: (Int) -> Void
-    /// Returns whether a suggestion was accepted, so the key can be swallowed if it was.
-    var onAccept: () -> Bool
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = TokenisedTextView.scrollableTextView()
-        guard let textView = scrollView.documentView as? TokenisedTextView else { return scrollView }
-
-        textView.delegate = context.coordinator
-        textView.coordinator = context.coordinator
-        textView.string = text
-        textView.isRichText = false
-        textView.allowsUndo = true
-        textView.font = .preferredFont(forTextStyle: .body)
-        // Straight quotes, because the grammar is punctuation and a smart quote is not the same
-        // character the parser is looking for.
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.isAutomaticDashSubstitutionEnabled = false
-        textView.isAutomaticTextReplacementEnabled = false
-        textView.textContainerInset = NSSize(width: 6, height: 8)
-        textView.drawsBackground = false
-        textView.vocabulary = vocabulary
-        textView.applyHighlighting()
-
-        scrollView.drawsBackground = false
-        scrollView.hasVerticalScroller = false
-
-        DispatchQueue.main.async { textView.window?.makeFirstResponder(textView) }
-        return scrollView
-    }
-
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        context.coordinator.parent = self
-        guard let textView = scrollView.documentView as? TokenisedTextView else { return }
-
-        if textView.string != text {
-            textView.string = text
-            // A programmatic change — accepting a suggestion — moves the caret deliberately.
-            let target = min(caret, textView.string.utf16.count)
-            textView.setSelectedRange(NSRange(location: target, length: 0))
-        }
-
-        textView.vocabulary = vocabulary
-        textView.applyHighlighting()
-    }
-
-    @MainActor
-    final class Coordinator: NSObject, NSTextViewDelegate {
-        var parent: CaptureTextField
-
-        init(_ parent: CaptureTextField) {
-            self.parent = parent
-        }
-
-        func textDidChange(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
-            parent.text = textView.string
-            parent.caret = textView.selectedRange().location
-            (textView as? TokenisedTextView)?.applyHighlighting()
-        }
-
-        func textViewDidChangeSelection(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
-            parent.caret = textView.selectedRange().location
-        }
-
-        func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-            switch selector {
-            case #selector(NSResponder.moveUp(_:)):
-                parent.onMove(-1)
-                return true
-            case #selector(NSResponder.moveDown(_:)):
-                parent.onMove(1)
-                return true
-            case #selector(NSResponder.insertTab(_:)):
-                // Only swallowed when there was something to accept, so Tab still moves focus in an
-                // empty field rather than doing nothing.
-                return parent.onAccept()
-            case #selector(NSResponder.cancelOperation(_:)):
-                parent.onCancel()
-                return true
-            default:
-                return false
-            }
-        }
-    }
-}
-
 /// A text view that knows which parts of itself are tokens.
 ///
 /// ### Why the text is not replaced by attachments
@@ -125,11 +15,21 @@ struct CaptureTextField: NSViewRepresentable {
 ///
 /// So the text stays text, and only three things change: it is drawn with a fill behind it, one
 /// press of Delete removes the whole of it, and a double-click selects the whole of it.
+///
+/// A token that has finished being typed leaves the field altogether and becomes a chip — but that
+/// is ``CaptureLift``'s decision, taken above this view, and by the time it arrives here it is an
+/// ordinary edit to the string.
 final class TokenisedTextView: NSTextView {
-    weak var coordinator: CaptureTextField.Coordinator?
+    weak var coordinator: CaptureTitleField.Coordinator?
 
     /// The names the parser may read across a space. Kept in step with the field above.
     var vocabulary: CaptureVocabulary = .empty
+
+    /// Shown when there is nothing typed. Drawn rather than made a subview, because a placeholder is
+    /// not content and should not be in the accessibility tree twice.
+    var placeholder: String = "" {
+        didSet { needsDisplay = true }
+    }
 
     /// What the parser made of the current string. Recomputed whenever the string changes.
     private var highlights: [CaptureHighlight] = []
@@ -214,6 +114,7 @@ final class TokenisedTextView: NSTextView {
     override func draw(_ dirtyRect: NSRect) {
         drawTokenFills(in: dirtyRect)
         super.draw(dirtyRect)
+        drawPlaceholder()
     }
 
     private func drawTokenFills(in rect: NSRect) {
@@ -236,6 +137,21 @@ final class TokenisedTextView: NSTextView {
                 ).fill()
             }
         }
+    }
+
+    /// After the text, not before, so an empty field still shows a caret in front of the prompt.
+    private func drawPlaceholder() {
+        guard string.isEmpty, !placeholder.isEmpty else { return }
+
+        let origin = textContainerOrigin
+        let inset = textContainerInset
+        NSAttributedString(
+            string: placeholder,
+            attributes: [
+                .font: font ?? .preferredFont(forTextStyle: .body),
+                .foregroundColor: NSColor.placeholderTextColor,
+            ]
+        ).draw(at: NSPoint(x: origin.x + inset.width, y: origin.y + inset.height))
     }
 
     /// Where a range of characters is on screen — one rect per line it spans.
@@ -348,7 +264,8 @@ final class TokenisedTextView: NSTextView {
 
     override func keyDown(with event: NSEvent) {
         // ⌘↩ saves. Checked here because AppKit maps it to no standard editing selector, so
-        // there is nothing for `doCommandBy` to report.
+        // there is nothing for `doCommandBy` to report — and because plain Return is spoken for: in
+        // a one-line field it moves to the notes.
         let isReturn = event.keyCode == 36 || event.keyCode == 76
         if isReturn, event.modifierFlags.contains(.command) {
             MainActor.assumeIsolated { coordinator?.parent.onSubmit() }
@@ -363,8 +280,8 @@ final class TokenisedTextView: NSTextView {
     ///
     /// `#landscape @Sarah due:friday` read literally is "number sign landscape at Sarah due colon
     /// friday", which describes the keystrokes rather than the meaning. Read as a value it becomes
-    /// "Tag landscape, Person Sarah, Deadline Friday" — the same thing the interpretation row shows
-    /// a sighted user, which is the standard being aimed at.
+    /// "Tag landscape, Person Sarah, Deadline Friday" — the same thing the chip row shows a sighted
+    /// user, which is the standard being aimed at.
     override func accessibilityValueDescription() -> String? {
         guard !highlights.isEmpty else { return super.accessibilityValueDescription() }
         return highlights.map(\.spokenDescription).joined(separator: ", ")

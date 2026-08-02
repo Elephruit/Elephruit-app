@@ -130,7 +130,7 @@ throws a sheet over the board.
 
 ---
 
-## 3. Schema — `SchemaV11` (`0.0.11`)
+## 3. Schema — `SchemaV12` (`0.0.12`)
 
 > The lost work built this as `SchemaV10`. `main` has since shipped its own `SchemaV10` (the
 > Reminders-home column), so the rebuild is **V11**. If you are reading this against a later `main`,
@@ -426,7 +426,7 @@ context.
 
 Each phase ends green (`swift build`, `swift test`, `xcodebuild` Debug) and is one commit.
 
-1. **Model & schema** — `SchemaV11`, eight entities, `Item` columns, new kinds/link kinds, the
+1. **Model & schema** — `SchemaV12`, eight entities, `Item` columns, new kinds/link kinds, the
    `isWorkItem` sweep, `ItemFields`/`canContain`, migration test.
 2. **Services** — the seven above, wired into `AppServices`.
 3. **Sidebar** — `ProjectsSidebarModel`/`Section`, `SidebarSelection.project`, `displayOrder`.

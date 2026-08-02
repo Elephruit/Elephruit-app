@@ -389,7 +389,17 @@ struct TodayTaskRow: View {
     @State private var isHovering = false
     @FocusState private var isFocused: Bool
 
+    /// ### Why the metadata is computed once and passed in
+    /// It was computed three times per row — the emptiness check, the `ForEach`, and the
+    /// accessibility label — and each pass builds the reason, resolves the container by walking the
+    /// ancestor chain, and faults the waiting-on person out of `outgoingLinks`. Three of those per
+    /// row, times every row in the day, times every pass the view makes. A computed property cannot
+    /// cache; a parameter can.
     var body: some View {
+        row(metadata)
+    }
+
+    private func row(_ pieces: [Piece]) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
             if pinnedAt != nil {
                 timeGutter
@@ -397,12 +407,20 @@ struct TodayTaskRow: View {
 
             completionControl
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                titleLine
-                if !metadata.isEmpty { metadataLine }
-            }
+            titleLine
 
             Spacer(minLength: Theme.Spacing.small)
+
+            // ### Why this is the same shape a task row in Tasks has
+            // It is the same object. Today drew it with its facts on a second line and the Tasks
+            // list drew it with them on a second line of its own design, which is redesign issue #8:
+            // one thing, two pictures, and a reader who has to learn both. The facts are now on the
+            // trailing edge in both places, off the same rule — only what is currently true — with
+            // the same completion control at the head of the row.
+            //
+            // What stays different is what is genuinely different: a time gutter for work pinned to
+            // an hour, the reason the task is here today, and the actions this page offers on hover.
+            if !pieces.isEmpty { metadataLine(pieces) }
 
             // Focus reveals them too. A control that only exists under a pointer is a control
             // somebody navigating by keyboard cannot know about, let alone reach.
@@ -434,7 +452,7 @@ struct TodayTaskRow: View {
         .contextMenu { TodayTaskMenu(task: task, item: item, plan: plan, actions: actions) }
         .help(tooltip)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityLabel)
+        .accessibilityLabel(accessibilityLabel(pieces))
         .accessibilityAddTraits(item.status == .completed ? [.isSelected] : [])
     }
 
@@ -447,33 +465,10 @@ struct TodayTaskRow: View {
             .frame(width: TodayMetrics.timeGutterWidth, alignment: .leading)
     }
 
+    /// The same control the Tasks list and the open card draw. Three copies of one circle is three
+    /// chances for a flagged task to look different depending on which screen it is on.
     private var completionControl: some View {
-        Button { actions.toggleCompletion(item) } label: {
-            Image(systemName: symbolName)
-                .font(.system(size: 13))
-                .rowTint(controlColor)
-                .contentTransition(.symbolEffect(.replace))
-        }
-        .buttonStyle(.plain)
-        .calmAnimation(value: item.status)
-        .accessibilityLabel(item.status == .completed ? "Mark incomplete" : "Mark complete")
-        .accessibilityIdentifier("today.task.toggle.\(item.id.uuidString)")
-    }
-
-    private var symbolName: String {
-        switch item.status {
-        case .completed: "checkmark.circle.fill"
-        case .cancelled: "xmark.circle"
-        default: item.isFlagged ? "circle.dotted.circle" : "circle"
-        }
-    }
-
-    private var controlColor: Color {
-        switch item.status {
-        case .completed: Theme.Colors.completed
-        case .cancelled: Theme.Colors.tertiaryText
-        default: Theme.Colors.secondaryText
-        }
+        TaskCompletionControl(task: item) { actions.toggleCompletion(item) }
     }
 
     private var titleLine: some View {
@@ -499,9 +494,9 @@ struct TodayTaskRow: View {
         }
     }
 
-    private var metadataLine: some View {
+    private func metadataLine(_ pieces: [Piece]) -> some View {
         HStack(spacing: Theme.Spacing.small) {
-            ForEach(metadata) { piece in
+            ForEach(pieces) { piece in
                 HStack(spacing: Theme.Spacing.hairline) {
                     Image(systemName: piece.symbolName)
                         .font(.system(size: 9))
@@ -512,6 +507,7 @@ struct TodayTaskRow: View {
                 .modifier(TodayMetadataTint(color: piece.color))
             }
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private struct Piece: Identifiable {
@@ -628,12 +624,12 @@ struct TodayTaskRow: View {
         return lines.joined(separator: "\n")
     }
 
-    private var accessibilityLabel: String {
+    private func accessibilityLabel(_ pieces: [Piece]) -> String {
         var parts = [item.displayTitle]
         if item.status == .completed { parts.append("completed") }
         if item.isFlagged { parts.append("flagged") }
         if item.priority != .normal { parts.append("\(item.priority.displayName) priority") }
-        parts.append(contentsOf: metadata.map(\.text))
+        parts.append(contentsOf: pieces.map(\.text))
         return parts.joined(separator: ", ")
     }
 }

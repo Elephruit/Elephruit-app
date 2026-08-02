@@ -28,65 +28,86 @@ struct TaskRow: View {
     /// Whether the row is the one the detail pane is showing.
     var isSelected = false
 
+    /// Whether this row is currently the open card.
+    ///
+    /// ### Why a row and a card are one view rather than two
+    /// Because they are one object in two states, and the list has to be able to tell that. Two
+    /// sibling views swapped by the parent would mean the row's identity changed at the moment of
+    /// opening — and `List` reads identity to decide what to animate, what stays selected, and what
+    /// a drag is carrying. Swapping the *body* keeps the row the same row, which is what makes the
+    /// rows below simply move down.
+    ///
+    /// The same shape ``TimeEntryGroupRow`` uses for the tracker's editable rows.
+    var isEditing = false
+
+    let navigation: NavigationModel
+
     var onToggle: () -> Void
 
+    /// Called after the card writes something the list should redraw for.
+    var onChange: () -> Void = {}
+
+    /// Called when the card asks to close.
+    var onClose: () -> Void = {}
+
     var body: some View {
+        if isEditing {
+            TaskCard(task: task, navigation: navigation, onChange: onChange, onClose: onClose)
+        } else {
+            summary
+        }
+    }
+
+    /// ### Why the metadata is on the title's line rather than under it
+    /// A second line doubles every row's height to carry facts that are usually one short phrase. In
+    /// a list of forty tasks that is forty extra lines of mostly nothing, and it makes the *titles* —
+    /// the thing being scanned — twice as far apart as they need to be. On the trailing edge the same
+    /// facts sit in the space a title was never going to use, right-aligned, so they form their own
+    /// readable column down the list instead of interrupting each row.
+    ///
+    /// The rule for *what* appears is unchanged: only what is currently true. What changed is where.
+    ///
+    /// ### Why the metadata is computed once and passed in
+    /// Because it was computed three times per row — for the emptiness check, for the `ForEach`, and
+    /// again for the accessibility label — and each one calls
+    /// ``ElephruitModel/Item/taskFacts()``, which walks the ancestor chain, traverses `outgoingLinks`
+    /// twice faulting every target, and decodes the checklist JSON twice. Three of those per row,
+    /// times every visible row, times every pass the list makes. A computed property cannot cache;
+    /// a parameter can.
+    private var summary: some View {
+        summary(metadata)
+    }
+
+    private func summary(_ pieces: [MetadataPiece]) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
             completionControl
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                titleLine
+            titleLine
 
-                if !metadata.isEmpty {
-                    metadataLine
-                }
+            Spacer(minLength: Theme.Spacing.small)
+
+            if !pieces.isEmpty {
+                metadataLine(pieces)
             }
-
-            Spacer(minLength: 0)
         }
         .padding(.vertical, Theme.Spacing.tight)
         .frame(minHeight: Theme.Size.rowHeight)
         .hoverHighlight(isEnabled: !isSelected, extending: Theme.Spacing.small)
         .help(tooltip)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityDescription)
+        .accessibilityLabel(accessibilityDescription(pieces))
         .accessibilityAddTraits(task.status == .completed ? [.isSelected] : [])
     }
 
     // MARK: - Completion
 
-    /// A restrained control, sized to the text rather than to a fingertip.
+    /// The same control the card draws, so it neither moves nor changes size on opening.
     ///
     /// The satisfying part of ticking something off is that it happens immediately; an animation
     /// that delays the next action is the opposite of satisfying. So the fill changes with the
-    /// standard motion and nothing waits for it.
+    /// standard motion and nothing waits for it. See ``TaskCompletionControl``.
     private var completionControl: some View {
-        Button(action: onToggle) {
-            Image(systemName: symbolName)
-                .font(.system(size: 13))
-                .rowTint(controlColor)
-                .contentTransition(.symbolEffect(.replace))
-        }
-        .buttonStyle(.plain)
-        .calmAnimation(value: task.status)
-        .accessibilityLabel(task.status == .completed ? "Mark incomplete" : "Mark complete")
-        .accessibilityIdentifier("task.toggle.\(task.id.uuidString)")
-    }
-
-    private var symbolName: String {
-        switch task.status {
-        case .completed: "checkmark.circle.fill"
-        case .cancelled: "xmark.circle"
-        default: task.isFlagged ? "circle.dotted.circle" : "circle"
-        }
-    }
-
-    private var controlColor: Color {
-        switch task.status {
-        case .completed: Theme.Colors.completed
-        case .cancelled: Theme.Colors.tertiaryText
-        default: Theme.Colors.secondaryText
-        }
+        TaskCompletionControl(task: task, onToggle: onToggle)
     }
 
     // MARK: - Title
@@ -124,55 +145,55 @@ struct TaskRow: View {
 
     // MARK: - Metadata
 
-    /// One line, at most, of what is currently true.
-    private var metadataLine: some View {
+    /// One line, at most, of what is currently true, on the trailing edge.
+    ///
+    /// A piece with no text draws as a bare glyph. That is how notes, a repeat and — once it is
+    /// ticked off — a checklist appear: the presence of the symbol is the whole message, and
+    /// "Notes" written beside a document icon is the icon's own name read back.
+    private func metadataLine(_ pieces: [MetadataPiece]) -> some View {
         HStack(spacing: Theme.Spacing.small) {
-            ForEach(metadata) { piece in
-                HStack(spacing: Theme.Spacing.hairline) {
-                    Image(systemName: piece.symbolName)
-                        .font(.system(size: 9))
-                    Text(piece.text)
-                        .font(Theme.Text.metadata)
-                        .lineLimit(1)
+            ForEach(pieces) { piece in
+                if let slugs = piece.tagSlugs {
+                    // Tags are the one piece that is not grey text. They carry the user's own
+                    // colours and they are the same component Today and the library draw, so a tag
+                    // looks like a tag wherever the task is being read.
+                    TagChipRow(slugs: slugs, limit: 2)
+                } else {
+                    HStack(spacing: Theme.Spacing.hairline) {
+                        Image(systemName: piece.symbolName)
+                            .font(.system(size: 9))
+                        if !piece.text.isEmpty {
+                            Text(piece.text)
+                                .font(Theme.Text.metadata)
+                                .lineLimit(1)
+                        }
+                    }
+                    .modifier(MetadataTint(color: piece.color))
                 }
-                .modifier(MetadataTint(color: piece.color))
             }
         }
+        // The metadata never squeezes the title: it takes what it needs and the title truncates
+        // first, because a title cut short still says what the task is and "2 days la…" does not.
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private struct MetadataPiece: Identifiable {
         var id: String
         var symbolName: String
+        /// Empty for a piece whose glyph is the whole message.
         var text: String
         /// `nil` means secondary, which is most of them. A colour is reserved for a date that has
         /// actually arrived.
         var color: Color?
+
+        /// Set only by the tags piece, which draws chips rather than a glyph and a string.
+        var tagSlugs: [String]?
     }
 
     private var metadata: [MetadataPiece] {
         guard let clock = services?.dateProvider else { return [] }
         let facts = task.taskFacts()
         var pieces: [MetadataPiece] = []
-
-        // Where this task lives, and the list in Reminders counts as a place it lives.
-        //
-        // ### Why an imported task cites its list
-        // Because it has no container, no filing and no tags — that is what an imported reminder
-        // looks like, and it is why the Inbox used to collect every one of them. Now that they sit
-        // outside the Inbox on the strength of a home nothing on the row mentioned, the row has to
-        // mention it: a task appearing in Anytime with no visible origin is a task the user did not
-        // create and cannot account for. The list's own name, not the word "System".
-        if showsContainer, let container = containerTitle {
-            pieces.append(MetadataPiece(id: "container", symbolName: "folder", text: container))
-        } else if showsContainer, task.isKeptInStepWithAnExternalList {
-            pieces.append(
-                MetadataPiece(
-                    id: "reminders",
-                    symbolName: "app.badge.checkmark",
-                    text: services?.reminders.listName(id: task.externalListIdentifier) ?? "Reminders"
-                )
-            )
-        }
 
         switch facts.deadlineUrgency(on: clock.now, calendar: clock.calendar) {
         case .overdue(let days):
@@ -247,6 +268,46 @@ struct TaskRow: View {
             )
         }
 
+        // Where this task lives, and the list in Reminders counts as a place it lives.
+        //
+        // ### Why an imported task cites its list
+        // Because it has no container, no filing and no tags — that is what an imported reminder
+        // looks like, and it is why the Inbox used to collect every one of them. Now that they sit
+        // outside the Inbox on the strength of a home nothing on the row mentioned, the row has to
+        // mention it: a task appearing in Anytime with no visible origin is a task the user did not
+        // create and cannot account for. The list's own name, not the word "System".
+        if showsContainer, let container = containerTitle {
+            pieces.append(MetadataPiece(id: "container", symbolName: "folder", text: container))
+        } else if showsContainer, task.isKeptInStepWithAnExternalList {
+            pieces.append(
+                MetadataPiece(
+                    id: "reminders",
+                    symbolName: "app.badge.checkmark",
+                    text: services?.reminders.listName(id: task.externalListIdentifier) ?? "Reminders"
+                )
+            )
+        }
+
+        if !task.tags.isEmpty {
+            pieces.append(
+                MetadataPiece(
+                    id: "tags",
+                    symbolName: "number",
+                    text: "",
+                    tagSlugs: task.tags.map(\.slug).sorted()
+                )
+            )
+        }
+
+        // ### The glyphs, and why they carry no words
+        // Notes, steps and a repeat are answers to "is there more inside this than the title says".
+        // The presence of the symbol *is* the answer, and a word beside each would be three labels
+        // on every row that has them. Steps keep their count, because "how many are left" is a
+        // different question from "are there any" and the count is what answers it.
+        if !task.body.isEmpty {
+            pieces.append(MetadataPiece(id: "notes", symbolName: "text.alignleft", text: ""))
+        }
+
         if facts.checklistTotal > 0 {
             pieces.append(
                 MetadataPiece(
@@ -259,16 +320,6 @@ struct TaskRow: View {
 
         if facts.isRepeating {
             pieces.append(MetadataPiece(id: "repeat", symbolName: "repeat", text: ""))
-        }
-
-        if !task.tags.isEmpty {
-            pieces.append(
-                MetadataPiece(
-                    id: "tags",
-                    symbolName: "number",
-                    text: task.tags.map(\.leafName).sorted().joined(separator: " ")
-                )
-            )
         }
 
         return pieces
@@ -290,11 +341,25 @@ struct TaskRow: View {
         return lines.joined(separator: "\n")
     }
 
-    private var accessibilityDescription: String {
+    /// ### Why the wordless glyphs get words here
+    /// Notes, a repeat and a tag chip say what they are by being seen. VoiceOver cannot see them, so
+    /// each one is named — from its identity rather than from its text, because several of them now
+    /// have no text at all and reading the empty string aloud is silence where a fact should be.
+    private func accessibilityDescription(_ pieces: [MetadataPiece]) -> String {
         var parts = [task.displayTitle]
         if task.status == .completed { parts.append("completed") }
         if task.isFlagged { parts.append("flagged") }
-        parts.append(contentsOf: metadata.map { $0.text.isEmpty ? "repeating" : $0.text })
+
+        parts.append(contentsOf: pieces.map { piece in
+            if let slugs = piece.tagSlugs { return "tagged " + slugs.joined(separator: ", ") }
+            if !piece.text.isEmpty { return piece.text }
+            switch piece.id {
+            case "notes": return "has notes"
+            case "repeat": return "repeating"
+            default: return piece.id
+            }
+        })
+
         return parts.joined(separator: ", ")
     }
 }

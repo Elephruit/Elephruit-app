@@ -93,6 +93,19 @@ extension Item {
             }
         }
 
+        // ### Why these three are hoisted out of the argument list
+        // Each was being computed twice by the initialiser call below, and this function is the
+        // hottest thing in the module: it runs once per visible row per layout pass, and again over
+        // *every open task* each time `refreshDerivedState` recomputes a badge.
+        //
+        // `checklist` decodes JSON on every access, and the call site asked for it twice — once for
+        // the total and once for the completed count. `linkedPeople` and `waitingOnPerson` each walk
+        // `outgoingLinks` and fault every target out of the store, and `waitingOnPerson` is itself a
+        // `linkedPeople` call, so the collection was traversed twice for two answers that one pass
+        // gives. None of this changes what is returned.
+        let steps = checklist
+        let people = linkedPeopleByKind()
+
         return TaskFacts(
             id: id,
             title: title,
@@ -119,13 +132,13 @@ extension Item {
             listID: containers.list?.id,
             sectionID: containers.section?.id,
             tagSlugs: tagSlugs,
-            relatedPersonIDs: linkedPeople(kinds: [.mentions, .participant, .related, .promisedTo]).map(\.id),
-            waitingOnPersonID: waitingOnPerson()?.id,
+            relatedPersonIDs: people.related,
+            waitingOnPersonID: people.waitingOn,
             hasAttachments: !attachments.isEmpty,
             isRepeating: recurrenceData != nil,
             hasSubtasks: children.contains { $0.kind.isWorkItem && $0.deletedAt == nil },
-            checklistTotal: checklist.total,
-            checklistCompleted: checklist.completed,
+            checklistTotal: steps.total,
+            checklistCompleted: steps.completed,
             source: source.kind,
             syncState: syncState,
             createdAt: createdAt,
@@ -293,6 +306,35 @@ extension Item {
         }
 
         return (area, project, list, section)
+    }
+
+    /// The two person answers ``taskFacts()`` needs, from one walk of the links.
+    ///
+    /// Kept separate from ``linkedPeople(kinds:)`` rather than replacing it, because the two answers
+    /// are drawn from *different* kinds — being waited on is not the same as being involved — and a
+    /// single `linkedPeople` call cannot produce both without being run twice. Every element of
+    /// `outgoingLinks` is a stored relationship whose target has to be faulted in, so the second walk
+    /// was the expensive half of the second answer.
+    private func linkedPeopleByKind() -> (related: [UUID], waitingOn: UUID?) {
+        var related: [UUID] = []
+        var waitingOn: UUID?
+
+        for link in outgoingLinks {
+            guard let target = link.target, target.kind == .person, target.deletedAt == nil else {
+                continue
+            }
+            switch link.kind {
+            case .mentions, .participant, .related, .promisedTo:
+                related.append(target.id)
+            case .waitingOn:
+                // First wins, matching `waitingOnPerson()`, which takes the head of its list.
+                if waitingOn == nil { waitingOn = target.id }
+            default:
+                break
+            }
+        }
+
+        return (related, waitingOn)
     }
 
     /// People this item points at, by the kinds of link named.

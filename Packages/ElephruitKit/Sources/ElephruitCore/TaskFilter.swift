@@ -443,6 +443,18 @@ public struct BuiltInSmartList: Sendable, Hashable, Identifiable {
     }
 
     public static let all: [BuiltInSmartList] = [
+        // ### Why Flagged is here rather than beside Today
+        // A flag is a rule over the library — "everything I marked" — which is precisely what a
+        // smart list is. It sat among the system views because it was written before smart lists
+        // existed, and it cost the sidebar a disclosure to hide it and its two neighbours behind.
+        // The filter below produces exactly what ``TaskViewRules/isInFlagged(_:)`` produced.
+        BuiltInSmartList(
+            id: "flagged",
+            title: "Flagged",
+            symbolName: "flag",
+            hint: "Marked as worth coming back to.",
+            filter: TaskFilter(rules: [.flagged(true)])
+        ),
         BuiltInSmartList(
             id: "overdue",
             title: "Overdue",
@@ -545,6 +557,16 @@ public struct BuiltInSmartList: Sendable, Hashable, Identifiable {
             symbolName: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90",
             hint: "Linked reminders that disagree, went missing, or cannot be written to.",
             filter: TaskFilter(rules: [.syncNeedsAttention], includesResolved: true)
+        ),
+        // Last, and no rules at all: a filter with nothing in it and `includesResolved` set is
+        // every task there is, which is what All Tasks always was. It goes at the end because it is
+        // the one list nobody navigates to in order to decide something.
+        BuiltInSmartList(
+            id: "all-tasks",
+            title: "All Tasks",
+            symbolName: "list.bullet",
+            hint: "Every task, however it is filed.",
+            filter: TaskFilter(includesResolved: true)
         ),
     ]
 

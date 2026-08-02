@@ -182,12 +182,24 @@ struct SmartListCodingTests {
 
 @Suite("The built-in smart lists are ordinary smart lists")
 struct BuiltInSmartListTests {
-    @Test("Every built-in has rules, so none of them silently shows the whole library")
+    /// The list whose whole purpose is to be unconstrained.
+    ///
+    /// Named once, here, rather than skipped by a condition inside each assertion. A test that says
+    /// "everything except X" is only worth reading if it also says which X, and adding a second one
+    /// should require somebody to type its name into this line and think about it.
+    static let showsTheWholeLibrary = "all-tasks"
+
+    @Test("Every built-in but All Tasks has rules, so none of them silently shows the whole library")
     func nothingIsUnconstrained() {
-        for list in BuiltInSmartList.all {
+        for list in BuiltInSmartList.all where list.id != Self.showsTheWholeLibrary {
             #expect(!list.filter.isUnconstrained, "\(list.title) has no rules")
             #expect(list.filter.unrecognisedRules.isEmpty, "\(list.title) has a rule this build cannot read")
         }
+
+        // And the exception is the exception on purpose: a name that says so, and nothing else that
+        // shares it.
+        let unconstrained = BuiltInSmartList.all.filter(\.filter.isUnconstrained).map(\.id)
+        #expect(unconstrained == [Self.showsTheWholeLibrary])
     }
 
     @Test("Identifiers are unique, so a sidebar selection cannot be ambiguous")
@@ -195,10 +207,30 @@ struct BuiltInSmartListTests {
         #expect(Set(BuiltInSmartList.all.map(\.id)).count == BuiltInSmartList.all.count)
     }
 
-    @Test("Recently Completed is the only one that reaches into finished work, plus sync issues")
+    @Test("Only the two logs and All Tasks reach into finished work")
     func onlyLogsIncludeResolved() {
         let including = BuiltInSmartList.all.filter(\.filter.includesResolved).map(\.id)
-        #expect(Set(including) == ["recently-completed", "sync-issues"])
+        #expect(Set(including) == ["recently-completed", "sync-issues", "all-tasks"])
+    }
+
+    @Test("Flagged and All Tasks match what the system views they replaced matched")
+    func demotedViewsKeptTheirContents() throws {
+        let flagged = try #require(BuiltInSmartList.list(id: "flagged"))
+        let marked = task { $0.isFlagged = true }
+        let done = task {
+            $0.isFlagged = true
+            $0.status = .completed
+            $0.completedAt = now
+        }
+        #expect(flagged.filter.matches(marked, now: now, calendar: calendar))
+        #expect(!flagged.filter.matches(task { _ in }, now: now, calendar: calendar))
+        // `TaskViewRules.isInFlagged` is flagged **and open**. A flag on something finished is
+        // history, not a thing to come back to.
+        #expect(!flagged.filter.matches(done, now: now, calendar: calendar))
+
+        let everything = try #require(BuiltInSmartList.list(id: "all-tasks"))
+        #expect(everything.filter.matches(marked, now: now, calendar: calendar))
+        #expect(everything.filter.matches(done, now: now, calendar: calendar))
     }
 
     @Test("Overdue finds a passed deadline and ignores a passed start date")

@@ -127,10 +127,19 @@ public struct CaptureToken: Sendable, Hashable {
     /// its sigil — what a field would underline.
     public var range: Range<Int>
 
-    public init(kind: Kind, text: String, range: Range<Int>) {
+    /// Whether the value was written inside quotes.
+    ///
+    /// Recorded because quoting is the user stating where the value *ends*, and that is the one
+    /// thing a reader cannot work out from the range alone. `>"Q3 Launch"` and `>Q3` both look like
+    /// finished tokens; only the first one is. ``CaptureLift`` needs the difference to know whether
+    /// the next word typed might still join on.
+    public var isQuoted: Bool
+
+    public init(kind: Kind, text: String, range: Range<Int>, isQuoted: Bool = false) {
         self.kind = kind
         self.text = text
         self.range = range
+        self.isQuoted = isQuoted
     }
 }
 
@@ -279,7 +288,12 @@ public enum CaptureParser {
                     index = name.next
                     draft.projectHint = name.value
                     draft.tokens.append(
-                        CaptureToken(kind: .project, text: name.value, range: token.range.lowerBound..<name.end)
+                        CaptureToken(
+                            kind: .project,
+                            text: name.value,
+                            range: token.range.lowerBound..<name.end,
+                            isQuoted: token.isQuoted
+                        )
                     )
                 } else {
                     titleWords.append(">" + trimmed)
@@ -299,7 +313,12 @@ public enum CaptureParser {
                     index = name.next
                     draft.personHints.append(name.value)
                     draft.tokens.append(
-                        CaptureToken(kind: .person, text: name.value, range: token.range.lowerBound..<name.end)
+                        CaptureToken(
+                            kind: .person,
+                            text: name.value,
+                            range: token.range.lowerBound..<name.end,
+                            isQuoted: token.isQuoted
+                        )
                     )
                 }
 
@@ -431,17 +450,37 @@ public enum CaptureParser {
         }
 
         let range = token.range.lowerBound..<bestEnd
+
+        // Quoting settles a token's extent only if nothing after it was in fact taken. Unlike
+        // ``extendedName``, this extends greedily whether or not the value was quoted, so a quoted
+        // date that grew has demonstrably *not* settled and must not claim it has.
+        let isSettled = token.isQuoted && bestNext == index
+
         switch role {
         case .due:
             draft.dueDate = interpretation.day
             draft.dueTime = interpretation.time
-            draft.tokens.append(CaptureToken(kind: .dueDate, text: interpretation.summary, range: range))
+            draft.tokens.append(
+                CaptureToken(
+                    kind: .dueDate,
+                    text: interpretation.summary,
+                    range: range,
+                    isQuoted: isSettled
+                )
+            )
             // A deadline implies intent to act.
             if draft.kind == .note { draft.kind = .task }
 
         case .follow:
             draft.followDate = interpretation.day
-            draft.tokens.append(CaptureToken(kind: .followDate, text: interpretation.summary, range: range))
+            draft.tokens.append(
+                CaptureToken(
+                    kind: .followDate,
+                    text: interpretation.summary,
+                    range: range,
+                    isQuoted: isSettled
+                )
+            )
             if draft.kind == .note { draft.kind = .task }
         }
 
