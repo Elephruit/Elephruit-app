@@ -55,6 +55,9 @@ struct TimeReportView: View {
             // One frame for both Time surfaces rather than one each, so switching between the log
             // and the report does not move every column.
             VStack(spacing: 0) {
+                // At the same point on the page as on the Log, so switching surfaces changes the
+                // content under the tabs rather than moving the tabs.
+                TimeSurfaceTabs(navigation: navigation)
                 controls
             }
             .frame(maxWidth: TimeView.measure)
@@ -123,8 +126,6 @@ struct TimeReportView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        TimeSurfaceSwitcher(navigation: navigation)
-
         ToolbarItem {
             Menu {
                 ForEach(TimeRounding.allCases, id: \.self) { rule in

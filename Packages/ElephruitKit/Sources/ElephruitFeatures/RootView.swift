@@ -570,7 +570,7 @@ public struct RootView: View {
             }
         )
 
-        // Time's two surfaces, by name. The segmented control in Time's toolbar is the pointer
+        // Time's two surfaces, by name. The tabs at the top of the Time content are the pointer
         // route; this is the keyboard one, and it works from anywhere.
         for surface in TimeSurface.allCases {
             commands.append(
