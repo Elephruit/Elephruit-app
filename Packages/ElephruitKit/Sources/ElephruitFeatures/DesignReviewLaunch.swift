@@ -231,6 +231,53 @@ public enum DesignReviewLaunch {
         navigation.selectItem(match.id)
     }
 
+    /// The project whose workspace the window should open on, by name — and, optionally, which of
+    /// its views, by kind.
+    ///
+    /// The workspace is seven screens behind one sidebar row, and before this the review arguments
+    /// could reach none of them: `-ElephruitStartModule` names modules, and the person selector
+    /// names people. Matched on a prefix for the same reason the person selector is.
+    static func selectedProjectName(in arguments: [String]) -> String? {
+        value(for: "-ElephruitSelectProject", in: arguments)
+    }
+
+    static func selectedProjectViewKind(in arguments: [String]) -> ProjectViewKind? {
+        guard let raw = value(for: "-ElephruitProjectView", in: arguments)?.lowercased() else {
+            return nil
+        }
+        guard let kind = ProjectViewKind(rawValue: raw) else {
+            Diagnostics.shell.error("Unknown -ElephruitProjectView \(raw, privacy: .public)")
+            return nil
+        }
+        return kind
+    }
+
+    /// Opens the named project's workspace, on the asked-for view when there is one.
+    @MainActor
+    public static func applyProjectSelection(to navigation: NavigationModel, using services: AppServices?) {
+        guard isDevelopmentMode,
+              let name = selectedProjectName(in: ProcessInfo.processInfo.arguments)?.lowercased(),
+              let services
+        else { return }
+
+        var query = ItemQuery()
+        query.kinds = [.project]
+        guard let projects = try? services.items.items(matching: query),
+              let match = projects.first(where: { $0.title.lowercased().hasPrefix(name) })
+        else {
+            Diagnostics.shell.error("No project matching \(name, privacy: .public)")
+            return
+        }
+
+        var viewID: UUID?
+        if let kind = selectedProjectViewKind(in: ProcessInfo.processInfo.arguments) {
+            _ = try? services.projectWorkspace.ensureWorkspace(for: match)
+            viewID = services.projectWorkspace.views(in: match).first { $0.kind == kind }?.id
+        }
+
+        navigation.select(.project(id: match.id, viewID: viewID))
+    }
+
     /// Applies the window-size override to whichever window is showing the library.
     ///
     /// Applied to the window rather than through `.defaultSize`, because a default is only consulted
