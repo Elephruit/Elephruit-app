@@ -63,6 +63,32 @@ struct ProjectWorkspaceView: View {
             Divider()
             body(for: model)
         }
+        // The keyboard the workspace always claimed to have. Every handler goes through
+        // ``ProjectWorkspaceModel/guarded(_:)`` so none of them fires while a title or the sheet
+        // has the keyboard — the gate that was built for exactly these and then never used.
+        .focusable()
+        .focusEffectDisabled()
+        .onKeyPress(.upArrow) {
+            model.guarded { model.moveFocus(by: -1) } ? .handled : .ignored
+        }
+        .onKeyPress(.downArrow) {
+            model.guarded { model.moveFocus(by: 1) } ? .handled : .ignored
+        }
+        .onKeyPress(.return) {
+            guard let id = model.focusedItemID ?? model.selectedItemIDs.first else { return .ignored }
+            return model.guarded { model.present(id) } ? .handled : .ignored
+        }
+        .onDeleteCommand {
+            _ = model.guarded { model.moveSelectionToTrash() }
+        }
+        // The Move to Trash menu command (⌘⌫), which was dead in the one module where work is
+        // managed most. Published the same way every list publishes it.
+        .focusedSceneValue(
+            \.rowActions,
+            RowActions(isEnabled: !model.selectedItemIDs.isEmpty) { [weak model] in
+                model?.moveSelectionToTrash()
+            }
+        )
         .sheet(item: presented(model)) { presentation in
             WorkItemDetailView(item: presentation.item, model: model)
         }
@@ -169,6 +195,8 @@ struct ProjectViewTabBar: View {
     let navigation: NavigationModel
     let projectID: UUID
 
+    @State private var pendingRemoval: ProjectViewRecord?
+
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Theme.Spacing.tight) {
@@ -180,6 +208,21 @@ struct ProjectViewTabBar: View {
             .padding(.bottom, Theme.Spacing.small)
         }
         .scrollIndicators(.never)
+        .confirmationDialog(
+            "Remove “\(pendingRemoval?.name ?? "")”?",
+            isPresented: Binding(
+                get: { pendingRemoval != nil },
+                set: { if !$0 { pendingRemoval = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Remove", role: .destructive) { confirmRemoval() }
+            Button("Cancel", role: .cancel) { pendingRemoval = nil }
+        } message: {
+            // Names the consequence, which for a view is smaller than it looks: a view is a way of
+            // looking, and none of the work in the project goes with it.
+            Text("The view's configuration is lost. The work it shows stays in the project.")
+        }
     }
 
     private func tab(_ view: ProjectViewRecord) -> some View {
@@ -207,7 +250,14 @@ struct ProjectViewTabBar: View {
         .accessibilityIdentifier("project.view.\(view.kind.rawValue)")
         .contextMenu {
             Button("Duplicate") { duplicate(view) }
-            Button("Remove", role: .destructive) { remove(view) }
+            if model.views.count > 1 {
+                Button("Remove…", role: .destructive) { pendingRemoval = view }
+            } else {
+                // Disabled with its reason in the label, because a context menu has nowhere else
+                // to put one — and the old silent path clicked, failed the service's last-view
+                // guard, and did nothing at all.
+                Button("Remove (the last view stays)") {}.disabled(true)
+            }
         }
     }
 
@@ -220,7 +270,9 @@ struct ProjectViewTabBar: View {
         model.refresh()
     }
 
-    private func remove(_ view: ProjectViewRecord) {
+    private func confirmRemoval() {
+        defer { pendingRemoval = nil }
+        guard let view = pendingRemoval else { return }
         _ = try? services?.projectWorkspace.removeView(view)
         model.refresh()
     }

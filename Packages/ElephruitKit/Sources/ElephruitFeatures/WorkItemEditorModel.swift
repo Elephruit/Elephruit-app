@@ -123,7 +123,14 @@ public final class WorkItemEditorModel {
     /// steps are findable.
     public func updateBug(_ mutate: (inout BugFacts) -> Void) {
         guard let item, item.kind == .bug else { return }
-        commit { try services.bugs.update(item, mutate) }
+        // Diffed here as well as in the service, because the service's no-change return still
+        // looks like a successful commit from out here — and a commit tells the workspace to
+        // redraw for what would be nothing.
+        var facts = bugFacts
+        let before = facts
+        mutate(&facts)
+        guard facts != before else { return }
+        commit { try services.bugs.update(item) { $0 = facts } }
     }
 
     public func setSeverity(_ severity: BugSeverity) {

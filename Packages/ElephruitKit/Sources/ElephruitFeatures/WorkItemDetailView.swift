@@ -3,21 +3,42 @@ import ElephruitDesign
 import ElephruitModel
 import SwiftUI
 
-/// One work item, in a sheet.
+/// One work item, in a sheet — and every field of it editable.
 ///
 /// **A sheet, not a drawer.** This was an inspector first, on the brief's "avoid excessive modals"
 /// line, and that line was explicitly withdrawn after use. A work item is nine sections wide, none
 /// of it reads in a 440-point column, and the column came out of the board's width — so the board
 /// paid for a pane that was still too narrow to use.
+///
+/// **An editor, not a display.** The first version drew every field as `Text`, which made this the
+/// only surface in the app that showed a bug's report and refused to change it — the literal shape
+/// of the "can't edit any bug details" report. Every mutation goes through
+/// ``WorkItemEditorModel``, which is where a test can hold the behaviour still.
+///
+/// There is no Save button. Each field commits when it is left — submit, focus loss, or the sheet
+/// closing — because a sheet that batches its edits is a sheet whose edits a force-quit loses.
 struct WorkItemDetailView: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
     let item: Item
     let model: ProjectWorkspaceModel
 
+    @State private var editor: WorkItemEditorModel?
     @State private var title = ""
+    @State private var notesText = ""
+    @State private var steps = ""
+    @State private var expected = ""
+    @State private var actual = ""
+    @State private var environmentText = ""
+    @State private var affectedVersion = ""
+    @State private var fixVersion = ""
+    @State private var estimateText = ""
     @State private var showsDeleteConfirmation = false
-    @FocusState private var titleFocused: Bool
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable {
+        case title, body, steps, expected, actual, environment, affected, fix, estimate
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,6 +47,7 @@ struct WorkItemDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.large) {
                     fields
+                    notesSection
                     if item.kind == .bug { bugSection }
                     historySection
                 }
@@ -36,7 +58,16 @@ struct WorkItemDetailView: View {
             footer
         }
         .frame(minWidth: 620, minHeight: 480)
-        .onAppear { title = item.title }
+        .onAppear(perform: load)
+        // The gate the workspace's shortcuts honour. Every field in the sheet counts as typing.
+        .onChange(of: focusedField) { previous, current in
+            model.isEditingText = current != nil
+            if let previous, previous != current { commit(previous) }
+        }
+        .onDisappear {
+            commitAll()
+            model.isEditingText = false
+        }
         .confirmationDialog(
             "Move “\(item.title)” to Trash?",
             isPresented: $showsDeleteConfirmation,
@@ -46,6 +77,8 @@ struct WorkItemDetailView: View {
             Button("Cancel", role: .cancel) {}
         }
     }
+
+    // MARK: - Header
 
     private var header: some View {
         HStack(spacing: Theme.Spacing.small) {
@@ -57,62 +90,291 @@ struct WorkItemDetailView: View {
             TextField("Title", text: $title)
                 .textFieldStyle(.plain)
                 .font(Theme.Text.title)
-                .focused($titleFocused)
-                .onSubmit(commitTitle)
-                .onChange(of: titleFocused) { _, focused in
-                    model.isEditingText = focused
-                    if !focused { commitTitle() }
-                }
+                .focused($focusedField, equals: .title)
+                .onSubmit { commit(.title) }
         }
         .padding(Theme.Spacing.large)
     }
 
+    // MARK: - Metadata
+
     private var fields: some View {
         Grid(alignment: .leading, horizontalSpacing: Theme.Spacing.medium, verticalSpacing: Theme.Spacing.small) {
             GridRow {
-                Text("Status").foregroundStyle(Theme.Colors.secondaryText)
-                Text(item.status == .completed ? "Done" : "Open")
+                fieldLabel("Status")
+                Picker("Status", selection: statusBinding) {
+                    ForEach([ItemStatus.open, .completed, .cancelled], id: \.self) { status in
+                        Text(status.displayName).tag(status)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+                .accessibilityIdentifier("workItem.status")
             }
+
+            if !model.stages.isEmpty {
+                GridRow {
+                    fieldLabel("Stage")
+                    Picker("Stage", selection: stageBinding) {
+                        Text("No Stage").tag(UUID?.none)
+                        ForEach(model.stages) { stage in
+                            Text(stage.name).tag(UUID?.some(stage.id))
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    .accessibilityIdentifier("workItem.stage")
+                }
+            }
+
             GridRow {
-                Text("Priority").foregroundStyle(Theme.Colors.secondaryText)
-                Text(item.priority.displayName)
-            }
-            if let assignee = item.assignee() {
-                GridRow {
-                    Text("Assignee").foregroundStyle(Theme.Colors.secondaryText)
-                    Text(assignee.title)
+                fieldLabel("Priority")
+                Picker("Priority", selection: priorityBinding) {
+                    ForEach(Priority.allCases, id: \.self) { priority in
+                        Text(priority.displayName).tag(priority)
+                    }
                 }
+                .labelsHidden()
+                .fixedSize()
+                .accessibilityIdentifier("workItem.priority")
             }
-            if let estimate = item.estimateMinutes {
-                GridRow {
-                    Text("Estimate").foregroundStyle(Theme.Colors.secondaryText)
-                    Text(EstimateLabel.duration(estimate))
+
+            GridRow {
+                fieldLabel("Assignee")
+                Picker("Assignee", selection: assigneeBinding) {
+                    Text("Nobody").tag(UUID?.none)
+                    ForEach(editor?.assignableCandidates ?? []) { person in
+                        Text(person.title).tag(UUID?.some(person.id))
+                    }
                 }
+                .labelsHidden()
+                .fixedSize()
+                .accessibilityIdentifier("workItem.assignee")
             }
+
+            GridRow {
+                fieldLabel("Due")
+                HStack(spacing: Theme.Spacing.tight) {
+                    if let due = item.dueAt {
+                        DatePicker(
+                            "Due",
+                            selection: Binding(
+                                get: { due },
+                                set: { editor?.setDueDate($0) }
+                            ),
+                            displayedComponents: .date
+                        )
+                        .labelsHidden()
+                        .fixedSize()
+                        Button("Clear") { editor?.setDueDate(nil) }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                    } else {
+                        Button("Add Due Date") {
+                            editor?.setDueDate(defaultDueDate)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                    }
+                }
+                .accessibilityIdentifier("workItem.due")
+            }
+
+            GridRow {
+                fieldLabel("Estimate")
+                HStack(spacing: Theme.Spacing.tight) {
+                    TextField("None", text: $estimateText)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 64)
+                        .focused($focusedField, equals: .estimate)
+                        .onSubmit { commit(.estimate) }
+                    Text("minutes")
+                        .font(Theme.Text.rowSubtitle)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                }
+                .accessibilityIdentifier("workItem.estimate")
+            }
+
+            markerRow(
+                "Milestone",
+                kind: .milestone,
+                current: item.linkedTarget(kind: .targetsMilestone),
+                set: { editor?.setMilestone($0) }
+            )
+            markerRow(
+                "Release",
+                kind: .release,
+                current: item.linkedTarget(kind: .relatesToRelease),
+                set: { editor?.setRelease($0) }
+            )
         }
         .font(Theme.Text.rowTitle)
     }
 
     @ViewBuilder
-    private var bugSection: some View {
-        // Bug fields appear only on a bug — progressive disclosure, so a task is not asked which
-        // build it affects.
-        if let record = item.bugRecord {
-            VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                Text("Defect").font(Theme.Text.sectionHeader)
-                Text(record.severity.displayName)
-                if let steps = record.stepsToReproduce {
-                    Text(steps).font(Theme.Text.rowSubtitle)
+    private func markerRow(
+        _ label: String,
+        kind: ItemKind,
+        current: Item?,
+        set: @escaping (Item?) -> Void
+    ) -> some View {
+        let candidates = model.markers.filter { $0.kind == kind }
+        if !candidates.isEmpty || current != nil {
+            GridRow {
+                fieldLabel(label)
+                Picker(label, selection: Binding(
+                    get: { current?.id },
+                    set: { id in set(id.flatMap { target in candidates.first { $0.id == target } }) }
+                )) {
+                    Text("None").tag(UUID?.none)
+                    ForEach(candidates) { candidate in
+                        Text(candidate.title).tag(UUID?.some(candidate.id))
+                    }
                 }
-                if !record.facts.missingFieldNames.isEmpty {
-                    // Nudged, never blocked. A bug filed in eight seconds is a bug that got filed.
-                    Text("Still missing: " + record.facts.missingFieldNames.formatted(.list(type: .and)))
-                        .font(Theme.Text.rowSubtitle)
-                        .foregroundStyle(Theme.Colors.tertiaryText)
-                }
+                .labelsHidden()
+                .fixedSize()
             }
         }
     }
+
+    private func fieldLabel(_ text: String) -> some View {
+        Text(text)
+            .foregroundStyle(Theme.Colors.secondaryText)
+            .gridColumnAlignment(.leading)
+    }
+
+    // MARK: - Notes
+
+    private var notesSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+            Text("Notes").font(Theme.Text.sectionHeader)
+            TextEditor(text: $notesText)
+                .font(Theme.Text.rowTitle)
+                .frame(minHeight: 60)
+                .focused($focusedField, equals: .body)
+                .scrollContentBackground(.hidden)
+                .padding(Theme.Spacing.tight)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                        .fill(Theme.Colors.subtleFill)
+                )
+                .accessibilityIdentifier("workItem.notes")
+        }
+    }
+
+    // MARK: - The report
+
+    /// Every field of the defect, editable — severity, the reproduction, the versions, the claims.
+    ///
+    /// Shown for every bug, record or no record. The record is created by the first *write*, never
+    /// by looking (see ``WorkItemEditorModel/updateBug(_:)``) — so a bug filed in eight seconds
+    /// opens onto an honest empty report rather than a missing section, which is what it used to
+    /// do, and which read as "this bug cannot be edited".
+    private var bugSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            Text("Defect").font(Theme.Text.sectionHeader)
+
+            Grid(alignment: .leading, horizontalSpacing: Theme.Spacing.medium, verticalSpacing: Theme.Spacing.small) {
+                GridRow {
+                    fieldLabel("Severity")
+                    Picker("Severity", selection: severityBinding) {
+                        ForEach(BugSeverity.allCases, id: \.self) { severity in
+                            Text(severity.displayName).tag(severity)
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    .accessibilityIdentifier("workItem.severity")
+                }
+
+                GridRow {
+                    fieldLabel("Regression")
+                    Toggle("Regression", isOn: regressionBinding)
+                        .labelsHidden()
+                        .toggleStyle(.checkbox)
+                        .help("Whether this used to work. A regression means something changed, and that is a lead.")
+                        .accessibilityIdentifier("workItem.regression")
+                }
+
+                GridRow {
+                    fieldLabel("Verified")
+                    Toggle("Verified", isOn: verifiedBinding)
+                        .labelsHidden()
+                        .toggleStyle(.checkbox)
+                        .help("Fixed and verified are two different claims by two different people. This is the second one.")
+                        .accessibilityIdentifier("workItem.verified")
+                }
+
+                GridRow {
+                    fieldLabel("Affected Version")
+                    TextField("The version it was found in", text: $affectedVersion)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 220)
+                        .focused($focusedField, equals: .affected)
+                        .onSubmit { commit(.affected) }
+                        .accessibilityIdentifier("workItem.affectedVersion")
+                }
+
+                GridRow {
+                    fieldLabel("Fix Version")
+                    TextField("Set when the fix lands", text: $fixVersion)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 220)
+                        .focused($focusedField, equals: .fix)
+                        .onSubmit { commit(.fix) }
+                        .accessibilityIdentifier("workItem.fixVersion")
+                }
+
+                GridRow {
+                    fieldLabel("Environment")
+                    TextField("Machine, OS, build", text: $environmentText)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 320)
+                        .focused($focusedField, equals: .environment)
+                        .onSubmit { commit(.environment) }
+                        .accessibilityIdentifier("workItem.environment")
+                }
+            }
+            .font(Theme.Text.rowTitle)
+
+            reportEditor("Steps to Reproduce", text: $steps, field: .steps, id: "workItem.steps")
+            reportEditor("Expected", text: $expected, field: .expected, id: "workItem.expected")
+            reportEditor("Actual", text: $actual, field: .actual, id: "workItem.actual")
+
+            if !currentFacts.missingFieldNames.isEmpty {
+                // Nudged, never blocked. A bug filed in eight seconds is a bug that got filed.
+                Text("Still missing: " + currentFacts.missingFieldNames.formatted(.list(type: .and)))
+                    .font(Theme.Text.rowSubtitle)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+            }
+        }
+    }
+
+    private func reportEditor(
+        _ label: String,
+        text: Binding<String>,
+        field: Field,
+        id: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+            Text(label)
+                .font(Theme.Text.rowSubtitle)
+                .foregroundStyle(Theme.Colors.secondaryText)
+            TextEditor(text: text)
+                .font(Theme.Text.rowTitle)
+                .frame(minHeight: 48)
+                .focused($focusedField, equals: field)
+                .scrollContentBackground(.hidden)
+                .padding(Theme.Spacing.tight)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                        .fill(Theme.Colors.subtleFill)
+                )
+                .accessibilityIdentifier(id)
+        }
+    }
+
+    // MARK: - History
 
     @ViewBuilder
     private var historySection: some View {
@@ -131,9 +393,9 @@ struct WorkItemDetailView: View {
 
     private var footer: some View {
         HStack {
-            // The delete that was missing entirely. In the sheet rather than only in a context menu,
-            // because a context menu is not somewhere people look for it.
-            Button("Delete", role: .destructive) { showsDeleteConfirmation = true }
+            // Named for what it does. It said "Delete" while the dialog said "Move to Trash", and
+            // the two disagreeing about whether the action is recoverable is worse than either.
+            Button("Move to Trash", role: .destructive) { showsDeleteConfirmation = true }
                 .keyboardShortcut(.delete, modifiers: .command)
             Spacer()
             Button("Done") { dismiss() }
@@ -142,15 +404,127 @@ struct WorkItemDetailView: View {
         .padding(Theme.Spacing.large)
     }
 
-    private func commitTitle() {
-        guard let services, let name = title.nilIfBlank, name != item.title else { return }
-        try? services.workItems.setTitle(name, on: item)
-        model.refresh()
+    // MARK: - Bindings
+
+    private var currentFacts: BugFacts {
+        editor?.bugFacts ?? item.bugRecord?.facts ?? BugFacts()
+    }
+
+    private var statusBinding: Binding<ItemStatus> {
+        Binding(
+            get: { item.status == .none ? .open : item.status },
+            set: { editor?.setStatus($0) }
+        )
+    }
+
+    private var stageBinding: Binding<UUID?> {
+        Binding(
+            get: { item.workflowStageID },
+            set: { id in editor?.setStage(id.flatMap { target in model.stages.first { $0.id == target } }) }
+        )
+    }
+
+    private var priorityBinding: Binding<Priority> {
+        Binding(
+            get: { item.priority },
+            set: { editor?.setPriority($0) }
+        )
+    }
+
+    private var assigneeBinding: Binding<UUID?> {
+        Binding(
+            get: { item.assignee()?.id },
+            set: { id in
+                editor?.setAssignee(id.flatMap { target in
+                    editor?.assignableCandidates.first { $0.id == target }
+                })
+            }
+        )
+    }
+
+    private var severityBinding: Binding<BugSeverity> {
+        Binding(
+            get: { currentFacts.severity },
+            set: { editor?.setSeverity($0) }
+        )
+    }
+
+    private var regressionBinding: Binding<Bool> {
+        Binding(
+            get: { currentFacts.isRegression },
+            set: { value in editor?.updateBug { $0.isRegression = value } }
+        )
+    }
+
+    private var verifiedBinding: Binding<Bool> {
+        Binding(
+            get: { editor?.isVerified ?? false },
+            set: { editor?.setVerified($0) }
+        )
+    }
+
+    /// Tomorrow morning, which is the least presumptuous non-empty answer.
+    private var defaultDueDate: Date {
+        Calendar.current.startOfDay(for: Date.now).addingTimeInterval(60 * 60 * 24)
+    }
+
+    // MARK: - Loading and committing
+
+    private func load() {
+        guard let services else { return }
+        let editor = WorkItemEditorModel(services: services, itemID: item.id)
+        editor.onChange = { model.refresh() }
+        self.editor = editor
+
+        title = item.title
+        notesText = item.body
+        estimateText = item.estimateMinutes.map(String.init) ?? ""
+
+        let facts = item.bugRecord?.facts ?? BugFacts()
+        steps = facts.stepsToReproduce ?? ""
+        expected = facts.expectedBehavior ?? ""
+        actual = facts.actualBehavior ?? ""
+        environmentText = facts.environment ?? ""
+        affectedVersion = facts.affectedVersion ?? ""
+        fixVersion = facts.fixVersion ?? ""
+    }
+
+    /// One field, committed as it is left.
+    private func commit(_ field: Field) {
+        guard let editor else { return }
+        switch field {
+        case .title:
+            editor.setTitle(title)
+        case .body:
+            editor.setBody(notesText)
+        case .estimate:
+            editor.setEstimate(minutes: Int(estimateText.trimmingCharacters(in: .whitespaces)))
+        case .steps:
+            editor.updateBug { $0.stepsToReproduce = steps.nilIfBlank }
+        case .expected:
+            editor.updateBug { $0.expectedBehavior = expected.nilIfBlank }
+        case .actual:
+            editor.updateBug { $0.actualBehavior = actual.nilIfBlank }
+        case .environment:
+            editor.updateBug { $0.environment = environmentText.nilIfBlank }
+        case .affected:
+            editor.updateBug { $0.affectedVersion = affectedVersion.nilIfBlank }
+        case .fix:
+            editor.updateBug { $0.fixVersion = fixVersion.nilIfBlank }
+        }
+    }
+
+    private func commitAll() {
+        for field in [Field.title, .body, .estimate, .steps, .expected, .actual, .environment, .affected, .fix] {
+            commit(field)
+        }
     }
 
     private func delete() {
         guard let services else { return }
-        try? services.items.moveToTrash(item)
+        // Through the undo coordinator, so ⌘Z after a mistaken deletion works here the way it does
+        // in every list.
+        services.perform { try services.undo.moveToTrash([item]) }
         model.refresh()
         dismiss()
     }

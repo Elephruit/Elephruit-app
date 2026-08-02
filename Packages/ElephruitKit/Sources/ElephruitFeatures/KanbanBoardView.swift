@@ -95,6 +95,7 @@ struct KanbanColumnView: View {
 }
 
 struct KanbanCardView: View {
+    @Environment(\.services) private var services
     let facts: TaskFacts
     let model: ProjectWorkspaceModel
 
@@ -123,8 +124,17 @@ struct KanbanCardView: View {
                 )
         )
         .contentShape(.rect)
-        .onTapGesture { model.select(facts.id) }
-        .simultaneousGesture(TapGesture(count: 2).onEnded { model.present(facts.id) })
+        // Gated the same way the list row is: the card's tap gestures stand down while its title
+        // is being edited in place, or the field cannot be clicked into.
+        .onTapGesture {
+            guard model.rowGesturesAreActive(for: facts.id) else { return }
+            model.select(facts.id)
+        }
+        .simultaneousGesture(TapGesture(count: 2).onEnded {
+            guard model.rowGesturesAreActive(for: facts.id) else { return }
+            model.present(facts.id)
+        })
+        .contextMenu { WorkItemMenu(facts: facts, model: model, services: services) }
     }
 }
 

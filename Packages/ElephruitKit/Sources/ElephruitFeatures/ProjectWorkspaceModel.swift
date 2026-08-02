@@ -242,6 +242,38 @@ public final class ProjectWorkspaceModel {
         selectedItemIDs.compactMap { itemsByID[$0] }
     }
 
+    // MARK: Deleting
+
+    /// Sends work to the Trash as one undo step, and moves the selection off the ghosts.
+    ///
+    /// The selection lands on the nearest surviving row below the deleted ones, or above when
+    /// nothing is left below — never on nothing while survivors remain, because a deletion that
+    /// empties the selection strands the keyboard back at the top of the list. The sheet, if it
+    /// was open over one of the deleted items, is closed by ``rearrange()``.
+    public func moveToTrash(_ ids: Set<UUID>) {
+        let doomed = ids.compactMap { itemsByID[$0] }
+        guard !doomed.isEmpty else { return }
+
+        let order = visibleOrder
+        let survivor =
+            order.drop(while: { !ids.contains($0) }).first(where: { !ids.contains($0) })
+            ?? order.reversed().drop(while: { !ids.contains($0) }).first(where: { !ids.contains($0) })
+
+        guard services.perform({ try services.undo.moveToTrash(doomed) }) else { return }
+        for id in ids { services.noteRemoval(of: id) }
+        refresh()
+
+        if let survivor {
+            select(survivor)
+        } else {
+            clearSelection()
+        }
+    }
+
+    public func moveSelectionToTrash() {
+        moveToTrash(selectedItemIDs)
+    }
+
     // MARK: Presenting
 
     public func present(_ id: UUID) {
@@ -258,6 +290,15 @@ public final class ProjectWorkspaceModel {
 
     public func endRenaming() {
         renamingItemID = nil
+    }
+
+    /// Whether row-level click gestures may act for this item.
+    ///
+    /// `false` while its title is being edited in place: the field owns those clicks, and a row
+    /// that keeps its tap gesture live under an active `TextField` is how a double-click meant to
+    /// select a word in the title threw a sheet over the editor instead.
+    public func rowGesturesAreActive(for id: UUID) -> Bool {
+        renamingItemID != id
     }
 
     /// Runs `body` only when nothing is being typed into.
