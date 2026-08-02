@@ -267,7 +267,11 @@ extension ItemQuery {
             // Only the active scope pushes the due bound to the store; elsewhere post-filtering
             // still applies, so both paths stay correct.
             dueFrom: scope == .active ? dueFrom : nil,
-            dueBefore: scope == .active ? dueBefore : nil
+            dueBefore: scope == .active ? dueBefore : nil,
+            // The pinned clause rides along in the active scope on the same terms — and never
+            // beside a due bound, where the builder would be over its clause ceiling. Post-filtering
+            // re-applies it either way, so the store clause only shrinks what is materialised.
+            isPinned: scope == .active && dueFrom == nil && dueBefore == nil ? isPinned : nil
         )
     }
 

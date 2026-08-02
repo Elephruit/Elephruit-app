@@ -233,6 +233,37 @@ public final class TaskViewService {
         return try tasks(in: view).count
     }
 
+    /// Every badge the sidebar shows, from **one** pass over the open tasks.
+    ///
+    /// The sidebar recomputes its badges after every save. Asking ``badgeCount(for:)`` per view
+    /// fetched and materialised every open task once *per badge* — the fetch is two-thirds of the
+    /// cost of any of these questions, so two badges cost double what they needed to. One fetch,
+    /// the same ``belongs(_:to:)`` rule per view over the same rows, identical answers.
+    public func badgeCounts() throws(AppError) -> [TaskSystemView: Int] {
+        let open = try openTasks()
+        var result: [TaskSystemView: Int] = [:]
+        for view in TaskSystemView.allCases where view.showsCount {
+            result[view] = open.count { belongs($0, to: view) }
+        }
+        return result
+    }
+
+    /// How many linked tasks are waiting for the user to decide something.
+    ///
+    /// A store-side count. This was a `TaskFilter` pass, which fetched and materialised **every**
+    /// work item including resolved ones — after every save, for a number that is almost always
+    /// zero. The predicate reads the same column the facts do, and
+    /// `TaskSidebarModelTests` holds the two answers equal across every sync state.
+    public func syncAttentionCount() -> Int {
+        let descriptor = FetchDescriptor<Item>(
+            predicate: CountPredicates.syncAttention(
+                workItemKindRaws: ItemKind.workItemKinds.map(\.rawValue),
+                attentionStateRaws: TaskSyncState.allCases.filter(\.needsAttention).map(\.rawValue)
+            )
+        )
+        return (try? context.fetchCount(descriptor)) ?? 0
+    }
+
     // MARK: - Today
 
     /// Today, in its three sections.

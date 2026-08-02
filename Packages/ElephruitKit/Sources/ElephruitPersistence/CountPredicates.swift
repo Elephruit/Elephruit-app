@@ -162,6 +162,23 @@ enum CountPredicates {
         })
     }
 
+    /// Active work whose sync state the user has to do something about. Four clauses.
+    ///
+    /// Semantically identical to filtering `taskFacts().syncState.needsAttention` over every work
+    /// item: the facts read the same column through `TaskSyncState(rawValue:)`, whose unknown-raw
+    /// fallback is `.local` — not an attention state — so an unknown raw is excluded on both paths.
+    static func syncAttention(
+        workItemKindRaws: [String],
+        attentionStateRaws: [String]
+    ) -> Predicate<Item> {
+        #Predicate<Item> { item in
+            item.deletedAt == nil
+                && item.archivedAt == nil
+                && workItemKindRaws.contains(item.kindRaw)
+                && attentionStateRaws.contains(item.syncStateRaw)
+        }
+    }
+
     /// The rows that could carry the one home the store cannot express: an external list.
     ///
     /// A superset on purpose — membership in the counted set is decided by the caller in Swift,

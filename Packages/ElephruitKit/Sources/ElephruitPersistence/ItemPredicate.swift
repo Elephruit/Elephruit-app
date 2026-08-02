@@ -35,7 +35,8 @@ enum ItemPredicateBuilder {
         kindRaws: [String],
         statusRaws: [String],
         dueFrom: Date?,
-        dueBefore: Date?
+        dueBefore: Date?,
+        isPinned: Bool? = nil
     ) -> Predicate<Item> {
         let filterByKind = !kindRaws.isEmpty
         let filterByStatus = !statusRaws.isEmpty
@@ -48,6 +49,15 @@ enum ItemPredicateBuilder {
                 filterByKind, kindRaws, filterByStatus, statusRaws,
                 dueFrom ?? .distantPast, dueBefore ?? .distantFuture
             )
+        }
+
+        // The pinned clause rides along on the same terms as the due bound, and for the same
+        // reason: the sidebar's pinned rows are recomputed after every save, and post-filtering
+        // them meant materialising every active item to find half a dozen pins. Only in the active
+        // scope, and never alongside a due bound — the caller keeps post-filtering either way, so
+        // every combination stays correct.
+        if scope == .active, let isPinned {
+            return activePinned(filterByKind, kindRaws, filterByStatus, statusRaws, isPinned)
         }
 
         switch scope {
@@ -82,6 +92,23 @@ enum ItemPredicateBuilder {
                 && item.archivedAt == nil
                 && item.dueSortKey >= dueFrom
                 && item.dueSortKey < dueBefore
+                && (!filterByKind || kindRaws.contains(item.kindRaw))
+                && (!filterByStatus || statusRaws.contains(item.statusRaw))
+        }
+    }
+
+    /// Active, restricted by the pinned flag. Five clauses.
+    private static func activePinned(
+        _ filterByKind: Bool,
+        _ kindRaws: [String],
+        _ filterByStatus: Bool,
+        _ statusRaws: [String],
+        _ isPinned: Bool
+    ) -> Predicate<Item> {
+        #Predicate<Item> { item in
+            item.deletedAt == nil
+                && item.archivedAt == nil
+                && item.isPinned == isPinned
                 && (!filterByKind || kindRaws.contains(item.kindRaw))
                 && (!filterByStatus || statusRaws.contains(item.statusRaw))
         }
