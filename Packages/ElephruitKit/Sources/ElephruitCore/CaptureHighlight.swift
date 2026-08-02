@@ -50,6 +50,7 @@ public struct CaptureHighlight: Sendable, Hashable {
         switch (standing, kind) {
         case (.notUnderstood, _): "\(text), not recognized"
         case (_, .tag): "Tag \(text)"
+        case (_, .kind): "Type \(text)"
         case (_, .person): "Person \(text)"
         case (_, .project): "Project \(text)"
         case (_, .dueDate): "Deadline \(text)"

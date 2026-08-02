@@ -105,6 +105,10 @@ public struct CaptureDraft: Sendable, Hashable {
 public struct CaptureToken: Sendable, Hashable {
     public enum Kind: String, Sendable, Hashable {
         case tag
+
+        /// A `#` word that names what the item *is* — `#bug`, `#feature`.
+        case kind
+
         case person
         case project
         case dueDate
@@ -249,7 +253,12 @@ public enum CaptureParser {
 
             case .tag:
                 let slug = TextNormalizer.slug(token.value)
-                if TextNormalizer.isValidSlug(slug) {
+                // Checked before the tag branch, so `#bug` sets the kind instead of becoming a
+                // label on a task that is really a defect.
+                if let named = CaptureKindWords.kind(for: slug) {
+                    draft.kind = named
+                    draft.tokens.append(CaptureToken(kind: .kind, text: slug, range: token.range))
+                } else if TextNormalizer.isValidSlug(slug) {
                     if !draft.tagSlugs.contains(slug) { draft.tagSlugs.append(slug) }
                     draft.tokens.append(CaptureToken(kind: .tag, text: slug, range: token.range))
                 } else {
