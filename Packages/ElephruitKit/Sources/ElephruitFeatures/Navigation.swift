@@ -707,6 +707,31 @@ public final class NavigationModel {
         selectedItemIDs = id.map { [$0] } ?? []
     }
 
+    /// A task somebody asked to open, from somewhere that is not the task list.
+    ///
+    /// ### Why this is a request rather than a navigation
+    /// Because a task no longer has a pane of its own to be shown in: it is opened by making its row
+    /// taller, in the list it lives in — see ``TaskCard``. So a backlink, a person's page, a search
+    /// result or a deep link cannot simply *show* a task; it has to say "go to where this lives and
+    /// open it there", and the two halves of that happen in different views. The destination is set
+    /// here, and ``TaskWorkspaceView`` picks the request up when it arrives and opens the card.
+    ///
+    /// Cleared by the workspace on the way through, so a second click on the same task opens it
+    /// again rather than being swallowed as a duplicate.
+    public var taskToOpen: UUID?
+
+    /// Goes to a task, wherever it lives.
+    ///
+    /// - Parameters:
+    ///   - id: the task.
+    ///   - destination: the list it lives in — its project, its list, or the system view it falls
+    ///     into. The caller resolves this because it has the store and this does not.
+    public func openTask(_ id: UUID, in destination: SidebarSelection) {
+        select(destination)
+        selectItem(id)
+        taskToOpen = id
+    }
+
     /// Whether a batch action bar should appear.
     public var hasMultipleSelection: Bool {
         selectedItemIDs.count > 1

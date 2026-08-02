@@ -28,6 +28,14 @@ struct TaskWorkspaceView: View {
     @State private var draftTitle = ""
     @State private var draftSectionID: String?
     @State private var pendingLinkedDeletion: Item?
+
+    /// The one task whose row is currently a card.
+    ///
+    /// One rather than a set, deliberately. Two cards open at once would be two editors competing
+    /// for Escape and for the debounced write, and the reason to open one is to work on it — which
+    /// is a thing you do to one task at a time.
+    @State private var editingTaskID: UUID?
+
     @FocusState private var isDraftFocused: Bool
 
     var body: some View {
@@ -36,6 +44,15 @@ struct TaskWorkspaceView: View {
             .navigationSubtitle(subtitle)
             .toolbar { toolbarContent }
             .task(id: reloadToken) { reload() }
+            // A card is open *in a list*. Changing which list you are looking at closes it, because
+            // the row it was is no longer on screen and an editor with no row under it is a detail
+            // pane by another name.
+            .onChange(of: navigation.selection) { _, _ in editingTaskID = nil }
+            // Somebody followed a link to a task from outside the list — see ``TaskRedirect``. The
+            // destination has already been selected; this is the half that opens the card, once the
+            // rows for that destination have actually loaded.
+            .onChange(of: navigation.taskToOpen) { _, _ in openRequestedTask() }
+            .onChange(of: reloadToken) { _, _ in openRequestedTask() }
             .background { linkedDeletionDialog }
             // ⌫ on the selection, which is what somebody tries before they find any menu.
             .onDeleteCommand { trashSelection() }
@@ -49,11 +66,16 @@ struct TaskWorkspaceView: View {
     @ViewBuilder
     private var content: some View {
         if navigation.selection == .taskView(.upcoming) {
-            UpcomingAgendaView(navigation: navigation, groups: agenda, onChange: reload)
+            UpcomingAgendaView(navigation: navigation, groups: agenda, tasksByID: tasksByID, onChange: reload)
         } else if sections.isEmpty, flatTasks.isEmpty, draftSectionID == nil {
             emptyState
         } else {
+            // The column is capped and centred for the ordinary reason a column of text is: a task
+            // title dragged out to 1400 points puts its own metadata a foot away from itself. The
+            // bottom bar rides inside this frame, so it stays under the rows it acts on.
             list
+                .frame(maxWidth: Theme.Size.editorMaxWidth)
+                .frame(maxWidth: .infinity)
         }
     }
 
@@ -67,13 +89,14 @@ struct TaskWorkspaceView: View {
 
             ForEach(sections) { section in
                 Section {
-                    ForEach(tasks(in: section), id: \.id) { task in
+                    ForEach(visibleTasks(in: section), id: \.id) { task in
                         row(for: task)
                     }
                     .onMove { offsets, destination in
                         move(in: section, from: offsets, to: destination)
                     }
 
+                    showMoreRow(for: section)
                     inlineDraft(for: section)
                 } header: {
                     header(for: section)
@@ -82,7 +105,34 @@ struct TaskWorkspaceView: View {
         }
         .listStyle(.inset)
         .alternatingRowBackgrounds(.disabled)
-        .safeAreaInset(edge: .bottom, spacing: 0) { batchBar }
+        // ### Why the list gives up its chrome
+        // A separator between every row, an alternating fill behind every other one, and a grey
+        // panel behind all of them are three different ways of saying "these are separate things"
+        // to somebody who can already see that they are separate things. What is left doing the
+        // work is the one thing that was always doing it: the space between rows.
+        //
+        // The column is capped and centred for the ordinary reason a column of text is: a task
+        // title dragged out to 1400 points puts its own metadata a foot away from itself.
+        .scrollContentBackground(.hidden)
+        .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
+        // Return on the selection, which is the way through the list without the mouse. A focused
+        // field inside the open card consumes Return before this sees it, so the guard is belt and
+        // braces rather than the mechanism.
+        .onKeyPress(.return) {
+            guard editingTaskID == nil,
+                  navigation.selectedItemIDs.count == 1,
+                  let id = navigation.selectedItemIDs.first,
+                  let task = tasksByID[id]
+            else { return .ignored }
+            open(task)
+            return .handled
+        }
+        // Arrowing away from an open card closes it, on the same terms as clicking another row: the
+        // card is an editor for the selected task, so a card for a task that is no longer selected
+        // is a second answer to "which one am I looking at".
+        .onChange(of: navigation.selectedItemIDs) { _, selection in
+            if let id = editingTaskID, !selection.contains(id) { editingTaskID = nil }
+        }
     }
 
     private func row(for task: Item) -> some View {
@@ -90,9 +140,40 @@ struct TaskWorkspaceView: View {
             task: task,
             showsContainer: showsContainer,
             isSelected: navigation.selectedItemIDs.contains(task.id),
-            onToggle: { toggle(task) }
+            isEditing: editingTaskID == task.id,
+            navigation: navigation,
+            onToggle: { toggle(task) },
+            onChange: reload,
+            onClose: { editingTaskID = nil }
         )
         .tag(task.id)
+        .listRowSeparator(.hidden)
+        // ### Why the selection is ours rather than the system's
+        // macOS draws a solid accent fill behind a selected row, which is right for a row and wrong
+        // for a row that can become a card: a white card sitting inside a saturated blue bar reads
+        // as two objects, one of them broken. A quiet tint of the same accent says the same thing
+        // and lets the card sit on it.
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                .fill(navigation.selectedItemIDs.contains(task.id)
+                    ? Theme.Colors.selection.opacity(0.16)
+                    : Color.clear)
+        )
+        // ### The two ways in, and why there is no longer a third
+        // Double-click, or Return on the selection. There used to also be "click a row that is
+        // already selected", and it cost more than it was worth.
+        //
+        // Implementing it meant a single-tap `onTapGesture` beside the double-tap one, and two tap
+        // gestures on one view force SwiftUI to disambiguate: it cannot fire the single until the
+        // double-click interval has elapsed without a second click. So *every* click in the list
+        // paid a quarter-second before anything happened, and the gesture swallowed the click on its
+        // way past the `List`, which is what actually performs selection — so selection went through
+        // SwiftUI state instead of AppKit and lost its immediacy too.
+        //
+        // A lone `simultaneousGesture` does neither. It does not consume the click, so the list
+        // selects on mouse-up exactly as it always did, and with no single-tap gesture to
+        // disambiguate against there is nothing to wait for.
+        .simultaneousGesture(TapGesture(count: 2).onEnded { open(task) })
         .contextMenu { TaskContextMenu(task: task, navigation: navigation, onChange: reload) }
         // Every one of these is on the context menu too, and reachable from the keyboard. A gesture
         // is a shortcut for something that must already be possible without it.
@@ -171,21 +252,30 @@ struct TaskWorkspaceView: View {
         }
     }
 
+    /// A glyph, a title, and a rule out to the edge.
+    ///
+    /// ### Why not the shared `SectionHeader`
+    /// Because that one is built for a form: small caps, a count, and nothing else, which is right
+    /// above a group of fields and wrong above a group of *things*. A list of tasks under a project
+    /// wants the project — its icon, its colour, its name at reading weight — because the header is
+    /// the answer to "what am I looking at" rather than a label on a region. The hairline carries the
+    /// eye across the gap and gives the group an edge without a box.
     @ViewBuilder
     private func header(for section: TaskSectionGroup) -> some View {
         switch section.heading {
         case .today(let part):
-            SectionHeader(part.title, count: section.taskIDs.count)
+            TaskSectionHeader(title: part.title, count: section.taskIDs.count)
         case .container(_, let title, let symbolName, let colorName):
-            HStack(spacing: Theme.Spacing.tight) {
-                Image(systemName: symbolName)
-                    .foregroundStyle(Theme.Palette.color(named: colorName))
-                SectionHeader(title, count: section.taskIDs.count)
-            }
+            TaskSectionHeader(
+                title: title,
+                symbolName: symbolName,
+                tint: Theme.Palette.color(named: colorName),
+                count: section.taskIDs.count
+            )
         case .unfiled:
-            SectionHeader("No project", count: section.taskIDs.count)
+            TaskSectionHeader(title: "No project", symbolName: "tray", count: section.taskIDs.count)
         case .day(let date):
-            SectionHeader(dayTitle(date), count: section.taskIDs.count)
+            TaskSectionHeader(title: dayTitle(date), count: section.taskIDs.count)
         case .none:
             EmptyView()
         }
@@ -375,6 +465,11 @@ struct TaskWorkspaceView: View {
 
     // MARK: - Toolbar
 
+    /// What is left in the window toolbar once the actions moved to the foot of the list.
+    ///
+    /// Plan Today stays, and only Plan Today. It is not an action on a task or on a selection — it is
+    /// a mode for the whole view, which is what a window toolbar is for. Everything else went to the
+    /// foot of the list, where it can depend on whether a card is open.
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         if navigation.selection == .taskView(.today) {
@@ -383,18 +478,6 @@ struct TaskWorkspaceView: View {
                     .help("Review what is overdue and pull a manageable amount from Anytime")
                     .accessibilityIdentifier("tasks.planToday")
             }
-        }
-
-        ToolbarItem {
-            Button {
-                openDraft(in: sections.first)
-            } label: {
-                Label("New Task", systemImage: "plus")
-            }
-            .keyboardShortcut("n")
-            .disabled(!allowsCreation)
-            .help(allowsCreation ? "Add a task here" : "This list is worked out rather than filed, so nothing can be added to it")
-            .accessibilityIdentifier("tasks.newTask")
         }
     }
 
@@ -415,17 +498,44 @@ struct TaskWorkspaceView: View {
         return count == 1 ? "1 task" : "\(count) tasks"
     }
 
-    // MARK: - Batch actions
+    // MARK: - The bottom bar
 
-    @ViewBuilder
-    private var batchBar: some View {
-        if navigation.hasMultipleSelection {
-            TaskBatchBar(
-                navigation: navigation,
-                tasks: flatTasks.filter { navigation.selectedItemIDs.contains($0.id) },
-                onChange: reload
-            )
+    /// One bar, in the slot the multi-selection bar used to have to itself.
+    ///
+    /// Multiple selection is not a different surface; it is a third thing this bar can be about,
+    /// alongside "the list" and "the open task". Two bars stacked at the foot of a list, one of them
+    /// empty most of the time, is what the alternative looked like.
+    private var bottomBar: some View {
+        TaskBottomBar(
+            navigation: navigation,
+            editingTask: editingTaskID.flatMap { tasksByID[$0] },
+            selectedTasks: flatTasks.filter { navigation.selectedItemIDs.contains($0.id) },
+            allowsCreation: allowsCreation,
+            allowsHeadings: allowsHeadings,
+            onNewTask: { openDraft(in: sections.first) },
+            onNewHeading: { createHeading() },
+            onChange: reload
+        )
+    }
+
+    /// A heading divides a project or a list, so it is offered inside one and nowhere else.
+    ///
+    /// Stored rather than computed, because working it out means fetching the container from the
+    /// store — and this is read by the bottom bar, which sits in the list's `safeAreaInset` and is
+    /// therefore re-evaluated on every pass the list makes. A fetch per render is the shape of
+    /// problem `FetchAudit` exists to catch; it is answered once per load instead, beside the rows
+    /// it describes.
+    @State private var allowsHeadings = false
+
+    private func createHeading() {
+        guard let services, case .item(let id) = navigation.selection else { return }
+        services.perform {
+            var draft = ItemDraft(kind: .heading, title: "New Heading")
+            draft.parentID = id
+            let created = try services.items.create(draft)
+            services.noteChange(to: created)
         }
+        reload()
     }
 
     // MARK: - Data
@@ -477,6 +587,12 @@ struct TaskWorkspaceView: View {
             }
 
             tasksByID = Dictionary(flatTasks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+
+            if case .item(let id) = navigation.selection, let container = try services.items.item(id: id) {
+                allowsHeadings = container.kind.canContain(.heading)
+            } else {
+                allowsHeadings = false
+            }
         }
     }
 
@@ -487,6 +603,51 @@ struct TaskWorkspaceView: View {
     /// drawing the list quadratic in the number of sections for no reason.
     private func tasks(in section: TaskSectionGroup) -> [Item] {
         section.taskIDs.compactMap { tasksByID[$0] }
+    }
+
+    /// How much of a long section is drawn before it offers the rest.
+    ///
+    /// ### Why a section truncates at all
+    /// Because a view that groups by container is answering "what is in each of these", and a
+    /// project with sixty tasks in it answers that question in the first five and then buries the
+    /// next project under fifty-five rows nobody is reading. Five is enough to know what a project
+    /// is *about*; opening the project itself is where you go to work through it.
+    ///
+    /// Only ever container sections. Today has three sections and every row in them is there because
+    /// the user or the calendar put it there, so hiding any of them would hide the plan.
+    private static let sectionRowLimit = 5
+
+    @State private var expandedSectionIDs: Set<String> = []
+
+    private func truncates(_ section: TaskSectionGroup) -> Bool {
+        guard case .container = section.heading else { return false }
+        return section.taskIDs.count > Self.sectionRowLimit
+            && !expandedSectionIDs.contains(section.id)
+    }
+
+    /// Resolves only the rows that will be drawn.
+    ///
+    /// The prefix is taken over the *identifiers*, before they are looked up. Taking it afterwards
+    /// materialised the whole section — five hundred rows for a large project — and then threw all
+    /// but five away, which made truncation cost more than not truncating.
+    private func visibleTasks(in section: TaskSectionGroup) -> [Item] {
+        guard truncates(section) else { return tasks(in: section) }
+        return section.taskIDs.prefix(Self.sectionRowLimit).compactMap { tasksByID[$0] }
+    }
+
+    @ViewBuilder
+    private func showMoreRow(for section: TaskSectionGroup) -> some View {
+        if truncates(section) {
+            let hidden = section.taskIDs.count - Self.sectionRowLimit
+            Button("Show \(hidden) more") { expandedSectionIDs.insert(section.id) }
+                .buttonStyle(.plain)
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .frame(minHeight: Theme.Size.rowHeight)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .accessibilityIdentifier("tasks.showMore.\(section.id)")
+        }
     }
 
     // MARK: - Actions
@@ -512,6 +673,28 @@ struct TaskWorkspaceView: View {
         navigation.selectedItemIDs = []
         pendingLinkedDeletion = targets.first { $0.syncState != .local }
         reload()
+    }
+
+    /// Opens a task's card, closing whichever one was open.
+    ///
+    /// Closing the previous one is what makes "clicking another row closes this one" true without a
+    /// dismissal gesture: the click that opens the next card is the same click that closes this one,
+    /// and `TaskCard` flushes its pending write on the way out.
+    /// Honours a pending open request, if its task is in this list yet.
+    ///
+    /// Called both when the request arrives and after each reload, because the two race: the request
+    /// is set at the moment the destination changes, and the rows for that destination do not exist
+    /// until `reload` has run. Clearing the request only once the task is found means an arrival that
+    /// lands before the data does is picked up by the reload that follows.
+    private func openRequestedTask() {
+        guard let id = navigation.taskToOpen, let task = tasksByID[id] else { return }
+        navigation.taskToOpen = nil
+        open(task)
+    }
+
+    private func open(_ task: Item) {
+        navigation.selectedItemIDs = [task.id]
+        editingTaskID = task.id
     }
 
     private func toggle(_ task: Item) {

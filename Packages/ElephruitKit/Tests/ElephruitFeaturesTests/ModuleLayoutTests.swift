@@ -146,12 +146,15 @@ struct ModuleLayoutTests {
     func repeatedSwitchingIsStable() {
         let layout = store()
         layout.setWidth(700, of: .detail, in: .people, available: wideWindow)
-        layout.setWidth(400, of: .detail, in: .tasks, available: wideWindow)
+        layout.setWidth(500, of: .detail, in: .notes, available: wideWindow)
 
         for _ in 0..<20 {
             #expect(layout.width(of: .detail, in: .people, available: wideWindow) == 700)
             #expect(layout.width(of: .detail, in: .calendar, available: wideWindow) == 0)
-            #expect(layout.width(of: .detail, in: .tasks, available: wideWindow) == 400)
+            #expect(layout.width(of: .detail, in: .notes, available: wideWindow) == 500)
+            // Tasks joined the canvases when the card replaced its detail column, so it answers 0
+            // for the same reason the calendar does.
+            #expect(layout.width(of: .detail, in: .tasks, available: wideWindow) == 0)
         }
     }
 
@@ -182,10 +185,10 @@ struct ModuleLayoutTests {
     @Test("A width outside the module's own range is brought back inside it")
     func obsoleteWidthsAreClamped() {
         let layout = store()
-        let bounds = AppModule.tasks.shellLayout.detail.width
-        layout.setWidth(4000, of: .detail, in: .tasks, available: wideWindow)
+        let bounds = AppModule.notes.shellLayout.detail.width
+        layout.setWidth(4000, of: .detail, in: .notes, available: wideWindow)
 
-        let resolved = layout.width(of: .detail, in: .tasks, available: wideWindow)
+        let resolved = layout.width(of: .detail, in: .notes, available: wideWindow)
         #expect(resolved == bounds.maximum)
         #expect(resolved >= bounds.minimum)
     }
@@ -208,11 +211,11 @@ struct ModuleLayoutTests {
 
         let first = ModuleLayoutStore(defaults: defaults)
         first.setWidth(700, of: .detail, in: .people, available: wideWindow)
-        first.setWidth(420, of: .detail, in: .tasks, available: wideWindow)
+        first.setWidth(420, of: .detail, in: .notes, available: wideWindow)
 
         let afterRelaunch = ModuleLayoutStore(defaults: defaults)
         #expect(afterRelaunch.width(of: .detail, in: .people, available: wideWindow) == 700)
-        #expect(afterRelaunch.width(of: .detail, in: .tasks, available: wideWindow) == 420)
+        #expect(afterRelaunch.width(of: .detail, in: .notes, available: wideWindow) == 420)
     }
 
     /// A preference file written by a build that had a module this one does not must not cost the
@@ -227,7 +230,7 @@ struct ModuleLayoutTests {
             [
                 "someFutureModule": ["detail": 500.0],
                 "people": ["detail": 640.0],
-                "tasks": ["someFutureColumn": 300.0],
+                "notes": ["someFutureColumn": 300.0],
             ],
             forKey: "layout.moduleColumnWidths"
         )
@@ -235,8 +238,8 @@ struct ModuleLayoutTests {
         let loaded = ModuleLayoutStore(defaults: defaults)
         #expect(loaded.width(of: .detail, in: .people, available: wideWindow) == 640)
         #expect(
-            loaded.width(of: .detail, in: .tasks, available: wideWindow)
-                == AppModule.tasks.shellLayout.detail.width.ideal
+            loaded.width(of: .detail, in: .notes, available: wideWindow)
+                == AppModule.notes.shellLayout.detail.width.ideal
         )
     }
 
@@ -559,7 +562,9 @@ struct LayoutAuditTests {
     /// becoming a strip when the arithmetic changes.
     @Test("A canvas module gets its canvas and no empty third column")
     func canvasModulesKeepTheirCanvas() {
-        for module in [AppModule.calendar, .time] {
+        // Tasks joined this list when the card replaced its detail column: a list of tasks *is* the
+        // module now, the way a month is the Calendar.
+        for module in [AppModule.calendar, .time, .tasks] {
             let widths = module.shellLayout.widths(
                 windowWidth: 1920,
                 sidebarWidth: sidebar,
@@ -1248,7 +1253,7 @@ struct RoomToSpareByModuleTests {
     /// the better answer, and the one `theProfileIsTheFlexibleColumn` holds instead.
     @Test(
         "Each document module fills its list to its own ceiling",
-        arguments: [AppModule.notes, .tasks, .projects, .bookmarks, .archive, .trash]
+        arguments: [AppModule.notes, .projects, .bookmarks, .archive, .trash]
     )
     func eachModuleReachesItsCeiling(module: AppModule) throws {
         let layout = module.shellLayout

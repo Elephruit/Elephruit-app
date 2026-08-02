@@ -109,15 +109,19 @@ extension AppModule {
             )
 
         case .tasks:
-            // Narrower than a profile on purpose. A task is a title, three dates, a project, some
-            // tags and a note; giving it 720 points stretches a row of date pickers across a width
-            // none of them wants and leaves the note floating in the middle of it.
+            // ### Why Tasks became a canvas
+            // It was a document module: a list of tasks on the left, one task at length on the
+            // right. The right-hand column had to answer "which task is this?" all over again —
+            // a title bar, the container, the dates — because by the time you were reading it the
+            // list was three hundred points away and might have scrolled. Everything on it was a
+            // restatement of something already on screen.
+            //
+            // A task now opens by making its own row taller — see ``TaskCard`` — so the detail
+            // column has nothing left to hold. It goes, and the list takes the width: a list of
+            // tasks *is* the module, the same way a month is the Calendar.
             ModuleShellLayout(
-                primary: PaneWidth(minimum: 280, ideal: 380, maximum: 520),
-                detail: DetailPanePolicy(
-                    width: PaneWidth(minimum: 360, ideal: 460, maximum: 640),
-                    compactWindowWidth: 840
-                ),
+                primary: PaneWidth(minimum: 420, ideal: 900),
+                detail: .unavailable,
                 inspector: DetailPanePolicy(
                     hidesWhenNothingSelected: true,
                     width: PaneWidth(minimum: 240, ideal: 300, maximum: 400),

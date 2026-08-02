@@ -102,13 +102,17 @@ public struct ItemDetailView: View {
                 brief: bodyBinding
             )
 
+        // ### Why a task has no surface here any more
+        // Because it has one of its own, in the list, in place — see ``TaskCard``. A task opened in
+        // a column beside its list had to re-answer "which task is this?" with a header, a
+        // container and a set of dates, every one of which was a restatement of something already
+        // on screen a few hundred points away.
+        //
+        // What arrives here now is somebody following a *link* to a task — a backlink, a person's
+        // page, a search result, a deep link — and the right answer to that is to take them to
+        // where the task lives and open it there, which is what ``TaskRedirect`` does.
         case .task:
-            TaskDetailView(
-                item: item,
-                navigation: navigation,
-                title: titleBinding,
-                bodyText: bodyBinding
-            )
+            TaskRedirect(task: item, navigation: navigation)
 
         case .bookmark:
             BookmarkDetailView(item: item, title: titleBinding, bodyText: bodyBinding)
