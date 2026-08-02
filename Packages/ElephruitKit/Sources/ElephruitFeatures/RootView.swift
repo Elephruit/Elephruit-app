@@ -325,11 +325,12 @@ public struct RootView: View {
     private var splitView: some View {
         NavigationSplitView(columnVisibility: columnVisibilityBinding) {
             SidebarView(navigation: navigation)
-                // Exact at both layout layers. A flexible range lets `NavigationSplitView` use the
-                // sidebar to absorb sibling-column changes even when the window itself never moves.
-                // The frame makes the content non-negotiable; the column modifier gives AppKit the
-                // same answer before it asks the content to lay out.
-                .frame(width: sidebarWidth)
+                // The column and its native split item are fixed, but the content is deliberately
+                // not given the same fixed frame. macOS removes the window's leading safe-area
+                // inset from the pane's usable content width; forcing the content back to the full
+                // item width centers an oversized view and clips section headings on the leading
+                // edge. Let the sidebar fill the usable proposal while the two layout layers below
+                // keep the divider itself immovable.
                 .navigationSplitViewColumnWidth(sidebarWidth)
                 // SwiftUI's content width is not the native pane's width. Lock the actual
                 // NSSplitViewItem so sibling columns cannot rebalance the sidebar underneath us.
