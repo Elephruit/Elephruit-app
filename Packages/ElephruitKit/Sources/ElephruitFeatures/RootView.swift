@@ -38,6 +38,14 @@ public struct RootView: View {
     /// in this window is where the next window and the next launch find it. See ``ModuleLayoutStore``.
     @State private var moduleLayout = ModuleLayoutStore()
 
+    /// The sidebar changes width through one path only: the user dragging its handle.
+    ///
+    /// `NavigationSplitView` is given this as an exact width, so destinations, empty states, module
+    /// policies and sibling columns cannot negotiate it. Scene storage preserves the user's choice
+    /// for this window without measuring the rendered sidebar and feeding layout back into itself.
+    @SceneStorage("layout.sidebar.width") private var storedSidebarWidth = Double(SidebarMetrics.defaultWidth)
+    @State private var sidebarDragStart: CGFloat?
+
     /// The window's own width, so a restored column width can be clamped to what there is.
     @State private var windowWidth: CGFloat = 0
 
@@ -292,9 +300,33 @@ public struct RootView: View {
         )
     }
 
-    /// What primary navigation needs, at the current text size.
-    private var sidebarWidths: SidebarWidths {
-        SidebarMetrics.widths(fittingTitles: SidebarRegistry.nonTruncatingTitles)
+    /// The user's sidebar width, bounded only to keep the column usable.
+    private var sidebarWidth: CGFloat {
+        let stored = storedSidebarWidth.isFinite
+            ? CGFloat(storedSidebarWidth)
+            : SidebarMetrics.defaultWidth
+        return min(max(stored, SidebarMetrics.floorWidth), SidebarMetrics.maximumWidth)
+    }
+
+    /// A deliberate replacement for the split view's automatic divider negotiation.
+    ///
+    /// The start is captured once so every update uses the gesture's total translation rather than
+    /// accumulating deltas. Nothing outside this gesture writes `storedSidebarWidth`.
+    private var sidebarResizeGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let start = sidebarDragStart ?? sidebarWidth
+                if sidebarDragStart == nil { sidebarDragStart = start }
+
+                let proposed = start + value.translation.width
+                storedSidebarWidth = Double(min(
+                    max(proposed, SidebarMetrics.floorWidth),
+                    SidebarMetrics.maximumWidth
+                ))
+            }
+            .onEnded { _ in
+                sidebarDragStart = nil
+            }
     }
 
     /// Every column's width, decided together.
@@ -315,7 +347,7 @@ public struct RootView: View {
             windowWidth: windowWidth > 0 ? windowWidth : Theme.Size.assumedWindowWidth,
             // The sidebar is intentionally fixed. Budget the same width the view is given below so
             // no column can borrow from it while the shell changes shape.
-            sidebarWidth: navigation.layoutMode.showsSidebar ? sidebarWidths.ideal : nil,
+            sidebarWidth: navigation.layoutMode.showsSidebar ? sidebarWidth : nil,
             showsList: navigation.layoutMode.showsList,
             userWantsInspector: navigation.isInspectorVisible,
             hasSelection: hasInspectableSelection,
@@ -330,8 +362,17 @@ public struct RootView: View {
                 // sidebar to absorb sibling-column changes even when the window itself never moves.
                 // The frame makes the content non-negotiable; the column modifier gives AppKit the
                 // same answer before it asks the content to lay out.
-                .frame(width: sidebarWidths.ideal)
-                .navigationSplitViewColumnWidth(sidebarWidths.ideal)
+                .frame(width: sidebarWidth)
+                .navigationSplitViewColumnWidth(sidebarWidth)
+                .overlay(alignment: .trailing) {
+                    Rectangle()
+                        .fill(.clear)
+                        .frame(width: 8)
+                        .contentShape(Rectangle())
+                        .gesture(sidebarResizeGesture)
+                        .help("Drag to resize the sidebar")
+                        .accessibilityLabel("Resize sidebar")
+                }
         } content: {
             // Time replaces the list rather than opening beside it: it *is* the middle column's
             // contents for that destination, in the same way a project's task list is.
@@ -446,10 +487,13 @@ public struct RootView: View {
             guard width > 0 else { return }
             windowWidth = width
         }
-        // Applying a module's own widths on arrival is the whole point: AppKit's split view keeps
-        // its divider wherever it was last put, so without this, widening the pane to read somebody's
-        // profile also moved the calendar's divider — and the calendar had no say in it.
-        .task(id: shellShape) { await applyModuleLayout() }
+        // A shell change moves columns without the window moving. Tell the recorder before its next
+        // settled sample, but do not force a second layout pass: the column modifiers above already
+        // carry the new policy, and pinning then relaxing them made empty destinations visibly
+        // bounce between two arrangements.
+        .onChange(of: shellShape, initial: true) { _, _ in
+            widthRecorder.expectShellMove(of: [.primary, .detail])
+        }
         .onAppear { wireWidthRecorder() }
         // Anything that happened in Reminders while the app was in the background arrives when it
         // comes back. `reconcile()` is idempotent, so a pass that finds nothing writes nothing.
@@ -685,14 +729,13 @@ public struct RootView: View {
 
     // MARK: - Module layout
 
-    /// Snaps every column to what the module being entered asks for, then hands the dividers back.
+    /// Corrects a divider AppKit restored outside the active module's declared range.
     ///
-    /// The pause is a single turn of the run loop rather than an animation: the split view needs one
-    /// layout pass to adopt the pinned constraints, and relaxing them in the same pass would leave
-    /// the old width in place. It is short enough to read as the module arriving rather than as the
-    /// window rearranging itself afterwards.
-    private func applyModuleLayout() async {
-        // A drag detector that saw the old module's widths would read the snap as a preference.
+    /// This is deliberately not run during ordinary navigation. The active column modifiers apply
+    /// those policy changes directly; a pin-and-relax cycle there created two layouts 50 ms apart.
+    /// The temporary pin remains only for an invalid asynchronous AppKit restoration detected by
+    /// `sample`, where one forced pass is necessary to bring the divider back inside its ceiling.
+    private func correctInvalidColumnWidths() async {
         widthRecorder.expectShellMove(of: [.primary, .detail])
 
         // Pinned to what the *shell* worked out, not to what the store remembers.
@@ -730,14 +773,13 @@ public struct RootView: View {
 
         // AppKit's split view restores its remembered divider *asynchronously* — the
         // "NSSplitView Subview Frames" autosave arrives a beat after the window is up — and that
-        // late restoration does not honour `navigationSplitViewColumnWidth`. When it lands inside
-        // the 50 ms pin that `applyModuleLayout` holds, the pin wins; when it lands after, a list
-        // with a declared maximum of 340 opens at a thousand points and stays there. The samples
+        // late restoration does not honour `navigationSplitViewColumnWidth`. A list with a declared
+        // maximum of 340 can therefore open at a thousand points and stay there. The samples
         // are where the loss shows up, so this is where it is corrected: a settled width past the
         // module's own ceiling is never something the user chose — the divider cannot be dragged
         // past a maximum that is being honoured — and is re-pinned rather than recorded.
         if width > shellLayout.declaredCeiling(of: column) + 1 {
-            Task { await applyModuleLayout() }
+            Task { await correctInvalidColumnWidths() }
             return
         }
 
