@@ -84,7 +84,7 @@ struct TaskCard: View {
         .background {
             RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                 .fill(Theme.Colors.contentBackground)
-                .shadow(color: .black.opacity(0.14), radius: 8, y: 2)
+                .shadow(color: Theme.Colors.shadow.opacity(0.14), radius: 8, y: 2)
         }
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
@@ -129,7 +129,7 @@ struct TaskCard: View {
             if task.isFlagged {
                 Image(systemName: "flag.fill")
                     .font(.system(size: 9))
-                    .rowTint(Theme.Colors.dueToday)
+                    .rowTint(Theme.Colors.favorite)
                     .accessibilityHidden(true)
             }
         }

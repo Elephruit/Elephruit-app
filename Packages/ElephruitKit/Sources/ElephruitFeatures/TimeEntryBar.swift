@@ -66,7 +66,7 @@ struct TimeTrackerCard: View {
         )
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
-                .strokeBorder(isRunning ? Theme.Colors.destructive.opacity(0.4) : Theme.Colors.separator)
+                .strokeBorder(isRunning ? Theme.Colors.recording.opacity(0.4) : Theme.Colors.separator)
         }
         .calmAnimation(value: isRunning)
         .onAppear {
@@ -157,7 +157,7 @@ struct TimeTrackerCard: View {
         HStack(alignment: .center, spacing: Theme.Spacing.medium) {
             Image(systemName: "record.circle")
                 .font(.title3)
-                .foregroundStyle(Theme.Colors.destructive)
+                .foregroundStyle(Theme.Colors.recording)
                 .symbolEffect(.pulse, options: .repeating)
                 .accessibilityHidden(true)
 
@@ -314,7 +314,7 @@ struct TimeTrackerCard: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(Theme.Colors.onAccent)
-        .background(Circle().fill(Theme.Colors.destructive))
+        .background(Circle().fill(Theme.Colors.recording))
         .help("Stop and keep this time")
         .accessibilityLabel("Stop")
         .accessibilityIdentifier(AccessibilityID.Time.stopButton)

@@ -215,7 +215,7 @@ struct FloatingTimerView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(Theme.Colors.onAccent)
-            .background(Circle().fill(Theme.Colors.destructive))
+            .background(Circle().fill(Theme.Colors.recording))
             .help(state.isPaused ? "Finish here" : "Stop and keep this time")
             .accessibilityLabel("Stop")
             .accessibilityIdentifier(AccessibilityID.Time.floatingStop)
@@ -236,7 +236,7 @@ struct FloatingTimerView: View {
         var accumulated: TimeInterval
 
         var tint: Color {
-            isPaused ? Theme.Colors.warning : Theme.Colors.destructive
+            isPaused ? Theme.Colors.warning : Theme.Colors.recording
         }
     }
 
@@ -333,7 +333,7 @@ struct FloatingCard: ViewModifier {
                     RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                         .strokeBorder(tint.opacity(0.35))
                 }
-                .shadow(color: .black.opacity(depth.opacity), radius: depth.radius, y: depth.offset)
+                .shadow(color: Theme.Colors.shadow.opacity(depth.opacity), radius: depth.radius, y: depth.offset)
         } else {
             content
         }
@@ -382,7 +382,7 @@ struct MiniTimerView: View {
     /// three it is before any of the words are read.
     private var tint: Color {
         if services?.timer.paused != nil { return Theme.Colors.warning }
-        if services?.timer.running != nil { return Theme.Colors.destructive }
+        if services?.timer.running != nil { return Theme.Colors.recording }
         return Theme.Colors.separator
     }
 

@@ -97,10 +97,7 @@ struct WorkItemGroupHeader<Accessory: View>: View {
     }
 
     private var tint: Color {
-        guard let name = group.colorName, let entry = Theme.Palette(rawValue: name) else {
-            return Theme.Colors.secondaryText
-        }
-        return entry.color
+        Theme.Palette.color(named: group.colorName, neutral: Theme.Colors.secondaryText)
     }
 }
 
@@ -137,7 +134,7 @@ struct WorkItemRowView: View {
         }
         .padding(.horizontal, Theme.Spacing.large)
         .frame(height: Theme.Size.rowHeight)
-        .background(isSelected ? Theme.Colors.selection.opacity(0.15) : .clear)
+        .background(isSelected ? Theme.Colors.selectionFill : .clear)
         .contentShape(.rect)
         // Both gestures stand down while this row's title is being edited in place — the whole
         // row is hit-testable, so without the gate a double-click meant to select a word in the

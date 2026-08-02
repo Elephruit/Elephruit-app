@@ -152,7 +152,7 @@ struct PeopleCommandBarView: View {
                         .padding(.horizontal, Theme.Spacing.medium)
                         .padding(.vertical, Theme.Spacing.small)
                         .background(
-                            index == highlighted ? Theme.Colors.selection.opacity(0.15) : .clear,
+                            index == highlighted ? Theme.Colors.selectionFill : .clear,
                             in: RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
                         )
                         .contentShape(.rect)

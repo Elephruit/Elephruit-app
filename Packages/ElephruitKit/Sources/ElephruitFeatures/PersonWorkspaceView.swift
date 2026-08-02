@@ -456,7 +456,7 @@ struct PersonHeaderView: View {
                             toggleFavorite()
                         } label: {
                             Image(systemName: person.isFavorite ? "star.fill" : "star")
-                                .foregroundStyle(person.isFavorite ? Theme.Colors.dueToday : Theme.Colors.secondaryText)
+                                .foregroundStyle(person.isFavorite ? Theme.Colors.favorite : Theme.Colors.secondaryText)
                         }
                         .buttonStyle(.borderless)
                         .help(person.isFavorite ? "Remove from Favorites" : "Add to Favorites")
@@ -886,12 +886,12 @@ struct PersonDockButton: View {
         }
 
         switch channel {
-        case .call: return Theme.Palette.green.color
-        case .message: return Theme.Palette.blue.color
-        case .email: return Theme.Palette.indigo.color
-        case .facetimeVideo, .facetimeAudio: return Theme.Palette.cyan.color
-        case .maps: return Theme.Palette.orange.color
-        case .web: return Theme.Palette.purple.color
+        case .call: return ContactChannelPalette.phone
+        case .message: return ContactChannelPalette.message
+        case .email: return ContactChannelPalette.email
+        case .facetimeVideo, .facetimeAudio: return ContactChannelPalette.facetime
+        case .maps: return ContactChannelPalette.address
+        case .web: return ContactChannelPalette.website
         }
     }
 

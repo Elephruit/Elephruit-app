@@ -78,7 +78,7 @@ enum RowSwipeActions {
                 id: "task.flag",
                 title: task.isFlagged ? "Unflag" : "Flag",
                 systemImage: "flag",
-                tint: Theme.Colors.warning
+                tint: Theme.Colors.favorite
             ) {
                 services.perform {
                     try services.tasks.setFlagged(!task.isFlagged, on: task)
@@ -203,7 +203,7 @@ enum RowSwipeActions {
                 id: "item.pin",
                 title: item.isPinned ? "Unpin" : "Pin",
                 systemImage: "pin",
-                tint: Theme.Colors.warning
+                tint: Theme.Colors.favorite
             ) {
                 services.perform { try services.items.update(item) { $0.isPinned.toggle() } }
                 services.noteChange(to: item)
@@ -276,7 +276,7 @@ enum RowSwipeActions {
                 id: "person.favorite",
                 title: person.isFavorite ? "Unstar" : "Star",
                 systemImage: "star",
-                tint: Theme.Colors.warning
+                tint: Theme.Colors.favorite
             ) {
                 services.perform { try services.items.update(person) { $0.isFavorite.toggle() } }
                 services.noteChange(to: person)

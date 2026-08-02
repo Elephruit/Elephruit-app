@@ -107,10 +107,7 @@ public struct ItemRow<Item: ContentItem>: View {
     }
 
     private var glyphColor: Color {
-        if let colorName = item.colorName {
-            return Theme.Palette.color(named: colorName)
-        }
-        return Theme.Colors.secondaryText
+        Theme.Palette.color(named: item.colorName, neutral: Theme.Colors.secondaryText)
     }
 
     private var titleLine: some View {
@@ -125,7 +122,7 @@ public struct ItemRow<Item: ContentItem>: View {
             if item.isFavorite {
                 Image(systemName: "star.fill")
                     .font(Theme.Text.metadata)
-                    .rowTint(Theme.Colors.dueToday)
+                    .rowTint(Theme.Colors.favorite)
                     .accessibilityHidden(true)
             }
         }
@@ -261,6 +258,18 @@ public struct DueDateLabel: View {
 
     private var color: Color {
         guard isActionable else { return Theme.Colors.tertiaryText }
+        return DateUrgency.color(for: date, using: dateProvider)
+    }
+}
+
+/// The urgency ramp every dated element shares: overdue red, due-today amber, else quiet.
+///
+/// One function rather than the same three-line ladder pasted beside each label that draws a date,
+/// which is how the two copies in this file had already started life. Callers apply their own
+/// guards about *whether* urgency applies — a date that is merely past is not late — and this
+/// answers only what urgency looks like.
+public enum DateUrgency {
+    public static func color(for date: Date, using dateProvider: any DateProvider) -> Color {
         if dateProvider.isOverdue(date) { return Theme.Colors.overdue }
         if dateProvider.isToday(date) { return Theme.Colors.dueToday }
         return Theme.Colors.secondaryText
@@ -328,9 +337,7 @@ public struct RowDateLabel: View {
     /// every date in a row would produce.
     private var color: Color {
         guard resolved.role.showsUrgency, isActionable else { return Theme.Colors.tertiaryText }
-        if dateProvider.isOverdue(resolved.date) { return Theme.Colors.overdue }
-        if dateProvider.isToday(resolved.date) { return Theme.Colors.dueToday }
-        return Theme.Colors.secondaryText
+        return DateUrgency.color(for: resolved.date, using: dateProvider)
     }
 }
 
@@ -389,7 +396,7 @@ public struct TagChip: View {
     }
 
     private var tint: Color {
-        colorName == nil ? Theme.Colors.secondaryText : Theme.Palette.color(named: colorName)
+        Theme.Palette.color(named: colorName, neutral: Theme.Colors.secondaryText)
     }
 }
 

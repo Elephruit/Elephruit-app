@@ -127,7 +127,7 @@ struct EditContactDetailsSheet: View {
                         .background(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
                                 .fill(selectedPage == page ? Theme.Colors.contentBackground : .clear)
-                                .shadow(color: selectedPage == page ? .black.opacity(0.06) : .clear, radius: 5, y: 2)
+                                .shadow(color: selectedPage == page ? Theme.Colors.shadow.opacity(0.06) : .clear, radius: 5, y: 2)
                         )
                     }
                     .buttonStyle(.plain)
@@ -368,14 +368,17 @@ private enum ContactEditorPage: String, CaseIterable, Identifiable {
     }
 
     var tint: Color {
+        // The channels come from the shared palette, so this page list, the row editor and the
+        // person's action bar cannot disagree about what colour email is. Name moves off blue to
+        // make room for it — identity is not a channel.
         switch self {
-        case .name: Theme.Palette.blue.color
+        case .name: Theme.Palette.graphite.color
         case .work: Theme.Palette.indigo.color
         case .birthday: Theme.Palette.pink.color
-        case .email: Theme.Palette.cyan.color
-        case .phone: Theme.Palette.green.color
-        case .address: Theme.Palette.orange.color
-        case .website: Theme.Palette.purple.color
+        case .email: ContactChannelPalette.email
+        case .phone: ContactChannelPalette.phone
+        case .address: ContactChannelPalette.address
+        case .website: ContactChannelPalette.website
         }
     }
 }
@@ -396,7 +399,7 @@ private struct EditorPanel<Content: View>: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(Theme.Colors.separator.opacity(0.55))
         )
-        .shadow(color: .black.opacity(0.04), radius: 16, y: 6)
+        .shadow(color: Theme.Colors.shadow.opacity(0.04), radius: 16, y: 6)
     }
 }
 
@@ -697,10 +700,10 @@ private extension String {
 extension ContactDetailKind {
     var editorTint: Color {
         switch self {
-        case .email: Theme.Palette.blue.color
-        case .phone: Theme.Palette.green.color
-        case .address: Theme.Palette.orange.color
-        case .website: Theme.Palette.purple.color
+        case .email: ContactChannelPalette.email
+        case .phone: ContactChannelPalette.phone
+        case .address: ContactChannelPalette.address
+        case .website: ContactChannelPalette.website
         }
     }
 

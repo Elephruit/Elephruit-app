@@ -537,7 +537,7 @@ struct ModuleRow: View {
         .buttonStyle(.plain)
         .background(
             RoundedRectangle(cornerRadius: SidebarMetrics.selectionRadius)
-                .fill(isCurrent ? Theme.Colors.selection.opacity(0.16) : .clear)
+                .fill(isCurrent ? Theme.Colors.selectionFill : .clear)
                 .padding(.horizontal, -SidebarMetrics.selectionInset)
         )
         .hoverHighlight(
@@ -580,7 +580,7 @@ struct SidebarDerivedRowView: View {
         HStack(spacing: SidebarMetrics.iconGap) {
             Image(systemName: row.symbolName)
                 .frame(width: SidebarMetrics.iconColumn)
-                .rowTint(row.colorName == nil ? Theme.Colors.secondaryText : Theme.Palette.color(named: row.colorName))
+                .rowTint(Theme.Palette.color(named: row.colorName, neutral: Theme.Colors.secondaryText))
                 .accessibilityHidden(true)
 
             Text(row.title)

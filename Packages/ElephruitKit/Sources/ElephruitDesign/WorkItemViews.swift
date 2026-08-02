@@ -39,10 +39,7 @@ public struct WorkItemKindGlyph: View {
     }
 
     private var tint: Color {
-        guard let name = severity?.colorName, let entry = Theme.Palette(rawValue: name) else {
-            return Theme.Colors.secondaryText
-        }
-        return entry.color
+        Theme.Palette.color(named: severity?.colorName, neutral: Theme.Colors.secondaryText)
     }
 
     private var accessibilityText: String {

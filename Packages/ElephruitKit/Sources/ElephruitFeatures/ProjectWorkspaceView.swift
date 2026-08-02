@@ -262,7 +262,7 @@ struct ProjectViewTabBar: View {
     }
 
     private func tint(_ view: ProjectViewRecord) -> Color {
-        Theme.Palette(rawValue: view.kind.colorName)?.color ?? Theme.Colors.secondaryText
+        Theme.Palette.color(named: view.kind.colorName, neutral: Theme.Colors.secondaryText)
     }
 
     private func duplicate(_ view: ProjectViewRecord) {

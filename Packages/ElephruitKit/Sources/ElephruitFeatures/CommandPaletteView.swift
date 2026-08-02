@@ -229,7 +229,7 @@ public struct CommandPaletteView: View {
     private func highlightBackground(isHighlighted: Bool) -> some View {
         if isHighlighted {
             RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                .fill(Theme.Colors.selection.opacity(0.18))
+                .fill(Theme.Colors.selectionFill)
         } else {
             Color.clear
         }

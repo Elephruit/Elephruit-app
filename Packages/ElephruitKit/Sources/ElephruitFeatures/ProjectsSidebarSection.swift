@@ -339,9 +339,6 @@ struct ProjectSidebarRowView: View {
     }
 
     private var glyphColor: Color {
-        guard let name = row.colorName, let entry = Theme.Palette(rawValue: name) else {
-            return Theme.Colors.secondaryText
-        }
-        return entry.color
+        Theme.Palette.color(named: row.colorName, neutral: Theme.Colors.secondaryText)
     }
 }

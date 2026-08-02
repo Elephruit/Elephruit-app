@@ -25,14 +25,14 @@ public struct ItemTimerButton: View {
                 Text(services.timer.elapsedDisplay)
                     .font(Theme.Text.metadata)
                     .monospacedDigit()
-                    .foregroundStyle(Theme.Colors.destructive)
+                    .foregroundStyle(Theme.Colors.recording)
             }
 
             Button {
                 services?.timer.toggle(item: item)
             } label: {
                 Image(systemName: isTimingThisItem ? "stop.circle.fill" : "play.circle")
-                    .foregroundStyle(isTimingThisItem ? Theme.Colors.destructive : Theme.Colors.secondaryText)
+                    .foregroundStyle(isTimingThisItem ? Theme.Colors.recording : Theme.Colors.secondaryText)
             }
             .buttonStyle(.plain)
             .help(isTimingThisItem ? "Stop timing" : "Start timing “\(item.displayTitle)”")

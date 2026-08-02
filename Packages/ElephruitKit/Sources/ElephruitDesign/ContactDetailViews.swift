@@ -21,6 +21,24 @@ extension ContactAffinity {
     }
 }
 
+/// One hue per way of reaching somebody, shared by every surface that draws contact channels.
+///
+/// Before this existed, three screens answered "what colour is email?" three ways — cyan in the
+/// contact editor's page list, blue in its row editor, indigo on the person's action bar. Same
+/// person, three screens, three hues for the one concept. Phone, address and website had already
+/// converged by accident; this makes the agreement a rule instead of a coincidence.
+///
+/// Colour is never the only signal on any of these surfaces — every use sits beside the channel's
+/// own glyph and word.
+public enum ContactChannelPalette {
+    public static var email: Color { Theme.Palette.blue.color }
+    public static var phone: Color { Theme.Palette.green.color }
+    public static var message: Color { Theme.Palette.cyan.color }
+    public static var facetime: Color { Theme.Palette.teal.color }
+    public static var address: Color { Theme.Palette.orange.color }
+    public static var website: Color { Theme.Palette.purple.color }
+}
+
 /// One contact detail as it reads in a list row — `✉ Work · caroline@example.com`.
 ///
 /// The label is coloured and the value is not, so a column of these can be scanned for "which of

@@ -157,7 +157,7 @@ struct ContainerSidebarRow: View {
         HStack(spacing: SidebarMetrics.iconGap) {
             Image(systemName: row.symbolName)
                 .frame(width: SidebarMetrics.iconColumn)
-                .rowTint(row.colorName == nil ? Theme.Colors.secondaryText : Theme.Palette.color(named: row.colorName))
+                .rowTint(Theme.Palette.color(named: row.colorName, neutral: Theme.Colors.secondaryText))
                 .accessibilityHidden(true)
 
             Text(row.title)
@@ -233,7 +233,7 @@ struct ModeRow: View {
         .buttonStyle(.plain)
         .background {
             RoundedRectangle(cornerRadius: SidebarMetrics.selectionRadius, style: .continuous)
-                .fill(Theme.Colors.selection.opacity(0.16))
+                .fill(Theme.Colors.selectionFill)
                 .padding(.horizontal, -SidebarMetrics.selectionInset)
                 .opacity(isOn ? 1 : 0)
         }
