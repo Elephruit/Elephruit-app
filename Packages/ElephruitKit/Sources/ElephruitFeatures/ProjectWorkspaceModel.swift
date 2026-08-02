@@ -84,7 +84,9 @@ public final class ProjectWorkspaceModel {
         itemsByID = Dictionary(uniqueKeysWithValues: work.map { ($0.id, $0) })
         allFacts = work.map { $0.taskFacts() }
         markers = project.planningMarkers()
-        health = services.projectReports.health(of: project)
+        // Handing over the facts just computed, rather than letting reporting walk the project
+        // again. This is one pass over the project per refresh, not three.
+        health = services.projectReports.health(of: project, facts: allFacts)
         rearrange()
     }
 

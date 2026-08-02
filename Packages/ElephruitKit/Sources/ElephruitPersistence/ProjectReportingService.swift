@@ -22,10 +22,20 @@ public final class ProjectReportingService {
 
     // MARK: - Health
 
-    public func health(of project: Item, calendar: Calendar = .current) -> ProjectHealth {
+    /// Health, from facts the caller has already computed.
+    ///
+    /// The `facts` parameter is the whole point. Computing them is the expensive part — a walk of
+    /// the project plus a relationship fault or two per item — and the workspace has already done it
+    /// to draw the arrangement. Asking for them again turned one pass into three: this walk, the
+    /// arrangement's walk, and `awaitingVerification`'s walk on top. Measured at 25ms per project on
+    /// every mutation, for numbers that were already sitting in a local variable.
+    public func health(
+        of project: Item,
+        facts precomputed: [TaskFacts]? = nil,
+        calendar: Calendar = .current
+    ) -> ProjectHealth {
         let now = dateProvider.now
-        let work = project.descendantWork()
-        let facts = work.map { $0.taskFacts() }
+        let facts = precomputed ?? project.descendantWork().map { $0.taskFacts() }
 
         let open = facts.filter { $0.status == .open || $0.status == .none }
         let today = calendar.startOfDay(for: now)
@@ -48,7 +58,10 @@ public final class ProjectReportingService {
             unassignedWork: open.filter { $0.assigneeID == nil }.count,
             openBugs: openBugFacts.count,
             criticalBugs: openBugFacts.filter { $0.severity == .critical }.count,
-            bugsAwaitingVerification: bugs.awaitingVerification(in: project).count,
+            // From the facts rather than a fourth walk of the project.
+            bugsAwaitingVerification: facts.filter {
+                $0.kind == .bug && $0.status == .completed && !$0.isVerified
+            }.count,
             stagesOverLimit: overLimit,
             nextDeadline: open.compactMap(\.deadlineAt).filter { $0 >= now }.min()
         )

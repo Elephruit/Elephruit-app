@@ -379,6 +379,12 @@ public struct TaskFacts: Sendable, Hashable, Identifiable {
 
     public var isRegression: Bool
 
+    /// Whether somebody has confirmed the fix works. Always `false` for anything that is not a bug.
+    ///
+    /// Carried here so a project's health does not need a second walk of the whole project just to
+    /// count the fixes nobody has checked.
+    public var isVerified: Bool
+
     public var estimateMinutes: Int?
 
     /// Time actually recorded against it.
@@ -442,6 +448,7 @@ public struct TaskFacts: Sendable, Hashable, Identifiable {
         isBlocked: Bool = false,
         severity: BugSeverity? = nil,
         isRegression: Bool = false,
+        isVerified: Bool = false,
         estimateMinutes: Int? = nil,
         trackedMinutes: Int = 0,
         commentCount: Int = 0,
@@ -498,6 +505,7 @@ public struct TaskFacts: Sendable, Hashable, Identifiable {
         self.isBlocked = isBlocked
         self.severity = severity
         self.isRegression = isRegression
+        self.isVerified = isVerified
         self.estimateMinutes = estimateMinutes
         self.trackedMinutes = trackedMinutes
         self.commentCount = commentCount

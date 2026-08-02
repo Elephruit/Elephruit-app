@@ -363,10 +363,20 @@ public final class ProjectWorkspaceService {
     /// commit message start pointing at different work, silently, in a place nobody would think to
     /// look for the cause.
     public func allocateReferenceKey(in project: Item) throws(AppError) -> String? {
+        let key = takeReferenceKey(in: project)
+        try save()
+        return key
+    }
+
+    /// The same, without saving.
+    ///
+    /// For callers already inside a larger act that will save once at the end. Saving here as well
+    /// meant three write transactions to create one work item, which is what made populating a
+    /// project feel like the app had stopped.
+    public func takeReferenceKey(in project: Item) -> String? {
         guard let key = project.projectKey else { return nil }
         let number = project.nextReferenceNumber
         project.nextReferenceNumber = number + 1
-        try save()
         return WorkItemReference.format(key: key, number: number)
     }
 

@@ -185,11 +185,19 @@ struct ProjectsSidebarSection: View {
     ///
     /// "This cannot be undone" is boilerplate nobody reads; "and the 43 items in it" is the sentence
     /// that makes somebody stop and check they meant this project.
+    ///
+    /// Counted **here**, when the dialog opens, rather than carried on every row. It was a field on
+    /// `ProjectSidebarRow`, which meant walking every project in the library on every save to keep a
+    /// number that is read at most once, by one project, in the moment somebody asks to delete it.
     private var deletionMessage: String {
-        guard let pendingDeletion, pendingDeletion.totalWork > 0 else {
+        guard let pendingDeletion,
+              let services,
+              let project = try? services.items.item(id: pendingDeletion.id)
+        else {
             return "You can put it back from the Trash."
         }
-        let count = pendingDeletion.totalWork
+        let count = project.descendantWork().count
+        guard count > 0 else { return "You can put it back from the Trash." }
         return count == 1
             ? "The one item in it goes too. You can put both back from the Trash."
             : "The \(count) items in it go too. You can put them all back from the Trash."

@@ -70,12 +70,15 @@ public final class WorkItemService {
             item.parent = container
         }
 
-        item.referenceKey = try workspace.allocateReferenceKey(in: project)
+        // Allocated without saving; this method saves once at the end. Three saves per created
+        // item — one in `create`, one here, one in the allocator — is three write transactions for
+        // one logical act.
+        item.referenceKey = workspace.takeReferenceKey(in: project)
 
         let landing = stage ?? firstOpenStage(in: project)
         if kind.isWorkItem {
             item.workflowStageID = landing?.id
-            item.boardOrder = nextBoardOrder(in: project, stage: landing)
+            item.boardOrder = nextBoardOrder(in: project)
         }
 
         if kind == .bug {
@@ -102,9 +105,15 @@ public final class WorkItemService {
         workspace.stages(in: project).first { !$0.category.isTerminal }
     }
 
-    private func nextBoardOrder(in project: Item, stage: WorkflowStage?) -> Double {
-        let peers = project.descendantWork().filter { $0.workflowStageID == stage?.id }
-        return (peers.map(\.boardOrder).max() ?? 0) + ProjectWorkspaceService.orderGap
+    /// Where a newly created item sits in its column.
+    ///
+    /// Derived from the project's reference counter, which only ever goes up, rather than from the
+    /// largest board order already in the column. The obvious version walked every item in the
+    /// project to find that maximum — so creating the two hundredth item walked a hundred and
+    /// ninety-nine, and populating a project was quadratic. Appending only needs a number bigger
+    /// than the ones already there, and a monotonic counter is one.
+    private func nextBoardOrder(in project: Item) -> Double {
+        Double(project.nextReferenceNumber) * ProjectWorkspaceService.orderGap
     }
 
     // MARK: - Assignment

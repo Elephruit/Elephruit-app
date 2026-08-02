@@ -73,10 +73,25 @@ extension Item {
     /// every predicate in Today would be a fault-in while a list was drawing.
     public func taskFacts() -> TaskFacts {
         let containers = enclosingContainers()
-        // Computed once. `blockers()` walks the links, and asking it twice — for the identifiers and
-        // again for whether any are unresolved — walks them twice for every item in the project on
-        // every refresh.
-        let blocking = blockers()
+        // One pass over the outgoing links, not six.
+        //
+        // The obvious spelling asks separately for the assignee, the milestone, the release and the
+        // blockers, and each of those scans `outgoingLinks` from the start. Six scans per item, over
+        // every item in the project, on every refresh — for four answers that one loop produces.
+        var assigneeItem: Item?
+        var milestoneItem: Item?
+        var releaseItem: Item?
+        var blocking: [Item] = []
+        for link in outgoingLinks {
+            guard let target = link.target, target.deletedAt == nil else { continue }
+            switch link.kind {
+            case .assignee: assigneeItem = assigneeItem ?? target
+            case .targetsMilestone: milestoneItem = milestoneItem ?? target
+            case .relatesToRelease: releaseItem = releaseItem ?? target
+            case .blockedBy: blocking.append(target)
+            default: break
+            }
+        }
 
         return TaskFacts(
             id: id,
@@ -120,11 +135,11 @@ extension Item {
             kind: kind,
             referenceKey: referenceKey,
             workflowStageID: workflowStageID,
-            stageCategory: resolvedStageCategory(),
+            stageCategory: resolvedStageCategory(within: containers.project),
             boardOrder: boardOrder,
-            assigneeID: assignee()?.id,
-            milestoneID: linkedTarget(kind: .targetsMilestone)?.id,
-            releaseID: linkedTarget(kind: .relatesToRelease)?.id,
+            assigneeID: assigneeItem?.id,
+            milestoneID: milestoneItem?.id,
+            releaseID: releaseItem?.id,
             blockedByIDs: blocking.map(\.id),
             blocksIDs: blockedItems().map(\.id),
             isBlocked: blocking.contains { $0.status == .open || $0.status == .none },
@@ -133,6 +148,7 @@ extension Item {
             // bug", which is a judgement nobody made about a report somebody filed in good faith.
             severity: bugRecord?.severity ?? (kind == .bug ? .minor : nil),
             isRegression: bugRecord?.isRegression ?? false,
+            isVerified: bugRecord?.verifiedAt != nil,
             estimateMinutes: estimateMinutes,
             trackedMinutes: trackedMinutes(),
             commentCount: comments.count,
@@ -144,16 +160,14 @@ extension Item {
     ///
     /// `nil` when the work is unplaced or the column has since been deleted — both of which the
     /// board shows as "Unplaced" rather than pretending to a category.
-    public func resolvedStageCategory() -> WorkflowStageCategory? {
-        guard let stageID = workflowStageID else { return nil }
-        var container: Item? = self
-        while let next = container {
-            if let stage = next.workflowStages.first(where: { $0.id == stageID }) {
-                return stage.category
-            }
-            container = next.parent
-        }
-        return nil
+    ///
+    /// Takes the project rather than walking up to find it. `taskFacts()` has already computed the
+    /// enclosing containers, and walking again meant faulting the `workflowStages` relationship on
+    /// every ancestor of every item — a second upward traversal per item, for an answer that was
+    /// already in hand.
+    public func resolvedStageCategory(within project: Item?) -> WorkflowStageCategory? {
+        guard let stageID = workflowStageID, let project else { return nil }
+        return project.workflowStages.first { $0.id == stageID }?.category
     }
 
     /// The person doing this work. At most one — see `WorkItemService.assign`.

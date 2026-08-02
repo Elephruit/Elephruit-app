@@ -636,3 +636,118 @@ struct ProjectInboxTests {
         #expect(fixture.inbox.badgeCount(for: project) == 1)
     }
 }
+
+// MARK: - Cost
+
+@Suite("Project workspace cost")
+@MainActor
+struct ProjectWorkspaceCostTests {
+    /// Enough to expose an O(items) walk, and no more.
+    ///
+    /// Creating items is itself expensive — see the note in the reconstruction doc — so a fixture
+    /// large enough to be a "realistic library" costs minutes of suite time to build. Three hundred
+    /// items is ample: a walk over them is three orders of magnitude above the budgets below, so the
+    /// guards trip immediately if one comes back.
+    private static let projectCount = 5
+    private static let itemsPerProject = 60
+
+    private static func populated() throws -> (WorkspaceFixture, [Item]) {
+        let fixture = try WorkspaceFixture()
+        let area = try fixture.store.items.create(ItemDraft(kind: .area, title: "Area"))
+        var projects: [Item] = []
+        for index in 0..<projectCount {
+            let project = try fixture.templates.createProject(
+                named: "Project \(index)",
+                from: .blank,
+                in: area
+            )
+            for itemIndex in 0..<itemsPerProject {
+                _ = try fixture.workItems.createWorkItem(
+                    title: "Work \(itemIndex)",
+                    kind: itemIndex.isMultiple(of: 5) ? .bug : .task,
+                    in: project
+                )
+            }
+            projects.append(project)
+        }
+        return (fixture, projects)
+    }
+
+    @Test("Counting badges does not touch every item in the library")
+    func badgesAreFetchedNotWalked() throws {
+        // This ran on every mutation anywhere in the app, and it worked by faulting the
+        // `notifications` relationship of every item in the store to count a handful of rows —
+        // 144ms across ten projects of two hundred items. The budget is a hundredfold the measured
+        // cost, so it only fails if somebody reintroduces a walk.
+        let (fixture, projects) = try Self.populated()
+        _ = try fixture.inbox.post(.assigned, about: projects[0], summary: "yours")
+
+        let elapsed = ContinuousClock().measure {
+            for _ in 0..<5 { _ = fixture.inbox.unreadCountsByContainer() }
+        }
+        #expect(elapsed < .milliseconds(50), "badge counting is walking the library again")
+    }
+
+    @Test("An area's badge counts the work inside its projects")
+    func badgesRollUpToAreas() throws {
+        // The roll-up is what the ancestor walk buys. An area that read as quiet while a project
+        // inside it had unread work would be worse than no badge at all.
+        let fixture = try WorkspaceFixture()
+        let area = try fixture.store.items.create(ItemDraft(kind: .area, title: "Area"))
+        let project = try fixture.templates.createProject(named: "Inside", from: .blank, in: area)
+        let task = try fixture.workItems.createWorkItem(title: "Work", in: project)
+
+        _ = try fixture.inbox.post(.assigned, about: task, summary: "yours")
+
+        let counts = fixture.inbox.unreadCountsByContainer()
+        #expect(counts[project.id] == 1)
+        #expect(counts[area.id] == 1)
+    }
+
+    @Test("A read notification stops counting")
+    func readNotificationsLeaveTheCount() throws {
+        let fixture = try WorkspaceFixture()
+        let project = try fixture.templates.createProject(named: "P", from: .blank)
+        let notification = try fixture.inbox.post(.assigned, about: project, summary: "yours")
+
+        #expect(fixture.inbox.unreadCountsByContainer()[project.id] == 1)
+        try fixture.inbox.markRead(notification)
+        #expect(fixture.inbox.unreadCountsByContainer()[project.id] == nil)
+    }
+
+    @Test("Health computed from facts already in hand costs almost nothing")
+    func healthReusesTheArrangementsPass() throws {
+        // Health used to walk the project itself, compute every fact a second time, and then walk it
+        // again for the verification count — three passes for numbers the workspace had already
+        // computed to draw the board. 25ms per project, on every mutation.
+        let (fixture, projects) = try Self.populated()
+        let facts = projects[0].descendantWork().map { $0.taskFacts() }
+
+        let elapsed = ContinuousClock().measure {
+            for _ in 0..<5 { _ = fixture.reports.health(of: projects[0], facts: facts) }
+        }
+        #expect(elapsed < .milliseconds(50), "health is recomputing facts it was handed")
+    }
+
+    @Test("Health from precomputed facts agrees with health that walks")
+    func precomputedHealthAgrees() throws {
+        // The optimisation is only worth having if it is the same answer.
+        let fixture = try WorkspaceFixture()
+        let project = try fixture.templates.createProject(named: "P", from: .software)
+        let bug = try fixture.bugs.fileBug(title: "Crash", in: project, severity: .critical)
+        _ = try fixture.workItems.createWorkItem(title: "Task", in: project)
+        let fixed = try fixture.bugs.fileBug(title: "Fixed", in: project)
+        try fixture.store.items.toggleCompletion(fixed)
+
+        let walked = fixture.reports.health(of: project)
+        let handed = fixture.reports.health(
+            of: project,
+            facts: project.descendantWork().map { $0.taskFacts() }
+        )
+
+        #expect(walked == handed)
+        #expect(handed.criticalBugs == 1)
+        #expect(handed.bugsAwaitingVerification == 1)
+        _ = bug
+    }
+}

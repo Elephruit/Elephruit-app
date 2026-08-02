@@ -28,8 +28,6 @@ public struct ProjectSidebarRow: Identifiable, Hashable, Sendable {
     /// Unread notifications, anywhere beneath this row.
     public var unreadCount: Int
 
-    public var completedWork: Int
-    public var totalWork: Int
 
     /// Whether this row has anything worth drawing beside the name.
     ///
@@ -52,9 +50,7 @@ public struct ProjectSidebarRow: Identifiable, Hashable, Sendable {
         isFavorite: Bool = false,
         isArchived: Bool = false,
         overdueCount: Int = 0,
-        unreadCount: Int = 0,
-        completedWork: Int = 0,
-        totalWork: Int = 0
+        unreadCount: Int = 0
     ) {
         self.id = id
         self.title = title
@@ -66,8 +62,6 @@ public struct ProjectSidebarRow: Identifiable, Hashable, Sendable {
         self.isArchived = isArchived
         self.overdueCount = overdueCount
         self.unreadCount = unreadCount
-        self.completedWork = completedWork
-        self.totalWork = totalWork
     }
 }
 
@@ -100,63 +94,109 @@ public final class ProjectsSidebarModel {
         rows.isEmpty && favourites.isEmpty && archived.isEmpty
     }
 
-    /// Rebuilds the tree. Called from `AppServices.refreshDerivedState()`, never from a view body.
+    /// Rebuilds the tree.
+    ///
+    /// Called from `AppServices.refreshDerivedState()`, which runs after **every mutation anywhere
+    /// in the app** — so this method's cost is paid on every keystroke that saves.
+    ///
+    /// ### Why it fetches rather than walks
+    ///
+    /// The obvious shape asked each row for its own numbers: `descendantWork()` for the counts,
+    /// `badgeCount` for the unread total, per project *and* per area. That recursively faults the
+    /// `children` relationship of every container in the store, and the badge faulted a `notifications`
+    /// relationship on every item. Measured at 144ms for the badges and a further 122ms for the walks,
+    /// on ten projects of two hundred items — a quarter of a second of blocked main thread per
+    /// keystroke, on a library that is not large.
+    ///
+    /// So it asks only for what it draws. Two narrow fetches — overdue work, unread notifications —
+    /// and each result walks *up* to credit its ancestors, which is a to-one hop or two rather than a
+    /// recursive descent. The cost is now proportional to the number of things worth showing a mark
+    /// for, which is almost always nearly none.
+    ///
+    /// The completed/total figures went with it. Nothing in the tree draws them: they existed for the
+    /// deletion confirmation's "and the 43 items in it", which is now counted at the moment somebody
+    /// opens that dialog rather than on every save for every project forever.
     public func refresh(calendar: Calendar = .current) {
-        var query = ItemQuery()
-        query.kinds = [.project, .area]
-        query.scope = .active
+        var containerQuery = ItemQuery()
+        containerQuery.kinds = [.project, .area]
 
-        var activeQuery = query
+        var activeQuery = containerQuery
         activeQuery.scope = .active
-        var archivedQuery = query
+        var archivedQuery = containerQuery
         archivedQuery.scope = .archived
 
         let live = (try? items.items(matching: activeQuery)) ?? []
-        let put_away = (try? items.items(matching: archivedQuery)) ?? []
+        let archivedItems = (try? items.items(matching: archivedQuery)) ?? []
+
+        let overdue = overdueCountsByContainer(calendar: calendar)
+        let unread = inbox.unreadCountsByContainer()
 
         let areas = live.filter { $0.kind == .area }.sorted { $0.sortOrder < $1.sortOrder }
         let projects = live.filter { $0.kind == .project }
+
+        func makeRow(_ item: Item, depth: Int) -> ProjectSidebarRow {
+            row(
+                for: item,
+                depth: depth,
+                overdue: overdue[item.id] ?? 0,
+                unread: unread[item.id] ?? 0
+            )
+        }
 
         var built: [ProjectSidebarRow] = []
         for area in areas {
             let inside = projects
                 .filter { $0.parent?.id == area.id }
                 .sorted { $0.sortOrder < $1.sortOrder }
-            // An area with no projects is still a row — it is where the next project goes, and a
-            // heading that disappears when you empty it is one you cannot drop into.
-            built.append(row(for: area, depth: 0, calendar: calendar))
-            built.append(contentsOf: inside.map { row(for: $0, depth: 1, calendar: calendar) })
+            // An area with no projects is still a row: it is where the next project goes, and a
+            // heading that vanishes when you empty it is one you cannot drop into.
+            built.append(makeRow(area, depth: 0))
+            built.append(contentsOf: inside.map { makeRow($0, depth: 1) })
         }
 
         let loose = projects
             .filter { $0.parent == nil || $0.parent?.kind != .area }
             .sorted { $0.sortOrder < $1.sortOrder }
-        built.append(contentsOf: loose.map { row(for: $0, depth: 0, calendar: calendar) })
+        built.append(contentsOf: loose.map { makeRow($0, depth: 0) })
 
         rows = built
         favourites = built.filter { $0.isFavorite && !$0.isArea }
-        archived = put_away
+        archived = archivedItems
             .filter { $0.kind == .project }
             .sorted { $0.sortOrder < $1.sortOrder }
-            .map { row(for: $0, depth: 0, calendar: calendar) }
-        totalUnread = built.reduce(0) { $0 + $1.unreadCount }
+            .map { makeRow($0, depth: 0) }
+        totalUnread = built.filter { !$0.isArea }.reduce(0) { $0 + $1.unreadCount }
     }
 
-    private func row(for item: Item, depth: Int, calendar: Calendar) -> ProjectSidebarRow {
-        // `descendantWork`, not `descendantTasks`, and this is the whole reason that method exists.
-        // An area asking "is anything under me late?" has to descend through the projects inside it —
-        // an area that reads as calm while a project within it is three weeks overdue is worse than
-        // no indicator at all.
-        let work = item.descendantWork()
-        let today = calendar.startOfDay(for: dateProvider.now)
+    /// Overdue work per container, from one bounded fetch.
+    ///
+    /// `dueBefore` is a store-side bound against the `dueSortKey` column, so the rows that come back
+    /// are the overdue ones rather than everything-then-filtered. Every ancestor is credited as it
+    /// goes, which is what lets an area answer for the projects inside it — an area that read as calm
+    /// while a project within it was three weeks late would be worse than no indicator at all.
+    private func overdueCountsByContainer(calendar: Calendar) -> [UUID: Int] {
+        var query = ItemQuery()
+        query.kinds = ItemKind.workItemKindSet
+        query.statuses = [.open, .none]
+        query.dueBefore = calendar.startOfDay(for: dateProvider.now)
+        query.scope = .active
 
-        let overdue = work.filter { candidate in
-            guard candidate.status == .open || candidate.status == .none else { return false }
-            guard let due = candidate.dueAt else { return false }
-            return calendar.startOfDay(for: due) < today
-        }.count
+        guard let late = try? items.items(matching: query) else { return [:] }
 
-        return ProjectSidebarRow(
+        var counts: [UUID: Int] = [:]
+        for item in late {
+            var container = item.parent
+            var seen: Set<UUID> = []
+            while let next = container, seen.insert(next.id).inserted {
+                counts[next.id, default: 0] += 1
+                container = next.parent
+            }
+        }
+        return counts
+    }
+
+    private func row(for item: Item, depth: Int, overdue: Int, unread: Int) -> ProjectSidebarRow {
+        ProjectSidebarRow(
             id: item.id,
             title: item.title,
             symbolName: item.symbolName ?? item.kind.symbolName,
@@ -166,9 +206,7 @@ public final class ProjectsSidebarModel {
             isFavorite: item.isFavorite,
             isArchived: item.archivedAt != nil,
             overdueCount: overdue,
-            unreadCount: inbox.badgeCount(for: item),
-            completedWork: work.filter { $0.status == .completed }.count,
-            totalWork: work.count
+            unreadCount: unread
         )
     }
 }
