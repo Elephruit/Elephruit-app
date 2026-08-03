@@ -214,6 +214,45 @@ struct ReminderComposerStateTests {
         #expect(router.activeField == .notes)
     }
 
+    @Test("Registering an editor never changes SwiftUI-bound selection synchronously")
+    @MainActor
+    func editorRegistrationDefersFocus() {
+        _ = NSApplication.shared
+        var selectionChanges = 0
+        let router = ReminderComposerFocusRouter()
+        let editor = ReminderPlainTextEditor(
+            text: .constant("Reminder"),
+            placeholder: "Reminder",
+            role: .title,
+            onTab: { _ in },
+            onReturn: {},
+            onCommandReturn: {},
+            onEscape: {},
+            field: .title,
+            focusRouter: router,
+            onSelectionChange: { _ in selectionChanges += 1 }
+        )
+        let coordinator = editor.makeCoordinator()
+        let textView = ReminderEditorTextView()
+        textView.delegate = coordinator
+        textView.coordinator = coordinator
+        textView.string = "Reminder"
+        selectionChanges = 0
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 300, height: 120),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = textView
+
+        router.register(textView, for: .title)
+
+        #expect(selectionChanges == 0)
+        window.close()
+    }
+
     @Test("Arrow keys move suggestion selection and Return accepts it")
     @MainActor
     func editorSuggestionKeyboard() {

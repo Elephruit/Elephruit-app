@@ -1672,7 +1672,6 @@ struct ReminderPlainTextEditor: NSViewRepresentable {
     func updateNSView(_ scroll: ReminderEditorScrollView, context: Context) {
         context.coordinator.parent = self
         guard let editor = scroll.documentView as? ReminderEditorTextView else { return }
-        focusRouter.register(editor, for: field)
         editor.placeholder = placeholder
         context.coordinator.reconciliationGeneration += 1
         let generation = context.coordinator.reconciliationGeneration
@@ -1900,7 +1899,22 @@ final class ReminderComposerFocusRouter: ObservableObject {
 
     func register(_ editor: NSTextView, for field: ReminderComposerField) {
         editors[field] = WeakReminderEditor(editor)
-        if activeField == field { focus(field) }
+        guard activeField == field else { return }
+
+        // Registration happens from `makeNSView` and `viewDidMoveToWindow`, both of which can run
+        // inside SwiftUI's view-reconciliation pass. Making the editor first responder there also
+        // changes its selection, whose delegate writes the caret back to SwiftUI state. AppKit is
+        // therefore allowed to focus only after that pass has finished. User-driven `activate`
+        // continues to use `focus(_:)` below and remains immediate.
+        focusGeneration += 1
+        let generation = focusGeneration
+        DispatchQueue.main.async { [weak self] in
+            guard let self,
+                  self.focusGeneration == generation,
+                  self.activeField == field
+            else { return }
+            _ = self.focusNow(field)
+        }
     }
 
     func activate(_ field: ReminderComposerField) {
