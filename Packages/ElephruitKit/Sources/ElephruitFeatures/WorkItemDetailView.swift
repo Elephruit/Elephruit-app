@@ -20,6 +20,7 @@ import SwiftUI
 struct WorkItemDetailView: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let item: Item
     let model: ProjectWorkspaceModel
 
@@ -34,6 +35,7 @@ struct WorkItemDetailView: View {
     @State private var fixVersion = ""
     @State private var estimateText = ""
     @State private var showsDeleteConfirmation = false
+    @State private var hasAppeared = false
     @FocusState private var focusedField: Field?
 
     private enum Field: Hashable {
@@ -41,24 +43,46 @@ struct WorkItemDetailView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: Theme.Spacing.large) {
-                    fields
-                    notesSection
-                    if item.kind == .bug { bugSection }
-                    historySection
+        ZStack {
+            Theme.Colors.subtleFill.opacity(0.38)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                header
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+                        sectionCard("Details", symbol: "slider.horizontal.3", tint: accentTint) {
+                            fields
+                        }
+                        notesSection
+                        if item.kind == .bug { bugSection }
+                        historySection
+                    }
+                    .padding(Theme.Spacing.large)
+                    .frame(maxWidth: 780, alignment: .leading)
+                    .frame(maxWidth: .infinity)
                 }
-                .padding(Theme.Spacing.large)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                footer
             }
-            Divider()
-            footer
+            .background(Theme.Colors.contentBackground.opacity(0.72))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
+                    .stroke(Theme.Colors.separator, lineWidth: 0.5)
+            }
+            .padding(Theme.Spacing.small)
+            .opacity(hasAppeared ? 1 : 0)
+            .scaleEffect(hasAppeared ? 1 : 0.985, anchor: .center)
+            .offset(y: hasAppeared ? 0 : 8)
         }
-        .frame(minWidth: 620, minHeight: 480)
-        .onAppear(perform: load)
+        .frame(minWidth: 720, idealWidth: 800, minHeight: 560, idealHeight: 660)
+        .onAppear {
+            load()
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.24)) {
+                hasAppeared = true
+            }
+        }
         // The gate the workspace's shortcuts honour. Every field in the sheet counts as typing.
         .onChange(of: focusedField) { previous, current in
             model.isEditingText = current != nil
@@ -81,19 +105,82 @@ struct WorkItemDetailView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: Theme.Spacing.small) {
+        HStack(alignment: .center, spacing: Theme.Spacing.medium) {
             WorkItemKindGlyph(kind: item.kind, severity: item.bugRecord?.severity)
-            if let key = item.referenceKey { WorkItemReferenceLabel(reference: key) }
+                .frame(width: 34, height: 34)
+                .background(accentTint.opacity(0.12), in: Circle())
 
-            // A single-line field, deliberately. A vertical TextField treats Return as a newline,
-            // which is how a drawer's title ended up with no way to commit it at all.
-            TextField("Title", text: $title)
-                .textFieldStyle(.plain)
-                .font(Theme.Text.title)
-                .focused($focusedField, equals: .title)
-                .onSubmit { commit(.title) }
+            VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                HStack(spacing: Theme.Spacing.small) {
+                    if let key = item.referenceKey { WorkItemReferenceLabel(reference: key) }
+                    Text(item.kind.displayName)
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.tertiaryText)
+                }
+
+                // A single-line field, deliberately. A vertical TextField treats Return as a newline,
+                // which is how a drawer's title ended up with no way to commit it at all.
+                TextField("Title", text: $title)
+                    .textFieldStyle(.plain)
+                    .font(Theme.Text.title)
+                    .focused($focusedField, equals: .title)
+                    .onSubmit { commit(.title) }
+            }
+
+            Spacer(minLength: Theme.Spacing.large)
+
+            Button(action: dismiss.callAsFunction) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 26, height: 26)
+                    .background(Theme.Colors.subtleFill, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.Colors.secondaryText)
+            .help("Close")
+            .keyboardShortcut(.escape, modifiers: [])
         }
         .padding(Theme.Spacing.large)
+        .background(Theme.Colors.contentBackground)
+        .overlay(alignment: .bottom) { Divider() }
+        .overlay(alignment: .leading) {
+            Capsule()
+                .fill(accentTint)
+                .frame(width: 3)
+                .padding(.vertical, Theme.Spacing.medium)
+        }
+    }
+
+    private var accentTint: Color {
+        guard item.kind == .bug else { return Theme.Colors.selection }
+        return Theme.Palette.color(named: currentFacts.severity.colorName, neutral: Theme.Colors.selection)
+    }
+
+    private func sectionCard<Content: View>(
+        _ title: String,
+        symbol: String,
+        tint: Color,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            Label(title, systemImage: symbol)
+                .font(Theme.Text.sectionHeader)
+                .foregroundStyle(tint)
+            content()
+        }
+        .padding(Theme.Spacing.large)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: Theme.Radius.large))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.large)
+                .stroke(Theme.Colors.separator, lineWidth: 0.5)
+        }
+        .overlay(alignment: .leading) {
+            Capsule()
+                .fill(tint)
+                .frame(width: 3)
+                .padding(.vertical, Theme.Spacing.large)
+        }
     }
 
     // MARK: - Metadata
@@ -246,18 +333,24 @@ struct WorkItemDetailView: View {
     // MARK: - Notes
 
     private var notesSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-            Text("Notes").font(Theme.Text.sectionHeader)
+        sectionCard("Notes", symbol: "text.alignleft", tint: Theme.Colors.secondaryText) {
             TextEditor(text: $notesText)
                 .font(Theme.Text.rowTitle)
-                .frame(minHeight: 60)
+                .frame(minHeight: 82)
                 .focused($focusedField, equals: .body)
                 .scrollContentBackground(.hidden)
-                .padding(Theme.Spacing.tight)
+                .padding(Theme.Spacing.small)
                 .background(
                     RoundedRectangle(cornerRadius: Theme.Radius.medium)
                         .fill(Theme.Colors.subtleFill)
                 )
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                        .stroke(
+                            focusedField == .body ? Theme.Colors.selection.opacity(0.55) : .clear,
+                            lineWidth: 1
+                        )
+                }
                 .accessibilityIdentifier("workItem.notes")
         }
     }
@@ -271,9 +364,7 @@ struct WorkItemDetailView: View {
     /// opens onto an honest empty report rather than a missing section, which is what it used to
     /// do, and which read as "this bug cannot be edited".
     private var bugSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            Text("Defect").font(Theme.Text.sectionHeader)
-
+        sectionCard("Bug report", symbol: "ladybug.fill", tint: accentTint) {
             Grid(alignment: .leading, horizontalSpacing: Theme.Spacing.medium, verticalSpacing: Theme.Spacing.small) {
                 GridRow {
                     fieldLabel("Severity")
@@ -337,9 +428,12 @@ struct WorkItemDetailView: View {
             }
             .font(Theme.Text.rowTitle)
 
-            reportEditor("Steps to Reproduce", text: $steps, field: .steps, id: "workItem.steps")
-            reportEditor("Expected", text: $expected, field: .expected, id: "workItem.expected")
-            reportEditor("Actual", text: $actual, field: .actual, id: "workItem.actual")
+            reportEditor("Steps to reproduce", text: $steps, field: .steps, id: "workItem.steps", minHeight: 70)
+
+            HStack(alignment: .top, spacing: Theme.Spacing.medium) {
+                reportEditor("Expected", text: $expected, field: .expected, id: "workItem.expected")
+                reportEditor("Actual", text: $actual, field: .actual, id: "workItem.actual")
+            }
 
             if !currentFacts.missingFieldNames.isEmpty {
                 // Nudged, never blocked. A bug filed in eight seconds is a bug that got filed.
@@ -354,7 +448,8 @@ struct WorkItemDetailView: View {
         _ label: String,
         text: Binding<String>,
         field: Field,
-        id: String
+        id: String,
+        minHeight: CGFloat = 58
     ) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
             Text(label)
@@ -362,14 +457,21 @@ struct WorkItemDetailView: View {
                 .foregroundStyle(Theme.Colors.secondaryText)
             TextEditor(text: text)
                 .font(Theme.Text.rowTitle)
-                .frame(minHeight: 48)
+                .frame(maxWidth: .infinity, minHeight: minHeight)
                 .focused($focusedField, equals: field)
                 .scrollContentBackground(.hidden)
-                .padding(Theme.Spacing.tight)
+                .padding(Theme.Spacing.small)
                 .background(
                     RoundedRectangle(cornerRadius: Theme.Radius.medium)
                         .fill(Theme.Colors.subtleFill)
                 )
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                        .stroke(
+                            focusedField == field ? accentTint.opacity(0.55) : .clear,
+                            lineWidth: 1
+                        )
+                }
                 .accessibilityIdentifier(id)
         }
     }
@@ -380,12 +482,16 @@ struct WorkItemDetailView: View {
     private var historySection: some View {
         let history = services?.workItems.history(of: item) ?? []
         if !history.isEmpty {
-            VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-                Text("History").font(Theme.Text.sectionHeader)
+            sectionCard("Recent history", symbol: "clock.arrow.circlepath", tint: Theme.Colors.secondaryText) {
                 ForEach(history.prefix(10)) { activity in
-                    Text(activity.sentence)
-                        .font(Theme.Text.rowSubtitle)
-                        .foregroundStyle(Theme.Colors.secondaryText)
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
+                        Circle()
+                            .fill(Theme.Colors.tertiaryText)
+                            .frame(width: 4, height: 4)
+                        Text(activity.sentence)
+                            .font(Theme.Text.rowSubtitle)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                    }
                 }
             }
         }
@@ -398,10 +504,15 @@ struct WorkItemDetailView: View {
             Button("Move to Trash", role: .destructive) { showsDeleteConfirmation = true }
                 .keyboardShortcut(.delete, modifiers: .command)
             Spacer()
+            Label("Changes save automatically", systemImage: "checkmark.circle")
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.tertiaryText)
             Button("Done") { dismiss() }
                 .keyboardShortcut(.defaultAction)
         }
         .padding(Theme.Spacing.large)
+        .background(Theme.Colors.contentBackground)
+        .overlay(alignment: .top) { Divider() }
     }
 
     // MARK: - Bindings
