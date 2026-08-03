@@ -119,13 +119,19 @@ public protocol PersonRepository: AnyObject {
     @discardableResult
     func createPerson(_ draft: PersonDraft) throws(AppError) -> Item
 
+    /// Stages an imported person without committing the surrounding import transaction.
+    @discardableResult
+    func stageImportedPerson(_ draft: PersonDraft) throws(AppError) -> Item
+
     /// Adds details to somebody who already exists, without removing any.
     ///
     /// Additive by design: a command bar line adding a phone number must never silently drop the
     /// email that was already there.
     func addDetails(to person: Item, from draft: PersonDraft) throws(AppError)
+    func stageImportedDetails(to person: Item, from draft: PersonDraft) throws(AppError)
 
     func updateProfile(of person: Item, _ mutate: (PersonProfile) -> Void) throws(AppError)
+    func stageImportedProfile(of person: Item, _ mutate: (PersonProfile) -> Void) throws(AppError)
 
     /// The user's own card, if one has been chosen.
     func myCard() throws(AppError) -> Item?
@@ -249,10 +255,18 @@ public final class SwiftDataPersonRepository: PersonRepository {
 
     @discardableResult
     public func createPerson(_ draft: PersonDraft) throws(AppError) -> Item {
+        try createPerson(draft, stagingImport: false)
+    }
+
+    public func stageImportedPerson(_ draft: PersonDraft) throws(AppError) -> Item {
+        try createPerson(draft, stagingImport: true)
+    }
+
+    private func createPerson(_ draft: PersonDraft, stagingImport: Bool) throws(AppError) -> Item {
         var itemDraft = ItemDraft(kind: .person, title: draft.fullName, source: draft.source)
         itemDraft.id = draft.id
 
-        let person = try items.create(itemDraft)
+        let person = try stagingImport ? items.stageCreate(itemDraft) : items.create(itemDraft)
         let profile = PersonProfile()
         profile.item = person
         context.insert(profile)
@@ -261,22 +275,38 @@ public final class SwiftDataPersonRepository: PersonRepository {
 
         // The profile's names and role feed the item's search projection, so it has to be refreshed
         // *after* the profile exists — creating the item alone indexes an empty person.
-        try items.update(person) { $0.refreshSearchText() }
+        if stagingImport {
+            try items.stageUpdate(person) { $0.refreshSearchText() }
+        } else {
+            try items.update(person) { $0.refreshSearchText() }
+        }
 
-        if let birthday = draft.birthday {
+        if !stagingImport, let birthday = draft.birthday {
             try addCelebration(to: person, kind: .birthday, title: nil, date: birthday)
         }
 
-        try save()
+        if !stagingImport { try save() }
         Diagnostics.persistence.debug("Created a person")
         return person
     }
 
     public func addDetails(to person: Item, from draft: PersonDraft) throws(AppError) {
-        let profile = try profile(for: person)
+        try addDetails(to: person, from: draft, stagingImport: false)
+    }
+
+    public func stageImportedDetails(to person: Item, from draft: PersonDraft) throws(AppError) {
+        try addDetails(to: person, from: draft, stagingImport: true)
+    }
+
+    private func addDetails(to person: Item, from draft: PersonDraft, stagingImport: Bool) throws(AppError) {
+        let profile = try profile(for: person, stagingImport: stagingImport)
         apply(draft, to: profile, replacingIdentity: false)
-        try items.update(person) { $0.refreshSearchText() }
-        try save()
+        if stagingImport {
+            try items.stageUpdate(person) { $0.refreshSearchText() }
+        } else {
+            try items.update(person) { $0.refreshSearchText() }
+            try save()
+        }
     }
 
     /// Writes a draft onto a profile.
@@ -346,10 +376,26 @@ public final class SwiftDataPersonRepository: PersonRepository {
     }
 
     public func updateProfile(of person: Item, _ mutate: (PersonProfile) -> Void) throws(AppError) {
-        let profile = try profile(for: person)
+        try updateProfile(of: person, stagingImport: false, mutate)
+    }
+
+    public func stageImportedProfile(of person: Item, _ mutate: (PersonProfile) -> Void) throws(AppError) {
+        try updateProfile(of: person, stagingImport: true, mutate)
+    }
+
+    private func updateProfile(
+        of person: Item,
+        stagingImport: Bool,
+        _ mutate: (PersonProfile) -> Void
+    ) throws(AppError) {
+        let profile = try profile(for: person, stagingImport: stagingImport)
         mutate(profile)
-        try items.update(person) { $0.refreshSearchText() }
-        try save()
+        if stagingImport {
+            try items.stageUpdate(person) { $0.refreshSearchText() }
+        } else {
+            try items.update(person) { $0.refreshSearchText() }
+            try save()
+        }
     }
 
     /// The profile, created on demand.
@@ -357,7 +403,7 @@ public final class SwiftDataPersonRepository: PersonRepository {
     /// A person without one is a person created before this module or imported from an archive that
     /// predates it. Making one silently is right: the alternative is an error on a page the user just
     /// opened, for a condition they cannot act on.
-    private func profile(for person: Item) throws(AppError) -> PersonProfile {
+    private func profile(for person: Item, stagingImport: Bool = false) throws(AppError) -> PersonProfile {
         if let existing = person.personProfile { return existing }
 
         let profile = PersonProfile()
@@ -366,7 +412,7 @@ public final class SwiftDataPersonRepository: PersonRepository {
         profile.givenName = parts.given
         profile.familyName = parts.family
         context.insert(profile)
-        try save()
+        if !stagingImport { try save() }
         return profile
     }
 

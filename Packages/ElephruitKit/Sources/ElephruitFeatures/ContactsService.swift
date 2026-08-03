@@ -86,10 +86,6 @@ public final class ContactsService {
 
         provider = makeProvider()
         authorization = await provider.requestAccess()
-
-        if authorization.canRead {
-            await refreshAccounts()
-        }
         return authorization
     }
 

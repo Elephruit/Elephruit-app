@@ -10,9 +10,10 @@ import SwiftData
 /// It writes nothing, and it runs against value types, so the expensive part — folding thousands of
 /// names and phone numbers — happens away from the main actor and away from the store.
 ///
-/// **Applying** takes the plan the user approved and writes it, one contact per transaction, on the
-/// main actor where `Item` lives. One transaction each is what makes cancelling safe: whatever was
-/// written is complete and already de-duplicated by its link, and resuming finds it and moves on.
+/// **Applying** takes the plan the user approved and stages complete people, profiles, links, and
+/// provenance on the main actor where `Item` lives, then commits the run together. This avoids
+/// turning a few hundred contacts into thousands of disk transactions. Every staged person is
+/// complete before the next begins, and its link makes a resumed import idempotent.
 ///
 /// A plan is a snapshot of a moving target. Between building one and applying it the address book can
 /// change, so applying re-checks each contact's link before writing — which is also what makes a
@@ -27,6 +28,7 @@ public final class ContactImportService {
     private let dateProvider: any DateProvider
 
     private var linkCache: [UUID: SystemContactLink]?
+    private var stagedContactIDs: Set<String>?
 
     public init(
         context: ModelContext,
@@ -126,12 +128,60 @@ public final class ContactImportService {
         }
     }
 
+    /// Prepares the existing-link set once so a bulk import does not issue one fetch per contact.
+    public func beginStagedImport() throws(AppError) {
+        stagedContactIDs = Set(try allLinks().map(\.contactIdentifier))
+    }
+
+    /// Stages one approved proposal without saving. The caller commits the completed batch.
+    @discardableResult
+    public func stage(
+        _ proposal: ContactImportProposal,
+        sessionID: UUID?
+    ) throws(AppError) -> ContactImportOutcome {
+        guard var stagedContactIDs else {
+            throw .writeFailed(path: "contacts", reason: "The import batch was not prepared.")
+        }
+        guard stagedContactIDs.insert(proposal.contact.id).inserted else { return .alreadyLinked }
+        self.stagedContactIDs = stagedContactIDs
+
+        switch proposal.outcome {
+        case .createPerson:
+            let person = try people.stageImportedPerson(draft(from: proposal.contact))
+            try attachLink(proposal.contact, to: person, sessionID: sessionID, stagingImport: true)
+            return .createPerson
+
+        case .linkToExisting:
+            guard let personID = proposal.matchedPersonID,
+                  let person = try people.person(id: personID)
+            else {
+                let person = try people.stageImportedPerson(draft(from: proposal.contact))
+                try attachLink(proposal.contact, to: person, sessionID: sessionID, stagingImport: true)
+                return .createPerson
+            }
+
+            try people.stageImportedDetails(to: person, from: draft(from: proposal.contact))
+            try attachLink(proposal.contact, to: person, sessionID: sessionID, stagingImport: true)
+            return .linkToExisting
+
+        case .alreadyLinked, .needsReview, .skipped, .unusable:
+            return proposal.outcome
+        }
+    }
+
+    /// Saves the staged contacts in one SwiftData transaction.
+    public func commitStagedImport() throws(AppError) {
+        defer { stagedContactIDs = nil }
+        try save()
+    }
+
     /// Creates the link and records where every imported value came from.
     func attachLink(
         _ contact: SystemContact,
         to person: Item,
         sessionID: UUID?,
-        marksRecordAsImported: Bool = true
+        marksRecordAsImported: Bool = true,
+        stagingImport: Bool = false
     ) throws(AppError) {
         let now = dateProvider.now
         let signature = ContactIdentitySignature(contact: contact)
@@ -154,19 +204,25 @@ public final class ContactImportService {
         }
 
         // Mirrored onto the profile so every view written before this slice keeps working unchanged.
-        try people.updateProfile(of: person) { profile in
+        let updateProfile: (PersonProfile) -> Void = { profile in
             profile.contactsIdentifier = contact.id
             profile.contactsAccountName = contact.containerName
             profile.contactsRefreshedAt = now
             // A record that arrived from the address book is not a placeholder somebody sketched.
             profile.isPlaceholder = false
         }
-
-        if marksRecordAsImported {
-            try records.markImported(person)
+        if stagingImport {
+            try people.stageImportedProfile(of: person, updateProfile)
+        } else {
+            try people.updateProfile(of: person, updateProfile)
         }
 
-        try save()
+        if marksRecordAsImported {
+            if stagingImport { records.stageImported(person) }
+            else { try records.markImported(person) }
+        }
+
+        if !stagingImport { try save() }
     }
 
     /// Links a locally-created person to the Apple contact created from that same record.

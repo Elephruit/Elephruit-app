@@ -130,11 +130,16 @@ public final class RecordsService {
     /// Marks a contact-backed person as a Records import. Called for both newly created and matched
     /// people, so an import always appears in All and Unsorted and nowhere becomes the default view.
     public func markImported(_ person: Item) throws(AppError) {
+        stageImported(person)
+        try save()
+    }
+
+    /// Marks a person for Unsorted while leaving the surrounding contact batch uncommitted.
+    func stageImported(_ person: Item) {
         let profile = profile(for: person, type: .person, origin: .contacts)
         profile.origin = .contacts
         profile.isUnsorted = true
         profile.updatedAt = dateProvider.now
-        try save()
     }
 
     public func file(_ item: Item) throws(AppError) {
