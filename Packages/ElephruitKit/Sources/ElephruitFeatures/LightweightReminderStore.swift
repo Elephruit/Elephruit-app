@@ -12,6 +12,8 @@ struct LightweightReminder: Codable, Hashable, Identifiable, Sendable {
     var dueAt: Date?
     var isSomeday: Bool
     var tagSlugs: [String]
+    var personNames: [String]
+    var projectTitle: String?
     var checklist: [ReminderChecklistItem]
     var isCompleted: Bool
     var createdAt: Date
@@ -24,9 +26,32 @@ struct LightweightReminder: Codable, Hashable, Identifiable, Sendable {
         self.dueAt = draft.dueAt
         self.isSomeday = draft.isSomeday
         self.tagSlugs = draft.tagSlugs
+        self.personNames = draft.personNames
+        self.projectTitle = draft.projectTitle
         self.checklist = draft.checklist
         self.isCompleted = false
         self.createdAt = now
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, notes, startAt, dueAt, isSomeday, tagSlugs
+        case personNames, projectTitle, checklist, isCompleted, createdAt
+    }
+
+    init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        title = try values.decode(String.self, forKey: .title)
+        notes = try values.decode(String.self, forKey: .notes)
+        startAt = try values.decodeIfPresent(Date.self, forKey: .startAt)
+        dueAt = try values.decodeIfPresent(Date.self, forKey: .dueAt)
+        isSomeday = try values.decode(Bool.self, forKey: .isSomeday)
+        tagSlugs = try values.decode([String].self, forKey: .tagSlugs)
+        personNames = try values.decodeIfPresent([String].self, forKey: .personNames) ?? []
+        projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
+        checklist = try values.decode([ReminderChecklistItem].self, forKey: .checklist)
+        isCompleted = try values.decode(Bool.self, forKey: .isCompleted)
+        createdAt = try values.decode(Date.self, forKey: .createdAt)
     }
 }
 
@@ -60,6 +85,15 @@ final class LightweightReminderStore {
 
     func create(from draft: ReminderComposerDraft, now: Date) throws(AppError) {
         reminders.insert(LightweightReminder(draft: draft, now: now), at: 0)
+        try persist()
+    }
+
+    func update(_ id: UUID, from draft: ReminderComposerDraft) throws(AppError) {
+        guard let index = reminders.firstIndex(where: { $0.id == id }) else { return }
+        let existing = reminders[index]
+        var updated = LightweightReminder(id: id, draft: draft, now: existing.createdAt)
+        updated.isCompleted = existing.isCompleted
+        reminders[index] = updated
         try persist()
     }
 

@@ -10,6 +10,7 @@ struct RemindersWorkspaceView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var isComposing = false
+    @State private var editingReminderID: UUID?
     @State private var draft = ReminderComposerDraft()
 
     var body: some View {
@@ -49,7 +50,7 @@ struct RemindersWorkspaceView: View {
         } else {
             ScrollView {
                 LazyVStack(spacing: Theme.Spacing.small) {
-                    if isComposing {
+                    if isComposing && editingReminderID == nil {
                         ReminderComposer(
                             draft: $draft,
                             onQuickCommit: { commit(keepsOpen: true) },
@@ -60,7 +61,17 @@ struct RemindersWorkspaceView: View {
                     }
 
                     ForEach(visibleReminders) { reminder in
-                        reminderRow(reminder)
+                        if editingReminderID == reminder.id {
+                            ReminderComposer(
+                                draft: $draft,
+                                onQuickCommit: { commit(keepsOpen: false) },
+                                onCommitAndClose: { commit(keepsOpen: false) },
+                                onCancel: closeComposer
+                            )
+                            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+                        } else {
+                            reminderRow(reminder)
+                        }
                     }
                 }
                 .padding(Theme.Spacing.large)
@@ -126,7 +137,13 @@ struct RemindersWorkspaceView: View {
         }
         .padding(Theme.Spacing.medium)
         .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { openComposer(editing: reminder) }
+        .accessibilityAction(named: "Edit Reminder") { openComposer(editing: reminder) }
         .contextMenu {
+            Button("Edit", systemImage: "pencil") {
+                openComposer(editing: reminder)
+            }
             Button("Delete", systemImage: "trash", role: .destructive) {
                 services?.perform { try services?.lightweightReminders.delete(reminder.id) }
             }
@@ -158,6 +175,10 @@ struct RemindersWorkspaceView: View {
             labels.append("Deadline " + dueAt.formatted(.dateTime.month(.abbreviated).day()))
         }
         labels.append(contentsOf: reminder.tagSlugs.map { "#" + $0 })
+        labels.append(contentsOf: reminder.personNames.map { "@" + $0 })
+        if let projectTitle = reminder.projectTitle {
+            labels.append(">" + projectTitle)
+        }
         if !reminder.checklist.isEmpty {
             labels.append("\(reminder.checklist.count) checklist")
         }
@@ -170,7 +191,17 @@ struct RemindersWorkspaceView: View {
 
     private func openComposer() {
         guard !isComposing else { return }
+        editingReminderID = nil
         draft.reset()
+        withAnimation(Theme.Motion.respectingReduceMotion(Theme.Motion.appearance, reduceMotion: reduceMotion)) {
+            isComposing = true
+        }
+    }
+
+    private func openComposer(editing reminder: LightweightReminder) {
+        guard !isComposing else { return }
+        draft = ReminderComposerDraft(reminder: reminder)
+        editingReminderID = reminder.id
         withAnimation(Theme.Motion.respectingReduceMotion(Theme.Motion.appearance, reduceMotion: reduceMotion)) {
             isComposing = true
         }
@@ -180,6 +211,7 @@ struct RemindersWorkspaceView: View {
         withAnimation(Theme.Motion.respectingReduceMotion(Theme.Motion.appearance, reduceMotion: reduceMotion)) {
             isComposing = false
         }
+        editingReminderID = nil
         draft.reset()
     }
 
@@ -193,11 +225,16 @@ struct RemindersWorkspaceView: View {
         }
 
         let committed = draft
+        let reminderID = editingReminderID
         services.perform {
-            try services.lightweightReminders.create(from: committed, now: services.dateProvider.now)
+            if let reminderID {
+                try services.lightweightReminders.update(reminderID, from: committed)
+            } else {
+                try services.lightweightReminders.create(from: committed, now: services.dateProvider.now)
+            }
         }
 
-        if keepsOpen {
+        if keepsOpen && reminderID == nil {
             draft.reset()
         } else {
             closeComposer()

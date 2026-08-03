@@ -339,7 +339,7 @@ struct ReminderComposer: View {
                     activate(.title)
                 }
             )
-        case .title, .notes, .checklist, nil:
+        case .title, .notes, .people, .checklist, .project, nil:
             EmptyView()
         }
     }

@@ -10,8 +10,10 @@ enum ReminderComposerField: Int, CaseIterable, Sendable, Hashable {
     case notes
     case when
     case tags
+    case people
     case checklist
     case deadline
+    case project
 
     func advanced(reverse: Bool = false) -> Self {
         let fields = Self.allCases
@@ -32,8 +34,24 @@ struct ReminderComposerDraft: Sendable, Hashable {
     var dueAt: Date?
     var isSomeday = false
     var tagSlugs: [String] = []
+    var personNames: [String] = []
+    var projectTitle: String?
     var checklist: [ReminderChecklistItem] = []
     var pendingStep = ""
+
+    init() {}
+
+    init(reminder: LightweightReminder) {
+        title = reminder.title
+        notes = reminder.notes
+        startAt = reminder.startAt
+        dueAt = reminder.dueAt
+        isSomeday = reminder.isSomeday
+        tagSlugs = reminder.tagSlugs
+        personNames = reminder.personNames
+        projectTitle = reminder.projectTitle
+        checklist = reminder.checklist
+    }
 
     var hasChecklistContent: Bool {
         !pendingStep.isEmpty || !checklist.isEmpty

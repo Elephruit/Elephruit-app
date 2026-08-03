@@ -11,16 +11,35 @@ struct ReminderComposerStateTests {
         #expect(ReminderComposerField.title.advanced() == .notes)
         #expect(ReminderComposerField.notes.advanced() == .when)
         #expect(ReminderComposerField.when.advanced() == .tags)
-        #expect(ReminderComposerField.tags.advanced() == .checklist)
+        #expect(ReminderComposerField.tags.advanced() == .people)
+        #expect(ReminderComposerField.people.advanced() == .checklist)
         #expect(ReminderComposerField.checklist.advanced() == .deadline)
-        #expect(ReminderComposerField.deadline.advanced() == .title)
+        #expect(ReminderComposerField.deadline.advanced() == .project)
+        #expect(ReminderComposerField.project.advanced() == .title)
     }
 
     @Test("Shift-Tab follows the same path backwards")
     func reverseTraversal() {
-        #expect(ReminderComposerField.title.advanced(reverse: true) == .deadline)
-        #expect(ReminderComposerField.checklist.advanced(reverse: true) == .tags)
+        #expect(ReminderComposerField.title.advanced(reverse: true) == .project)
+        #expect(ReminderComposerField.checklist.advanced(reverse: true) == .people)
         #expect(ReminderComposerField.notes.advanced(reverse: true) == .title)
+    }
+
+    @Test("A saved reminder can repopulate the entire composer")
+    func editingDraft() {
+        var original = ReminderComposerDraft()
+        original.title = "Call Taylor"
+        original.personNames = ["Taylor Reed"]
+        original.projectTitle = "House move"
+        original.tagSlugs = ["calls"]
+        let reminder = LightweightReminder(draft: original, now: .distantPast)
+
+        let reopened = ReminderComposerDraft(reminder: reminder)
+
+        #expect(reopened.title == "Call Taylor")
+        #expect(reopened.personNames == ["Taylor Reed"])
+        #expect(reopened.projectTitle == "House move")
+        #expect(reopened.tagSlugs == ["calls"])
     }
 
     @Test("A pending checklist line is trimmed, appended, and cleared")
