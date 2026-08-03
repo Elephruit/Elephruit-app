@@ -4,33 +4,6 @@ import ElephruitModel
 import ElephruitPersistence
 import SwiftUI
 
-/// The mutually exclusive keyboard-selection and inline-editing states of the time log.
-///
-/// Keeping them in one value makes it impossible for an edit to begin without also clearing the
-/// native `List` selection that would paint the expanded editor with the system accent color.
-struct TimeLogRowState: Equatable {
-    var selectedRowID: String?
-    var editingRowID: String?
-
-    mutating func beginEditing(_ rowID: String) {
-        editingRowID = rowID
-        selectedRowID = nil
-    }
-
-    mutating func select(_ rowID: String?) {
-        guard editingRowID == nil else {
-            selectedRowID = nil
-            return
-        }
-        selectedRowID = rowID
-    }
-
-    mutating func endEditing(restoringSelection rowID: String? = nil) {
-        editingRowID = nil
-        selectedRowID = rowID
-    }
-}
-
 /// The Time destination: what is running, what was tracked, and where it went.
 ///
 /// One screen rather than three. the layout's lesson is that tracking, reviewing and correcting are the
@@ -69,8 +42,11 @@ public struct TimeView: View {
 
     @State private var entries: [TimeEntrySnapshot] = []
     @State private var expandedGroups: Set<String> = []
-    @State private var rowState = TimeLogRowState()
+    @State private var editingState = InlineListEditingState<String>()
     @State private var reloadTick = 0
+
+    /// The compact row the keyboard is on. It stays empty while a row is an editor.
+    @State private var selectedRowID: String?
 
     /// The last deletion, until the offer to undo it expires or is taken.
     @State private var undoableDeletion: DeletedTimeEntries?
@@ -330,8 +306,8 @@ public struct TimeView: View {
             .alternatingRowBackgrounds(.disabled)
             .onDeleteCommand { deleteSelection() }
             .onKeyPress(.return) {
-                guard let selectedRowID = rowState.selectedRowID,
-                      rowState.editingRowID == nil
+                guard let selectedRowID,
+                      editingState.editingID == nil
                 else { return .ignored }
                 beginEditing(selectedRowID)
                 return .handled
@@ -343,15 +319,15 @@ public struct TimeView: View {
         TimeEntryGroupRow(
             group: group,
             isExpanded: expandedGroups.contains(group.id),
-            isEditing: rowState.editingRowID == group.id,
-            isCurrent: rowState.selectedRowID == group.id,
+            isEditing: editingState.editingID == group.id,
+            isCurrent: selectedRowID == group.id,
             onToggleExpanded: { toggleExpanded(group) },
             onResume: { group.lead.map(resume) },
             onOpen: { group.lead?.itemID.map { navigation.selectItem($0) } },
             onEdit: { beginEditing(group.id) },
             onCommit: { edit in
                 apply(edit, to: group.entries.map(\.id))
-                rowState.endEditing()
+                selectedRowID = editingState.endEditing().first
             },
             onCancelEdit: { endEditing(restoringSelection: group.id) },
             onDuplicate: { group.lead.map(duplicate) },
@@ -362,12 +338,12 @@ public struct TimeView: View {
     private func entryRow(_ entry: TimeEntrySnapshot) -> some View {
         TimeEntryRow(
             entry: entry,
-            isEditing: rowState.editingRowID == entry.id.uuidString,
-            isCurrent: rowState.selectedRowID == entry.id.uuidString,
+            isEditing: editingState.editingID == entry.id.uuidString,
+            isCurrent: selectedRowID == entry.id.uuidString,
             onEdit: { beginEditing(entry.id.uuidString) },
             onCommit: { edit in
                 apply(edit, to: [entry.id])
-                rowState.endEditing()
+                selectedRowID = editingState.endEditing().first
             },
             onCancelEdit: { endEditing(restoringSelection: entry.id.uuidString) },
             onDuplicate: { duplicate(entry) },
@@ -377,7 +353,7 @@ public struct TimeView: View {
 
     /// Removes whatever the keyboard is on, group or single stretch.
     private func deleteSelection() {
-        guard let selectedRowID = rowState.selectedRowID else { return }
+        guard let selectedRowID else { return }
 
         if let group = sections.flatMap(\.groups).first(where: { $0.id == selectedRowID }) {
             delete(group.entries.map(\.id), describing: group.displayTitle)
@@ -400,7 +376,7 @@ public struct TimeView: View {
     /// editor, the fill covers every field and button in the form. Selection is useful for moving
     /// through the compact log, but it must yield while the selected row is an editing surface.
     private func beginEditing(_ rowID: String) {
-        rowState.beginEditing(rowID)
+        selectedRowID = editingState.beginEditing(rowID).first
     }
 
     /// Rejects native selection writes while a form is open. Controls inside a list row can cause
@@ -408,8 +384,8 @@ public struct TimeView: View {
     /// the accent fill back as soon as somebody used the editor.
     private var rowSelection: Binding<String?> {
         Binding(
-            get: { rowState.selectedRowID },
-            set: { rowState.select($0) }
+            get: { selectedRowID },
+            set: { selectedRowID = editingState.acceptSelection($0.map { [$0] } ?? []).first }
         )
     }
 
@@ -417,7 +393,7 @@ public struct TimeView: View {
     /// caller deliberately leaves selection empty rather than selecting an identifier that may no
     /// longer exist.
     private func endEditing(restoringSelection rowID: String) {
-        rowState.endEditing(restoringSelection: rowID)
+        selectedRowID = editingState.endEditing(restoringSelection: rowID).first
     }
 
     // MARK: - Toolbar
@@ -524,9 +500,9 @@ public struct TimeView: View {
         ids.forEach { services.mirrorTime(entryID: $0) }
         services.timer.refresh()
 
-        if let selectedRowID = rowState.selectedRowID,
+        if let selectedRowID,
            ids.contains(where: { $0.uuidString == selectedRowID }) {
-            rowState.selectedRowID = nil
+            self.selectedRowID = nil
         }
         undoableDeletion = DeletedTimeEntries(ids: ids, title: title)
         bump()

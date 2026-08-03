@@ -34,7 +34,7 @@ struct TaskWorkspaceView: View {
     /// One rather than a set, deliberately. Two cards open at once would be two editors competing
     /// for Escape and for the debounced write, and the reason to open one is to work on it — which
     /// is a thing you do to one task at a time.
-    @State private var editingTaskID: UUID?
+    @State private var editingState = InlineListEditingState<UUID>()
 
     @FocusState private var isDraftFocused: Bool
 
@@ -47,7 +47,9 @@ struct TaskWorkspaceView: View {
             // A card is open *in a list*. Changing which list you are looking at closes it, because
             // the row it was is no longer on screen and an editor with no row under it is a detail
             // pane by another name.
-            .onChange(of: navigation.selection) { _, _ in editingTaskID = nil }
+            .onChange(of: navigation.selection) { _, _ in
+                _ = editingState.endEditing()
+            }
             // Somebody followed a link to a task from outside the list — see ``TaskRedirect``. The
             // destination has already been selected; this is the half that opens the card, once the
             // rows for that destination have actually loaded.
@@ -122,7 +124,7 @@ struct TaskWorkspaceView: View {
         // field inside the open card consumes Return before this sees it, so the guard is belt and
         // braces rather than the mechanism.
         .onKeyPress(.return) {
-            guard editingTaskID == nil,
+            guard editingState.editingID == nil,
                   navigation.selectedItemIDs.count == 1,
                   let id = navigation.selectedItemIDs.first,
                   let task = tasksByID[id]
@@ -134,7 +136,11 @@ struct TaskWorkspaceView: View {
         // card is an editor for the selected task, so a card for a task that is no longer selected
         // is a second answer to "which one am I looking at".
         .onChange(of: navigation.selectedItemIDs) { _, selection in
-            if let id = editingTaskID, !selection.contains(id) { editingTaskID = nil }
+            if let id = editingState.editingID,
+               !selection.isEmpty,
+               !selection.contains(id) {
+                _ = editingState.endEditing()
+            }
         }
     }
 
@@ -143,19 +149,20 @@ struct TaskWorkspaceView: View {
             task: task,
             showsContainer: showsContainer,
             isSelected: navigation.selectedItemIDs.contains(task.id),
-            isEditing: editingTaskID == task.id,
+            isEditing: editingState.editingID == task.id,
             navigation: navigation,
             onToggle: { toggle(task) },
             onChange: reload,
-            onClose: { editingTaskID = nil }
+            onClose: {
+                navigation.selectedItemIDs = editingState.endEditing(restoringSelection: task.id)
+            }
         )
         .tag(task.id)
         .listRowSeparator(.hidden)
         // ### Why the selection is ours rather than the system's
-        // macOS draws a solid accent fill behind a selected row, which is right for a row and wrong
-        // for a row that can become a card: a white card sitting inside a saturated blue bar reads
-        // as two objects, one of them broken. A quiet tint of the same accent says the same thing
-        // and lets the card sit on it.
+        // macOS draws a solid accent fill behind a selected row. Compact rows use a quiet tint of
+        // that accent instead; an open card is removed from selection altogether by
+        // `InlineListEditingState`, because even a quiet row fill does not belong behind a form.
         .listRowBackground(
             RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
                 .fill(navigation.selectedItemIDs.contains(task.id)
@@ -511,7 +518,7 @@ struct TaskWorkspaceView: View {
     private var bottomBar: some View {
         TaskBottomBar(
             navigation: navigation,
-            editingTask: editingTaskID.flatMap { tasksByID[$0] },
+            editingTask: editingState.editingID.flatMap { tasksByID[$0] },
             selectedTasks: flatTasks.filter { navigation.selectedItemIDs.contains($0.id) },
             allowsCreation: allowsCreation,
             allowsHeadings: allowsHeadings,
@@ -696,8 +703,7 @@ struct TaskWorkspaceView: View {
     }
 
     private func open(_ task: Item) {
-        navigation.selectedItemIDs = [task.id]
-        editingTaskID = task.id
+        navigation.selectedItemIDs = editingState.beginEditing(task.id)
     }
 
     private func toggle(_ task: Item) {
@@ -747,7 +753,7 @@ struct TaskWorkspaceView: View {
     private var selectionBinding: Binding<Set<UUID>> {
         Binding(
             get: { navigation.selectedItemIDs },
-            set: { navigation.selectedItemIDs = $0 }
+            set: { navigation.selectedItemIDs = editingState.acceptSelection($0) }
         )
     }
 }
