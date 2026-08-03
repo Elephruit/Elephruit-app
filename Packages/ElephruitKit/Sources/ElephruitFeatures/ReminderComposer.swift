@@ -43,8 +43,8 @@ struct ReminderComposer: View {
                 if !inlineSuggestions.isEmpty {
                     inlineSuggestionList
                 }
-                metadataSummary
                 checklist
+                metadataSummary
             }
             .padding(Theme.Spacing.medium)
             .animation(.snappy(duration: 0.18), value: activeField == .checklist)
@@ -1604,7 +1604,9 @@ struct ReminderPlainTextEditor: NSViewRepresentable {
         switch role {
         case .title: 2
         case .notes: 0
-        case .body: 3
+        // Compact editors are 24 points tall and the system subheadline line height is 14.
+        // Five points above and below centers its glyphs instead of leaving them visibly high.
+        case .body: 5
         }
     }
 

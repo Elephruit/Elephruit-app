@@ -279,7 +279,7 @@ struct ReminderComposerStateTests {
     @Test("Compact metadata text is vertically inset")
     @MainActor
     func metadataTextAlignment() {
-        #expect(ReminderPlainTextEditor.verticalInset(for: .body) == 3)
+        #expect(ReminderPlainTextEditor.verticalInset(for: .body) == 5)
         #expect(
             ReminderPlainTextEditor.verticalInset(for: .body)
                 > ReminderPlainTextEditor.verticalInset(for: .notes)
