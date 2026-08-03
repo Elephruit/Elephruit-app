@@ -51,6 +51,42 @@ struct RecordsServiceTests {
         #expect(persistedPet.recordProfile?.details["vet"] == "Lakeview Animal Hospital")
     }
 
+    @Test("People retain structured Apple Contacts fields")
+    func createsStructuredPerson() throws {
+        let (_, _, records) = try fixture()
+
+        let person = try records.create(RecordDraft(
+            name: "Dr Maya Lin Chen PhD",
+            type: .person,
+            details: [
+                "given_name": "Maya",
+                "middle_name": "Lin",
+                "family_name": "Chen",
+                "name_prefix": "Dr",
+                "name_suffix": "PhD",
+                "nickname": "May",
+                "department": "Design",
+                "role": "Head of Design",
+                "organization": "Northwind",
+                "email": "maya@northwind.example",
+                "phone": "+15125550192",
+            ]
+        ))
+
+        let profile = person.personProfile
+        #expect(profile?.givenName == "Maya")
+        #expect(profile?.middleName == "Lin")
+        #expect(profile?.familyName == "Chen")
+        #expect(profile?.namePrefix == "Dr")
+        #expect(profile?.nameSuffix == "PhD")
+        #expect(profile?.nickname == "May")
+        #expect(profile?.departmentName == "Design")
+        #expect(profile?.roleTitle == "Head of Design")
+        #expect(profile?.organizationName == "Northwind")
+        #expect(profile?.emails.first?.value == "maya@northwind.example")
+        #expect(profile?.phones.first?.value == "+15125550192")
+    }
+
     @Test("Contact imports wait in Unsorted until explicitly filed")
     func importFilingState() throws {
         let (store, people, records) = try fixture()

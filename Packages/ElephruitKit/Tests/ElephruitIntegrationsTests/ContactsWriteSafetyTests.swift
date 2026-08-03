@@ -3,7 +3,7 @@ import ElephruitIntegrations
 import Foundation
 import Testing
 
-/// Records' address-book safety rule: **one write, and it can only say five things.**
+/// Records' address-book safety rule: address-book changes live in two explicit adapter paths.
 ///
 /// ### What changed, and what did not
 /// This suite used to assert that no system contact could ever be written, on the reasoning that the
@@ -21,10 +21,9 @@ import Testing
 ///
 /// 1. **``ContactWrite`` can express five fields**, so a name, a birthday, a photograph, or a postal
 ///    address cannot be altered — not because nothing does, but because nothing *can*.
-/// 2. **Only `write(_:)` mutates.** The adapter's source contains no other mutating call, checked
-///    here — which catches somebody reaching past the protocol to `CNContactStore` directly.
-/// 3. **Nothing creates or deletes.** `CNSaveRequest.add` and `.delete` stay forbidden outright: this
-///    app corrects records the user already has and is never the reason one appears or vanishes.
+/// 2. **Only `create(_:)` and `write(_:)` mutate.** The adapter's source contains exactly those two
+///    save paths, checked here — which catches somebody reaching past the protocol to the store.
+/// 3. **Nothing deletes.** Contact removal stays forbidden outright.
 @Suite("Contacts write safety")
 struct ContactsWriteSafetyTests {
     private static func sourceRoot() -> URL {
@@ -45,19 +44,16 @@ struct ContactsWriteSafetyTests {
 
     /// Calls that remain forbidden outright, at any count.
     ///
-    /// Creation and deletion are the two things a correction never needs, and the two whose damage
-    /// cannot be undone from inside the app. `CNMutableGroup` is here because reorganising somebody's
-    /// groups is not something this app has any business doing.
+    /// Deletion cannot be undone from inside the app. `CNMutableGroup` is here because reorganising
+    /// somebody's groups is not something this app has any business doing.
     private static let forbiddenCalls = [
-        "CNSaveRequest().add",
-        "request.add(",
         "request.delete(",
         ".delete(contact",
         "CNMutableGroup",
     ]
 
-    @Test("Nothing in the adapter can create or delete a contact")
-    func adapterNeverCreatesOrDeletes() throws {
+    @Test("Nothing in the adapter can delete a contact")
+    func adapterNeverDeletes() throws {
         let files = Self.swiftFiles(under: "ElephruitIntegrations")
         #expect(!files.isEmpty, "The integrations source must be findable, or this test proves nothing")
 
@@ -83,18 +79,17 @@ struct ContactsWriteSafetyTests {
         #expect(
             offenders.isEmpty,
             """
-            Elephruit corrects contacts the user already has. It is never the reason one appears or \
-            disappears. These would be: \(offenders)
+            Elephruit never removes a contact or reorganises contact groups. These would be: \(offenders)
             """
         )
     }
 
-    /// The write is meant to be one method, not a capability that spread.
+    /// Address-book changes are meant to be two methods, not a capability that spreads.
     ///
     /// Counting occurrences rather than forbidding them is the whole point: `CNSaveRequest` and
-    /// `store.execute` each belong in exactly one place, and a second appearance means a second way
-    /// to change somebody's address book that nothing reviewed.
-    @Test("Saving happens in exactly one place")
+    /// `store.execute` each belong only in `create(_:)` and `write(_:)`; another appearance means a
+    /// new way to change somebody's address book.
+    @Test("Saving is limited to create and update")
     func savingIsNotSpreadAround() throws {
         var saveRequests = 0
         var executes = 0
@@ -113,12 +108,47 @@ struct ContactsWriteSafetyTests {
             }
         }
 
-        #expect(saveRequests <= 1, "`CNSaveRequest` appears \(saveRequests) times; it belongs only in `write(_:)`")
-        #expect(executes <= 1, "`store.execute` appears \(executes) times; it belongs only in `write(_:)`")
+        #expect(saveRequests <= 2, "`CNSaveRequest` appears \(saveRequests) times; it belongs only in `create(_:)` and `write(_:)`")
+        #expect(executes <= 2, "`store.execute` appears \(executes) times; it belongs only in `create(_:)` and `write(_:)`")
         #expect(
-            mutableContacts <= 1,
-            "`CNMutableContact` appears \(mutableContacts) times; it belongs only in `write(_:)`"
+            mutableContacts <= 2,
+            "`CNMutableContact` appears \(mutableContacts) times; it belongs only in `create(_:)` and `write(_:)`"
         )
+    }
+
+    @Test("A requested person is created with structured contact fields")
+    func fixtureCreatesStructuredContact() async {
+        let provider = FixtureContactsProvider(
+            containers: [ContactAccount(id: "icloud", name: "iCloud", contactCount: 0)],
+            authorization: .authorized
+        )
+
+        let outcome = await provider.create(ContactCreate(
+            givenName: "Maya",
+            middleName: "Lin",
+            familyName: "Chen",
+            namePrefix: "Dr",
+            nameSuffix: "PhD",
+            nickname: "May",
+            jobTitle: "Head of Design",
+            departmentName: "Design",
+            organizationName: "Northwind",
+            emailAddresses: [ContactLabelledValue(label: "work", value: "maya@northwind.example")],
+            phoneNumbers: [ContactLabelledValue(label: "mobile", value: "+15125550192")]
+        ))
+
+        guard case .created(let created) = outcome else {
+            Issue.record("An authorized fixture should create a contact")
+            return
+        }
+        #expect(created.givenName == "Maya")
+        #expect(created.middleName == "Lin")
+        #expect(created.familyName == "Chen")
+        #expect(created.namePrefix == "Dr")
+        #expect(created.nameSuffix == "PhD")
+        #expect(created.nickname == "May")
+        #expect(created.organizationName == "Northwind")
+        #expect(created.emailAddresses.first?.value == "maya@northwind.example")
     }
 
     /// The narrowness of the write, asserted against the type rather than against the prose.

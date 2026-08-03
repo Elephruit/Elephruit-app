@@ -589,7 +589,47 @@ public actor SystemContactsProvider: ContactsProviding {
 
     // MARK: - Writing
 
-    /// The one method in this actor that changes anything.
+    public func create(_ contact: ContactCreate) async -> ContactCreateOutcome {
+        guard CNContactStore.authorizationStatus(for: .contacts) == .authorized else {
+            return .notPermitted
+        }
+
+        let mutable = CNMutableContact()
+        mutable.givenName = contact.givenName
+        mutable.middleName = contact.middleName
+        mutable.familyName = contact.familyName
+        mutable.namePrefix = contact.namePrefix
+        mutable.nameSuffix = contact.nameSuffix
+        mutable.nickname = contact.nickname
+        mutable.jobTitle = contact.jobTitle
+        mutable.departmentName = contact.departmentName
+        mutable.organizationName = contact.organizationName
+        mutable.emailAddresses = contact.emailAddresses.map {
+            CNLabeledValue(label: Self.writeLabel(for: $0.label), value: $0.value as NSString)
+        }
+        mutable.phoneNumbers = contact.phoneNumbers.map {
+            CNLabeledValue(label: Self.writeLabel(for: $0.label), value: CNPhoneNumber(stringValue: $0.value))
+        }
+        mutable.urlAddresses = contact.urlAddresses.map {
+            CNLabeledValue(label: Self.writeLabel(for: $0.label), value: $0.value as NSString)
+        }
+
+        let request = CNSaveRequest()
+        request.add(mutable, toContainerWithIdentifier: nil)
+
+        do {
+            try store.execute(request)
+            let saved = try store.unifiedContact(
+                withIdentifier: mutable.identifier,
+                keysToFetch: importKeys
+            )
+            return .created(snapshot(from: saved))
+        } catch let error as NSError {
+            return .failed(error.localizedDescription)
+        }
+    }
+
+    /// Updates an existing contact after the user reviews the proposed changes.
     ///
     /// Every guard is here rather than at the call site, because a call site can be added and this
     /// cannot be got around: no access means nothing is attempted, a vanished record is reported

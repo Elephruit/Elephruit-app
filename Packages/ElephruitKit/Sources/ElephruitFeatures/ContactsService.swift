@@ -119,6 +119,11 @@ public final class ContactsService {
 
     // MARK: - Writing
 
+    /// Adds a new structured person to Apple Contacts after an explicit choice in Records.
+    public func create(_ contact: ContactCreate) async -> ContactCreateOutcome {
+        await provider.create(contact)
+    }
+
     /// Passes a confirmed edit to the address book.
     ///
     /// A passthrough on purpose: every guard that matters — access, a vanished record, a read-only

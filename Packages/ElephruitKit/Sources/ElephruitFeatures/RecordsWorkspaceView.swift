@@ -1,5 +1,6 @@
 import ElephruitCore
 import ElephruitDesign
+import ElephruitIntegrations
 import ElephruitModel
 import ElephruitPersistence
 import SwiftUI
@@ -14,6 +15,7 @@ struct RecordsWorkspaceView: View {
     @State private var records: [Item] = []
     @State private var tab = RecordsTab.overview
     @State private var loadError: AppError?
+    @State private var contactMessage: String?
 
     var body: some View {
         detail
@@ -30,6 +32,14 @@ struct RecordsWorkspaceView: View {
             Button("OK") { loadError = nil }
         } message: { error in
             Text(error.summary)
+        }
+        .alert(
+            "Person saved",
+            isPresented: Binding(get: { contactMessage != nil }, set: { if !$0 { contactMessage = nil } })
+        ) {
+            Button("OK") { contactMessage = nil }
+        } message: {
+            Text(contactMessage ?? "")
         }
         .accessibilityIdentifier("records.workspace")
     }
@@ -84,8 +94,54 @@ struct RecordsWorkspaceView: View {
             let record = try services.records.create(draft)
             navigation.isNewRecordVisible = false
             refresh(selecting: record.id)
+            if draft.addToContacts {
+                addToAppleContacts(draft, person: record, services: services)
+            }
         } catch {
             loadError = appError(error)
+        }
+    }
+
+    private func addToAppleContacts(_ draft: RecordDraft, person: Item, services: AppServices) {
+        Task {
+            if !services.contacts.isEnabled {
+                _ = await services.contacts.enable()
+            }
+
+            let value: (String) -> String = { key in
+                draft.details[key]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            }
+            let labelled: (String, String) -> [ContactLabelledValue] = { label, raw in
+                raw.isEmpty ? [] : [ContactLabelledValue(label: label, value: raw)]
+            }
+            let contact = ContactCreate(
+                givenName: value("given_name"),
+                middleName: value("middle_name"),
+                familyName: value("family_name"),
+                namePrefix: value("name_prefix"),
+                nameSuffix: value("name_suffix"),
+                nickname: value("nickname"),
+                jobTitle: value("role"),
+                departmentName: value("department"),
+                organizationName: value("organization"),
+                emailAddresses: labelled("email", value("email")),
+                phoneNumbers: labelled("phone", value("phone")),
+                urlAddresses: labelled("website", value("website"))
+            )
+
+            switch await services.contacts.create(contact) {
+            case .created(let systemContact):
+                do {
+                    try services.contactImports.attachCreatedContact(systemContact, to: person)
+                    refresh(selecting: person.id)
+                } catch {
+                    contactMessage = "The Apple contact was created, but Elephruit could not link it back to this record."
+                }
+            case .notPermitted:
+                contactMessage = ContactCreateOutcome.notPermitted.explanation
+            case .failed(let reason):
+                contactMessage = ContactCreateOutcome.failed(reason).explanation
+            }
         }
     }
 
@@ -189,7 +245,16 @@ private struct RecordDetail: View {
         .padding(Theme.Spacing.section)
     }
 
+    @ViewBuilder
     private var overview: some View {
+        if type == .pet && !isEditing {
+            petOverview
+        } else {
+            genericOverview
+        }
+    }
+
+    private var genericOverview: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.section) {
             detailCard(title: "At a glance", symbol: "info.circle") {
                 if isEditing {
@@ -227,6 +292,83 @@ private struct RecordDetail: View {
                 }
             }
         }
+    }
+
+    private var petOverview: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+            if !summary.isEmpty {
+                Text(summary)
+                    .font(.system(.title3, weight: .medium))
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+
+            LazyVGrid(
+                columns: [GridItem(.flexible(), spacing: Theme.Spacing.section), GridItem(.flexible())],
+                alignment: .leading,
+                spacing: Theme.Spacing.section
+            ) {
+                petInfoCard(
+                    title: "Profile",
+                    symbol: "pawprint",
+                    fields: [
+                        ("Species", "species"),
+                        ("Breed", "breed"),
+                        ("Birth date", "birth_date"),
+                    ],
+                    emptyMessage: "Add species, breed, or birthday."
+                )
+                petInfoCard(
+                    title: "Care",
+                    symbol: "cross.case",
+                    fields: [
+                        ("Veterinarian", "vet"),
+                        ("Medications", "medications"),
+                    ],
+                    emptyMessage: "Add a veterinarian or medication details."
+                )
+            }
+
+            detailCard(title: "Notes", symbol: "note.text") {
+                Text(notes.isEmpty ? "Add care instructions, temperament, dietary notes, or anything useful to remember." : notes)
+                    .foregroundStyle(notes.isEmpty ? Theme.Colors.tertiaryText : Theme.Colors.primaryText)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    private func petInfoCard(
+        title: String,
+        symbol: String,
+        fields: [(label: String, key: String)],
+        emptyMessage: String
+    ) -> some View {
+        let populated = fields.filter { !(details[$0.key] ?? "").isEmpty }
+        return VStack(alignment: .leading, spacing: Theme.Spacing.large) {
+            Label(title, systemImage: symbol)
+                .font(Theme.Text.rowTitleEmphasised)
+
+            if populated.isEmpty {
+                Text(emptyMessage)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+            } else {
+                ForEach(populated, id: \.key) { field in
+                    VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+                        Text(field.label)
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                        Text(details[field.key] ?? "")
+                            .font(Theme.Text.rowTitleEmphasised)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(Theme.Spacing.large)
+        .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
+        .background(Theme.Colors.subtleFill)
+        .clipShape(.rect(cornerRadius: Theme.Radius.large))
     }
 
     private var history: some View {
@@ -297,6 +439,8 @@ private struct RecordDetail: View {
         }
         .padding(Theme.Spacing.large)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.Colors.subtleFill)
+        .clipShape(.rect(cornerRadius: Theme.Radius.large))
     }
 
     private func loadDraft() {
@@ -320,6 +464,7 @@ struct NewRecordEditor: View {
     @State private var summary = ""
     @State private var notes = ""
     @State private var details: [String: String] = [:]
+    @State private var addToContacts = false
     @FocusState private var focusedField: String?
 
     var body: some View {
@@ -332,6 +477,7 @@ struct NewRecordEditor: View {
                     typeChooser
                     identityCard
                     detailsCard
+                    if type == .person { contactsCard }
                     notesCard
                 }
                 .frame(maxWidth: 820, alignment: .leading)
@@ -344,6 +490,7 @@ struct NewRecordEditor: View {
         .onAppear { focusedField = "name" }
         .onChange(of: type) { _, _ in
             details = [:]
+            addToContacts = false
             focusedField = "name"
         }
         .accessibilityIdentifier("records.new.editor")
@@ -416,7 +563,21 @@ struct NewRecordEditor: View {
 
     private var identityCard: some View {
         editorCard {
-            editorField(label: namePrompt, text: $name, focusID: "name")
+            if type == .person {
+                editorField(label: "Prefix", text: binding("name_prefix"), focusID: "name_prefix")
+                Divider()
+                editorField(label: "First name", text: binding("given_name"), focusID: "name")
+                Divider()
+                editorField(label: "Middle name", text: binding("middle_name"), focusID: "middle_name")
+                Divider()
+                editorField(label: "Last name", text: binding("family_name"), focusID: "family_name")
+                Divider()
+                editorField(label: "Suffix", text: binding("name_suffix"), focusID: "name_suffix")
+                Divider()
+                editorField(label: "Nickname", text: binding("nickname"), focusID: "nickname")
+            } else {
+                editorField(label: namePrompt, text: $name, focusID: "name")
+            }
             Divider()
             editorField(label: "Short description", text: $summary, focusID: "summary")
         }
@@ -456,6 +617,30 @@ struct NewRecordEditor: View {
                             .allowsHitTesting(false)
                     }
                 }
+        }
+    }
+
+    private var contactsCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            sectionTitle("Apple Contacts", symbol: "person.crop.circle.badge.plus")
+
+            HStack(spacing: Theme.Spacing.large) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+                    Text("Add this person to Apple Contacts")
+                        .font(Theme.Text.rowTitleEmphasised)
+                    Text("The structured name and contact details above will be used. You may be asked for Contacts access.")
+                        .font(Theme.Text.rowSubtitle)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Toggle("", isOn: $addToContacts)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+            .padding(Theme.Spacing.large)
+            .background(Theme.Colors.subtleFill)
+            .clipShape(.rect(cornerRadius: Theme.Radius.large))
         }
     }
 
@@ -502,16 +687,42 @@ struct NewRecordEditor: View {
         }
     }
 
-    private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var trimmedName: String {
+        if type == .person {
+            let structured = ["name_prefix", "given_name", "middle_name", "family_name", "name_suffix"]
+                .compactMap { details[$0]?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+            if !structured.isEmpty { return structured }
+            return details["nickname"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+        return name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     private func create() {
         guard !trimmedName.isEmpty else { return }
-        onCreate(RecordDraft(name: trimmedName, type: type, summary: summary, notes: notes, details: details))
+        onCreate(
+            RecordDraft(
+                name: trimmedName,
+                type: type,
+                summary: summary,
+                notes: notes,
+                details: details,
+                addToContacts: type == .person && addToContacts
+            )
+        )
     }
 
     private var detailFields: [(key: String, label: String)] {
         switch type {
-        case .person: [("role", "Role"), ("organization", "Organization"), ("email", "Email"), ("phone", "Phone")]
+        case .person: [
+            ("role", "Role"),
+            ("department", "Department"),
+            ("organization", "Organization"),
+            ("email", "Email"),
+            ("phone", "Phone"),
+            ("website", "Website"),
+        ]
         case .pet: [("species", "Species"), ("breed", "Breed"), ("birth_date", "Birth date"), ("vet", "Veterinarian"), ("medications", "Medications")]
         case .vehicle: [("year", "Year"), ("make", "Make"), ("model", "Model"), ("vin", "VIN"), ("license_plate", "License plate")]
         case .organization: [("role", "Your role"), ("website", "Website"), ("phone", "Phone"), ("address", "Address")]

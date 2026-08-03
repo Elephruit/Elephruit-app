@@ -130,7 +130,8 @@ public final class ContactImportService {
     func attachLink(
         _ contact: SystemContact,
         to person: Item,
-        sessionID: UUID?
+        sessionID: UUID?,
+        marksRecordAsImported: Bool = true
     ) throws(AppError) {
         let now = dateProvider.now
         let signature = ContactIdentitySignature(contact: contact)
@@ -161,9 +162,16 @@ public final class ContactImportService {
             profile.isPlaceholder = false
         }
 
-        try records.markImported(person)
+        if marksRecordAsImported {
+            try records.markImported(person)
+        }
 
         try save()
+    }
+
+    /// Links a locally-created person to the Apple contact created from that same record.
+    public func attachCreatedContact(_ contact: SystemContact, to person: Item) throws(AppError) {
+        try attachLink(contact, to: person, sessionID: nil, marksRecordAsImported: false)
     }
 
     /// Every field worth recording provenance for.

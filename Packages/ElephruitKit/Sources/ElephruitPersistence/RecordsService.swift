@@ -9,19 +9,22 @@ public struct RecordDraft: Sendable, Hashable {
     public var summary: String
     public var notes: String
     public var details: [String: String]
+    public var addToContacts: Bool
 
     public init(
         name: String,
         type: RecordType,
         summary: String = "",
         notes: String = "",
-        details: [String: String] = [:]
+        details: [String: String] = [:],
+        addToContacts: Bool = false
     ) {
         self.name = name
         self.type = type
         self.summary = summary
         self.notes = notes
         self.details = details
+        self.addToContacts = addToContacts
     }
 }
 
@@ -72,10 +75,18 @@ public final class RecordsService {
             item = try people.createPerson(
                 PersonDraft(
                     fullName: trimmed,
+                    givenName: cleanedDetails["given_name"],
+                    familyName: cleanedDetails["family_name"],
+                    middleName: cleanedDetails["middle_name"],
+                    namePrefix: cleanedDetails["name_prefix"],
+                    nameSuffix: cleanedDetails["name_suffix"],
+                    departmentName: cleanedDetails["department"],
+                    nickname: cleanedDetails["nickname"],
                     roleTitle: cleanedDetails["role"],
                     organizationName: cleanedDetails["organization"],
                     emails: cleanedDetails["email"].map { [LabelledValue(label: "email", value: $0)] } ?? [],
-                    phones: cleanedDetails["phone"].map { [LabelledValue(label: "phone", value: $0)] } ?? []
+                    phones: cleanedDetails["phone"].map { [LabelledValue(label: "phone", value: $0)] } ?? [],
+                    websites: cleanedDetails["website"].map { [LabelledValue(label: "website", value: $0)] } ?? []
                 )
             )
             item.body = draft.notes
