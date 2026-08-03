@@ -26,6 +26,26 @@ struct SourceHygieneTests {
         #expect(Self.swiftFiles().count > 15, "Expected the module sources to be discoverable")
     }
 
+    /// A repeating SwiftUI symbol effect installs a display link and redraws continuously, even
+    /// when the symbol only communicates a stable state. Two pulsing recording icons were enough
+    /// to hold Elephruit at roughly 40% CPU for the entire duration of a running timer.
+    @Test("Symbol effects do not animate indefinitely")
+    func symbolEffectsDoNotRepeatIndefinitely() {
+        var offenders: [String] = []
+
+        for file in Self.swiftFiles() {
+            for line in Self.codeLines(of: file)
+            where line.text.contains("symbolEffect(") && line.text.contains(".repeating") {
+                offenders.append("\(file.lastPathComponent):\(line.number)")
+            }
+        }
+
+        #expect(
+            offenders.isEmpty,
+            "Repeating symbol effects keep the display link active and consume CPU continuously: \(offenders)"
+        )
+    }
+
     /// Interface language is a product decision, not whichever dictionary the last contributor
     /// happened to use. Scan string literals in both the package and the app target so a new label,
     /// tooltip, intent description, or accessibility phrase cannot quietly switch dialects.

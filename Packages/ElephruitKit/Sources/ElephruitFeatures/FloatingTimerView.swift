@@ -77,7 +77,6 @@ struct FloatingTimerView: View {
                     Image(systemName: state.isPaused ? "pause.circle.fill" : "record.circle")
                         .font(.title3)
                         .foregroundStyle(state.tint)
-                        .symbolEffect(.pulse, options: state.isPaused ? .nonRepeating : .repeating)
 
                     if !isCompact {
                         VStack(alignment: .leading, spacing: 0) {
