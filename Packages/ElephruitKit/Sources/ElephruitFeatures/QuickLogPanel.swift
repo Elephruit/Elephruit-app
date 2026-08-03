@@ -2,6 +2,16 @@ import AppKit
 import ElephruitCore
 import SwiftUI
 
+/// What Quick Log is asking the user to do.
+///
+/// An existing timer is a decision boundary, not an editing surface. Keeping that state explicit
+/// prevents the shortcut from silently turning "start something new" into "rename what is already
+/// running", and gives the view a stable state to render while the current timer remains untouched.
+public enum QuickLogPresentation: Sendable, Equatable {
+    case editing
+    case confirmReplacement
+}
+
 /// The floating window that starts a timer from wherever you are.
 ///
 /// A sibling of ``QuickJotPanel`` in every structural respect, and for the same reason: the moment
@@ -42,11 +52,10 @@ final class QuickLogPanel: NSPanel {
 /// Owns the one panel, the name being typed into it, and where focus goes when it closes.
 ///
 /// ### The promise this makes, which is the whole feature
-/// Pressing the shortcut **starts the clock first and asks afterwards**. Everything the panel offers
-/// — what the time is against, which project it is billed to, who was there, how it is tagged — is
-/// filled in while the seconds are already accumulating, and every one of them writes straight to
-/// the entry that is running. Nothing about this panel is a form that has to be completed before
-/// work can be measured, because a tracker you have to compose is a tracker nobody starts.
+/// With nothing running, pressing the shortcut **starts the clock first and asks afterwards**.
+/// Everything the panel offers — what the time is against, which project it is billed to, who was
+/// there, how it is tagged — is filled in while the seconds are already accumulating. When work is
+/// already being timed, the panel preserves that entry and asks before stopping and replacing it.
 ///
 /// That is not a new rule invented here. It is exactly what the Start button in the Time module
 /// does, and this is the same button reachable from a spreadsheet, a video call, or a terminal.
@@ -69,11 +78,13 @@ public final class QuickLogController {
 
     public private(set) var isVisible = false
 
+    /// Whether the panel is naming a timer it just started or asking about one already in progress.
+    public private(set) var presentation: QuickLogPresentation = .editing
+
     /// Whether the timer on screen is one this panel started.
     ///
-    /// The panel adopts a timer that was already going rather than switching away from it — pressing
-    /// a shortcut is not a decision to end the work you are in the middle of — and this is how the
-    /// window says which of the two happened instead of implying it started something it did not.
+    /// A timer the panel started is editable immediately; a timer already in progress first produces
+    /// a replacement confirmation. This flag lets the editable state describe its origin accurately.
     public private(set) var startedTheTimer = false
 
     private var panel: QuickLogPanel?
@@ -102,6 +113,15 @@ public final class QuickLogController {
     /// Returns whether a timer was started, so a caller that wants to say so can.
     @discardableResult
     public func show() -> Bool {
+        // Repeating the shortcut while the panel is already open means "bring this forward", not
+        // "reconsider the timer beneath it". In particular, do not replace an unfinished name in
+        // the field with the last value committed to the store.
+        if isVisible, let panel {
+            panel.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            return false
+        }
+
         let started = startTimerIfIdle()
 
         if let panel {
@@ -148,6 +168,7 @@ public final class QuickLogController {
     public func startTimerIfIdle() -> Bool {
         guard services.timer.running == nil else {
             startedTheTimer = false
+            presentation = .confirmReplacement
             syncFromRunning()
             return false
         }
@@ -156,12 +177,29 @@ public final class QuickLogController {
         // and a fresh sitting begins with a clock at zero. Nothing is running, so nothing is stopped.
         services.timer.switchTo(item: nil)
         startedTheTimer = services.timer.running != nil
+        presentation = .editing
         description = ""
         return startedTheTimer
     }
 
-    /// Fills the name from whatever is running, so an adopted timer arrives with the name it already
-    /// has rather than with whatever was last typed here.
+    /// Stops the timer the confirmation described and begins a blank replacement.
+    ///
+    /// `switchTo` is one repository operation: it closes the current entry with its description,
+    /// subject, project, people, tags and billable flag intact, then creates the new running entry.
+    /// Nothing is cleared until that transition succeeds.
+    @discardableResult
+    public func replaceRunningTimer() -> Bool {
+        guard services.timer.running != nil else { return startTimerIfIdle() }
+
+        guard services.timer.switchTo(item: nil), services.timer.running != nil else { return false }
+        startedTheTimer = true
+        presentation = .editing
+        description = ""
+        return true
+    }
+
+    /// Fills the name from whatever is running, so replacement confirmation describes the current
+    /// work rather than whatever was last typed here.
     public func syncFromRunning() {
         description = services.timer.running?.entryDescription ?? ""
     }
