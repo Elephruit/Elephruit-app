@@ -25,6 +25,7 @@ struct ReminderComposer: View {
     @State private var availablePeople: [String] = []
     @State private var availableProjects: [String] = []
     @State private var popupField: ReminderComposerField?
+    @State private var popupPresentationGate = ReminderPopoverPresentationGate()
     @State private var titleCaret = 0
     @State private var notesCaret = 0
     @State private var inlineSuggestionSelection = 0
@@ -570,10 +571,19 @@ struct ReminderComposer: View {
     }
 
     private func popupBinding(for field: ReminderComposerField) -> Binding<Bool> {
-        Binding(
+        // A native popover may report dismissal after focus has traversed all the way back to the
+        // same field. Capture the request generation so that late notification cannot tear down
+        // the newer presentation.
+        let generation = popupPresentationGate.generation
+        return Binding(
             get: { popupField == field },
             set: { isPresented in
-                if !isPresented, popupField == field { popupField = nil }
+                guard !isPresented,
+                      popupField == field,
+                      popupPresentationGate.generation == generation
+                else { return }
+                popupPresentationGate.cancel()
+                popupField = nil
             }
         )
     }
@@ -612,6 +622,12 @@ struct ReminderComposer: View {
         .frame(width: width, height: 24)
         .padding(.horizontal, Theme.Spacing.small)
         .background(Theme.Colors.selectionFill, in: Capsule())
+        .onAppear {
+            // The query editor is the popover's anchor. Asking again here guarantees that anchor
+            // exists even when several Tab events are processed in one render pass.
+            guard activeField == field else { return }
+            presentPopupAfterLayout(for: field)
+        }
     }
 
     private func actionButton(
@@ -1269,12 +1285,8 @@ struct ReminderComposer: View {
         collapseTransientEditor(activeField)
         resetMetadataSuggestion()
         dateNavigation.reset()
+        cancelPopupPresentation()
         focusRouter.activate(field)
-
-        if !fieldHasPopup(field) {
-            popupField = nil
-        }
-
         presentPopupAfterLayout(for: field)
     }
 
@@ -1302,22 +1314,35 @@ struct ReminderComposer: View {
     }
 
     private func presentPopupAfterLayout(for field: ReminderComposerField) {
-        guard fieldHasPopup(field) else { return }
+        guard fieldHasPopup(field), activeField == field else { return }
         if popupField == field { return }
 
-        // Native popovers belong to their individual controls. Close the old anchor, let SwiftUI
-        // lay out the newly focused query field, then present from that field on the next turn.
-        let needsHandoff = popupField != nil
+        // Always close the previous presentation and defer the new one. Even when the SwiftUI
+        // binding is already nil, AppKit may still be dismissing its popover or laying out the new
+        // query editor. Generation checks cancel every request except the final focused field.
+        let generation = popupPresentationGate.nextRequest()
         popupField = nil
-        if needsHandoff {
-            Task { @MainActor in
-                await Task.yield()
-                guard activeField == field else { return }
-                popupField = field
-            }
-        } else {
+
+        Task { @MainActor in
+            await Task.yield()
+            // One short beat lets the native dismissal finish as well as the SwiftUI layout pass.
+            // Staying below 100 ms keeps the response perceptually immediate while avoiding a
+            // second presentation during AppKit's teardown window.
+            try? await Task.sleep(for: .milliseconds(80))
+            guard popupPresentationGate.accepts(
+                      generation,
+                      for: field,
+                      activeField: activeField
+                  ),
+                  fieldHasPopup(field)
+            else { return }
             popupField = field
         }
+    }
+
+    private func cancelPopupPresentation() {
+        popupPresentationGate.cancel()
+        popupField = nil
     }
 
     private func fieldHasPopup(_ field: ReminderComposerField) -> Bool {

@@ -27,6 +27,18 @@ struct ReminderComposerStateTests {
         #expect(ReminderComposerField.project.advanced(reverse: true) == .notes)
     }
 
+    @Test("A stale popover dismissal cannot cancel a newer visit to the same field")
+    func stalePopoverRequest() {
+        var gate = ReminderPopoverPresentationGate()
+        let firstVisit = gate.nextRequest()
+        gate.cancel()
+        let secondVisit = gate.nextRequest()
+
+        #expect(!gate.accepts(firstVisit, for: .when, activeField: .when))
+        #expect(gate.accepts(secondVisit, for: .when, activeField: .when))
+        #expect(!gate.accepts(secondVisit, for: .when, activeField: .tags))
+    }
+
     @Test("A saved reminder can repopulate the entire composer")
     func editingDraft() {
         var original = ReminderComposerDraft()
