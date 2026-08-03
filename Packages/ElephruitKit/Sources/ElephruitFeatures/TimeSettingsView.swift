@@ -33,7 +33,7 @@ public struct TimeSettingsSection: View {
     private var tracking: some View {
         Section {
             Toggle("Collapse alike entries in the log", isOn: $groupsSimilarEntries)
-                .help("Eight goes at one task become one row you can open")
+                .help("Eight sessions on one item become one row you can open")
 
             Toggle("New entries are billable", isOn: $defaultsToBillable)
                 .help("For work that is billable more often than not")

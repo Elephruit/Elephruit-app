@@ -311,7 +311,7 @@ public struct ItemListView: View {
             EmptyStateView(
                 symbolName: "square.stack.3d.up",
                 headline: "Nothing inside yet",
-                message: "Add tasks to this project."
+                message: "Add reminders, bugs, or features to this project."
             )
         case .archive:
             EmptyStateView(

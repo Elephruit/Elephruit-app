@@ -179,7 +179,7 @@ public final class RemindersService {
     public static let explanation: [(headline: String, detail: String)] = [
         (
             "Your reminders, beside your work",
-            "Elephruit can show the Reminders lists already on this Mac alongside its own tasks."
+            "Elephruit can show the Reminders lists already on this Mac alongside its own reminders."
         ),
         (
             "Changes travel both ways",
@@ -201,7 +201,7 @@ public final class RemindersService {
             """
         ),
         (
-            "Local tasks stay local",
+            "Local reminders stay local",
             "Anything you do not link is never sent anywhere."
         ),
     ]

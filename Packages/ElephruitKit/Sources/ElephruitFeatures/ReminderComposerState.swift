@@ -178,7 +178,7 @@ enum ReminderDateSearch {
         }
         if !named.isEmpty { return Array(named.prefix(limit)) }
 
-        guard let parsed = TaskDateSuggestion.resolving(normalized, using: dateProvider) else {
+        guard let parsed = ReminderDateInterpretation.resolving(normalized, using: dateProvider) else {
             return []
         }
         return [

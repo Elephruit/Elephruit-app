@@ -398,7 +398,7 @@ struct RecordsCommandBarView: View {
                 }
                 services.noteChange(to: task)
             }
-            feedback = "Task created."
+            feedback = "Reminder created."
 
         case .groupAction(let groupID, let action):
             runGroupAction(action, groupID: groupID)

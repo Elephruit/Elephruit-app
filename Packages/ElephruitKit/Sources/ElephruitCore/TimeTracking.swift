@@ -427,7 +427,7 @@ public enum TimeGrouping: String, Sendable, Hashable, CaseIterable {
         case .project: "Rolled up to the project each item belongs to."
         case .tag: "Rolled up by tag, so one entry can count toward several."
         case .person: "Rolled up by who you were with, so an hour with two people counts under both."
-        case .kind: "Rolled up by what the time was against — a task, a meeting, a conversation."
+        case .kind: "Rolled up by what the time was against — a reminder, a meeting, a conversation."
         }
     }
 

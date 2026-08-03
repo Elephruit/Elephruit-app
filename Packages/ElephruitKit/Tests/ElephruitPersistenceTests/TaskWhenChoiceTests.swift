@@ -9,11 +9,11 @@ import Testing
 @MainActor
 private struct WhenFixture {
     let store: StoreFixture
-    let tasks: TaskService
+    let tasks: ReminderLifecycleService
 
     init() throws {
         store = try StoreFixture()
-        tasks = TaskService(items: store.items, context: store.context, dateProvider: store.dateProvider)
+        tasks = ReminderLifecycleService(items: store.items, context: store.context, dateProvider: store.dateProvider)
     }
 
     var calendar: Calendar { store.dateProvider.calendar }

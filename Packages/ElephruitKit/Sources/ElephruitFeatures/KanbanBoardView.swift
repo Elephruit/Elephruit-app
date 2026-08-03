@@ -52,7 +52,7 @@ struct KanbanColumnView: View {
             Color.clear
                 .contentShape(Rectangle())
                 .onDrop(
-                    of: [.elephruitTaskDrag],
+                    of: [.elephruitWorkItemDrag],
                     delegate: KanbanEndDropDelegate(
                         columnKey: column.key,
                         drag: drag,
@@ -129,7 +129,7 @@ struct KanbanColumnView: View {
                         }
                     }
                     .onDrop(
-                        of: [.elephruitTaskDrag],
+                        of: [.elephruitWorkItemDrag],
                         delegate: KanbanCardDropDelegate(
                             targetID: facts.id,
                             columnKey: column.key,
@@ -143,7 +143,7 @@ struct KanbanColumnView: View {
                 isActive: isDropTargeted && drag.isAtEnd(of: column.key)
             )
             .onDrop(
-                of: [.elephruitTaskDrag],
+                of: [.elephruitWorkItemDrag],
                 delegate: KanbanEndDropDelegate(
                     columnKey: column.key,
                     drag: drag,
@@ -514,13 +514,13 @@ struct KanbanCardView: View {
 
 /// A work item crossing a drag.
 ///
-/// Reuses the existing `.elephruitTaskDrag` type, so a card dragged out of a board onto a task list
+/// Uses the shared `.elephruitWorkItemDrag` type for movement between project surfaces.
 /// is understood there rather than arriving as an opaque payload nothing accepts.
 struct WorkItemTransfer: Codable, Transferable, Identifiable {
     let id: UUID
 
     static var transferRepresentation: some TransferRepresentation {
-        CodableRepresentation(contentType: .elephruitTaskDrag)
+        CodableRepresentation(contentType: .elephruitWorkItemDrag)
     }
 }
 

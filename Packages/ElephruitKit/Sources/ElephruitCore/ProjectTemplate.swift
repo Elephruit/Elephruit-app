@@ -277,7 +277,7 @@ extension ProjectTemplate {
 
     public static let generalTasks = ProjectTemplate(
         id: "general",
-        name: "General tasks",
+        name: "General reminders",
         summary: "A plain list of work, grouped into sections",
         symbolName: "checklist",
         stages: [

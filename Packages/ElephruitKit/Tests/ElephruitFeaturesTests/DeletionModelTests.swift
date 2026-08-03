@@ -39,22 +39,6 @@ struct DeletionModelTests {
         #expect(try services.items.item(id: note.id)?.isInTrash == false, "The search is only its text")
     }
 
-    @Test("Deleting a smart list leaves its tasks where they are")
-    func smartListDeletionKeepsTheTasks() throws {
-        let services = makeServices()
-        let task = try services.items.create(ItemDraft(kind: .task, title: "Still here"))
-        let list = SavedSearch(name: "Errands", queryString: "")
-        list.taskFilterData = Data("{}".utf8)
-        services.context.insert(list)
-        try services.context.save()
-        #expect(services.taskViews.smartLists().count == 1)
-
-        services.deleteSavedSearch(id: list.id)
-
-        #expect(services.taskViews.smartLists().isEmpty)
-        #expect(try services.items.item(id: task.id)?.isInTrash == false)
-    }
-
     @Test("The last project view cannot be removed, and the guard is reachable")
     func lastProjectViewIsRefused() throws {
         let services = makeServices()

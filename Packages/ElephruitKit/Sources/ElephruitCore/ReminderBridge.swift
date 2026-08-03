@@ -243,13 +243,13 @@ public enum ReminderFieldMapping {
         ("Sections", "Reminders has no headings inside a list that EventKit exposes."),
         ("Today and Later Today", "A commitment to today is this app's idea, not the system's."),
         ("Today's manual order", "EventKit exposes no ordering this app can write."),
-        ("Someday", "Reminders has no parked state; a parked task would read as merely undated."),
+        ("Someday", "Apple Reminders has no parked state; a parked reminder would read as merely undated."),
         ("Waiting for", "There is no field for who you are waiting on."),
         ("Linked people, notes, and meetings", "Private relationship data, which must not travel in a shared list."),
-        ("Provenance", "Where a task came from is a fact about this library."),
+        ("Provenance", "Where a reminder came from is a fact about this library."),
         ("Attachments", "EventKit does not expose reminder attachments to third-party apps."),
         ("Smart-list rules", "Rules are evaluated here, over fields the system does not have."),
-        ("Task history", "Completion history beyond the single completion date has nowhere to go."),
+        ("Work history", "Completion history beyond the single completion date has nowhere to go."),
     ]
 
     /// EventKit's priority scale, mapped to the app's three levels.
@@ -434,7 +434,7 @@ public enum ConflictResolution: String, Sendable, Hashable, CaseIterable, Codabl
         switch self {
         case .keepLocal: "The reminder is updated to match. Notes and links here are untouched."
         case .keepRemote: "The shared fields are taken from Reminders. Everything private stays."
-        case .keepBoth: "The reminder is left alone, and your edits become a separate local task."
+        case .keepBoth: "The reminder is left alone, and your edits become a separate local reminder."
         }
     }
 }
@@ -472,7 +472,7 @@ public enum MissingReminderChoice: String, Sendable, Hashable, CaseIterable, Cod
 
     public var displayName: String {
         switch self {
-        case .keepAsLocal: "Keep it here as a local task"
+        case .keepAsLocal: "Keep it here as a local reminder"
         case .deleteLocally: "Delete it here as well"
         case .relink: "Link it to a different reminder"
         }

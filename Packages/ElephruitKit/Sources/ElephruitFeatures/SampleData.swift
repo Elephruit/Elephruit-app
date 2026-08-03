@@ -310,7 +310,7 @@ public enum SampleData {
     }
 
     private static let savedSearchDefinitions: [(name: String, query: String, symbol: String)] = [
-        ("Overdue", "is:overdue type:task", "exclamationmark.triangle"),
+        ("Overdue", "is:overdue type:reminder", "exclamationmark.triangle"),
         ("Urgent this week", "tag:urgent is:open due:<7d", "flame"),
         ("Unfiled notes", "type:note is:unfiled", "tray.2"),
     ]

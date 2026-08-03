@@ -909,7 +909,7 @@ struct ReminderComposer: View {
 
             Divider()
 
-            TaskMonthPicker(
+            ReminderMonthPicker(
                 calendar: clock.calendar,
                 today: clock.now,
                 selected: dateNavigation.day ?? selected,
@@ -1360,7 +1360,7 @@ struct ReminderComposer: View {
     }
 
     private func commitWhenQuery() {
-        guard let suggestion = services.flatMap({ TaskDateSuggestion.resolving(whenQuery, using: $0.dateProvider) })
+        guard let suggestion = services.flatMap({ ReminderDateInterpretation.resolving(whenQuery, using: $0.dateProvider) })
         else { return }
         draft.startAt = suggestion.date
         draft.isSomeday = false
@@ -1368,7 +1368,7 @@ struct ReminderComposer: View {
     }
 
     private func commitDeadlineQuery() {
-        guard let suggestion = services.flatMap({ TaskDateSuggestion.resolving(deadlineQuery, using: $0.dateProvider) })
+        guard let suggestion = services.flatMap({ ReminderDateInterpretation.resolving(deadlineQuery, using: $0.dateProvider) })
         else { return }
         draft.dueAt = suggestion.date
         deadlineQuery = ""

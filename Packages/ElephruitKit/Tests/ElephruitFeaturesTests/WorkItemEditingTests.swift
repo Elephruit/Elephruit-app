@@ -244,7 +244,7 @@ struct WorkItemEditingTests {
         let fixedBug = try services.workItems.createWorkItem(
             title: "Ready to check", kind: .bug, in: project
         )
-        _ = try services.tasks.complete(fixedBug)
+        _ = try services.reminderLifecycle.complete(fixedBug)
 
         let model = ProjectWorkspaceModel(services: services)
         model.load(projectID: project.id, viewID: nil)
@@ -281,8 +281,8 @@ struct WorkItemEditingTests {
         let secondFix = try services.workItems.createWorkItem(
             title: "Second fix", kind: .bug, in: project
         )
-        _ = try services.tasks.complete(firstFix)
-        _ = try services.tasks.complete(secondFix)
+        _ = try services.reminderLifecycle.complete(firstFix)
+        _ = try services.reminderLifecycle.complete(secondFix)
 
         let model = ProjectWorkspaceModel(services: services)
         model.load(projectID: project.id, viewID: nil)

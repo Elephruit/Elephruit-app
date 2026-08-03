@@ -25,9 +25,9 @@ struct WorkItemMenu: View {
         Divider()
 
         if facts.status == .completed || facts.status == .cancelled {
-            Button("Reopen") { perform { try $0.tasks.reopen($1) } }
+            Button("Reopen") { perform { try $0.reminderLifecycle.reopen($1) } }
         } else {
-            Button("Mark Complete") { perform { _ = try $0.tasks.complete($1) } }
+            Button("Mark Complete") { perform { _ = try $0.reminderLifecycle.complete($1) } }
         }
 
         if facts.kind == .bug {

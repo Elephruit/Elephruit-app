@@ -133,7 +133,7 @@ public enum NoteInsertionCommand: Hashable, Sendable, CaseIterable {
         case .table: "Rows and columns."
         case .image: "A picture, stored with the note."
         case .file: "Any attachment, kept as a file."
-        case .reference: "A task, person, project or event — linked, never copied."
+        case .reference: "A reminder, person, project or event — linked, never copied."
         case .page: "A nested note, opened in its own right."
         }
     }

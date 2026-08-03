@@ -3,7 +3,7 @@ import ElephruitModel
 import Foundation
 import SwiftData
 
-/// One block of a task list, with the heading it sits under.
+/// One block of a reminder query, with the heading it sits under.
 ///
 /// Sections are computed here rather than in a view because "which section is this in?" is the
 /// scheduling model's question, and a view that answered it would be a second, quieter copy of
@@ -66,7 +66,7 @@ public struct TaskSectionGroup: Identifiable, Sendable {
 /// For a single person's library that is thousands of rows, not millions. The escalation path if it
 /// ever matters is the derived index in ADR 0004, not a bigger predicate.
 @MainActor
-public final class TaskViewService {
+public final class ReminderQueryService {
     private let items: any ItemRepository
     private let context: ModelContext
     private let dateProvider: any DateProvider

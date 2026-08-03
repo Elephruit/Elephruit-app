@@ -11,8 +11,8 @@ import Testing
 @MainActor
 @Suite("Sidebar refresh queries")
 struct SidebarRefreshQueryTests {
-    private func makeViews(_ fixture: StoreFixture) -> TaskViewService {
-        TaskViewService(items: fixture.items, context: fixture.context, dateProvider: fixture.dateProvider)
+    private func makeViews(_ fixture: StoreFixture) -> ReminderQueryService {
+        ReminderQueryService(items: fixture.items, context: fixture.context, dateProvider: fixture.dateProvider)
     }
 
     @Test("The single-pass badges equal the per-view counts")

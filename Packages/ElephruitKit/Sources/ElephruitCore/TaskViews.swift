@@ -25,7 +25,7 @@ public enum TaskSystemView: String, Sendable, Hashable, CaseIterable, Codable {
         case .flagged: "Flagged"
         case .waiting: "Waiting"
         case .completed: "Logbook"
-        case .all: "All Tasks"
+        case .all: "All Reminders"
         }
     }
 
@@ -55,7 +55,7 @@ public enum TaskSystemView: String, Sendable, Hashable, CaseIterable, Codable {
         case .flagged: "Marked as worth coming back to."
         case .waiting: "Somebody else has the next move."
         case .completed: "What you finished, and what you decided not to."
-        case .all: "Every task, however it is filed."
+        case .all: "Every reminder, however it is filed."
         }
     }
 

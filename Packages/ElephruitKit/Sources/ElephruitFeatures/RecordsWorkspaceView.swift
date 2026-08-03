@@ -529,7 +529,7 @@ private struct RecordDetail: View {
                 return other?.kind == .reminder ? other : nil
             }
             if tasks.isEmpty {
-                Text("Tasks linked to this record appear here, including work assigned to them and things you owe them.")
+                Text("Reminders linked to this record appear here, including things assigned to them and things you owe them.")
                     .foregroundStyle(Theme.Colors.tertiaryText)
             } else {
                 ForEach(tasks) { task in Label(task.displayTitle, systemImage: "circle") }

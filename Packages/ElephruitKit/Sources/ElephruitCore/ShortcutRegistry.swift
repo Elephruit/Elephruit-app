@@ -54,7 +54,7 @@ public struct KeyBinding: Sendable, Hashable, Codable {
 /// than one that shows none.
 public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
     case newItem
-    case newTask
+    case newReminder = "newTask"
     case newProject
     case quickCapture
     case newWindow
@@ -75,10 +75,10 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
     case toggleTimer
     case quickLog
     case recordsCommandBar = "peopleCommandBar"
-    case quickTaskEntry
-    case goTasks
-    case completeTask
-    case flagTask
+    case quickReminderEntry = "quickTaskEntry"
+    case goReminders = "goTasks"
+    case completeReminder = "completeTask"
+    case flagReminder = "flagTask"
     case moveToToday
 
     // MARK: The calendar
@@ -90,7 +90,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
     public var title: String {
         switch self {
         case .newItem: "New Item"
-        case .newTask: "New Task"
+        case .newReminder: "New Reminder"
         case .newProject: "New Project"
         case .quickCapture: "Quick Jot"
         case .newWindow: "New Window"
@@ -115,10 +115,10 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .newEvent: "New Event"
         case .searchCalendar: "Search Calendar"
         case .switchCalendarSet: "Switch Calendar Set"
-        case .quickTaskEntry: "Quick Task Entry"
-        case .goTasks: "Go to Today's Tasks"
-        case .completeTask: "Complete Task"
-        case .flagTask: "Flag Task"
+        case .quickReminderEntry: "Quick Reminder Entry"
+        case .goReminders: "Go to Reminders"
+        case .completeReminder: "Complete Reminder"
+        case .flagReminder: "Flag Reminder"
         case .moveToToday: "Move to Today"
         }
     }
@@ -127,7 +127,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
     public var defaultBinding: KeyBinding {
         switch self {
         case .newItem: KeyBinding("n")
-        case .newTask: KeyBinding("n", [.command, .option])
+        case .newReminder: KeyBinding("n", [.command, .option])
         case .newProject: KeyBinding("n", [.command, .shift, .option])
         // ⌘⇧J for Jot. It used to be ⌘⇧N, which put it in the middle of the four New-something
         // bindings — ⌘N, ⌥⌘N, ⌥⇧⌘N, ⌃⌘N — where the only thing distinguishing the one global,
@@ -184,14 +184,13 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .searchCalendar: KeyBinding("f", [.command, .control])
         case .switchCalendarSet: KeyBinding("s", [.command, .option])
 
-        // ⌃⌘Space for capture from anywhere, which is the one shortcut a task manager has to have
-        // and the one place a global binding is worth the cost. See ADR 0008.
-        case .quickTaskEntry: KeyBinding(" ", [.command, .control])
-        case .goTasks: KeyBinding("7")
+        // Preserve the historical raw values so existing shortcut preferences keep working.
+        case .quickReminderEntry: KeyBinding(" ", [.command, .control])
+        case .goReminders: KeyBinding("7")
         // Return-adjacent, because completing is what you do most and ⌘Return is free here: the
         // lists are not text fields, and the text fields that exist handle their own Return.
-        case .completeTask: KeyBinding("\r", .command)
-        case .flagTask: KeyBinding("f", [.command, .shift])
+        case .completeReminder: KeyBinding("\r", .command)
+        case .flagReminder: KeyBinding("f", [.command, .shift])
         case .moveToToday: KeyBinding("t", [.command, .shift])
         }
     }

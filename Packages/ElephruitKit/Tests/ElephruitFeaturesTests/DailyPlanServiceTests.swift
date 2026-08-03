@@ -94,7 +94,7 @@ struct DailyPlanServiceTests {
 
         let task = try services.items.create(ItemDraft(kind: .task, title: "Send Maya the pricing"))
         try services.items.link(task, to: maya, kind: .mentions)
-        try services.tasks.commit(task, to: Self.clock.startOfToday)
+        try services.reminderLifecycle.commit(task, to: Self.clock.startOfToday)
 
         let day = try await plan(services)
 
@@ -209,10 +209,10 @@ struct DailyPlanServiceTests {
         let services = await Self.fixture()
 
         let late = try services.items.create(ItemDraft(kind: .task, title: "The tax return"))
-        try services.tasks.setDeadline(Self.clock.startOfDay(daysFromToday: -4), on: late)
+        try services.reminderLifecycle.setDeadline(Self.clock.startOfDay(daysFromToday: -4), on: late)
 
         let planned = try services.items.create(ItemDraft(kind: .task, title: "Write the brief"))
-        try services.tasks.commitToToday(planned)
+        try services.reminderLifecycle.commitToToday(planned)
 
         let day = try await plan(services)
 
@@ -227,8 +227,8 @@ struct DailyPlanServiceTests {
         let services = await Self.fixture()
 
         let done = try services.items.create(ItemDraft(kind: .task, title: "Book the room"))
-        try services.tasks.commitToToday(done)
-        _ = try services.tasks.complete(done)
+        try services.reminderLifecycle.commitToToday(done)
+        _ = try services.reminderLifecycle.complete(done)
 
         let day = try await plan(services)
 
@@ -294,7 +294,7 @@ struct DailyPlanServiceTests {
         var draft = ItemDraft(kind: .task, title: "Draft the tiers")
         draft.parentID = project.id
         let task = try services.items.create(draft)
-        try services.tasks.commitToToday(task)
+        try services.reminderLifecycle.commitToToday(task)
 
         #expect(try await plan(services).tasks.count == 1)
 
@@ -310,11 +310,11 @@ struct DailyPlanServiceTests {
         let services = await Self.fixture()
 
         let task = try services.items.create(ItemDraft(kind: .task, title: "Send the invoice"))
-        try services.tasks.commitToToday(task)
+        try services.reminderLifecycle.commitToToday(task)
 
         #expect(try await plan(services).tasks.map(\.taskID) == [task.id])
 
-        _ = try services.tasks.complete(task)
+        _ = try services.reminderLifecycle.complete(task)
         // As every mutation in the app does — see `AppServices.noteChange(to:)`. It is what tells the
         // search index, the sidebar counts and this page that something moved, and the assembler's
         // library pass is keyed on it for the same reason `ItemListView`'s reload already was.
@@ -325,7 +325,7 @@ struct DailyPlanServiceTests {
         #expect(after.completedTaskIDs == [task.id])
 
         // And the change is visible everywhere else, because there was only ever one record.
-        #expect(try services.taskViews.tasks(in: .completed).contains { $0.id == task.id })
+        #expect(try services.items.item(id: task.id)?.status == .completed)
     }
 
     @Test("The same event arriving again from the calendar produces one row, not two")
@@ -422,7 +422,7 @@ struct DailyPlanServiceTests {
 
         let done = try services.items.create(ItemDraft(kind: .task, title: "Book Room 2"))
         try services.items.link(done, to: meeting, kind: .related)
-        _ = try services.tasks.complete(done)
+        _ = try services.reminderLifecycle.complete(done)
 
         let day = try await plan(services)
         let preparation = try #require(day.events.first?.preparation)
@@ -443,7 +443,7 @@ struct DailyPlanServiceTests {
         let meeting = try #require(try services.eventLinks.meetingItem(for: event))
         let prepare = try services.items.create(ItemDraft(kind: .task, title: "Print the comparison"))
         try services.items.link(prepare, to: meeting, kind: .related)
-        try services.tasks.commitToToday(prepare)
+        try services.reminderLifecycle.commitToToday(prepare)
 
         let day = try await plan(services)
         let task = try #require(day.tasks.first { $0.taskID == prepare.id })
@@ -489,7 +489,7 @@ struct DailyPlanServiceTests {
         let services = await Self.fixture()
 
         let flagged = try services.items.create(ItemDraft(kind: .task, title: "Come back to this"))
-        try services.tasks.setFlagged(true, on: flagged)
+        try services.reminderLifecycle.setFlagged(true, on: flagged)
 
         let day = try await plan(services)
         let task = try #require(day.tasks.first { $0.taskID == flagged.id })
@@ -540,7 +540,7 @@ struct DailyPlanServiceTests {
         )
         for index in 0..<20 {
             let task = try services.items.create(ItemDraft(kind: .task, title: "Task \(index)"))
-            try services.tasks.commit(task, to: Self.clock.startOfDay(daysFromToday: index % 5))
+            try services.reminderLifecycle.commit(task, to: Self.clock.startOfDay(daysFromToday: index % 5))
         }
 
         await services.dailyPlan.loadCalendar(
@@ -596,7 +596,7 @@ struct DailyPlanServiceTests {
         )
         for index in 0..<40 {
             let task = try services.items.create(ItemDraft(kind: .task, title: "Task \(index)"))
-            try services.tasks.commit(task, to: Self.clock.startOfDay(daysFromToday: index % 5))
+            try services.reminderLifecycle.commit(task, to: Self.clock.startOfDay(daysFromToday: index % 5))
         }
 
         let model = TodayModel(services: services)
@@ -648,7 +648,7 @@ struct DailyPlanServiceTests {
         #expect(model.selectedPlan?.tasks.isEmpty == true)
 
         let task = try services.items.create(ItemDraft(kind: .task, title: "Something new"))
-        try services.tasks.commitToToday(task)
+        try services.reminderLifecycle.commitToToday(task)
         services.noteChange(to: task)
 
         model.assemble()
@@ -747,7 +747,7 @@ struct DailyPlanServiceTests {
         let services = await Self.fixture()
 
         let late = try services.items.create(ItemDraft(kind: .task, title: "The tax return"))
-        try services.tasks.setDeadline(Self.clock.startOfDay(daysFromToday: -4), on: late)
+        try services.reminderLifecycle.setDeadline(Self.clock.startOfDay(daysFromToday: -4), on: late)
 
         #expect(try await plan(services).tasks.count == 1)
         #expect(try await plan(services, on: Self.clock.startOfTomorrow).tasks.isEmpty)

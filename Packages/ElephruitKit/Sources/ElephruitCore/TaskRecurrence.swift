@@ -170,9 +170,9 @@ public enum RecurrenceEditScope: String, Sendable, Hashable, CaseIterable, Codab
 
     public var displayName: String {
         switch self {
-        case .thisOccurrence: "This Task"
-        case .thisAndFuture: "This and Future Tasks"
-        case .entireSeries: "All Tasks in the Series"
+        case .thisOccurrence: "This Reminder"
+        case .thisAndFuture: "This and Future Reminders"
+        case .entireSeries: "All Reminders in the Series"
         }
     }
 

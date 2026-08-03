@@ -134,8 +134,8 @@ struct AreasSidebarSection: View {
         }
     }
 
-    private var rows: [TasksSidebarSection.ContainerRow] {
-        services?.taskSidebar.containers ?? []
+    private var rows: [ContainerSidebarEntry] {
+        services?.containerSidebar.containers ?? []
     }
 }
 
@@ -143,7 +143,7 @@ struct AreasSidebarSection: View {
 
 /// A container — an area, a project, or a list — as a sidebar row.
 struct ContainerSidebarRow: View {
-    let row: TasksSidebarSection.ContainerRow
+    let row: ContainerSidebarEntry
     var isSelected: Bool
     var rowHeight: CGFloat
 
@@ -163,7 +163,9 @@ struct ContainerSidebarRow: View {
             // Progress, and only where it means something. A list never finishes, so a figure
             // against one would be a number with no destination.
             if let progress = row.progress {
-                ProjectProgressDot(progress: progress)
+                Text(progress, format: .percent.precision(.fractionLength(0)))
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
             }
         }
         .frame(minHeight: rowHeight)

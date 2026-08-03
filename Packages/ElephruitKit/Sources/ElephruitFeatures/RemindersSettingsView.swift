@@ -146,7 +146,7 @@ public struct RemindersSettingsSection: View {
                 Spacer()
 
                 Button("Disconnect", role: .destructive) { services.reminders.disable() }
-                    .help("Stops syncing. Tasks already linked keep their notes, links, and history.")
+                    .help("Stops syncing. Reminders already linked keep their notes, links, and history.")
             }
         }
         .padding(.vertical, Theme.Spacing.small)

@@ -73,9 +73,9 @@ public final class WorkItemEditorModel {
         guard let item, item.status != status else { return }
         commit {
             switch status {
-            case .completed: _ = try services.tasks.complete(item)
-            case .cancelled: try services.tasks.cancel(item)
-            case .open, .none: try services.tasks.reopen(item)
+            case .completed: _ = try services.reminderLifecycle.complete(item)
+            case .cancelled: try services.reminderLifecycle.cancel(item)
+            case .open, .none: try services.reminderLifecycle.reopen(item)
             }
         }
     }

@@ -22,7 +22,7 @@ import Testing
 @MainActor
 private struct InboxFixture {
     let store: StoreFixture
-    let tasks: TaskService
+    let tasks: ReminderLifecycleService
     let reminders: FixtureRemindersProvider
     let engine: ReminderSyncEngine
 
@@ -30,11 +30,11 @@ private struct InboxFixture {
 
     init() throws {
         store = try StoreFixture(dateProvider: clock)
-        tasks = TaskService(items: store.items, context: store.context, dateProvider: store.dateProvider)
+        tasks = ReminderLifecycleService(items: store.items, context: store.context, dateProvider: store.dateProvider)
         reminders = FixtureRemindersProvider(authorization: .authorized)
         engine = ReminderSyncEngine(
             items: store.items,
-            tasks: tasks,
+            lifecycle: tasks,
             context: store.context,
             dateProvider: store.dateProvider,
             provider: reminders

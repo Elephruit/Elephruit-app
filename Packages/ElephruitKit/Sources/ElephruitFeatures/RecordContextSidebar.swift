@@ -36,7 +36,7 @@ struct RecordContextSidebar: View {
                     }
 
                     if !context.openItems.isEmpty {
-                        InspectorSection("Tasks") {
+                        InspectorSection("Reminders") {
                             ForEach(context.openItems.prefix(6)) { entry in
                                 linkRow(entry.title, systemImage: entry.kind.symbolName) {
                                     navigation.selectItem(entry.id)

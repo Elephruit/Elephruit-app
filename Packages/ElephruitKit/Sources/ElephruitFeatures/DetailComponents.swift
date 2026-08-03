@@ -253,7 +253,7 @@ struct HeadingActionConfirmation: Identifiable {
         guard taskCount > 0 else {
             return "This heading is empty."
         }
-        let plural = taskCount == 1 ? "task" : "tasks"
+        let plural = taskCount == 1 ? "work item" : "work items"
         switch action {
         case .archive:
             return "Its \(taskCount) \(plural) will be archived with it. You can move them out first instead."
@@ -264,8 +264,8 @@ struct HeadingActionConfirmation: Identifiable {
 
     var confirmTitle: String {
         switch action {
-        case .archive: taskCount > 0 ? "Archive Heading and \(taskCount) Tasks" : "Archive Heading"
-        case .trash: taskCount > 0 ? "Trash Heading and \(taskCount) Tasks" : "Trash Heading"
+        case .archive: taskCount > 0 ? "Archive Heading and \(taskCount) Work Items" : "Archive Heading"
+        case .trash: taskCount > 0 ? "Trash Heading and \(taskCount) Work Items" : "Trash Heading"
         }
     }
 }

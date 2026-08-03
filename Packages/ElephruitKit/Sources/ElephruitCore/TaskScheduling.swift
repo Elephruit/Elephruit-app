@@ -216,7 +216,7 @@ public enum DateReviewReason: String, Sendable, Hashable, Codable, CaseIterable 
         case .deadlineMayHaveBeenAReminder:
             "This deadline has a time on it. Did you mean a deadline, or a reminder?"
         case .startAndDeferDisagreed:
-            "This task had two different start dates. The earlier one was kept."
+            "This reminder had two different start dates. The earlier one was kept."
         }
     }
 }
@@ -637,20 +637,20 @@ public enum TaskInvariants {
                 facts.waitingOnPersonID = nil
                 facts.followUpAt = nil
                 corrections.append(
-                    Correction(field: "waiting", reason: "A finished task is not waiting on anybody.")
+                    Correction(field: "waiting", reason: "A finished reminder is not waiting on anybody.")
                 )
             }
             if facts.isSomeday {
                 facts.isSomeday = false
                 corrections.append(
-                    Correction(field: "someday", reason: "A finished task is no longer a maybe.")
+                    Correction(field: "someday", reason: "A finished reminder is no longer a maybe.")
                 )
             }
             if facts.todayCommittedOn != nil || facts.isLaterToday {
                 facts.todayCommittedOn = nil
                 facts.isLaterToday = false
                 corrections.append(
-                    Correction(field: "today", reason: "A finished task leaves today's plan.")
+                    Correction(field: "today", reason: "A finished reminder leaves today's plan.")
                 )
             }
         }
@@ -661,7 +661,7 @@ public enum TaskInvariants {
             facts.reminderAt = nil
             facts.reminderOwner = .none
             corrections.append(
-                Correction(field: "reminder", reason: "A canceled task does not send notifications.")
+                Correction(field: "reminder", reason: "A canceled reminder does not send notifications.")
             )
         }
 
@@ -690,7 +690,7 @@ public enum TaskInvariants {
         if facts.followUpAt != nil, facts.waitingSince == nil {
             facts.followUpAt = nil
             corrections.append(
-                Correction(field: "followUp", reason: "Only a waiting task has somebody to chase.")
+                Correction(field: "followUp", reason: "Only a waiting reminder has somebody to chase.")
             )
         }
 

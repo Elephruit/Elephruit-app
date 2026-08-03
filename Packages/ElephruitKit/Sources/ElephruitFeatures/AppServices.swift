@@ -98,18 +98,13 @@ public final class AppServices {
     public let eventTemplates: EventTemplateService
     public let eventLinks: EventAnnotationService
 
-    // MARK: The Tasks module
-
-    /// Every way a task can change, and the one place its invariants are applied.
-    public let tasks: TaskService
-
-    /// The system views, assembled from the store.
-    public let taskViews: TaskViewService
-
-    /// What the Tasks band of the sidebar reads. Computed on change, never during a render.
-    public let taskSidebar: TaskSidebarModel
-
     // MARK: The Reminders module
+
+    /// Every way a reminder or project work record can change.
+    public let reminderLifecycle: ReminderLifecycleService
+
+    /// The container tree used by the Areas sidebar.
+    public let containerSidebar: ContainerSidebarModel
 
     /// The Reminders module's direct view of first-class items.
     let reminderStore: ReminderStore
@@ -145,9 +140,6 @@ public final class AppServices {
 
     /// Keeping linked tasks and system reminders in step, and saying so when it cannot.
     public let reminderSync: ReminderSyncEngine
-
-    /// Turning a line of typed text into a task, once the library has had its say.
-    public let taskEntry: TaskEntryComposer
 
     /// People, computed from the links that already exist.
     public let people: PeopleService
@@ -469,14 +461,12 @@ public final class AppServices {
         let eventLinks = EventAnnotationService(context: context, items: items, dateProvider: dateProvider)
         self.eventLinks = eventLinks
 
-        let tasks = TaskService(items: items, context: context, dateProvider: dateProvider)
-        let taskViews = TaskViewService(items: items, context: context, dateProvider: dateProvider)
-        self.tasks = tasks
-        self.taskViews = taskViews
-        self.taskSidebar = TaskSidebarModel(items: items, views: taskViews)
+        let reminderLifecycle = ReminderLifecycleService(items: items, context: context, dateProvider: dateProvider)
+        self.reminderLifecycle = reminderLifecycle
+        self.containerSidebar = ContainerSidebarModel(items: items)
         let reminderStore = ReminderStore(
             items: items,
-            lifecycle: tasks,
+            lifecycle: reminderLifecycle,
             dateProvider: dateProvider
         )
         self.reminderStore = reminderStore
@@ -585,12 +575,11 @@ public final class AppServices {
         // which somebody turned Reminders on.
         self.reminderSync = ReminderSyncEngine(
             items: items,
-            tasks: tasks,
+            lifecycle: reminderLifecycle,
             context: context,
             dateProvider: dateProvider,
             provider: { reminders.provider }
         )
-        self.taskEntry = TaskEntryComposer(items: items, tasks: tasks, dateProvider: dateProvider)
 
         // The provider is built lazily, and only when the feature is enabled — so an app that never
         // turns the calendar on never constructs an `EKEventStore` and never prompts.
@@ -991,7 +980,7 @@ public final class AppServices {
     public func refreshDerivedState() {
         counts.refresh()
         sidebar.refresh()
-        taskSidebar.refresh()
+        containerSidebar.refresh()
         // Without this the Projects tree is empty until something else changes — which is exactly
         // how "no projects until you create one" happened: everything the sidebar reads is computed
         // on change and never during a render, so the *first* computation has to come from
@@ -1013,7 +1002,6 @@ public final class AppServices {
         }
         let populated = perform {
             try SampleData.populate(services: self)
-            try TaskSampleData.populate(services: self)
         }
         guard populated else { return }
 
@@ -1021,7 +1009,7 @@ public final class AppServices {
 
         // Sample data is written straight through `ItemService`, which is the point — it exercises
         // the same path a real write takes. What it skips is ``noteChange(to:)``, and with it the
-        // index, so a hundred and forty invented notes and tasks were unreachable by search: the
+        // index, so the invented notes and reminders were unreachable by search: the
         // index had already been opened, found complete, and had no reason to look again.
         //
         // The effect was that every review of this app searched an empty index and concluded the

@@ -12,12 +12,12 @@ import Observation
 @MainActor
 final class ReminderStore {
     private let items: any ItemRepository
-    private let lifecycle: TaskService
+    private let lifecycle: ReminderLifecycleService
     private let dateProvider: any DateProvider
 
     init(
         items: any ItemRepository,
-        lifecycle: TaskService,
+        lifecycle: ReminderLifecycleService,
         dateProvider: any DateProvider
     ) {
         self.items = items

@@ -167,7 +167,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
             // asked to see.
             ItemQuery()
         case .taskView, .smartList, .builtInSmartList:
-            // Every task view is assembled by `TaskViewService`, whose rules compare against today
+            // Every task view is assembled by `ReminderQueryService`, whose rules compare against today
             // in the user's calendar and read a lifecycle derived from four columns and a traversal.
             // None of that is a predicate, and an empty query is the honest answer rather than a
             // half-right one that a view might use by mistake.
@@ -445,7 +445,6 @@ public final class NavigationModel {
     /// a thought and files it as a note; this one reads a sentence about a *task* and shows what it
     /// understood — dates, a repeat, a destination — before anything is created. Merging them would
     /// mean one field whose behaviour changed depending on what the first word turned out to be.
-    public var isTaskEntryVisible = false
     public var isCommandPaletteVisible = false
 
     /// The Records command bar, which is a different surface from the general ⌘K palette.
@@ -819,20 +818,12 @@ public final class NavigationModel {
     ///
     /// Cleared by the workspace on the way through, so a second click on the same task opens it
     /// again rather than being swallowed as a duplicate.
-    public var taskToOpen: UUID?
-
     /// Goes to a task, wherever it lives.
     ///
     /// - Parameters:
     ///   - id: the task.
     ///   - destination: the list it lives in — its project, its list, or the system view it falls
     ///     into. The caller resolves this because it has the store and this does not.
-    public func openTask(_ id: UUID, in destination: SidebarSelection) {
-        select(destination)
-        selectItem(id)
-        taskToOpen = id
-    }
-
     /// Whether a batch action bar should appear.
     public var hasMultipleSelection: Bool {
         selectedItemIDs.count > 1
@@ -908,8 +899,7 @@ public final class NavigationModel {
 
     public var shellState: ShellState {
         ShellState(
-            hasOverlay: isQuickCaptureVisible || isCommandPaletteVisible || isTagBrowserVisible
-                || isTaskEntryVisible,
+            hasOverlay: isQuickCaptureVisible || isCommandPaletteVisible || isTagBrowserVisible,
             hasRevealedRowActions: hasRevealedRowActions,
             isSearchActive: isSearchActive,
             focusedPane: focusedPane,
@@ -928,7 +918,6 @@ public final class NavigationModel {
             isQuickCaptureVisible = false
             isCommandPaletteVisible = false
             isTagBrowserVisible = false
-            isTaskEntryVisible = false
 
         case .closeRowActions:
             onCloseRowActions?()

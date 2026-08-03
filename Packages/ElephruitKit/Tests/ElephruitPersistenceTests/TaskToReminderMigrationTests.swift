@@ -37,4 +37,22 @@ struct TaskToReminderMigrationTests {
         #expect(try TaskToReminderMigration.apply(in: fixture.context) == 0)
         #expect(try TaskToReminderMigration.plan(in: fixture.context).isEmpty)
     }
+
+    @Test("Project bugs and features remain project work records")
+    func preservesProjectSpecificWorkKinds() throws {
+        let fixture = try StoreFixture()
+        let project = try fixture.makeProject(title: "Launch")
+        let task = try fixture.makeTask(title: "Legacy", parentID: project.id)
+        let bug = try fixture.items.create(ItemDraft(kind: .bug, title: "Crash", parentID: project.id))
+        let feature = try fixture.items.create(ItemDraft(kind: .feature, title: "Export", parentID: project.id))
+
+        #expect(try TaskToReminderMigration.plan(in: fixture.context) == [task.id])
+        #expect(try TaskToReminderMigration.apply(in: fixture.context) == 1)
+
+        #expect(try fixture.requireItem(id: task.id).kind == .reminder)
+        #expect(try fixture.requireItem(id: bug.id).kind == .bug)
+        #expect(try fixture.requireItem(id: feature.id).kind == .feature)
+        #expect(try fixture.requireItem(id: bug.id).parent?.id == project.id)
+        #expect(try fixture.requireItem(id: feature.id).parent?.id == project.id)
+    }
 }

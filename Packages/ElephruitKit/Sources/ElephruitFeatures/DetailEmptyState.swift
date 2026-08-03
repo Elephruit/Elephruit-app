@@ -85,8 +85,8 @@ public struct DetailEmptyState: Sendable, Hashable {
         case .taskView, .smartList, .builtInSmartList:
             DetailEmptyState(
                 symbolName: "checkmark.circle",
-                headline: "No task selected",
-                message: "Choose a task to see its dates, its project, and what it is waiting on."
+                headline: "No reminder selected",
+                message: "Choose a reminder to see its dates, its project, and what it is waiting on."
             )
 
         case .kind(let kind):

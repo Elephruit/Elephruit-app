@@ -514,7 +514,7 @@ public struct EventInspectorView: View {
                     .font(Theme.Text.metadata)
             }
             .buttonStyle(.borderless)
-            .help("Adds a task in Tasks. It never appears in a calendar view.")
+            .help("Adds a reminder in Reminders. It never appears in a calendar view.")
         }
     }
 
@@ -984,7 +984,7 @@ struct FollowUpSheet: View {
                     .foregroundStyle(Theme.Colors.secondaryText)
             }
 
-            Text("Appears in Tasks. Never in a calendar view.")
+            Text("Appears in Reminders. Never in a calendar view.")
                 .font(Theme.Text.keyHint)
                 .foregroundStyle(Theme.Colors.tertiaryText)
 

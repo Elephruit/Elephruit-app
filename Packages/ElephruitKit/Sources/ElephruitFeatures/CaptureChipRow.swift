@@ -191,8 +191,8 @@ struct CaptureKindToggle: View {
     }
 
     private var helpText: String {
-        if isTask { return "A task. Click to make it a note." }
-        if isNote { return "A note. Click to make it a task." }
-        return "A \(kindName.lowercased()). Click to make it a task."
+        if isTask { return "A reminder. Click to make it a note." }
+        if isNote { return "A note. Click to make it a reminder." }
+        return "A \(kindName.lowercased()). Click to make it a reminder."
     }
 }

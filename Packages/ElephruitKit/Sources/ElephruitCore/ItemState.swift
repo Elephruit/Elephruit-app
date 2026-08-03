@@ -184,7 +184,7 @@ public enum LinkKind: String, Codable, Sendable, Hashable, CaseIterable {
         case .participant: "Participant"
         case .blockedBy: "Blocked By"
         case .waitingOn: "Waiting on"
-        case .promisedTo: "Task for"
+        case .promisedTo: "Reminder for"
         case .recurrenceSeries: "Recurrence"
         case .conflictCopy: "Conflicted Copy"
         case .assignee: "Assigned to"

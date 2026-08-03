@@ -84,7 +84,7 @@ public struct PersonQuery: Sendable, Hashable {
             parts.append(months <= 1 ? "celebrations this month" : "celebrations in \(months) months")
         }
         if let days = notContactedForDays { parts.append("not contacted in \(days / 30) months") }
-        if hasOpenPromises { parts.append("open tasks") }
+        if hasOpenPromises { parts.append("open reminders") }
         if let groupName { parts.append("in \(groupName)") }
         return parts.joined(separator: " · ")
     }

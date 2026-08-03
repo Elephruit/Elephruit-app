@@ -516,7 +516,7 @@ public struct BuiltInSmartList: Sendable, Hashable, Identifiable {
         ),
         BuiltInSmartList(
             id: "open-promises",
-            title: "Open Tasks with People",
+            title: "Open Reminders with People",
             symbolName: "hand.raised",
             hint: "Something you owe somebody, or somebody owes you.",
             filter: TaskFilter(
@@ -528,7 +528,7 @@ public struct BuiltInSmartList: Sendable, Hashable, Identifiable {
             id: "has-attachments",
             title: "Has Attachments",
             symbolName: "paperclip",
-            hint: "Tasks carrying a file.",
+            hint: "Reminders carrying a file.",
             filter: TaskFilter(rules: [.hasAttachments(true)])
         ),
         BuiltInSmartList(
@@ -563,9 +563,9 @@ public struct BuiltInSmartList: Sendable, Hashable, Identifiable {
         // the one list nobody navigates to in order to decide something.
         BuiltInSmartList(
             id: "all-tasks",
-            title: "All Tasks",
+            title: "All Reminders",
             symbolName: "list.bullet",
-            hint: "Every task, however it is filed.",
+            hint: "Every reminder, however it is filed.",
             filter: TaskFilter(includesResolved: true)
         ),
     ]

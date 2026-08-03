@@ -36,7 +36,7 @@ public struct ReminderSyncReport: Sendable, Hashable {
     }
 }
 
-/// Keeps linked tasks and system reminders in step, and says so when it cannot.
+/// Keeps linked app reminders and system reminders in step, and says so when it cannot.
 ///
 /// ### The three rules this type exists to keep
 /// 1. **Nothing in the user's Reminders changes without their intent.** Every write goes through
@@ -52,7 +52,7 @@ public struct ReminderSyncReport: Sendable, Hashable {
 @MainActor
 public final class ReminderSyncEngine {
     private let items: any ItemRepository
-    private let tasks: TaskService
+    private let lifecycle: ReminderLifecycleService
     private let context: ModelContext
     private let dateProvider: any DateProvider
 
@@ -81,13 +81,13 @@ public final class ReminderSyncEngine {
 
     public init(
         items: any ItemRepository,
-        tasks: TaskService,
+        lifecycle: ReminderLifecycleService,
         context: ModelContext,
         dateProvider: any DateProvider,
         provider: @escaping @MainActor () -> any RemindersProviding
     ) {
         self.items = items
-        self.tasks = tasks
+        self.lifecycle = lifecycle
         self.context = context
         self.dateProvider = dateProvider
         self.resolveProvider = provider
@@ -96,14 +96,14 @@ public final class ReminderSyncEngine {
     /// For a caller whose adapter genuinely never changes — the fixtures, and the tests over them.
     public convenience init(
         items: any ItemRepository,
-        tasks: TaskService,
+        lifecycle: ReminderLifecycleService,
         context: ModelContext,
         dateProvider: any DateProvider,
         provider: any RemindersProviding
     ) {
         self.init(
             items: items,
-            tasks: tasks,
+            lifecycle: lifecycle,
             context: context,
             dateProvider: dateProvider,
             provider: { provider }
@@ -152,7 +152,7 @@ public final class ReminderSyncEngine {
 
     /// Writes a reminder's mapped fields onto a task, leaving everything else exactly as it was.
     public func adopt(_ snapshot: ReminderSnapshot, into task: Item) throws(AppError) {
-        try tasks.mutate(task) { subject in
+        try lifecycle.mutate(task) { subject in
             subject.title = snapshot.title
             if let notes = snapshot.notes { subject.body = notes }
 

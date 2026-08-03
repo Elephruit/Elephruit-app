@@ -3,12 +3,12 @@ import ElephruitModel
 import Foundation
 import SwiftData
 
-/// What completing a task actually did.
+/// What completing a reminder or project work record actually did.
 ///
 /// Returned rather than inferred, because completing a repeating task is two facts — this occurrence
 /// is done, and the next one exists — and a caller that has to work out which happened by re-reading
 /// the store will get it wrong the first time somebody completes the last occurrence of a series.
-public struct TaskCompletionOutcome: Sendable, Hashable {
+public struct WorkItemCompletionOutcome: Sendable, Hashable {
     /// The occurrence that was just finished.
     public var completedID: UUID
 
@@ -42,14 +42,14 @@ public struct TaskCompletionOutcome: Sendable, Hashable {
 /// means applying them six times and forgetting once — and the forgotten one is a task that reads as
 /// completed in one column and waiting in another.
 ///
-/// So every mutation here funnels through ``TaskService/mutate(_:_:)``, which runs the invariants
+/// So every mutation here funnels through ``ReminderLifecycleService/mutate(_:_:)``, which runs the invariants
 /// after the change and before the save. A view that reaches past this to `update` can still write
 /// an inconsistent task; that is what `TaskInvariantCoverageTests` is for.
 ///
 /// `@MainActor` for the reason `ItemRepository` is: it hands back `Item` objects, which belong to
 /// the context that owns them.
 @MainActor
-public final class TaskService {
+public final class ReminderLifecycleService {
     private let items: any ItemRepository
     private let context: ModelContext
     private let dateProvider: any DateProvider
@@ -443,7 +443,7 @@ public final class TaskService {
     /// do, and it means a weekly task has exactly one completion in its history however many years
     /// it has been running.
     @discardableResult
-    public func complete(_ task: Item) throws(AppError) -> TaskCompletionOutcome {
+    public func complete(_ task: Item) throws(AppError) -> WorkItemCompletionOutcome {
         let now = dateProvider.now
         let facts = task.taskFacts()
 
@@ -462,7 +462,7 @@ public final class TaskService {
         }
 
         guard let rule = task.recurrence, let advance else {
-            return TaskCompletionOutcome(
+            return WorkItemCompletionOutcome(
                 completedID: task.id,
                 seriesEnded: task.recurrence != nil,
                 needsReminderPush: task.syncState == .linked
@@ -470,7 +470,7 @@ public final class TaskService {
         }
 
         let next = try makeNextOccurrence(of: task, rule: rule, advance: advance)
-        return TaskCompletionOutcome(
+        return WorkItemCompletionOutcome(
             completedID: task.id,
             nextOccurrenceID: next.id,
             needsReminderPush: task.syncState == .linked

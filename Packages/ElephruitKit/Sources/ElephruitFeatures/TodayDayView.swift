@@ -238,7 +238,7 @@ struct TodayDayView: View {
         let isDrafting = draftDay == plan.date
 
         if !remaining.isEmpty || isDrafting || !(plan.isPast || plan.isEmpty), let actions {
-            TodaySection(title: "Tasks", count: remaining.isEmpty ? nil : remaining.count) {
+            TodaySection(title: "Reminders", count: remaining.isEmpty ? nil : remaining.count) {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(remaining) { task in
                         if let item = model.task(task.taskID) {
@@ -272,7 +272,7 @@ struct TodayDayView: View {
             Button {
                 openDraft()
             } label: {
-                Label("Add Task", systemImage: "plus.circle")
+                Label("Add Reminder", systemImage: "plus.circle")
                     .font(Theme.Text.rowSubtitle)
             }
             .buttonStyle(.plain)
@@ -433,7 +433,7 @@ struct TodayCompactDayView: View {
             parts.append(plan.briefing.meetingCount == 1 ? "1 meeting" : "\(plan.briefing.meetingCount) meetings")
         }
         if !plan.tasks.isEmpty {
-            parts.append(plan.tasks.count == 1 ? "1 task" : "\(plan.tasks.count) tasks")
+            parts.append(plan.tasks.count == 1 ? "1 reminder" : "\(plan.tasks.count) reminders")
         }
         if parts.count == 1 { parts.append(isPast ? "nothing recorded" : "clear") }
         return parts.joined(separator: ", ")

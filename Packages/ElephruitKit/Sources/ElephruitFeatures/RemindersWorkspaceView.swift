@@ -2,13 +2,12 @@ import ElephruitDesign
 import ElephruitModel
 import SwiftUI
 
-/// The lightweight Reminders module.
-///
-/// This is deliberately not a task view: no task sections, projects, planning state, lifecycle,
-/// inspector, or task service participates. The module owns one compact list and one local draft.
+/// The Reminders module: one compact list over first-class graph items.
 struct RemindersWorkspaceView: View {
     @Environment(\.services) private var services
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let navigation: NavigationModel
 
     @State private var isComposing = false
     @State private var editingReminderID: UUID?
@@ -25,6 +24,8 @@ struct RemindersWorkspaceView: View {
         .background(Theme.Colors.windowBackground)
         .navigationTitle("Reminders")
         .accessibilityIdentifier("reminders.workspace")
+        .onAppear(perform: openLinkedReminderIfNeeded)
+        .onChange(of: navigation.selectedItemID) { _, _ in openLinkedReminderIfNeeded() }
     }
 
     private var header: some View {
@@ -43,7 +44,7 @@ struct RemindersWorkspaceView: View {
             EmptyStateView(
                 symbolName: "bell",
                 headline: "No reminders",
-                message: "Keep the small things here, without turning them into tasks.",
+                message: "Keep everything you need to remember in one place.",
                 actionTitle: "New Reminder",
                 action: openComposer
             )
@@ -201,6 +202,14 @@ struct RemindersWorkspaceView: View {
 
     private var visibleReminders: [Item] {
         services?.reminderStore.reminders ?? []
+    }
+
+    private func openLinkedReminderIfNeeded() {
+        guard !isComposing,
+              let id = navigation.selectedItemID,
+              let reminder = visibleReminders.first(where: { $0.id == id })
+        else { return }
+        openComposer(editing: reminder)
     }
 
     private func openComposer() {

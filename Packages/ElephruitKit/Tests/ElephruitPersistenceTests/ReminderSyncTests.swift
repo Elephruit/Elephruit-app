@@ -13,7 +13,7 @@ import Testing
 @MainActor
 private struct SyncFixture {
     let store: StoreFixture
-    let tasks: TaskService
+    let tasks: ReminderLifecycleService
     let reminders: FixtureRemindersProvider
     let engine: ReminderSyncEngine
 
@@ -23,11 +23,11 @@ private struct SyncFixture {
 
     init(authorization: IntegrationAuthorization = .authorized) throws {
         store = try StoreFixture(dateProvider: clock)
-        tasks = TaskService(items: store.items, context: store.context, dateProvider: store.dateProvider)
+        tasks = ReminderLifecycleService(items: store.items, context: store.context, dateProvider: store.dateProvider)
         reminders = FixtureRemindersProvider(authorization: authorization)
         engine = ReminderSyncEngine(
             items: store.items,
-            tasks: tasks,
+            lifecycle: tasks,
             context: store.context,
             dateProvider: store.dateProvider,
             provider: reminders
@@ -534,12 +534,12 @@ struct ReminderProviderResolutionTests {
     @Test("An adapter linked after the engine was built is the one the engine uses")
     func adapterSwappedAfterConstructionIsUsed() async throws {
         let store = try StoreFixture(dateProvider: TickingDateProvider())
-        let tasks = TaskService(items: store.items, context: store.context, dateProvider: store.dateProvider)
+        let tasks = ReminderLifecycleService(items: store.items, context: store.context, dateProvider: store.dateProvider)
         let box = SwappableProvider()
 
         let engine = ReminderSyncEngine(
             items: store.items,
-            tasks: tasks,
+            lifecycle: tasks,
             context: store.context,
             dateProvider: store.dateProvider,
             provider: { box.current }
@@ -698,11 +698,11 @@ struct ReminderSyncSettlingTests {
     func repeatedPassesSettle() async throws {
         let clock = WallClock()
         let store = try StoreFixture(dateProvider: clock)
-        let tasks = TaskService(items: store.items, context: store.context, dateProvider: clock)
+        let tasks = ReminderLifecycleService(items: store.items, context: store.context, dateProvider: clock)
         let provider = FixtureRemindersProvider(authorization: .authorized)
         let engine = ReminderSyncEngine(
             items: store.items,
-            tasks: tasks,
+            lifecycle: tasks,
             context: store.context,
             dateProvider: clock,
             provider: provider
@@ -730,11 +730,11 @@ struct ReminderSyncSettlingTests {
     func lossyRemindersSettle() async throws {
         let clock = WallClock()
         let store = try StoreFixture(dateProvider: clock)
-        let tasks = TaskService(items: store.items, context: store.context, dateProvider: clock)
+        let tasks = ReminderLifecycleService(items: store.items, context: store.context, dateProvider: clock)
         let provider = FixtureRemindersProvider(authorization: .authorized)
         let engine = ReminderSyncEngine(
             items: store.items,
-            tasks: tasks,
+            lifecycle: tasks,
             context: store.context,
             dateProvider: clock,
             provider: provider
@@ -753,11 +753,11 @@ struct ReminderSyncSettlingTests {
     func localEditPushesOnceAndThenSettles() async throws {
         let clock = WallClock()
         let store = try StoreFixture(dateProvider: clock)
-        let tasks = TaskService(items: store.items, context: store.context, dateProvider: clock)
+        let tasks = ReminderLifecycleService(items: store.items, context: store.context, dateProvider: clock)
         let provider = FixtureRemindersProvider(authorization: .authorized)
         let engine = ReminderSyncEngine(
             items: store.items,
-            tasks: tasks,
+            lifecycle: tasks,
             context: store.context,
             dateProvider: clock,
             provider: provider
