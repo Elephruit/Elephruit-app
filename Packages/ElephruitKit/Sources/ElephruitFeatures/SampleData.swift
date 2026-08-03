@@ -81,7 +81,7 @@ public enum SampleData {
 
         let overdue = try items.create(
             ItemDraft(
-                kind: .task,
+                kind: .reminder,
                 title: "Send the revised pricing table to Priya for review",
                 tagSlugs: ["urgent"],
                 parentID: planning.id,
@@ -92,7 +92,7 @@ public enum SampleData {
 
         _ = try items.create(
             ItemDraft(
-                kind: .task,
+                kind: .reminder,
                 title: "Draft the announcement post",
                 body: "Tone: matter-of-fact. Reference [[Positioning Notes]] for the framing.",
                 tagSlugs: ["writing"],
@@ -103,35 +103,35 @@ public enum SampleData {
         )
 
         _ = try items.create(
-            ItemDraft(kind: .task, title: "Book the venue", parentID: planning.id, dueAt: clock.startOfDay(daysFromToday: 2))
+            ItemDraft(kind: .reminder, title: "Book the venue", parentID: planning.id, dueAt: clock.startOfDay(daysFromToday: 2))
         )
 
         let completedTask = try items.create(
-            ItemDraft(kind: .task, title: "Agree the launch date with Sales", parentID: planning.id)
+            ItemDraft(kind: .reminder, title: "Agree the launch date with Sales", parentID: planning.id)
         )
         try items.toggleCompletion(completedTask)
 
         // A subtask, to exercise Task ▸ Subtask containment.
         _ = try items.create(
-            ItemDraft(kind: .task, title: "Check the figures against last quarter", parentID: overdue.id)
+            ItemDraft(kind: .reminder, title: "Check the figures against last quarter", parentID: overdue.id)
         )
 
         // Deferred, so Today has something to correctly hide.
         let deferred = try items.create(
-            ItemDraft(kind: .task, title: "Review the migration rollback plan", parentID: migration.id, dueAt: clock.startOfToday)
+            ItemDraft(kind: .reminder, title: "Review the migration rollback plan", parentID: migration.id, dueAt: clock.startOfToday)
         )
         try items.update(deferred) { $0.deferUntil = clock.startOfDay(daysFromToday: 6) }
 
         // Recurring, anchored to completion.
         let recurring = try items.create(
-            ItemDraft(kind: .task, title: "Weekly review", dueAt: clock.startOfDay(daysFromToday: 1), priority: .normal)
+            ItemDraft(kind: .reminder, title: "Weekly review", dueAt: clock.startOfDay(daysFromToday: 1), priority: .normal)
         )
         try items.update(recurring) { subject in
             subject.recurrence = RecurrenceRule(frequency: .weekly, weekdays: [6], anchor: .schedule)
         }
 
         _ = try items.create(
-            ItemDraft(kind: .task, title: "Get quotes from three removal firms", tagSlugs: ["home"], parentID: houseMove.id)
+            ItemDraft(kind: .reminder, title: "Get quotes from three removal firms", tagSlugs: ["home"], parentID: houseMove.id)
         )
 
         // A finished project, so the completion suggestion has somewhere to appear.
@@ -139,7 +139,7 @@ public enum SampleData {
             ItemDraft(kind: .project, title: "Renew the domain", parentID: work.id)
         )
         for title in ["Check the registrar", "Pay the invoice"] {
-            let task = try items.create(ItemDraft(kind: .task, title: title, parentID: finished.id))
+            let task = try items.create(ItemDraft(kind: .reminder, title: title, parentID: finished.id))
             try items.toggleCompletion(task)
         }
 
@@ -155,7 +155,7 @@ public enum SampleData {
         )
 
         _ = try items.create(
-            ItemDraft(kind: .task, title: "Chase the invoice from February", source: .quickCapture)
+            ItemDraft(kind: .reminder, title: "Chase the invoice from February", source: .quickCapture)
         )
 
         // An untitled capture, so the placeholder-title path is exercised.

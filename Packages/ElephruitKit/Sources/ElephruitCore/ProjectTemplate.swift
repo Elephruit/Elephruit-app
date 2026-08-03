@@ -63,7 +63,7 @@ public struct ProjectTemplate: Sendable, Hashable, Identifiable {
 
         public init(
             _ title: String,
-            kind: ItemKind = .task,
+            kind: ItemKind = .reminder,
             stageIndex: Int? = nil,
             severity: BugSeverity? = nil,
             body: String? = nil

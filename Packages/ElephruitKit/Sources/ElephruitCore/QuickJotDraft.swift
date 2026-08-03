@@ -96,7 +96,7 @@ public struct QuickJotDraft: Sendable, Hashable {
     /// Deliberately leaves ``kindIsExplicit`` alone. Being promoted is not the user choosing, and a
     /// promoted task must not then start outranking a URL the way a ticked box does.
     private mutating func promoteIfNeeded() {
-        if kind == .note { kind = .task }
+        if kind == .note { kind = .reminder }
     }
 
     public mutating func addTag(_ slug: String) {
@@ -236,7 +236,7 @@ public struct QuickJotDraft: Sendable, Hashable {
         // `due:` that was never lifted has to promote here, since it never passed through a mutator.
         if merged.kind == .note, !kindIsExplicit,
            merged.dueDate != nil || merged.followDate != nil || merged.projectHint != nil {
-            merged.kind = .task
+            merged.kind = .reminder
         }
 
         return merged

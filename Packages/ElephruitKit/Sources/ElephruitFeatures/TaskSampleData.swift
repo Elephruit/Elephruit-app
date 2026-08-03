@@ -57,21 +57,21 @@ enum TaskSampleData {
 
         // MARK: Inbox — captured, not yet filed
 
-        try items.create(ItemDraft(kind: .task, title: "Look into the bike-repair place on Mill Lane"))
-        try items.create(ItemDraft(kind: .task, title: "Ask about the noise from the flat upstairs"))
+        try items.create(ItemDraft(kind: .reminder, title: "Look into the bike-repair place on Mill Lane"))
+        try items.create(ItemDraft(kind: .reminder, title: "Ask about the noise from the flat upstairs"))
 
         // MARK: A planned Today, in the user's own order
 
         let brief = try items.create(
-            ItemDraft(kind: .task, title: "Write the client brief", parentID: trip.id)
+            ItemDraft(kind: .reminder, title: "Write the client brief", parentID: trip.id)
         )
         try tasks.commitToToday(brief)
 
-        let callback = try items.create(ItemDraft(kind: .task, title: "Ring the dentist back"))
+        let callback = try items.create(ItemDraft(kind: .reminder, title: "Ring the dentist back"))
         try tasks.commitToToday(callback)
 
         // Later Today: deliberately pushed to the back half of the day.
-        let evening = try items.create(ItemDraft(kind: .task, title: "Book the airport transfer", parentID: trip.id))
+        let evening = try items.create(ItemDraft(kind: .reminder, title: "Book the airport transfer", parentID: trip.id))
         try tasks.moveToLaterToday(evening)
 
         // The plan, in an order that is not the project's order.
@@ -79,37 +79,37 @@ enum TaskSampleData {
 
         // MARK: Overdue — a deadline that has passed, and nothing else
 
-        let overdue = try items.create(ItemDraft(kind: .task, title: "Renew the parking permit"))
+        let overdue = try items.create(ItemDraft(kind: .reminder, title: "Renew the parking permit"))
         try tasks.setDeadline(day(-3), on: overdue)
 
         // MARK: A future start date — not late, not asked about yet
 
         let futureStart = try items.create(
-            ItemDraft(kind: .task, title: "Start the tax return", parentID: home.id)
+            ItemDraft(kind: .reminder, title: "Start the tax return", parentID: home.id)
         )
         try tasks.setStartDate(day(21), on: futureStart)
 
         // MARK: A hard deadline with no start date
 
-        let deadlineOnly = try items.create(ItemDraft(kind: .task, title: "File the annual accounts"))
+        let deadlineOnly = try items.create(ItemDraft(kind: .reminder, title: "File the annual accounts"))
         try tasks.setDeadline(day(34), on: deadlineOnly)
 
         // MARK: A reminder that is not a deadline
 
-        let reminder = try items.create(ItemDraft(kind: .task, title: "Move the car before the street sweeper"))
+        let reminder = try items.create(ItemDraft(kind: .reminder, title: "Move the car before the street sweeper"))
         try tasks.setReminder(at(1, hour: 7), timed: true, on: reminder)
 
         // MARK: The project's sections
 
         let visa = try items.create(
-            ItemDraft(kind: .task, title: "Check whether a visa is needed", parentID: beforeTheTrip.id)
+            ItemDraft(kind: .reminder, title: "Check whether a visa is needed", parentID: beforeTheTrip.id)
         )
         try tasks.setDeadline(day(9), on: visa)
 
-        try items.create(ItemDraft(kind: .task, title: "Tell the bank about the travel dates", parentID: beforeTheTrip.id))
+        try items.create(ItemDraft(kind: .reminder, title: "Tell the bank about the travel dates", parentID: beforeTheTrip.id))
 
         // A task with steps: one action, several small parts.
-        let suitcase = try items.create(ItemDraft(kind: .task, title: "Pack", parentID: packing.id))
+        let suitcase = try items.create(ItemDraft(kind: .reminder, title: "Pack", parentID: packing.id))
         try tasks.setChecklist(
             TaskChecklist.parse("- passport\n- adapters\n- swimming things\n- [x] sun cream"),
             on: suitcase
@@ -117,41 +117,41 @@ enum TaskSampleData {
 
         // A task with real subtasks: each has its own dates and its own row everywhere.
         let insurance = try items.create(
-            ItemDraft(kind: .task, title: "Sort the travel insurance", parentID: beforeTheTrip.id)
+            ItemDraft(kind: .reminder, title: "Sort the travel insurance", parentID: beforeTheTrip.id)
         )
-        let quotes = try items.create(ItemDraft(kind: .task, title: "Get three quotes", parentID: insurance.id))
+        let quotes = try items.create(ItemDraft(kind: .reminder, title: "Get three quotes", parentID: insurance.id))
         try tasks.setDeadline(day(4), on: quotes)
-        try items.create(ItemDraft(kind: .task, title: "Read what the excess actually covers", parentID: insurance.id))
+        try items.create(ItemDraft(kind: .reminder, title: "Read what the excess actually covers", parentID: insurance.id))
 
         // MARK: The list, which never finishes
 
         for line in ["Oat milk", "Coffee", "Something for Sunday"] {
-            try items.create(ItemDraft(kind: .task, title: line, parentID: groceries.id))
+            try items.create(ItemDraft(kind: .reminder, title: line, parentID: groceries.id))
         }
 
         // MARK: Someday — parked, and in no count
 
-        let piano = try items.create(ItemDraft(kind: .task, title: "Learn enough piano to be annoying"))
+        let piano = try items.create(ItemDraft(kind: .reminder, title: "Learn enough piano to be annoying"))
         try tasks.setSomeday(true, on: piano)
 
         // MARK: Waiting on a person, with a follow-up
 
-        let budget = try items.create(ItemDraft(kind: .task, title: "Sign off the Q3 budget"))
+        let budget = try items.create(ItemDraft(kind: .reminder, title: "Sign off the Q3 budget"))
         try tasks.markWaiting(budget, on: jordan, since: day(-6), followUp: day(2))
 
         // MARK: A promise made to somebody
 
-        let promise = try items.create(ItemDraft(kind: .task, title: "Send Maya the reading list"))
+        let promise = try items.create(ItemDraft(kind: .reminder, title: "Send Maya the reading list"))
         try tasks.markPromised(promise, to: maya)
         try tasks.setDeadline(day(5), on: promise)
 
         // MARK: Repeating, both anchors
 
-        let timesheet = try items.create(ItemDraft(kind: .task, title: "Submit the timesheet"))
+        let timesheet = try items.create(ItemDraft(kind: .reminder, title: "Submit the timesheet"))
         try items.update(timesheet) { $0.recurrence = RecurrenceRule(frequency: .weekly, weekdays: [6]) }
         try tasks.setDeadline(day(4), on: timesheet)
 
-        let plants = try items.create(ItemDraft(kind: .task, title: "Water the plants"))
+        let plants = try items.create(ItemDraft(kind: .reminder, title: "Water the plants"))
         try items.update(plants) {
             $0.recurrence = RecurrenceRule(frequency: .daily, interval: 3, anchor: .completion)
         }
@@ -159,7 +159,7 @@ enum TaskSampleData {
 
         // MARK: Flagged, without implying anything else
 
-        let flagged = try items.create(ItemDraft(kind: .task, title: "Reread the contract clause about renewal"))
+        let flagged = try items.create(ItemDraft(kind: .reminder, title: "Reread the contract clause about renewal"))
         try tasks.setFlagged(true, on: flagged)
 
         // MARK: A task made from a note, keeping its provenance
@@ -173,7 +173,7 @@ enum TaskSampleData {
         )
         let fromNote = try items.create(
             ItemDraft(
-                kind: .task,
+                kind: .reminder,
                 title: "Revise the numbers for the board pack",
                 source: ItemSource(kind: .manual, identifier: "note:\(note.id.uuidString)")
             )
@@ -183,16 +183,16 @@ enum TaskSampleData {
 
         // MARK: History — one finished, one deliberately abandoned
 
-        let finished = try items.create(ItemDraft(kind: .task, title: "Book the flights", parentID: beforeTheTrip.id))
+        let finished = try items.create(ItemDraft(kind: .reminder, title: "Book the flights", parentID: beforeTheTrip.id))
         try tasks.complete(finished)
 
-        let abandoned = try items.create(ItemDraft(kind: .task, title: "Hire a car for the whole fortnight"))
+        let abandoned = try items.create(ItemDraft(kind: .reminder, title: "Hire a car for the whole fortnight"))
         try tasks.cancel(abandoned)
 
         // MARK: The four Reminders states
 
         // Local-only: the default, and the private one.
-        try items.create(ItemDraft(kind: .task, title: "Draft the birthday message"))
+        try items.create(ItemDraft(kind: .reminder, title: "Draft the birthday message"))
 
         try link(
             items: items,
@@ -246,7 +246,7 @@ enum TaskSampleData {
 
         // MARK: A date the migration would not interpret
 
-        let ambiguous = try items.create(ItemDraft(kind: .task, title: "Send the draft over"))
+        let ambiguous = try items.create(ItemDraft(kind: .reminder, title: "Send the draft over"))
         try items.update(ambiguous) {
             $0.dueAt = at(2, hour: 17)
             $0.dateReview = .deadlineMayHaveBeenAReminder
@@ -276,7 +276,7 @@ enum TaskSampleData {
     ) throws(AppError) {
         let task = try items.create(
             ItemDraft(
-                kind: .task,
+                kind: .reminder,
                 title: title,
                 parentID: parentID,
                 source: ItemSource(kind: .systemStore, identifier: externalID)

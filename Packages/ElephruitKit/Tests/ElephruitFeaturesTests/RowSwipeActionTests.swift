@@ -308,13 +308,10 @@ struct RowSwipeActionTests {
 @MainActor
 @Suite("Module sidebar contents")
 struct ModuleSidebarContentTests {
-    /// The two modules whose navigation is not made of registry rows.
+    /// The module whose navigation is not made of registry rows.
     ///
-    /// Tasks draws `TaskSystemView`, which is a type of its own precisely so that "what does Anytime
-    /// mean" has one answer; People draws `RecordsScope`, for the same reason. Neither belongs in a
-    /// registry of fixed destinations, and forcing them in would be duplicating a vocabulary to
-    /// satisfy a test.
-    static let modulesWithTheirOwnVocabulary: Set<AppModule> = [.tasks, .records]
+    /// People draws `RecordsScope`, which does not belong in a registry of fixed destinations.
+    static let modulesWithTheirOwnVocabulary: Set<AppModule> = [.records]
 
     @Test("Every module draws something, and only its own rows")
     func everyModuleDrawsSomething() {
@@ -332,9 +329,7 @@ struct ModuleSidebarContentTests {
             }
         }
 
-        // The two exceptions still have somewhere to open on, which is the property that actually
-        // matters and the one an empty sidebar would break.
-        #expect(AppModule.tasks.defaultSelection == .taskView(.today))
+        // The exception still has somewhere to open on.
         #expect(AppModule.records.defaultSelection == .records(.all))
     }
 

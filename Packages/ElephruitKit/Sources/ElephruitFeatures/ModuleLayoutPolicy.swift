@@ -115,27 +115,6 @@ extension AppModule {
                 )
             )
 
-        case .tasks:
-            // ### Why Tasks became a canvas
-            // It was a document module: a list of tasks on the left, one task at length on the
-            // right. The right-hand column had to answer "which task is this?" all over again —
-            // a title bar, the container, the dates — because by the time you were reading it the
-            // list was three hundred points away and might have scrolled. Everything on it was a
-            // restatement of something already on screen.
-            //
-            // A task now opens by making its own row taller — see ``TaskCard`` — so the detail
-            // column has nothing left to hold. It goes, and the list takes the width: a list of
-            // tasks *is* the module, the same way a month is the Calendar.
-            ModuleShellLayout(
-                primary: PaneWidth(minimum: 420, ideal: 900),
-                detail: .unavailable,
-                inspector: DetailPanePolicy(
-                    hidesWhenNothingSelected: true,
-                    width: PaneWidth(minimum: 240, ideal: 300, maximum: 400),
-                    compactWindowWidth: 1120
-                )
-            )
-
         case .notes:
             // The one place the measure rules. `Theme.Size.editorMaxWidth` is roughly eighty
             // characters at the default size, and a column wider than that is a column the eye has

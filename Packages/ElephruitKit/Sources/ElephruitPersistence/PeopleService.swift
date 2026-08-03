@@ -188,7 +188,7 @@ public final class PeopleService {
         var created = [interaction]
 
         for title in followUps {
-            let task = try items.create(ItemDraft(kind: .task, title: title))
+            let task = try items.create(ItemDraft(kind: .reminder, title: title))
             for attendee in attendees { try items.link(task, to: attendee, kind: .mentions) }
             created.append(task)
         }
@@ -196,7 +196,7 @@ public final class PeopleService {
         // Older callers may still send the second legacy action list. It now creates the same
         // ordinary linked tasks as every other next step; no new "promise" subtype is introduced.
         for title in commitments {
-            let task = try items.create(ItemDraft(kind: .task, title: title))
+            let task = try items.create(ItemDraft(kind: .reminder, title: title))
             for attendee in attendees { try items.link(task, to: attendee, kind: .mentions) }
             created.append(task)
         }

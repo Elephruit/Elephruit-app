@@ -111,8 +111,8 @@ struct TodayActions {
     /// Opens the record in the module that owns it, for when the inspector is not enough.
     func openInModule(_ item: Item) {
         switch item.kind {
-        case .task:
-            navigation.select(.taskView(.today))
+        case .task, .reminder:
+            navigation.select(.reminders)
         case .person:
             navigation.select(.records(.people))
         default:
@@ -133,7 +133,7 @@ struct TodayActions {
 
         var created: Item?
         services.perform {
-            var draft = ItemDraft(kind: .task, title: trimmed)
+            var draft = ItemDraft(kind: .reminder, title: trimmed)
             draft.parentID = container?.id
             let task = try services.items.create(draft)
             try services.tasks.commit(task, to: day)
@@ -291,7 +291,7 @@ struct TodayActions {
         guard !trimmed.isEmpty else { return }
 
         services.perform {
-            let task = try services.items.create(ItemDraft(kind: .task, title: trimmed))
+            let task = try services.items.create(ItemDraft(kind: .reminder, title: trimmed))
             try services.items.link(task, to: person, kind: .mentions)
             try services.tasks.commit(task, to: day)
             services.noteChange(to: task)

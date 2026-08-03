@@ -231,7 +231,7 @@ public final class TaskEntryComposer {
         let destinationID = try resolvedDestination(plan)
 
         var draft = ItemDraft(
-            kind: .task,
+            kind: .reminder,
             title: plan.title,
             body: plan.notes,
             tagSlugs: plan.tagSlugs,

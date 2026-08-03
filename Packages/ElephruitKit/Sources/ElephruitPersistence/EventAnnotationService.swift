@@ -229,7 +229,7 @@ public final class EventAnnotationService {
             for link in meeting.incomingLinks {
                 guard let source = link.source, source.deletedAt == nil else { continue }
                 switch source.kind {
-                case .task:
+                case .task, .reminder:
                     if source.status == .open {
                         openTaskIDs.append(source.id)
                     } else {
@@ -462,7 +462,7 @@ public final class EventAnnotationService {
         for event: CalendarEventSummary,
         aboutPeople people: [Item] = []
     ) throws(AppError) -> Item {
-        let task = try items.create(ItemDraft(kind: .task, title: title))
+        let task = try items.create(ItemDraft(kind: .reminder, title: title))
 
         try items.update(task) { item in
             item.dueAt = dueAt

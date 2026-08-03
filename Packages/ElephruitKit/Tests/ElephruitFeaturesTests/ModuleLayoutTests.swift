@@ -168,9 +168,6 @@ struct ModuleLayoutTests {
             #expect(layout.width(of: .detail, in: .records, available: wideWindow) == 700)
             #expect(layout.width(of: .detail, in: .calendar, available: wideWindow) == 0)
             #expect(layout.width(of: .detail, in: .notes, available: wideWindow) == 500)
-            // Tasks joined the canvases when the card replaced its detail column, so it answers 0
-            // for the same reason the calendar does.
-            #expect(layout.width(of: .detail, in: .tasks, available: wideWindow) == 0)
         }
     }
 
@@ -578,9 +575,7 @@ struct LayoutAuditTests {
     /// becoming a strip when the arithmetic changes.
     @Test("A canvas module gets its canvas and no empty third column")
     func canvasModulesKeepTheirCanvas() {
-        // Tasks joined this list when the card replaced its detail column: a list of tasks *is* the
-        // module now, the way a month is the Calendar.
-        for module in [AppModule.calendar, .time, .tasks] {
+        for module in [AppModule.calendar, .time] {
             let widths = module.shellLayout.widths(
                 windowWidth: 1920,
                 sidebarWidth: sidebar,

@@ -7,7 +7,7 @@ import SwiftUI
 /// The sidebar, once a module has been entered.
 ///
 /// One `List` per module rather than one list with ten conditionals inside it, because the sections
-/// a module needs are genuinely different: Tasks has a container tree and smart lists, People has
+/// a module needs are genuinely different: People has
 /// scopes and groups, Calendar has views and calendar sets. What they share — the list style, the
 /// selection binding, the row geometry — is shared; what differs is written out.
 ///
@@ -32,8 +32,6 @@ struct ModuleSidebar: View {
                 switch module {
                 case .calendar:
                     CalendarSidebarSection(navigation: navigation)
-                case .tasks:
-                    TasksSidebarSection(navigation: navigation)
                 case .notes:
                     NotesSidebarSection(navigation: navigation)
                 case .areas:

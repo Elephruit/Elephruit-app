@@ -249,7 +249,7 @@ public struct ProjectDetailView: View {
         HStack(spacing: Theme.Spacing.medium) {
             Button {
                 perform { repository in
-                    let task = try repository.create(ItemDraft(kind: .task, parentID: project.id))
+                    let task = try repository.create(ItemDraft(kind: .reminder, parentID: project.id))
                     navigation.selectItem(task.id)
                 }
             } label: {

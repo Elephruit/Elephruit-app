@@ -61,7 +61,7 @@ struct ModuleNavigationTests {
         // `module(for:)`.
         #expect(
             AppModule.displayOrder == [
-                .calendar, .reminders, .tasks, .records, .notes, .time,
+                .calendar, .reminders, .records, .notes, .time,
                 .areas, .bookmarks, .archive, .trash,
             ]
         )
@@ -96,14 +96,11 @@ struct ModuleNavigationTests {
         }
     }
 
-    @Test("The Tasks module keeps its own Today, Upcoming and Inbox")
-    func tasksHasScopedVersionsOfTheGlobalRows() {
-        // Not a duplication: the global Today is the whole day — work, meetings and the people they
-        // involve — and the Tasks one is the list of work you planned. They are different questions
-        // with the same name, which is exactly the case the rule about redundant rows carves out.
-        #expect(AppModule.module(for: .taskView(.today)) == .tasks)
-        #expect(AppModule.module(for: .taskView(.upcoming)) == .tasks)
-        #expect(AppModule.module(for: .taskView(.inbox)) == .tasks)
+    @Test("Legacy Tasks destinations belong to Reminders")
+    func legacyTaskDestinationsOpenReminders() {
+        #expect(AppModule.module(for: .taskView(.today)) == .reminders)
+        #expect(AppModule.module(for: .taskView(.upcoming)) == .reminders)
+        #expect(AppModule.module(for: .taskView(.inbox)) == .reminders)
         #expect(AppModule.module(for: .today) == nil)
     }
 
@@ -112,10 +109,10 @@ struct ModuleNavigationTests {
     @Test("Entering a module selects its default and puts the sidebar inside it")
     func enteringSelectsTheDefault() {
         let navigation = NavigationModel()
-        navigation.enterModule(.tasks)
+        navigation.enterModule(.reminders)
 
-        #expect(navigation.activeModule == .tasks)
-        #expect(navigation.selection == .taskView(.today))
+        #expect(navigation.activeModule == .reminders)
+        #expect(navigation.selection == .reminders)
     }
 
     @Test("Selecting a module's destination enters that module, from anywhere")
@@ -130,7 +127,7 @@ struct ModuleNavigationTests {
         #expect(navigation.activeModule == .calendar)
 
         navigation.select(.builtInSmartList(id: "anything"))
-        #expect(navigation.activeModule == .tasks)
+        #expect(navigation.activeModule == .reminders)
     }
 
     @Test("Selecting a global destination leaves whatever module you were in")
@@ -173,13 +170,13 @@ struct ModuleNavigationTests {
     @Test("Re-entering a module resumes where it was left")
     func modulesRememberWhereTheyWere() {
         let navigation = NavigationModel()
-        navigation.enterModule(.tasks)
+        navigation.enterModule(.reminders)
         navigation.select(.taskView(.someday))
 
         navigation.enterModule(.records)
         #expect(navigation.selection == .records(.all))
 
-        navigation.enterModule(.tasks)
+        navigation.enterModule(.reminders)
         #expect(navigation.selection == .taskView(.someday), "Tasks resumed rather than restarting")
     }
 
@@ -197,7 +194,7 @@ struct ModuleNavigationTests {
     @Test("A remembered selection that stopped belonging to the module is dropped")
     func staleRememberedSelectionsFallBack() {
         let navigation = NavigationModel()
-        navigation.enterModule(.tasks)
+        navigation.enterModule(.reminders)
         navigation.select(.taskView(.waiting))
         navigation.leaveModule()
 
@@ -207,12 +204,12 @@ struct ModuleNavigationTests {
             NavigationModel.RestorationState(
                 module: nil,
                 selection: .home,
-                moduleSelections: [.tasks: .kind(.note)]
+                moduleSelections: [.reminders: .kind(.note)]
             )
         )
-        navigation.enterModule(.tasks)
+        navigation.enterModule(.reminders)
 
-        #expect(navigation.selection == .taskView(.today), "Fell back rather than showing a note")
+        #expect(navigation.selection == .reminders, "Fell back rather than showing a note")
     }
 
     @Test("Entering a module clears the list selection")
@@ -262,9 +259,8 @@ struct ModuleNavigationTests {
         let navigation = NavigationModel()
         #expect(navigation.windowTitle == "Today")
 
-        navigation.enterModule(.tasks)
-        // "Today" here would be indistinguishable from the global one it is not.
-        #expect(navigation.windowTitle == "Tasks")
+        navigation.enterModule(.reminders)
+        #expect(navigation.windowTitle == "Reminders")
 
         navigation.select(.taskView(.someday))
         #expect(navigation.windowTitle == "Someday")
@@ -307,14 +303,14 @@ struct ModuleNavigationTests {
     @Test("Each module's own place survives the relaunch too")
     func restorationCarriesEveryModulesPlace() {
         let navigation = NavigationModel()
-        navigation.enterModule(.tasks)
+        navigation.enterModule(.reminders)
         navigation.select(.taskView(.flagged))
         navigation.enterModule(.records)
         navigation.select(.records(.favorites))
 
         let restored = NavigationModel()
         restored.restore(navigation.restorationState)
-        restored.enterModule(.tasks)
+        restored.enterModule(.reminders)
 
         #expect(restored.selection == .taskView(.flagged))
     }
@@ -339,12 +335,12 @@ struct ModuleNavigationTests {
         #expect(navigation.activeModule == .calendar)
     }
 
-    @Test("Quick task entry lands in the Tasks module's inbox")
-    func taskEntryEntersTasks() {
+    @Test("A legacy task inbox link lands in Reminders")
+    func legacyTaskEntryEntersReminders() {
         let navigation = NavigationModel()
         navigation.select(.taskView(.inbox))
 
-        #expect(navigation.activeModule == .tasks)
+        #expect(navigation.activeModule == .reminders)
         #expect(navigation.windowTitle == "Inbox")
     }
 }

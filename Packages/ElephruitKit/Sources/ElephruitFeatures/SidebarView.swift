@@ -64,10 +64,7 @@ public struct SidebarView: View {
         }
         .accessibilityIdentifier(AccessibilityID.Sidebar.root)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: 0) {
-                newListFooter
-                statusLine
-            }
+            statusLine
             // Opaque, because the list scrolls behind this inset. Without a surface of its own the
             // status line printed straight over "Across Everything" whenever the sidebar was taller
             // than the window — two lines of text through each other, reading as a rendering fault.
@@ -96,70 +93,6 @@ public struct SidebarView: View {
         else { return }
         services.deleteSavedSearch(id: id)
         if navigation.selection == row.selection { navigation.select(.today) }
-    }
-
-    // MARK: - Making a container
-
-    /// The one control that adds to the sidebar rather than navigating it.
-    ///
-    /// ### Why it is here and not in the toolbar
-    /// A project and an area are *sidebar* objects: they are the shape of the column, not content in
-    /// the view beside it. The toolbar's `+` makes a task, in whichever list is open — a second `+`
-    /// up there making a container instead would be two plus signs a few points apart meaning two
-    /// different things.
-    ///
-    /// New Project is a direct button because a menu owns the keyboard until it has dismissed. A
-    /// naming field revealed by a menu action therefore cannot accept the first keystroke. The less
-    /// frequent Area action remains in the adjacent menu and carries the distinction in its help.
-    ///
-    /// Only in Tasks. Notes and Calendar have no containers of this kind, and a disabled control in
-    /// every other module would be a permanent offer the app never intends to honour.
-    @ViewBuilder
-    private var newListFooter: some View {
-        if navigation.activeModule == .tasks {
-            HStack(spacing: Theme.Spacing.small) {
-                Button {
-                    navigation.beginCreatingProject()
-                } label: {
-                    Label("New Project", systemImage: "plus")
-                        .font(Theme.Text.metadata)
-                }
-                .buttonStyle(.plain)
-                .help("Something with an end. It shows progress and can be finished.")
-
-                Menu {
-                    Button("New Area") { create(.area) }
-                        .help("A standing responsibility. It never finishes, so it never shows progress.")
-                } label: {
-                    Image(systemName: "chevron.down")
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.secondaryText)
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-            }
-            .fixedSize()
-            .padding(.horizontal, SidebarMetrics.leadingInset)
-            .padding(.top, Theme.Spacing.small)
-            .help("Add a project, or choose the menu for a new area")
-            .accessibilityIdentifier("sidebar.tasks.newList")
-        }
-    }
-
-    /// Creates the container, then opens it so the first thing that happens is naming it.
-    ///
-    /// The empty title is intentional: the detail header supplies a clear kind-specific prompt and
-    /// takes keyboard focus, so the first typing becomes the name instead of editing placeholder
-    /// content such as "New Project".
-    private func create(_ kind: ItemKind) {
-        guard let services else { return }
-        let draft = ItemDraft(kind: kind, title: "")
-        var created: Item?
-        guard services.perform({ created = try services.items.create(draft) }), let created else { return }
-        services.noteChange(to: created)
-        navigation.select(.item(id: created.id))
-        navigation.beginNaming(created.id)
     }
 
     /// The two levels, and the move between them.
@@ -571,11 +504,10 @@ struct ModuleRow: View {
 
     /// The one number worth carrying up to the module list.
     ///
-    /// Only Tasks, and only what is waiting to be sorted. A count beside every module would be a
-    /// scoreboard of ten figures nobody asked for, which is the thing this app has decided not to be.
+    /// Module badges are deliberately absent. A count beside every module would be a scoreboard of
+    /// figures nobody asked for.
     private var badge: Int? {
-        guard module == .tasks else { return nil }
-        return services?.taskSidebar.badges[.inbox]
+        nil
     }
 
     private var accessibilityLabel: String {
@@ -644,7 +576,7 @@ struct SidebarCountLabel: View {
 #Preview("Inside a module", traits: .fixedLayout(width: 220, height: 620)) {
     let services = AppServices.inMemory()
     let navigation = NavigationModel()
-    navigation.enterModule(.tasks)
+    navigation.enterModule(.reminders)
     return SidebarView(navigation: navigation)
         .appServices(services)
         .frame(width: 220, height: 620)

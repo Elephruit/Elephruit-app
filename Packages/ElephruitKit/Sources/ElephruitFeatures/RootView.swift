@@ -493,9 +493,7 @@ public struct RootView: View {
     private var primaryPane: some View {
         if case .project(let id, let viewID) = navigation.selection {
             ProjectWorkspaceView(navigation: navigation, projectID: id, viewID: viewID)
-        } else if navigation.selection.isTaskDestination {
-            TaskWorkspaceView(navigation: navigation)
-        } else if navigation.selection == .reminders {
+        } else if navigation.selection.isTaskDestination || navigation.selection == .reminders {
             RemindersWorkspaceView()
         } else if navigation.selection == .time {
             switch navigation.timeSurface {

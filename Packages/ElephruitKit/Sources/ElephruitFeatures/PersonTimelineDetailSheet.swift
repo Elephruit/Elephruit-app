@@ -275,7 +275,7 @@ struct PersonTimelineDetailSheet: View {
         switch entry.kind {
         case .note: return Theme.Palette.blue.color
         case .interaction, .meeting: return Theme.Palette.purple.color
-        case .task: return Theme.Palette.green.color
+        case .task, .reminder: return Theme.Palette.green.color
         default: return Theme.Colors.selection
         }
     }

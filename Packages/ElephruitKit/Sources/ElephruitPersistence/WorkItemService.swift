@@ -52,7 +52,7 @@ public final class WorkItemService {
     @discardableResult
     public func createWorkItem(
         title: String,
-        kind: ItemKind = .task,
+        kind: ItemKind = .reminder,
         in project: Item,
         stage: WorkflowStage? = nil,
         parent: Item? = nil,

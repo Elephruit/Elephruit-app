@@ -269,14 +269,14 @@ struct TaskCard: View {
 
     private var subtaskList: [Item] {
         task.children
-            .filter { $0.kind == .task && $0.deletedAt == nil }
+            .filter { $0.kind == .reminder && $0.deletedAt == nil }
             .sorted { $0.sortOrder < $1.sortOrder }
     }
 
     private func addSubtask() {
         guard let services else { return }
         services.perform {
-            let subtask = try services.items.create(ItemDraft(kind: .task, parentID: task.id))
+            let subtask = try services.items.create(ItemDraft(kind: .reminder, parentID: task.id))
             services.noteChange(to: subtask)
         }
         onChange()

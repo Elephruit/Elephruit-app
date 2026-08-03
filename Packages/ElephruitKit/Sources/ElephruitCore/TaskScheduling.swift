@@ -435,7 +435,7 @@ public struct TaskFacts: Sendable, Hashable, Identifiable {
         updatedAt: Date = Date(),
         sortOrder: Double = 0,
         searchText: String = "",
-        kind: ItemKind = .task,
+        kind: ItemKind = .reminder,
         referenceKey: String? = nil,
         workflowStageID: UUID? = nil,
         stageCategory: WorkflowStageCategory? = nil,

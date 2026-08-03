@@ -240,7 +240,7 @@ public enum CaptureParser {
         for prefix in ["- [ ] ", "- [x] ", "[] ", "[ ] ", "- ", "* "] where remaining.hasPrefix(prefix) {
             remaining = remaining.dropFirst(prefix.count)
             base = prefix.count
-            draft.kind = .task
+            draft.kind = .reminder
             break
         }
 
@@ -469,7 +469,7 @@ public enum CaptureParser {
                 )
             )
             // A deadline implies intent to act.
-            if draft.kind == .note { draft.kind = .task }
+            if draft.kind == .note { draft.kind = .reminder }
 
         case .follow:
             draft.followDate = interpretation.day
@@ -481,7 +481,7 @@ public enum CaptureParser {
                     isQuoted: isSettled
                 )
             )
-            if draft.kind == .note { draft.kind = .task }
+            if draft.kind == .note { draft.kind = .reminder }
         }
 
         return bestNext

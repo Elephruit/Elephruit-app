@@ -177,7 +177,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
 
     private static func defaultSort(for kind: ItemKind) -> ItemQuery.Sort {
         switch kind {
-        case .task: .dueSoonestFirst
+        case .task, .reminder: .dueSoonestFirst
         case .project, .area: .manual
         default: .updatedNewestFirst
         }
@@ -186,22 +186,22 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
     /// The kind a "New Item" action should create here, so `⌘N` does the obvious thing.
     public var defaultNewItemKind: ItemKind {
         switch self {
-        case .today, .home, .upcoming: .task
+        case .today, .home, .upcoming: .reminder
         case .inbox: .note
         case .kind(let kind): kind
         case .tag, .savedSearch, .item, .archive, .trash: .note
         // Inside a project, the obvious new thing is work. Which *kind* of work depends on the view
         // you are on — a bug view makes a bug — and the workspace intercepts the command before this
         // is reached; this is the fallback for a project opened with no view resolved yet.
-        case .project: .task
-        case .projectInbox: .task
+        case .project: .reminder
+        case .projectInbox: .reminder
         // A meeting, in the calendar. `⌘N` there means an event rather than a note, and the
         // workspace intercepts it before this is consulted — this is the honest fallback.
         case .calendar: .meeting
-        case .reminders: .note
+        case .reminders: .reminder
         case .time: .note
         case .records: .reference
-        case .taskView, .smartList, .builtInSmartList: .task
+        case .taskView, .smartList, .builtInSmartList: .reminder
         }
     }
 

@@ -363,7 +363,7 @@ struct TaskWorkspaceView: View {
         guard let services else { return }
 
         services.perform {
-            var draft = ItemDraft(kind: .task, title: trimmed)
+            var draft = ItemDraft(kind: .reminder, title: trimmed)
             draft.parentID = containerID(for: section)
             let created = try services.items.create(draft)
 

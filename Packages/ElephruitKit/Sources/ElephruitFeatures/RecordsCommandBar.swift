@@ -388,7 +388,7 @@ struct RecordsCommandBarView: View {
 
         case .createTask(let text, let personIDs, let day):
             services.perform {
-                var draft = ItemDraft(kind: .task, title: text)
+                var draft = ItemDraft(kind: .reminder, title: text)
                 draft.dueAt = day?.resolve(using: services.dateProvider)
                 let task = try services.items.create(draft)
                 for personID in personIDs {

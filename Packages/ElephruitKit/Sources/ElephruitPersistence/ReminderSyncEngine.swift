@@ -204,7 +204,7 @@ public final class ReminderSyncEngine {
     ) throws(AppError) -> Item {
         let task = try items.create(
             ItemDraft(
-                kind: .task,
+                kind: .reminder,
                 title: snapshot.title,
                 parentID: container?.id,
                 // The reminder's own identifier, kept whatever happens to the link afterwards. It is
@@ -418,7 +418,7 @@ public final class ReminderSyncEngine {
 
     private func linkedTasks() throws(AppError) -> [Item] {
         var query = ItemQuery()
-        query.kinds = [.task]
+        query.kinds = [.reminder]
         query.scope = .all
         let all = try items.items(matching: query)
         return all.filter { $0.externalIdentifier != nil && $0.deletedAt == nil }
@@ -465,7 +465,7 @@ public final class ReminderSyncEngine {
     private func splitLocalCopy(of task: Item) throws(AppError) {
         let copy = try items.create(
             ItemDraft(
-                kind: .task,
+                kind: .reminder,
                 title: task.title,
                 body: task.body,
                 tagSlugs: task.tags.map(\.slug),
@@ -553,7 +553,7 @@ public final class ReminderSyncEngine {
     /// Live links, broken links, and items in the Trash alike. See ``unlinkedReminders(inLists:)``.
     func knownReminderIdentifiers() -> Set<String> {
         var query = ItemQuery()
-        query.kinds = [.task]
+        query.kinds = [.reminder]
         query.scope = .all
         // Everything, including what has been archived or thrown away: a reminder the user deleted
         // here is one they have already decided about, and re-importing it would be the app arguing.

@@ -160,12 +160,12 @@ struct CaptureKindToggle: View {
     var displayedKind: ItemKind? = nil
 
     private var shownKind: ItemKind { displayedKind ?? draft.kind }
-    private var isTask: Bool { shownKind == .task }
+    private var isTask: Bool { shownKind == .reminder }
     private var isNote: Bool { shownKind == .note }
 
     var body: some View {
         Button {
-            draft.choose(isTask ? .note : .task)
+            draft.choose(isTask ? .note : .reminder)
         } label: {
             Label(kindName, systemImage: kindSymbol)
                 .font(Theme.Text.metadata)

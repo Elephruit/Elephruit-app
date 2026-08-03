@@ -152,7 +152,7 @@ extension ItemQuery {
     /// Everything due or scheduled today, plus anything overdue.
     public static func today(using dateProvider: any DateProvider) -> ItemQuery {
         var query = ItemQuery()
-        query.kinds = [.task, .project, .goal]
+        query.kinds = [.reminder, .project, .goal]
         query.statuses = [.open]
         query.dueBefore = dateProvider.startOfTomorrow
         query.notDeferredAfter = dateProvider.now
@@ -163,7 +163,7 @@ extension ItemQuery {
     /// Open work due within the next `days` days, excluding today.
     public static func upcoming(days: Int, using dateProvider: any DateProvider) -> ItemQuery {
         var query = ItemQuery()
-        query.kinds = [.task, .project, .goal]
+        query.kinds = [.reminder, .project, .goal]
         query.statuses = [.open]
         query.dueFrom = dateProvider.startOfTomorrow
         query.dueBefore = dateProvider.startOfDay(daysFromToday: days + 1)

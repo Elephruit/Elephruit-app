@@ -93,7 +93,7 @@ public enum CaptureLift {
         // The task prefix first, and separately, because it is the one instruction with no token
         // behind it — the parser consumes it before tokenizing and reports only its effect.
         if let prefix = taskPrefixes.first(where: { text.hasPrefix($0) }) {
-            lifted.kind = .task
+            lifted.kind = .reminder
             spans.append(0..<prefix.count)
         }
 

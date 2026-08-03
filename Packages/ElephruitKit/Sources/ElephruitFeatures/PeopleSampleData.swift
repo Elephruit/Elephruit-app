@@ -174,7 +174,7 @@ enum PeopleSampleData {
 
         let promise = try items.create(
             ItemDraft(
-                kind: .task,
+                kind: .reminder,
                 title: "Send Maya the dog trainer's number",
                 tagSlugs: [TagConventions.owed],
                 dueAt: clock.calendar.date(byAdding: .day, value: -14, to: today)

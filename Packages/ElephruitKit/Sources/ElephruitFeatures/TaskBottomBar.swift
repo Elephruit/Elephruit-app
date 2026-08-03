@@ -279,7 +279,7 @@ struct TaskBottomBar: View {
     private func duplicate(_ task: Item) {
         guard let services else { return }
         services.perform {
-            var draft = ItemDraft(kind: .task, title: task.title, parentID: task.parent?.id)
+            var draft = ItemDraft(kind: .reminder, title: task.title, parentID: task.parent?.id)
             draft.body = task.body
             draft.tagSlugs = task.tags.map(\.slug)
             let copy = try services.items.create(draft)

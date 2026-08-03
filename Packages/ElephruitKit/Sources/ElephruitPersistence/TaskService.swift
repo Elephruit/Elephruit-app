@@ -507,7 +507,7 @@ public final class TaskService {
         let seriesID = task.seriesID ?? UUID()
 
         var draft = ItemDraft(
-            kind: .task,
+            kind: .reminder,
             title: task.title,
             body: task.body,
             tagSlugs: task.tags.map(\.slug),
@@ -590,7 +590,7 @@ public final class TaskService {
         guard let step = checklist.items.first(where: { $0.id == id }) else { return nil }
 
         let subtask = try items.create(
-            ItemDraft(kind: .task, title: step.title, parentID: task.id)
+            ItemDraft(kind: .reminder, title: step.title, parentID: task.id)
         )
         if step.isCompleted {
             try mutate(subtask) { subject in
@@ -633,7 +633,7 @@ public final class TaskService {
     /// - Returns: the names of the fields that could not come across.
     @discardableResult
     public func convertToProject(_ task: Item) throws(AppError) -> [String] {
-        guard task.kind == .task else { return [] }
+        guard task.kind == .reminder else { return [] }
 
         for step in task.checklist.items {
             _ = try promoteChecklistItem(step.id, of: task)
