@@ -22,7 +22,6 @@ struct ReminderComposer: View {
     @State private var tagQuery = ""
     @State private var availableTags: [String] = []
     @State private var popupField: ReminderComposerField?
-    @State private var showsChecklist = false
     @StateObject private var focusRouter = ReminderComposerFocusRouter()
 
     private var activeField: ReminderComposerField { focusRouter.activeField }
@@ -52,6 +51,13 @@ struct ReminderComposer: View {
             focusRouter.onTab = { reverse in
                 move(from: focusRouter.activeField, reverse: reverse)
             }
+            focusRouter.onTextInput = { characters in
+                guard focusRouter.activeField == .checklist, !draft.hasChecklistContent else {
+                    return false
+                }
+                draft.pendingStep.append(contentsOf: characters)
+                return true
+            }
             availableTags = (try? services?.tags.allTags().map(\.slug).sorted()) ?? []
             Task { @MainActor in
                 await Task.yield()
@@ -60,6 +66,7 @@ struct ReminderComposer: View {
         }
         .onDisappear {
             focusRouter.onTab = nil
+            focusRouter.onTextInput = nil
         }
         .accessibilityIdentifier("tasks.reminderComposer")
     }
@@ -117,7 +124,7 @@ struct ReminderComposer: View {
 
     @ViewBuilder
     private var checklist: some View {
-        if showsChecklist || !draft.checklist.isEmpty {
+        if draft.hasChecklistContent {
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 ForEach(draft.checklist) { step in
                     HStack(spacing: Theme.Spacing.small) {
@@ -126,6 +133,15 @@ struct ReminderComposer: View {
                         Text(step.title)
                             .font(Theme.Text.rowSubtitle)
                         Spacer(minLength: 0)
+                        Button {
+                            draft.checklist.removeAll { $0.id == step.id }
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(Theme.Colors.tertiaryText)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Remove checklist item")
                     }
                     .frame(minHeight: Theme.Size.rowHeight)
                 }
@@ -150,6 +166,7 @@ struct ReminderComposer: View {
                         onEscape: onCancel,
                         field: .checklist,
                         focusRouter: focusRouter,
+                        onDeleteBackwardWhenEmpty: removeLastChecklistItem,
                         onFocus: { activate(.checklist) }
                     )
                     .frame(height: 24)
@@ -247,9 +264,9 @@ struct ReminderComposer: View {
         actionButton(
             title: draft.checklist.isEmpty ? "Checklist" : "\(draft.checklist.count) items",
             symbol: "checklist",
-            isActive: !draft.checklist.isEmpty
+            isActive: !draft.checklist.isEmpty,
+            isFocused: activeField == .checklist && !draft.hasChecklistContent
         ) {
-            showsChecklist = true
             activate(.checklist)
         }
     }
@@ -331,13 +348,19 @@ struct ReminderComposer: View {
         title: String,
         symbol: String,
         isActive: Bool,
+        isFocused: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Label(title, systemImage: activeSymbol(symbol, isActive: isActive))
                 .font(Theme.Text.metadata)
                 .lineLimit(1)
-                .foregroundStyle(isActive ? Theme.Colors.selection : Theme.Colors.tertiaryText)
+                .foregroundStyle(
+                    isActive || isFocused ? Theme.Colors.selection : Theme.Colors.tertiaryText
+                )
+                .padding(.horizontal, isFocused ? Theme.Spacing.small : 0)
+                .frame(height: 24)
+                .background(isFocused ? Theme.Colors.subtleFill : .clear, in: Capsule())
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -447,7 +470,6 @@ struct ReminderComposer: View {
             return
         }
         focusRouter.activate(field)
-        if field == .checklist { showsChecklist = true }
 
         if field != .when, field != .tags, field != .deadline {
             popupField = nil
@@ -505,6 +527,12 @@ struct ReminderComposer: View {
     private func shortDate(_ date: Date) -> String {
         date.formatted(.dateTime.month(.abbreviated).day())
     }
+
+    private func removeLastChecklistItem() -> Bool {
+        guard draft.pendingStep.isEmpty else { return false }
+        if !draft.checklist.isEmpty { draft.checklist.removeLast() }
+        return true
+    }
 }
 
 // MARK: - The keyboard editor
@@ -521,6 +549,7 @@ struct ReminderPlainTextEditor: NSViewRepresentable {
     let onEscape: () -> Void
     let field: ReminderComposerField
     let focusRouter: ReminderComposerFocusRouter
+    var onDeleteBackwardWhenEmpty: () -> Bool = { false }
     var onFocus: () -> Void = {}
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -679,6 +708,14 @@ final class ReminderEditorTextView: NSTextView {
         MainActor.assumeIsolated { coordinator?.parent.onTab(true) }
     }
 
+    override func deleteBackward(_ sender: Any?) {
+        if string.isEmpty,
+           MainActor.assumeIsolated({ coordinator?.parent.onDeleteBackwardWhenEmpty() == true }) {
+            return
+        }
+        super.deleteBackward(sender)
+    }
+
     override func keyDown(with event: NSEvent) {
         guard let parent = coordinator?.parent else {
             super.keyDown(with: event)
@@ -730,6 +767,7 @@ final class ReminderEditorTextView: NSTextView {
 final class ReminderComposerFocusRouter: ObservableObject {
     @Published private(set) var activeField: ReminderComposerField = .title
     var onTab: ((Bool) -> Void)?
+    var onTextInput: ((String) -> Bool)?
 
     private var editors: [ReminderComposerField: WeakReminderEditor] = [:]
     private var focusGeneration = 0
@@ -772,6 +810,10 @@ final class ReminderComposerFocusRouter: ObservableObject {
     func handleTab(reverse: Bool) {
         flushActiveEditor()
         onTab?(reverse)
+    }
+
+    func handleTextInput(_ characters: String) -> Bool {
+        onTextInput?(characters) == true
     }
 
     private func flushActiveEditor() {
@@ -831,13 +873,28 @@ struct ReminderComposerKeyboardMonitor: NSViewRepresentable {
                       let view,
                       let composerWindow = view.window,
                       NSApp.isActive,
-                      event.window === composerWindow || NSApp.mainWindow === composerWindow,
-                      event.keyCode == 48,
-                      !event.modifierFlags.contains(.command),
-                      !event.modifierFlags.contains(.control),
-                      !event.modifierFlags.contains(.option)
+                      event.window === composerWindow || NSApp.mainWindow === composerWindow
                 else { return event }
-                self.router?.handleTab(reverse: event.modifierFlags.contains(.shift))
+
+                let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                if event.keyCode == 48,
+                   !modifiers.contains(.command),
+                   !modifiers.contains(.control),
+                   !modifiers.contains(.option) {
+                    self.router?.handleTab(reverse: modifiers.contains(.shift))
+                    return nil
+                }
+
+                guard !modifiers.contains(.command),
+                      !modifiers.contains(.control),
+                      !modifiers.contains(.option),
+                      let characters = event.characters,
+                      !characters.isEmpty,
+                      characters.unicodeScalars.allSatisfy({
+                          !CharacterSet.controlCharacters.contains($0)
+                      }),
+                      self.router?.handleTextInput(characters) == true
+                else { return event }
                 return nil
             }
         }

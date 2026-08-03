@@ -35,6 +35,10 @@ struct ReminderComposerDraft: Sendable, Hashable {
     var checklist: [ReminderChecklistItem] = []
     var pendingStep = ""
 
+    var hasChecklistContent: Bool {
+        !pendingStep.isEmpty || !checklist.isEmpty
+    }
+
     var isEmpty: Bool {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

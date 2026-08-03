@@ -93,6 +93,53 @@ struct ReminderComposerStateTests {
         #expect(router.activeField == .notes)
     }
 
+    @Test("Checklist stays latent until typing is consumed")
+    @MainActor
+    func latentChecklistTyping() {
+        let router = ReminderComposerFocusRouter()
+        var draft = ReminderComposerDraft()
+        router.activate(.checklist)
+        router.onTextInput = { characters in
+            guard !draft.hasChecklistContent else { return false }
+            draft.pendingStep.append(contentsOf: characters)
+            return true
+        }
+
+        #expect(!draft.hasChecklistContent)
+        #expect(router.handleTextInput("P"))
+        #expect(draft.pendingStep == "P")
+        #expect(draft.hasChecklistContent)
+
+        draft.pendingStep = ""
+        #expect(!draft.hasChecklistContent)
+    }
+
+    @Test("Deleting backwards from an empty checklist removes its final item")
+    @MainActor
+    func emptyChecklistDelete() {
+        var removed = false
+        let router = ReminderComposerFocusRouter()
+        let editor = ReminderPlainTextEditor(
+            text: .constant(""),
+            placeholder: "Add a checklist item",
+            role: .body,
+            onTab: { _ in },
+            onReturn: {},
+            onCommandReturn: {},
+            onEscape: {},
+            field: .checklist,
+            focusRouter: router,
+            onDeleteBackwardWhenEmpty: { removed = true; return true }
+        )
+        let coordinator = editor.makeCoordinator()
+        let textView = ReminderEditorTextView()
+        textView.coordinator = coordinator
+
+        textView.deleteBackward(nil)
+
+        #expect(removed)
+    }
+
     @MainActor
     private func keyEvent(
         keyCode: UInt16,
