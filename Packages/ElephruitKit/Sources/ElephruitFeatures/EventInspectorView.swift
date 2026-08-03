@@ -752,6 +752,8 @@ struct EventRecordPicker: View {
     @State private var candidates: [Item] = []
     @State private var selectedRecordIDs: Set<UUID> = []
     @State private var hasLoadedCandidates = false
+    @State private var highlightedIndex = 0
+    @FocusState private var isSearchFocused: Bool
 
     init(
         event: CalendarEventSummary,
@@ -772,7 +774,21 @@ struct EventRecordPicker: View {
 
             TextField("Search people, pets, vehicles, and other records", text: $query)
                 .textFieldStyle(.roundedBorder)
-                .onChange(of: query) { _, _ in search() }
+                .focused($isSearchFocused)
+                .onChange(of: query) { _, _ in
+                    highlightedIndex = 0
+                    search()
+                }
+                .onSubmit { toggleHighlightedRecord() }
+                .onKeyPress(.upArrow) {
+                    moveHighlight(by: -1)
+                    return .handled
+                }
+                .onKeyPress(.downArrow) {
+                    moveHighlight(by: 1)
+                    return .handled
+                }
+                .onExitCommand { dismiss() }
 
             Group {
                 if !hasLoadedCandidates {
@@ -785,40 +801,58 @@ struct EventRecordPicker: View {
                         .foregroundStyle(Theme.Colors.secondaryText)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 } else {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 1) {
-                            ForEach(candidates) { record in
-                                Button { toggle(record) } label: {
-                                    HStack(spacing: Theme.Spacing.small) {
-                                        Image(systemName: services?.records.type(of: record).symbolName ?? "cube")
-                                            .foregroundStyle(Theme.Palette.color(named: record.colorName))
-                                            .frame(width: 24)
-                                        VStack(alignment: .leading, spacing: 0) {
-                                            Text(record.displayTitle)
-                                                .font(Theme.Text.rowSubtitle)
-                                            Text(services?.records.type(of: record).displayName ?? "Record")
-                                                .font(Theme.Text.keyHint)
-                                                .foregroundStyle(Theme.Colors.tertiaryText)
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 1) {
+                                ForEach(Array(candidates.enumerated()), id: \.element.id) { index, record in
+                                    Button {
+                                        highlightedIndex = index
+                                        toggle(record)
+                                    } label: {
+                                        HStack(spacing: Theme.Spacing.small) {
+                                            Image(systemName: services?.records.type(of: record).symbolName ?? "cube")
+                                                .foregroundStyle(Theme.Palette.color(named: record.colorName))
+                                                .frame(width: 24)
+                                            VStack(alignment: .leading, spacing: 0) {
+                                                Text(record.displayTitle)
+                                                    .font(Theme.Text.rowSubtitle)
+                                                Text(services?.records.type(of: record).displayName ?? "Record")
+                                                    .font(Theme.Text.keyHint)
+                                                    .foregroundStyle(Theme.Colors.tertiaryText)
+                                            }
+                                            Spacer(minLength: 0)
+                                            if selectedRecordIDs.contains(record.id) {
+                                                Image(systemName: "checkmark")
+                                                    .font(Theme.Text.metadata)
+                                                    .foregroundStyle(Theme.Colors.selection)
+                                            }
                                         }
-                                        Spacer(minLength: 0)
-                                        if selectedRecordIDs.contains(record.id) {
-                                            Image(systemName: "checkmark")
-                                                .font(Theme.Text.metadata)
-                                                .foregroundStyle(Theme.Colors.selection)
-                                        }
+                                        .contentShape(.rect)
+                                        .padding(.horizontal, Theme.Spacing.small)
+                                        .frame(height: 40)
                                     }
-                                    .contentShape(.rect)
-                                    .padding(.horizontal, Theme.Spacing.small)
-                                    .frame(height: 40)
+                                    .buttonStyle(.plain)
+                                    .background(
+                                        index == highlightedIndex
+                                            ? Theme.Colors.selectionFill
+                                            : Color.clear,
+                                        in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
+                                    )
+                                    .hoverHighlight(extending: Theme.Spacing.tight)
+                                    .onHover { hovering in
+                                        if hovering { highlightedIndex = index }
+                                    }
+                                    .id(record.id)
+                                    .accessibilityValue(
+                                        selectedRecordIDs.contains(record.id) ? "Selected" : "Not selected"
+                                    )
                                 }
-                                .buttonStyle(.plain)
-                                .background(
-                                    selectedRecordIDs.contains(record.id)
-                                        ? Theme.Colors.selectionFill
-                                        : Color.clear,
-                                    in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                                )
-                                .hoverHighlight(extending: Theme.Spacing.tight)
+                            }
+                        }
+                        .onChange(of: highlightedIndex) { _, index in
+                            guard candidates.indices.contains(index) else { return }
+                            withAnimation(.easeOut(duration: 0.1)) {
+                                proxy.scrollTo(candidates[index].id, anchor: .center)
                             }
                         }
                     }
@@ -842,7 +876,11 @@ struct EventRecordPicker: View {
         }
         .padding(Theme.Spacing.medium)
         .frame(width: 380)
-        .task { loadCandidates() }
+        .task {
+            loadCandidates()
+            await Task.yield()
+            isSearchFocused = true
+        }
     }
 
     /// Offers the event's own attendees first, since they are who somebody is most likely to want.
@@ -884,6 +922,22 @@ struct EventRecordPicker: View {
             selectedRecordIDs.insert(record.id)
         }
         onChanged()
+    }
+
+    private func moveHighlight(by offset: Int) {
+        guard !candidates.isEmpty else { return }
+        highlightedIndex = min(
+            candidates.count - 1,
+            max(0, highlightedIndex + offset)
+        )
+    }
+
+    private func toggleHighlightedRecord() {
+        guard candidates.indices.contains(highlightedIndex) else { return }
+        toggle(candidates[highlightedIndex])
+        // Reminder pickers clear their query after Return so the next selection starts from the
+        // full vocabulary without another trip to the mouse or Select All.
+        query = ""
     }
 }
 
