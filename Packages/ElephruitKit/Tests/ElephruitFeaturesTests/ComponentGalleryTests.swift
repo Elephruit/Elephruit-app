@@ -1,6 +1,7 @@
 import AppKit
 import ElephruitCore
 import ElephruitDesign
+import ElephruitPersistence
 import Foundation
 import SwiftUI
 import Testing
@@ -85,6 +86,9 @@ struct ComponentGalleryTests {
         let services = AppServices.inMemory(dateProvider: SystemDateProvider(), populated: false)
         let controller = services.quickLog
         controller.startTimerIfIdle()
+        let project = try services.items.create(ItemDraft(kind: .project, title: "Website"))
+        services.timer.setProject(project)
+        services.timer.setTags(["bugs"])
         services.timer.setElapsed(4 * 60 + 37)
 
         try write("quick-log-naming", width: 610) {

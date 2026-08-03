@@ -313,6 +313,7 @@ struct QuickLogView: View {
                     services?.timer.setSubject(resolve(subject))
                 }
             )
+            .fixedSize(horizontal: true, vertical: false)
 
             TimeProjectPicker(
                 project: draft.project,
@@ -321,6 +322,7 @@ struct QuickLogView: View {
                     services?.timer.setProject(resolve(project))
                 }
             )
+            .fixedSize(horizontal: true, vertical: false)
 
             TimePeoplePicker(
                 people: draft.people,
@@ -329,6 +331,7 @@ struct QuickLogView: View {
                     services?.timer.setPeople(people.compactMap { resolve($0) })
                 }
             )
+            .fixedSize(horizontal: true, vertical: false)
 
             TimeTagPicker(
                 slugs: draft.tagSlugs,
@@ -337,6 +340,7 @@ struct QuickLogView: View {
                     services?.timer.setTags(slugs)
                 }
             )
+            .fixedSize(horizontal: true, vertical: false)
 
             Button {
                 draft.isBillable.toggle()
@@ -348,8 +352,6 @@ struct QuickLogView: View {
             .help(draft.isBillable ? "Billable" : "Not billable")
             .accessibilityLabel("Billable")
             .accessibilityValue(draft.isBillable ? "on" : "off")
-
-            Spacer(minLength: 0)
         }
     }
 
@@ -393,6 +395,7 @@ struct QuickLogView: View {
             if running != nil, controller.presentation == .confirmReplacement {
                 Button("Keep Timing") { controller.hide() }
                     .keyboardShortcut(.cancelAction)
+                    .fixedSize(horizontal: true, vertical: false)
                     .accessibilityIdentifier(AccessibilityID.Time.quickLogKeep)
 
                 Button("Stop & Start New") {
@@ -401,15 +404,18 @@ struct QuickLogView: View {
                     isDescriptionFocused = true
                 }
                 .buttonStyle(.borderedProminent)
+                .fixedSize(horizontal: true, vertical: false)
                 .accessibilityIdentifier(AccessibilityID.Time.quickLogReplace)
             } else if running != nil {
                 // Quiet, and a long way from Done. It ends the same work Stop does and keeps none of
                 // it, so it must not be the button the eye lands on.
                 Button("Discard") { controller.discardTimer() }
+                    .fixedSize(horizontal: true, vertical: false)
                     .help("Throw this away without recording it")
                     .accessibilityIdentifier(AccessibilityID.Time.quickLogDiscard)
 
                 Button("Stop") { controller.stopTimer() }
+                    .fixedSize(horizontal: true, vertical: false)
                     .help("Stop now and keep this time")
                     .accessibilityIdentifier(AccessibilityID.Time.quickLogStop)
             }
@@ -418,6 +424,7 @@ struct QuickLogView: View {
                 Button("Done") { controller.hide() }
                     .keyboardShortcut(.return, modifiers: .command)
                     .buttonStyle(.borderedProminent)
+                    .fixedSize(horizontal: true, vertical: false)
                     .help("Put the panel away. The timer keeps running.")
                     .accessibilityIdentifier(AccessibilityID.Time.quickLogDone)
             }
