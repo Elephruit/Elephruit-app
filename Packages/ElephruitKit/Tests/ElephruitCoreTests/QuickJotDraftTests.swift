@@ -20,14 +20,14 @@ struct QuickJotDraftTests {
     func deadlinePromotes() {
         var draft = QuickJotDraft()
         draft.setDue(DateInterpretation(day: .tomorrow))
-        #expect(draft.kind == .task)
+        #expect(draft.kind == .reminder)
     }
 
     @Test("Setting a start date makes a note into a task")
     func followPromotes() {
         var draft = QuickJotDraft()
         draft.setFollow(.today)
-        #expect(draft.kind == .task)
+        #expect(draft.kind == .reminder)
     }
 
     /// The parser deliberately does *not* do this — see `CaptureGrammarTests`. Clicking the flag is
@@ -36,7 +36,7 @@ struct QuickJotDraftTests {
     func priorityPromotes() {
         var draft = QuickJotDraft()
         draft.setPriority(.high)
-        #expect(draft.kind == .task)
+        #expect(draft.kind == .reminder)
 
         #expect(CaptureParser.parse("Read the brief !high").kind == .note)
     }
@@ -45,7 +45,7 @@ struct QuickJotDraftTests {
     func projectPromotes() {
         var draft = QuickJotDraft()
         draft.setProject("Q3 Launch")
-        #expect(draft.kind == .task)
+        #expect(draft.kind == .reminder)
     }
 
     @Test("Tags and people do not promote — a note can hold both")
@@ -64,7 +64,7 @@ struct QuickJotDraftTests {
 
         // Demoting would throw away the notes field the user has been typing into for the last
         // minute, on the strength of them changing their mind about a date.
-        #expect(draft.kind == .task)
+        #expect(draft.kind == .reminder)
         #expect(draft.dueDate == nil)
     }
 
@@ -147,7 +147,7 @@ struct QuickJotDraftTests {
 
         #expect(draft.tagSlugs == ["errand"])
         #expect(draft.dueDate == .tomorrow)
-        #expect(draft.kind == .task)
+        #expect(draft.kind == .reminder)
     }
 
     /// A lift means the user has just typed the token and moved off it. Changing your mind about a
@@ -165,7 +165,7 @@ struct QuickJotDraftTests {
     func taskPrefixApplies() {
         var draft = QuickJotDraft()
         draft.apply(CaptureParser.parse("- Call the framer"))
-        #expect(draft.kind == .task)
+        #expect(draft.kind == .reminder)
     }
 
     @Test("An explicit choice is not overturned by what was lifted")
@@ -241,10 +241,10 @@ struct QuickJotDraftTests {
     @Test("An explicitly chosen task is not turned into a bookmark by a pasted URL")
     func explicitKindBeatsAPastedURL() {
         var draft = QuickJotDraft()
-        draft.choose(.task)
+        draft.choose(.reminder)
 
         let merged = draft.merged(with: CaptureParser.parse("read later https://example.com/x"))
-        #expect(merged.kind == .task)
+        #expect(merged.kind == .reminder)
         #expect(merged.url != nil)
     }
 
@@ -261,7 +261,7 @@ struct QuickJotDraftTests {
         draft.setDue(DateInterpretation(day: .tomorrow))
 
         let merged = draft.merged(with: CaptureParser.parse("read later https://example.com/x"))
-        #expect(merged.kind == .task)
+        #expect(merged.kind == .reminder)
     }
 
     /// A `due:"friday` with no closing quote never settles, so it reaches the merge as text. It still
@@ -272,7 +272,7 @@ struct QuickJotDraftTests {
         let merged = draft.merged(with: CaptureParser.parse("Ship it >Q3"))
 
         #expect(merged.projectHint == "Q3")
-        #expect(merged.kind == .task)
+        #expect(merged.kind == .reminder)
     }
 
     @Test("Merging keeps the title and body the residual parse worked out")

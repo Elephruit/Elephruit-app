@@ -38,7 +38,7 @@ private struct SyncFixture {
 
     @discardableResult
     func task(_ title: String) throws -> Item {
-        try store.items.create(ItemDraft(kind: .task, title: title))
+        try store.items.create(ItemDraft(kind: .reminder, title: title))
     }
 
     func snapshot(_ id: String) async throws -> ReminderSnapshot {
@@ -218,7 +218,7 @@ struct ReminderReconcileTests {
 
         let tasks = try fixture.store.items.items(matching: {
             var query = ItemQuery()
-            query.kinds = [.task]
+            query.kinds = [.reminder]
             return query
         }())
         #expect(tasks.count == 1)
@@ -335,7 +335,7 @@ struct ReminderConflictTests {
 
         // …and the local version survives beside it, linked so neither is orphaned.
         var query = ItemQuery()
-        query.kinds = [.task]
+        query.kinds = [.reminder]
         let all = try fixture.store.items.items(matching: query)
         #expect(all.count == 2)
 
@@ -600,7 +600,7 @@ struct ReminderInitialImportTests {
         #expect(report.failures.isEmpty)
 
         let tasks = try fixture.store.items.items(matching: {
-            var query = ItemQuery(); query.kinds = [.task]; query.scope = .all; return query
+            var query = ItemQuery(); query.kinds = [.reminder]; query.scope = .all; return query
         }())
         #expect(tasks.contains { $0.externalIdentifier != nil })
     }
@@ -640,7 +640,7 @@ struct ReminderInitialImportTests {
         #expect(report.imported > 0)
 
         let imported = try fixture.store.items.items(matching: {
-            var query = ItemQuery(); query.kinds = [.task]; query.scope = .all; return query
+            var query = ItemQuery(); query.kinds = [.reminder]; query.scope = .all; return query
         }()).filter { $0.externalIdentifier != nil }
 
         // Every task that arrived came from the one list that was ticked.
@@ -768,7 +768,7 @@ struct ReminderSyncSettlingTests {
         _ = await engine.reconcile(importingFrom: lists)
 
         let linked = try store.items.items(matching: {
-            var query = ItemQuery(); query.kinds = [.task]; query.scope = .all; return query
+            var query = ItemQuery(); query.kinds = [.reminder]; query.scope = .all; return query
         }()).filter { $0.externalIdentifier != nil && !$0.isCompleted }
         let task = try #require(linked.first)
 

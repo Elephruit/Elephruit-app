@@ -183,7 +183,7 @@ struct CaptureLiftTests {
         let result = lift("- Call the framer")
 
         #expect(result.text == "Call the framer")
-        #expect(result.lifted.kind == .task)
+        #expect(result.lifted.kind == .reminder)
     }
 
     @Test("Every spelling of the prefix works, and the longest wins")
@@ -200,7 +200,7 @@ struct CaptureLiftTests {
         let result = lift("- Call the framer #errand ")
 
         #expect(result.text == "Call the framer ")
-        #expect(result.lifted.kind == .task)
+        #expect(result.lifted.kind == .reminder)
         #expect(result.lifted.tagSlugs == ["errand"])
     }
 
@@ -364,7 +364,7 @@ struct CaptureLiftTests {
         #expect(actual.priority == expected.priority)
         #expect(actual.url == expected.url)
 
-        let promoted = expected.kind == .note && actual.kind == .task
+        let promoted = expected.kind == .note && actual.kind == .reminder
         #expect(actual.kind == expected.kind || promoted)
     }
 }

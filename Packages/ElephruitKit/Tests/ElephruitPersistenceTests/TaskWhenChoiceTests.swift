@@ -188,7 +188,7 @@ struct ConvertToProjectTests {
         #expect(task.checklist.isEmpty)
         let titles = task.children.map(\.title).sorted()
         #expect(titles == ["Book the van", "Change the address"])
-        #expect(task.children.allSatisfy { $0.kind == .task })
+        #expect(task.children.allSatisfy { $0.kind == .reminder })
     }
 
     @Test("A task inside a heading becomes a project somewhere a project may live")

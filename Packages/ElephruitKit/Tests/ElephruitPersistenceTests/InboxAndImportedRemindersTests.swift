@@ -73,7 +73,7 @@ struct InboxAndImportedRemindersTests {
 
         // They arrived — this is not a test that import stopped working.
         #expect(report.imported > 0)
-        #expect(try fixture.store.items.items(matching: .kind(.task)).count == report.imported)
+        #expect(try fixture.store.items.items(matching: .kind(.reminder)).count == report.imported)
 
         // And none of them is an unprocessed capture, because each one is filed in the list it came
         // from. That is the whole change.
@@ -224,13 +224,13 @@ struct InboxAndImportedRemindersTests {
         let lists = ["list-personal", "list-groceries", "list-work"]
 
         let first = await fixture.engine.reconcile(importingFrom: lists)
-        let afterFirst = try fixture.store.items.items(matching: .kind(.task)).count
+        let afterFirst = try fixture.store.items.items(matching: .kind(.reminder)).count
 
         let second = await fixture.engine.reconcile(importingFrom: lists)
 
         #expect(second.imported == 0)
         #expect(second.failures.isEmpty)
-        #expect(try fixture.store.items.items(matching: .kind(.task)).count == afterFirst)
+        #expect(try fixture.store.items.items(matching: .kind(.reminder)).count == afterFirst)
         #expect(afterFirst == first.imported)
         #expect(try fixture.inbox().isEmpty)
     }
@@ -248,7 +248,7 @@ struct InboxAndImportedRemindersTests {
 
         #expect(!report.failures.contains { $0.contains("list-personal") })
         let calls = try fixture.store.items
-            .items(matching: .kind(.task))
+            .items(matching: .kind(.reminder))
             .filter { $0.displayTitle == "Call the dentist" }
         #expect(calls.count == 1)
     }
@@ -260,7 +260,7 @@ struct InboxAndImportedRemindersTests {
 
         let bins = try #require(
             try fixture.store.items
-                .items(matching: .kind(.task))
+                .items(matching: .kind(.reminder))
                 .first { $0.displayTitle == "Put the bins out" }
         )
         try fixture.store.items.moveToTrash(bins)
@@ -270,7 +270,7 @@ struct InboxAndImportedRemindersTests {
         // Restoring it from the Trash must not produce two. A reminder the user threw away here is
         // one they have decided about, and re-importing it would be the app arguing.
         var everything = ItemQuery()
-        everything.kinds = [.task]
+        everything.kinds = [.reminder]
         everything.scope = .all
         let copies = try fixture.store.items
             .items(matching: everything)
@@ -289,7 +289,7 @@ struct InboxAndImportedRemindersTests {
         // `rem-post` is completed in the fixture. Bringing it in would put a finished chore in a
         // task manager that never had it, and — before the Inbox rule changed — in the Inbox.
         let posted = try fixture.store.items
-            .items(matching: .kind(.task))
+            .items(matching: .kind(.reminder))
             .filter { $0.displayTitle == "Post the parcel" }
         #expect(posted.isEmpty)
         #expect(try fixture.inbox().isEmpty)

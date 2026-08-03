@@ -586,7 +586,7 @@ struct MarkdownImportTests {
         #expect(report.itemsCreated == 1)
 
         let created = try fixture.item(id: identifier)
-        #expect(created.kind == .task)
+        #expect(created.kind == .reminder)
         #expect(created.title == "Imported Task")
         #expect(created.status == .completed)
         #expect(created.completedAt != nil, "The completion invariant holds even on import")
@@ -698,7 +698,7 @@ struct BundleWritingTests {
 
         // Grouped by kind, so the bundle is navigable.
         #expect(fileManager.fileExists(atPath: directory.appending(path: "Notes").path(percentEncoded: false)))
-        #expect(fileManager.fileExists(atPath: directory.appending(path: "Tasks").path(percentEncoded: false)))
+        #expect(fileManager.fileExists(atPath: directory.appending(path: "Reminders").path(percentEncoded: false)))
 
         #expect(report.fileCount == report.itemCount + 2)
 

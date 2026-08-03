@@ -94,7 +94,7 @@ struct SearchQueryParserTests {
         let description = SearchQueryParser.describe(query)
 
         #expect(description.contains("launch"))
-        #expect(description.contains("Tasks"))
+        #expect(description.contains("Reminders"))
         #expect(description.contains("open"))
         #expect(SearchQueryParser.describe(SearchQuery()) == "Everything")
     }

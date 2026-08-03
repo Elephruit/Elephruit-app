@@ -633,7 +633,7 @@ public final class ReminderLifecycleService {
     /// - Returns: the names of the fields that could not come across.
     @discardableResult
     public func convertToProject(_ task: Item) throws(AppError) -> [String] {
-        guard task.kind == .reminder else { return [] }
+        guard task.kind == .task || task.kind == .reminder else { return [] }
 
         for step in task.checklist.items {
             _ = try promoteChecklistItem(step.id, of: task)

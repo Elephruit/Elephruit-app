@@ -30,7 +30,7 @@ struct CaptureGrammarTests {
         #expect(draft.projectHint == "Operations")
         #expect(draft.dueDate == .nextWeekday(6))
         #expect(draft.priority == .high)
-        #expect(draft.kind == .task)
+        #expect(draft.kind == .reminder)
         #expect(draft.title == "Submit expense report")
     }
 
@@ -75,8 +75,8 @@ struct CaptureGrammarTests {
 
     @Test("Either date makes a note into a task")
     func datesImplyAction() {
-        #expect(CaptureParser.parse("Something due:friday").kind == .task)
-        #expect(CaptureParser.parse("Something follow:friday").kind == .task)
+        #expect(CaptureParser.parse("Something due:friday").kind == .reminder)
+        #expect(CaptureParser.parse("Something follow:friday").kind == .reminder)
     }
 
     // MARK: - Priority
