@@ -12,6 +12,9 @@ struct CaptureNotesField: NSViewRepresentable {
     @Binding var text: String
     @Binding var caret: Int
     var vocabulary: CaptureVocabulary = .empty
+    var placeholder = "Notes"
+    var font = Theme.AppKitText.captureSupportingInput
+    var isSingleLine = false
 
     var onSubmit: () -> Void
     var onCancel: () -> Void
@@ -24,7 +27,7 @@ struct CaptureNotesField: NSViewRepresentable {
         let scrollView = CaptureNotesScrollView()
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
-        scrollView.hasVerticalScroller = true
+        scrollView.hasVerticalScroller = !isSingleLine
         scrollView.autohidesScrollers = true
 
         let textView = CaptureNotesTextView()
@@ -35,9 +38,10 @@ struct CaptureNotesField: NSViewRepresentable {
         textView.isRichText = false
         textView.allowsUndo = true
         textView.drawsBackground = false
-        textView.font = Theme.AppKitText.captureSupportingInput
+        textView.font = font
+        textView.isFieldEditor = isSingleLine
         textView.textColor = Theme.AppKitColors.primaryText
-        textView.isVerticallyResizable = true
+        textView.isVerticallyResizable = !isSingleLine
         textView.isHorizontallyResizable = false
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(
@@ -58,7 +62,7 @@ struct CaptureNotesField: NSViewRepresentable {
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
-        textView.placeholder = "Notes"
+        textView.placeholder = placeholder
         textView.applyHighlighting()
         scrollView.documentView = textView
         return scrollView
@@ -68,6 +72,8 @@ struct CaptureNotesField: NSViewRepresentable {
         context.coordinator.parent = self
         guard let textView = scrollView.documentView as? CaptureNotesTextView else { return }
         textView.vocabulary = vocabulary
+        textView.placeholder = placeholder
+        textView.font = font
         guard textView.string != text,
               text != context.coordinator.lastEditorText,
               !textView.hasMarkedText()
@@ -126,6 +132,9 @@ struct CaptureNotesField: NSViewRepresentable {
                 return parent.onMove(1)
             case #selector(NSResponder.cancelOperation(_:)):
                 parent.onCancel()
+                return true
+            case #selector(NSResponder.insertNewline(_:)) where parent.isSingleLine:
+                parent.onSubmit()
                 return true
             default:
                 return false

@@ -29,10 +29,31 @@ struct QuickLogView: View {
     /// the running entry — this is what is on screen, not a pending edit.
     @State private var draft = TimeEntryComposition()
     @State private var vocabulary: CaptureVocabulary = .empty
+    @State private var caret = 0
+    @State private var suggestions: [String] = []
+    @State private var suggestionSelection = 0
 
     @FocusState private var isDescriptionFocused: Bool
 
     private var running: RunningTimer? { services?.timer.running }
+
+    private var completion: CaptureCompletion? {
+        guard let completion = CaptureCompletion.active(
+            in: controller.description,
+            caretAt: caret
+        ) else { return nil }
+
+        switch completion.trigger {
+        case .tag, .project, .person:
+            return completion
+        case .bang, .dueDate, .followDate:
+            return nil
+        }
+    }
+
+    private var suggestionSource: CaptureSuggestionSource {
+        CaptureSuggestionSource(services: services, vocabulary: vocabulary)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -73,6 +94,7 @@ struct QuickLogView: View {
         .onChange(of: controller.presentation) { _, _ in focusDescriptionIfEditing() }
         .onChange(of: running?.id) { _, _ in syncFromRunning() }
         .onChange(of: controller.description) { _, _ in applyGrammarPreview() }
+        .onChange(of: completion) { _, _ in refreshSuggestions() }
         .task(id: services?.changeToken) {
             refreshVocabulary()
             applyGrammarPreview()
@@ -126,15 +148,28 @@ struct QuickLogView: View {
     private var naming: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
             HStack(spacing: Theme.Spacing.medium) {
-                TextField("Add a description", text: $controller.description)
-                    .textFieldStyle(.plain)
-                    .font(Theme.FloatingCapturePanel.primaryInputFont)
+                CaptureNotesField(
+                    text: $controller.description,
+                    caret: $caret,
+                    vocabulary: vocabulary,
+                    placeholder: "Add a description",
+                    font: Theme.AppKitText.capturePrimaryInput,
+                    isSingleLine: true,
+                    onSubmit: { controller.hide() },
+                    onCancel: { controller.hide() },
+                    onMove: { moveSuggestion($0) },
+                    onAccept: { acceptSuggestion() }
+                )
+                    .frame(height: 26)
                     .focused($isDescriptionFocused)
-                    .onSubmit { controller.hide() }
                     .accessibilityLabel("What are you working on?")
                     .accessibilityIdentifier(AccessibilityID.Time.quickLogDescription)
 
                 timingBadge
+            }
+
+            if !suggestions.isEmpty {
+                suggestionList
             }
 
             Spacer(minLength: 72)
@@ -146,6 +181,60 @@ struct QuickLogView: View {
 
     private var timerGrammarHints: [(sigil: String, meaning: String, example: String)] {
         Array(CaptureParser.grammarHints.prefix(3))
+    }
+
+    private var suggestionList: some View {
+        CaptureSuggestionList(
+            prefix: completion?.trigger.prefix ?? "",
+            suggestions: suggestions,
+            selection: suggestionSelection
+        ) { index in
+            suggestionSelection = index
+            acceptSuggestion()
+        }
+    }
+
+    @discardableResult
+    private func moveSuggestion(_ direction: Int) -> Bool {
+        guard !suggestions.isEmpty else { return false }
+        suggestionSelection = max(
+            0,
+            min(suggestions.count - 1, suggestionSelection + direction)
+        )
+        return true
+    }
+
+    @discardableResult
+    private func acceptSuggestion() -> Bool {
+        guard let completion, suggestions.indices.contains(suggestionSelection) else { return false }
+        let applied = completion.applying(
+            suggestions[suggestionSelection],
+            to: controller.description,
+            caretAt: caret
+        )
+        controller.description = applied.text
+        caret = applied.caret
+        suggestions = []
+        return true
+    }
+
+    private func refreshSuggestions() {
+        guard let completion else {
+            suggestions = []
+            return
+        }
+
+        suggestionSelection = 0
+        switch completion.trigger {
+        case .tag:
+            suggestions = suggestionSource.tagSlugs(matching: completion.query, limit: 6)
+        case .project:
+            suggestions = suggestionSource.containers(matching: completion.query, limit: 6)
+        case .person:
+            suggestions = suggestionSource.people(matching: completion.query, limit: 6)
+        case .bang, .dueDate, .followDate:
+            suggestions = []
+        }
     }
 
     // MARK: - Replacement confirmation
@@ -362,6 +451,7 @@ struct QuickLogView: View {
 
     private func refreshVocabulary() {
         vocabulary = (try? services?.capture.vocabulary()) ?? .empty
+        refreshSuggestions()
     }
 
     /// Shows inline filing immediately, while persistence still waits for an intentional exit.

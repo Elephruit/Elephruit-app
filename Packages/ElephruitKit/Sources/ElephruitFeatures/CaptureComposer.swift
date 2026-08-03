@@ -208,27 +208,14 @@ struct CaptureComposer: View {
     // MARK: - Completions
 
     private var suggestionList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(suggestions.enumerated()), id: \.offset) { index, value in
-                HStack {
-                    Text(completion?.trigger.prefix ?? "")
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(Theme.CaptureToken.accent)
-                    Text(value)
-                        .font(Theme.Text.metadata)
-                    Spacer()
-                }
-                .padding(.vertical, 3)
-                .padding(.horizontal, Theme.Spacing.small)
-                .background(
-                    index == selection ? Theme.Colors.selectionFill : Color.clear,
-                    in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                )
-                .contentShape(Rectangle())
-                .onTapGesture { selection = index; acceptSuggestion() }
-            }
+        CaptureSuggestionList(
+            prefix: completion?.trigger.prefix ?? "",
+            suggestions: suggestions,
+            selection: selection
+        ) { index in
+            selection = index
+            acceptSuggestion()
         }
-        .accessibilityLabel("\(suggestions.count) suggestions. Use the arrow keys, then Tab to accept.")
     }
 
     @discardableResult
