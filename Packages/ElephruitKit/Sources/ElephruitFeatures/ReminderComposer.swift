@@ -76,6 +76,12 @@ struct ReminderComposer: View {
             focusRouter.onTab = { reverse in
                 move(from: focusRouter.activeField, reverse: reverse)
             }
+            focusRouter.onVerticalMove = { direction in
+                moveVertically(direction, from: focusRouter.activeField)
+            }
+            focusRouter.onHorizontalMove = { direction in
+                moveHorizontally(direction, from: focusRouter.activeField)
+            }
             focusRouter.onTextInput = { characters in
                 guard focusRouter.activeField == .checklist, !draft.hasChecklistContent else {
                     return false
@@ -100,6 +106,8 @@ struct ReminderComposer: View {
         .onChange(of: projectQuery) { _, _ in resetMetadataSuggestion() }
         .onDisappear {
             focusRouter.onTab = nil
+            focusRouter.onVerticalMove = nil
+            focusRouter.onHorizontalMove = nil
             focusRouter.onTextInput = nil
         }
         .accessibilityIdentifier("tasks.reminderComposer")
@@ -1109,6 +1117,37 @@ struct ReminderComposer: View {
         return true
     }
 
+    /// Routes directional navigation from the always-mounted composer event monitor. Metadata
+    /// editors are mounted conditionally, so making them own the only arrow handlers introduces a
+    /// reconciliation-sized window where a freshly activated picker cannot respond.
+    @discardableResult
+    private func moveVertically(
+        _ direction: Int,
+        from field: ReminderComposerField
+    ) -> Bool {
+        switch field {
+        case .title, .notes:
+            return moveInlineSuggestion(direction)
+        case .when, .tags, .people, .deadline, .project:
+            return moveMetadataSuggestion(direction, for: field)
+        case .checklist:
+            return false
+        }
+    }
+
+    @discardableResult
+    private func moveHorizontally(
+        _ direction: Int,
+        from field: ReminderComposerField
+    ) -> Bool {
+        switch field {
+        case .when, .deadline:
+            return moveDateHorizontally(direction, for: field)
+        case .title, .notes, .tags, .people, .checklist, .project:
+            return false
+        }
+    }
+
     @discardableResult
     private func acceptMetadataSuggestion(for field: ReminderComposerField) -> Bool {
         if field == .when || field == .deadline {
@@ -1902,6 +1941,8 @@ final class ReminderEditorTextView: NSTextView {
 final class ReminderComposerFocusRouter: ObservableObject {
     @Published private(set) var activeField: ReminderComposerField = .title
     var onTab: ((Bool) -> Void)?
+    var onVerticalMove: ((Int) -> Bool)?
+    var onHorizontalMove: ((Int) -> Bool)?
     var onTextInput: ((String) -> Bool)?
 
     private var editors: [ReminderComposerField: WeakReminderEditor] = [:]
@@ -1965,6 +2006,14 @@ final class ReminderComposerFocusRouter: ObservableObject {
         onTab?(reverse)
     }
 
+    func handleVerticalMove(_ direction: Int) -> Bool {
+        onVerticalMove?(direction) == true
+    }
+
+    func handleHorizontalMove(_ direction: Int) -> Bool {
+        onHorizontalMove?(direction) == true
+    }
+
     func handleTextInput(_ characters: String) -> Bool {
         onTextInput?(characters) == true
     }
@@ -2016,6 +2065,24 @@ struct ReminderComposerEventMonitor: NSViewRepresentable {
         eventWindowIsComposerWindow && !composerContainsLocation
     }
 
+    @MainActor
+    static func handleArrowKey(
+        _ keyCode: UInt16,
+        using router: ReminderComposerFocusRouter
+    ) -> Bool {
+        switch keyCode {
+        case 126: router.handleVerticalMove(-1) // Up Arrow
+        case 125: router.handleVerticalMove(1) // Down Arrow
+        case 123: router.handleHorizontalMove(-1) // Left Arrow
+        case 124: router.handleHorizontalMove(1) // Right Arrow
+        default: false
+        }
+    }
+
+    static func allowsArrowRouting(with modifiers: NSEvent.ModifierFlags) -> Bool {
+        modifiers.intersection([.shift, .control, .option, .command]).isEmpty
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(router: router, onClickOutside: onClickOutside)
     }
@@ -2061,6 +2128,11 @@ struct ReminderComposerEventMonitor: NSViewRepresentable {
                 else { return event }
 
                 let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                if ReminderComposerEventMonitor.allowsArrowRouting(with: modifiers),
+                   let router = self.router,
+                   ReminderComposerEventMonitor.handleArrowKey(event.keyCode, using: router) {
+                    return nil
+                }
                 if event.keyCode == 48,
                    !modifiers.contains(.command),
                    !modifiers.contains(.control),
