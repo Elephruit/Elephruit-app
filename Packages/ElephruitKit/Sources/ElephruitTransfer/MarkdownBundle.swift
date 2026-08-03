@@ -172,7 +172,7 @@ public enum MarkdownFrontMatter {
 ///   README.md                 ← what this bundle is, and its counts
 ///   elephruit-archive.json   ← the lossless companion
 ///   Notes/…                   ← one .md per item, grouped by kind
-///   Tasks/…
+///   Reminders/…
 ///   Attachments/<uuid>/…      ← the bytes of every copied-in file
 /// ```
 ///

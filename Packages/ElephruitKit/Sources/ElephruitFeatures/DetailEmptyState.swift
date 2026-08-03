@@ -80,8 +80,7 @@ public struct DetailEmptyState: Sendable, Hashable {
                 message: "Choose a capture to file it, or press ⌘N to add one."
             )
 
-        // The Tasks module's own destinations, which share a vocabulary with each other and not with
-        // the library's kinds.
+        // Legacy Tasks destinations remain decodable and redirect into Reminders.
         case .taskView, .smartList, .builtInSmartList:
             DetailEmptyState(
                 symbolName: "checkmark.circle",

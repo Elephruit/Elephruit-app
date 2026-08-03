@@ -450,9 +450,9 @@ public final class EventAnnotationService {
 
     // MARK: - Follow-ups
 
-    /// Creates a task in the Tasks module about this meeting.
+    /// Creates a reminder about this meeting.
     ///
-    /// **The task never appears in a calendar view.** It is an ordinary task in the ordinary place,
+    /// **The reminder never appears in a calendar view.** It is an ordinary reminder in Reminders,
     /// linked to the meeting so that opening either shows the other. A calendar that lists its own
     /// follow-ups turns into a to-do list with dates, which is a different and worse product.
     @discardableResult

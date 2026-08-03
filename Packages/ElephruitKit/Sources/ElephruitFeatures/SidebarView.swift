@@ -339,7 +339,7 @@ public struct SidebarView: View {
 ///
 /// One row: a back control that returns to the primary navigation, and the module's name as a menu
 /// that switches straight to another one. Two affordances in the space of one, because a sidebar
-/// header that takes three rows to say "Tasks" has spent the room the navigation needed.
+/// header that takes three rows to repeat a module name has spent the room the navigation needed.
 struct ModuleHeader: View {
     let module: AppModule
     let navigation: NavigationModel

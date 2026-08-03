@@ -1,5 +1,8 @@
 # 31 — Tasks interaction scope
 
+> **Historical record.** This interface was removed on 2026-08-03 and replaced by the unified
+> Reminders workspace. See `docs/33-reminders-unification.md`.
+
 The task **model** is finished and right. This is a plan for the shell around it.
 
 > **Status: items 1–6 shipped.** Six commits on `claude/tasks-ui-things-redesign-c07b40`, in the order

@@ -22,9 +22,9 @@ it is. That is one row on a page that has seen all three, and three rows on two 
 Inbox stayed. It answers a genuinely different question — what has arrived and not yet been filed —
 and that is not a fact about a day.
 
-The Tasks module keeps its own Today and Upcoming, and that is not a duplication. The global Today is
-the whole day: work, meetings, and the people they involve. The Tasks one is the list of work you
-planned. Same word, different questions; `ModuleNavigationTests` pins the distinction down.
+Reminders now has one graph-backed workspace. The global Today remains the whole day: reminders,
+meetings, and the people they involve. Choosing a legacy Tasks destination redirects to Reminders,
+so a restored window or old deep link never strands the user.
 
 ## 2. The redirect
 
@@ -141,7 +141,7 @@ invalidate, load, for as long as the page was on screen.
   page losing its meaning.
 - **Drag and drop between days.** Rescheduling is a menu and a hover control. Dragging a row onto a
   date rail is the obvious next step and is not built.
-- **Reordering within a day.** `todayOrder` exists and the Tasks module honours it; this page sorts
+- **Reordering within a day.** `todayOrder` exists and Reminders honours it; this page sorts
   by why something is here.
 - **A per-day time surface.** Tracked time is still the Time module's; the briefing does not say how
   long the day has taken.

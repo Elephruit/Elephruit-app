@@ -47,14 +47,14 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
     case reminders
     case time
 
-    /// One of the Tasks module's system views.
+    /// A system view written by the retired Tasks module.
     ///
     /// One case carrying a ``TaskSystemView`` rather than nine cases, on the same terms as
     /// ``people(_:)``: adding a view does not widen this enum, and a scene restored from a newer
     /// version still decodes.
     case taskView(TaskSystemView)
 
-    /// A saved task smart list.
+    /// A saved smart list written by the retired Tasks module.
     case smartList(id: UUID)
 
     /// A built-in smart list, named by its stable identifier rather than by an index.
@@ -271,7 +271,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         }
     }
 
-    /// Whether this selection is one the Tasks workspace draws.
+    /// The system view encoded by a legacy Tasks destination, if any.
     public var taskSystemView: TaskSystemView? {
         if case .taskView(let view) = self { return view }
         return nil
@@ -567,7 +567,7 @@ public final class NavigationModel {
     ///
     /// Re-entering the module you are already in is deliberately *not* a no-op at the sidebar level
     /// — it is how the header's module menu confirms a choice — but it does not disturb the
-    /// selection, so choosing "Tasks" while inside Tasks does not throw away where you were.
+    /// selection, so confirming the current module does not throw away where you were.
     public func enterModule(_ module: AppModule) {
         let resumed = moduleSelections[module] ?? module.defaultSelection
         // Guard against a remembered selection that has since stopped belonging to the module —
@@ -776,8 +776,8 @@ public final class NavigationModel {
     /// What the window is called.
     ///
     /// The selection's own name, except at a module's front door, where the module's name is the
-    /// more useful of the two: "Tasks" says where you are, and "Today" — which is also a global
-    /// destination — does not.
+    /// more useful of the two: the module says where you are, while a title shared with another
+    /// destination does not.
     public var windowTitle: String {
         guard let activeModule, selection == activeModule.defaultSelection else {
             return selection.title

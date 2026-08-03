@@ -142,10 +142,10 @@ Permanently".
 | `⌘⇧N` | Quick Capture |
 | `⌘N` | New item in current context |
 | `⌘⇧F` | Unified search |
-| `⌘0`…`⌘5` | Today / Inbox / Notes / Tasks / Projects / Tags |
+| `⌘0`, `⌘1`, `⌘3`…`⌘7` | Today / Inbox / Notes / Projects / Records / Calendar / Reminders |
 | `⌘⌥I` | Toggle Inspector |
 | `⌘⌃S` | Toggle Sidebar |
-| `Space` | Toggle task completion in list |
+| `Space` | Toggle reminder completion in list |
 | `⌘⇧D` / `⌘⇧P` / `⌘⇧T` | Set due date / project / tags |
 | `⌘⌫` | Move to Trash |
 | `⌘Z` / `⌘⇧Z` | Undo / Redo |

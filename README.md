@@ -5,7 +5,7 @@
 <h3>Your entire working memory, in one app, on your own Mac.</h3>
 
 <p>
-Notes, tasks, projects, people, calendar, and time —<br>
+Notes, reminders, projects, people, calendar, and time —<br>
 one linked graph, one search box, zero cloud.
 </p>
 
@@ -25,7 +25,7 @@ one linked graph, one search box, zero cloud.
 <tr><td align="center">
 
 Your thinking is spread across six apps that don't know about each other.<br>
-The note from Tuesday doesn't know it produced three tasks.<br>
+The note from Tuesday doesn't know it produced three reminders.<br>
 The person you promised something to doesn't know you promised it.<br>
 Search means remembering **which app** before you can find **what**.
 
@@ -45,7 +45,7 @@ in the app at all.
 <div align="center">
 
 **[Capture](#capture-in-under-four-seconds)** · **[Search](#search-that-actually-narrows)** ·
-**[Today](#a-today-that-has-seen-your-whole-day)** · **[Tasks](#tasks-with-the-parts-real-work-needs)** ·
+**[Today](#a-today-that-has-seen-your-whole-day)** · **[Reminders](#reminders-with-the-parts-real-work-needs)** ·
 **[People](#people-who-remember-themselves)** · **[Calendar](#a-calendar-that-knows-the-rest-of-your-life)** ·
 **[Time](#time-tracking-that-survives-an-audit)** · **[Export](#your-data-leaves-whenever-you-want)**
 
@@ -61,7 +61,7 @@ in the app at all.
 
 ### One graph, not six silos
 
-Notes, tasks, projects, areas, people, meetings, and reference material are all first-class items in
+Notes, reminders, projects, areas, people, meetings, and reference material are all first-class items in
 one store, and any of them can link to any other.
 
 Type `[[` anywhere in a note to link to something that exists — or to something that doesn't yet, and
@@ -117,7 +117,7 @@ launch plan type:note tag:work project:"Q3 Launch" is:open due:<7d
 
 |  |  |
 |---|---|
-| **Resolved in the index** | `is:open type:task due:<7d` becomes a `WHERE` clause, not a scan of your whole library — results stay instant as the corpus grows |
+| **Resolved in the index** | `is:open type:reminder due:<7d` becomes a `WHERE` clause, not a scan of your whole library — results stay instant as the corpus grows |
 | **Hierarchical tags** | `tag:work` finds `work/clients` |
 | **Quotes group** | `project:"Q3 Launch"`, `tag:"work in progress"` |
 | **Saveable** | Any query becomes a smart view that lives in the sidebar forever |
@@ -126,11 +126,11 @@ launch plan type:note tag:work project:"Q3 Launch" is:open due:<7d
 
 ## A Today that has seen your whole day
 
-> *The person in your ten o'clock is also the person a task is waiting on.*
+> *The person in your ten o'clock is also the person a reminder is waiting on.*
 
 One page, not three. Today joins your meetings, your work, and the people both involve — so the
 joining you used to do in your head, reading one screen and then another, is already done. Somebody
-appears on it for a stated reason: they're in a meeting, a task is waiting on them, a task is about
+appears on it for a stated reason: they're in a meeting, a reminder is waiting on them, a reminder is about
 them, or it's their birthday.
 
 The rules behind it are deliberate about what *not* to say. A dentist appointment isn't a meeting, so
@@ -140,20 +140,20 @@ ignore warnings. Free time is measured from *now* against the working hours you 
 a day you don't work there's no figure at all. Overdue work belongs to today alone — repeating it
 forward would make every future day open as a crisis.
 
-`Space` completes. A recurring task reschedules itself instead of breeding duplicates.
+`Space` completes. A recurring reminder reschedules itself instead of breeding duplicates.
 
 <br>
 
-## Tasks with the parts real work needs
+## Reminders with the parts real work needs
 
 > *Deadlines and start dates are different dates, and behave differently.*
 
 A start date brings something into view on the day without ever turning red. A deadline can go
-overdue. Conflating the two is why most task apps eventually shout at you about everything at once.
+overdue. Conflating the two is why most reminder apps eventually shout at you about everything at once.
 
 Beyond that: projects with sections, checklists and subtasks, Someday, waiting-on-a-person, promises
 you made, repeats of both kinds — *every Monday*, and *three days after you last finished it* — and
-tasks created straight from a line in a note that keep a link back to where they came from.
+reminders created straight from a line in a note that keep a link back to where they came from.
 
 <br>
 
@@ -161,7 +161,7 @@ tasks created straight from a line in a note that keep a link back to where they
 
 > *Assembled from links you already made.*
 
-A person's page shows every interaction, every note that mentions them, every open task you owe them
+A person's page shows every interaction, every note that mentions them, every open reminder you owe them
 or they owe you, the projects you share, and their relationships to other people — none of it
 re-entered.
 
@@ -192,7 +192,7 @@ people, the notes, and the open threads together before you walk in.
 
 > *An entry that ran fifty-one minutes is stored as fifty-one minutes. Forever.*
 
-Start a timer on anything — a task, a project, a meeting, a note — or log it after the fact.
+Start a timer on anything — a reminder, a project, a meeting, a note — or log it after the fact.
 
 People are a real relationship rather than a string, so *time **on** Sarah* and *time **with** Sarah*
 are different questions with different answers. Rounding applies to a report row, an export column,

@@ -7,8 +7,8 @@ import Observation
 ///
 /// ### Why this type has to exist
 /// Before it, every path to a sync was a control somebody had to press: a button in Settings, a
-/// button in the task workspace, and a swipe action on a row. Nothing ran a pass at launch, nothing
-/// ran one when the app came back to the front, and nothing watched `EKEventStoreChanged` — so a
+/// button in the former Tasks workspace, and a swipe action on a row. Nothing ran a pass at launch,
+/// nothing ran one when the app came back to the front, and nothing watched `EKEventStoreChanged` — so a
 /// reminder added on a phone never arrived, a reminder ticked off in Apple's own app stayed open
 /// here, and linking the integration imported nothing until the user went looking for a control they
 /// had no reason to know existed.

@@ -163,7 +163,7 @@ public final class ReminderQueryService {
         public var tasks: [Item] = []
     }
 
-    /// Everything the Tasks workspace draws for one destination.
+    /// Everything a reminder destination needs for one query.
     ///
     /// ### Why this exists rather than two calls
     /// Because it was two calls. The workspace asked `today()` for the sections and then
