@@ -25,6 +25,11 @@ struct ReminderComposer: View {
     @State private var availablePeople: [String] = []
     @State private var availableProjects: [String] = []
     @State private var popupField: ReminderComposerField?
+    @State private var titleCaret = 0
+    @State private var notesCaret = 0
+    @State private var inlineSuggestionSelection = 0
+    @State private var metadataSuggestionSelection = 0
+    @State private var metadataSuggestionWasNavigated = false
     @StateObject private var focusRouter = ReminderComposerFocusRouter()
 
     private var activeField: ReminderComposerField { focusRouter.activeField }
@@ -34,6 +39,9 @@ struct ReminderComposer: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                 titleLine
                 notes
+                if !inlineSuggestions.isEmpty {
+                    inlineSuggestionList
+                }
                 checklist
             }
             .padding(Theme.Spacing.medium)
@@ -75,6 +83,10 @@ struct ReminderComposer: View {
         .task(id: services?.changeToken) {
             refreshLibraryFacts()
         }
+        .onChange(of: inlineCompletion) { _, _ in inlineSuggestionSelection = 0 }
+        .onChange(of: tagQuery) { _, _ in resetMetadataSuggestion() }
+        .onChange(of: peopleQuery) { _, _ in resetMetadataSuggestion() }
+        .onChange(of: projectQuery) { _, _ in resetMetadataSuggestion() }
         .onDisappear {
             focusRouter.onTab = nil
             focusRouter.onTextInput = nil
@@ -93,21 +105,14 @@ struct ReminderComposer: View {
                 placeholder: "New Reminder",
                 role: .title,
                 onTab: moveFromTitle,
-                onReturn: {
-                    guard !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                        activate(.notes)
-                        return
-                    }
-                    onQuickCommit()
-                    Task { @MainActor in
-                        await Task.yield()
-                        activate(.title)
-                    }
-                },
-                onCommandReturn: onCommitAndClose,
+                onReturn: quickCommit,
+                onCommandReturn: commitAndClose,
                 onEscape: onCancel,
                 field: .title,
                 focusRouter: focusRouter,
+                onMove: moveInlineSuggestion,
+                onAcceptSuggestion: acceptInlineSuggestion,
+                onSelectionChange: { titleCaret = $0 },
                 onFocus: { activate(.title) }
             )
             .frame(height: 26)
@@ -122,15 +127,86 @@ struct ReminderComposer: View {
             role: .notes,
             onTab: { reverse in move(from: .notes, reverse: reverse) },
             onReturn: {},
-            onCommandReturn: onCommitAndClose,
+            onCommandReturn: commitAndClose,
             onEscape: onCancel,
             field: .notes,
             focusRouter: focusRouter,
+            onMove: moveInlineSuggestion,
+            onAcceptSuggestion: acceptInlineSuggestion,
+            onSelectionChange: { notesCaret = $0 },
             onFocus: { activate(.notes) }
         )
         .frame(minHeight: 42, maxHeight: 88)
         .padding(.leading, 21)
         .accessibilityIdentifier("tasks.reminderComposer.notes")
+    }
+
+    private var inlineCompletion: CaptureCompletion? {
+        let completion: CaptureCompletion?
+        switch activeField {
+        case .title:
+            completion = CaptureCompletion.active(in: draft.title, caretAt: titleCaret)
+        case .notes:
+            completion = CaptureCompletion.active(in: draft.notes, caretAt: notesCaret)
+        case .when, .tags, .people, .checklist, .deadline, .project:
+            completion = nil
+        }
+
+        guard let completion else { return nil }
+        return switch completion.trigger {
+        case .tag, .person, .project: completion
+        case .bang, .dueDate, .followDate: nil
+        }
+    }
+
+    private var inlineSuggestions: [String] {
+        guard let inlineCompletion else { return [] }
+        switch inlineCompletion.trigger {
+        case .tag:
+            let matches = matchingNames(inlineCompletion.query, in: availableTags)
+            if !matches.isEmpty { return matches }
+            let slug = TextNormalizer.slug(inlineCompletion.query)
+            return slug.isEmpty ? [] : [slug]
+        case .person:
+            return matchingNames(inlineCompletion.query, in: availablePeople)
+        case .project:
+            return matchingNames(inlineCompletion.query, in: availableProjects)
+        case .bang, .dueDate, .followDate:
+            return []
+        }
+    }
+
+    private var inlineSuggestionList: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(inlineSuggestions.enumerated()), id: \.offset) { index, value in
+                HStack(spacing: Theme.Spacing.small) {
+                    Text(inlineCompletion?.trigger.prefix ?? "")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(Theme.CaptureToken.accent)
+                    Text(value)
+                        .font(Theme.Text.metadata)
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 3)
+                .padding(.horizontal, Theme.Spacing.small)
+                .background(
+                    index == inlineSuggestionSelection ? Theme.Colors.selectionFill : Color.clear,
+                    in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
+                )
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    inlineSuggestionSelection = index
+                    _ = acceptInlineSuggestion()
+                }
+                .onHover { hovering in
+                    if hovering { inlineSuggestionSelection = index }
+                }
+            }
+        }
+        .padding(.leading, 21)
+        .accessibilityLabel(
+            "\(inlineSuggestions.count) suggestions. Use the arrow keys, then Tab or Return to accept."
+        )
     }
 
     @ViewBuilder
@@ -173,7 +249,7 @@ struct ReminderComposer: View {
                             draft.commitPendingStep()
                             activate(.checklist)
                         },
-                        onCommandReturn: onCommitAndClose,
+                        onCommandReturn: commitAndClose,
                         onEscape: onCancel,
                         field: .checklist,
                         focusRouter: focusRouter,
@@ -424,10 +500,12 @@ struct ReminderComposer: View {
                 role: .body,
                 onTab: onTab,
                 onReturn: onReturn,
-                onCommandReturn: onCommitAndClose,
+                onCommandReturn: commitAndClose,
                 onEscape: { popupField = nil; activate(escapeTo) },
                 field: field,
                 focusRouter: focusRouter,
+                onMove: { moveMetadataSuggestion($0, for: field) },
+                onAcceptSuggestion: { acceptMetadataSuggestion(for: field) },
                 onFocus: { activate(field) }
             )
         }
@@ -479,14 +557,27 @@ struct ReminderComposer: View {
                 .buttonStyle(.plain)
                 .disabled(TextNormalizer.slug(tagQuery).isEmpty)
             } else {
-                ForEach(matchingTags, id: \.self) { slug in
+                ForEach(Array(matchingTags.enumerated()), id: \.offset) { index, slug in
                     Button {
+                        metadataSuggestionSelection = index
                         toggleTag(slug)
                     } label: {
                         Label(slug, systemImage: draft.tagSlugs.contains(slug) ? "checkmark" : "tag")
+                            .padding(.vertical, 3)
+                            .padding(.horizontal, Theme.Spacing.tight)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .background(
+                        index == metadataSuggestionSelection
+                            ? Theme.Colors.selectionFill
+                            : Color.clear,
+                        in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
+                    )
+                    .onHover { hovering in
+                        if hovering { metadataSuggestionSelection = index }
+                    }
                 }
             }
         }
@@ -502,17 +593,30 @@ struct ReminderComposer: View {
                     .foregroundStyle(Theme.Colors.tertiaryText)
                     .padding(Theme.Spacing.small)
             } else {
-                ForEach(matchingPeople, id: \.self) { name in
+                ForEach(Array(matchingPeople.enumerated()), id: \.offset) { index, name in
                     Button {
+                        metadataSuggestionSelection = index
                         togglePerson(name)
                     } label: {
                         Label(
                             name,
                             systemImage: draft.personNames.contains(name) ? "checkmark" : "person"
                         )
+                        .padding(.vertical, 3)
+                        .padding(.horizontal, Theme.Spacing.tight)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .background(
+                        index == metadataSuggestionSelection
+                            ? Theme.Colors.selectionFill
+                            : Color.clear,
+                        in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
+                    )
+                    .onHover { hovering in
+                        if hovering { metadataSuggestionSelection = index }
+                    }
                 }
             }
         }
@@ -542,8 +646,9 @@ struct ReminderComposer: View {
                     .foregroundStyle(Theme.Colors.tertiaryText)
                     .padding(Theme.Spacing.small)
             } else {
-                ForEach(matchingProjects, id: \.self) { title in
+                ForEach(Array(matchingProjects.enumerated()), id: \.offset) { index, title in
                     Button {
+                        metadataSuggestionSelection = index
                         chooseProject(title)
                     } label: {
                         Label(
@@ -552,9 +657,21 @@ struct ReminderComposer: View {
                                 ? "checkmark"
                                 : "square.stack.3d.up"
                         )
+                        .padding(.vertical, 3)
+                        .padding(.horizontal, Theme.Spacing.tight)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .background(
+                        index == metadataSuggestionSelection
+                            ? Theme.Colors.selectionFill
+                            : Color.clear,
+                        in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
+                    )
+                    .onHover { hovering in
+                        if hovering { metadataSuggestionSelection = index }
+                    }
                 }
             }
         }
@@ -637,6 +754,144 @@ struct ReminderComposer: View {
         return Array((prefixed + contained).prefix(12))
     }
 
+    @discardableResult
+    private func moveInlineSuggestion(_ direction: Int) -> Bool {
+        guard !inlineSuggestions.isEmpty else { return false }
+        inlineSuggestionSelection = max(
+            0,
+            min(inlineSuggestions.count - 1, inlineSuggestionSelection + direction)
+        )
+        return true
+    }
+
+    @discardableResult
+    private func acceptInlineSuggestion() -> Bool {
+        guard let inlineCompletion,
+              inlineSuggestions.indices.contains(inlineSuggestionSelection)
+        else { return false }
+
+        let value = inlineSuggestions[inlineSuggestionSelection]
+        let field = activeField
+        let text: String
+        let caret: Int
+        switch field {
+        case .title:
+            text = draft.title
+            caret = titleCaret
+        case .notes:
+            text = draft.notes
+            caret = notesCaret
+        case .when, .tags, .people, .checklist, .deadline, .project:
+            return false
+        }
+
+        var characters = Array(text)
+        guard inlineCompletion.start >= 0,
+              inlineCompletion.start <= caret,
+              caret <= characters.count
+        else { return false }
+
+        var removalStart = inlineCompletion.start
+        var removalEnd = caret
+        if removalEnd < characters.count,
+           characters[removalEnd].isWhitespace,
+           !characters[removalEnd].isNewline {
+            removalEnd += 1
+        } else if removalStart > 0,
+                  characters[removalStart - 1].isWhitespace,
+                  !characters[removalStart - 1].isNewline {
+            removalStart -= 1
+        }
+        characters.removeSubrange(removalStart..<removalEnd)
+        let updated = String(characters)
+
+        switch inlineCompletion.trigger {
+        case .tag:
+            addTag(value)
+        case .person:
+            addPerson(value)
+        case .project:
+            draft.projectTitle = value
+        case .bang, .dueDate, .followDate:
+            return false
+        }
+
+        switch field {
+        case .title:
+            draft.title = updated
+            titleCaret = removalStart
+        case .notes:
+            draft.notes = updated
+            notesCaret = removalStart
+        case .when, .tags, .people, .checklist, .deadline, .project:
+            break
+        }
+        focusRouter.replaceText(updated, caret: removalStart, for: field)
+        inlineSuggestionSelection = 0
+        return true
+    }
+
+    @discardableResult
+    private func moveMetadataSuggestion(
+        _ direction: Int,
+        for field: ReminderComposerField
+    ) -> Bool {
+        let suggestions = metadataSuggestions(for: field)
+        guard !suggestions.isEmpty else { return false }
+        metadataSuggestionSelection = max(
+            0,
+            min(suggestions.count - 1, metadataSuggestionSelection + direction)
+        )
+        metadataSuggestionWasNavigated = true
+        return true
+    }
+
+    @discardableResult
+    private func acceptMetadataSuggestion(for field: ReminderComposerField) -> Bool {
+        let suggestions = metadataSuggestions(for: field)
+        guard metadataSuggestionWasNavigated || !metadataQuery(for: field).isEmpty,
+              suggestions.indices.contains(metadataSuggestionSelection)
+        else { return false }
+        let suggestion = suggestions[metadataSuggestionSelection]
+
+        switch field {
+        case .tags:
+            toggleTag(suggestion)
+            tagQuery = ""
+        case .people:
+            togglePerson(suggestion)
+            peopleQuery = ""
+        case .project:
+            chooseProject(suggestion)
+        case .title, .notes, .when, .checklist, .deadline:
+            return false
+        }
+        return true
+    }
+
+    private func metadataSuggestions(for field: ReminderComposerField) -> [String] {
+        switch field {
+        case .tags: matchingTags
+        case .people: matchingPeople
+        case .project: matchingProjects
+        case .title, .notes, .when, .checklist, .deadline: []
+        }
+    }
+
+    private func metadataQuery(for field: ReminderComposerField) -> String {
+        switch field {
+        case .tags: tagQuery
+        case .people: peopleQuery
+        case .project: projectQuery
+        case .title, .notes, .when, .checklist, .deadline: ""
+        }
+    }
+
+    private func resetMetadataSuggestion() {
+        metadataSuggestionSelection = 0
+        metadataSuggestionWasNavigated = false
+    }
+
     private func moveFromTitle(reverse: Bool) {
         move(from: .title, reverse: reverse)
     }
@@ -653,6 +908,7 @@ struct ReminderComposer: View {
             presentPopupAfterLayout(for: field)
             return
         }
+        resetMetadataSuggestion()
         focusRouter.activate(field)
 
         if !fieldHasPopup(field) {
@@ -744,6 +1000,17 @@ struct ReminderComposer: View {
         }
     }
 
+    private func addPerson(_ name: String) {
+        let folded = TextNormalizer.foldedForMatching(name)
+        guard !folded.isEmpty,
+              !draft.personNames.contains(where: {
+                  TextNormalizer.foldedForMatching($0) == folded
+              })
+        else { return }
+        draft.personNames.append(name)
+        draft.personNames.sort { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
     private func chooseFirstMatchingProject() {
         guard let first = matchingProjects.first else { return }
         chooseProject(first)
@@ -764,6 +1031,44 @@ struct ReminderComposer: View {
         availableProjects = vocabulary.projects.sorted {
             $0.localizedStandardCompare($1) == .orderedAscending
         }
+    }
+
+    private var shortcutVocabulary: CaptureVocabulary {
+        CaptureVocabulary(projects: availableProjects, people: availablePeople)
+    }
+
+    private func settleInlineShortcuts() {
+        let title = ReminderShortcutParser.extract(from: draft.title, knowing: shortcutVocabulary)
+        let notes = ReminderShortcutParser.extract(from: draft.notes, knowing: shortcutVocabulary)
+
+        draft.title = title.text
+        draft.notes = notes.text
+        for slug in title.tagSlugs + notes.tagSlugs { addTag(slug) }
+        for name in title.personNames + notes.personNames { addPerson(name) }
+        draft.projectTitle = notes.projectTitle ?? title.projectTitle ?? draft.projectTitle
+
+        titleCaret = draft.title.count
+        notesCaret = draft.notes.count
+        focusRouter.replaceText(draft.title, caret: titleCaret, for: .title)
+        focusRouter.replaceText(draft.notes, caret: notesCaret, for: .notes)
+    }
+
+    private func quickCommit() {
+        settleInlineShortcuts()
+        guard !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            activate(.notes)
+            return
+        }
+        onQuickCommit()
+        Task { @MainActor in
+            await Task.yield()
+            activate(.title)
+        }
+    }
+
+    private func commitAndClose() {
+        settleInlineShortcuts()
+        onCommitAndClose()
     }
 
     private func shortDate(_ date: Date) -> String {
@@ -791,8 +1096,19 @@ struct ReminderPlainTextEditor: NSViewRepresentable {
     let onEscape: () -> Void
     let field: ReminderComposerField
     let focusRouter: ReminderComposerFocusRouter
+    var onMove: (Int) -> Bool = { _ in false }
+    var onAcceptSuggestion: () -> Bool = { false }
+    var onSelectionChange: (Int) -> Void = { _ in }
     var onDeleteBackwardWhenEmpty: () -> Bool = { false }
     var onFocus: () -> Void = {}
+
+    static func verticalInset(for role: Role) -> CGFloat {
+        switch role {
+        case .title: 2
+        case .notes: 0
+        case .body: 3
+        }
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -827,7 +1143,10 @@ struct ReminderPlainTextEditor: NSViewRepresentable {
             height: CGFloat.greatestFiniteMagnitude
         )
         editor.textContainer?.widthTracksTextView = true
-        editor.textContainerInset = NSSize(width: 0, height: role == .title ? 2 : 0)
+        editor.textContainerInset = NSSize(
+            width: 0,
+            height: Self.verticalInset(for: role)
+        )
         editor.font = switch role {
         case .title: .preferredFont(forTextStyle: .title3)
         case .notes, .body: .preferredFont(forTextStyle: .subheadline)
@@ -887,10 +1206,26 @@ struct ReminderPlainTextEditor: NSViewRepresentable {
         func flushText(_ editor: NSTextView) {
             lastEditorText = editor.string
             parent.text = editor.string
+            parent.onSelectionChange(
+                CaptureHighlight.characterOffset(
+                    ofUTF16: editor.selectedRange().location,
+                    in: editor.string
+                )
+            )
         }
 
         func textDidBeginEditing(_ notification: Notification) {
             parent.onFocus()
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard let editor = notification.object as? NSTextView else { return }
+            parent.onSelectionChange(
+                CaptureHighlight.characterOffset(
+                    ofUTF16: editor.selectedRange().location,
+                    in: editor.string
+                )
+            )
         }
 
         /// AppKit interprets Tab and Return as text commands before a field editor necessarily
@@ -898,17 +1233,23 @@ struct ReminderPlainTextEditor: NSViewRepresentable {
         /// keyboards, accessibility-generated events, and the system key-view loop alike.
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             switch commandSelector {
+            case #selector(NSResponder.moveUp(_:)):
+                return parent.onMove(-1)
+            case #selector(NSResponder.moveDown(_:)):
+                return parent.onMove(1)
             case #selector(NSResponder.insertTab(_:)):
+                if parent.onAcceptSuggestion() { return true }
                 parent.onTab(false)
                 return true
             case #selector(NSResponder.insertBacktab(_:)):
                 parent.onTab(true)
                 return true
             case #selector(NSResponder.insertNewline(_:)):
-                if NSApp.currentEvent?.modifierFlags.contains(.command) == true {
+                if NSApplication.shared.currentEvent?.modifierFlags.contains(.command) == true {
                     parent.onCommandReturn()
                     return true
                 }
+                if parent.onAcceptSuggestion() { return true }
                 switch parent.role {
                 case .notes:
                     return false
@@ -943,7 +1284,10 @@ final class ReminderEditorTextView: NSTextView {
     /// The text system may dispatch these actions directly, without a raw key event or delegate
     /// command. Overriding the responder actions closes that final route around the focus machine.
     override func insertTab(_ sender: Any?) {
-        MainActor.assumeIsolated { coordinator?.parent.onTab(false) }
+        MainActor.assumeIsolated {
+            guard let parent = coordinator?.parent else { return }
+            if !parent.onAcceptSuggestion() { parent.onTab(false) }
+        }
     }
 
     override func insertBacktab(_ sender: Any?) {
@@ -965,13 +1309,24 @@ final class ReminderEditorTextView: NSTextView {
         }
 
         switch event.keyCode {
+        case 126: // Up Arrow
+            if !MainActor.assumeIsolated({ parent.onMove(-1) }) {
+                super.keyDown(with: event)
+            }
+        case 125: // Down Arrow
+            if !MainActor.assumeIsolated({ parent.onMove(1) }) {
+                super.keyDown(with: event)
+            }
         case 48: // Tab
             MainActor.assumeIsolated {
-                parent.onTab(event.modifierFlags.contains(.shift))
+                let reverse = event.modifierFlags.contains(.shift)
+                if reverse || !parent.onAcceptSuggestion() { parent.onTab(reverse) }
             }
         case 36, 76: // Return and keypad Enter
             if event.modifierFlags.contains(.command) {
                 MainActor.assumeIsolated { parent.onCommandReturn() }
+            } else if MainActor.assumeIsolated({ parent.onAcceptSuggestion() }) {
+                return
             } else if parent.role == .notes {
                 super.keyDown(with: event)
             } else {
@@ -1056,6 +1411,19 @@ final class ReminderComposerFocusRouter: ObservableObject {
 
     func handleTextInput(_ characters: String) -> Bool {
         onTextInput?(characters) == true
+    }
+
+    func replaceText(_ text: String, caret: Int, for field: ReminderComposerField) {
+        guard let editor = editors[field]?.value as? ReminderEditorTextView else { return }
+        editor.string = text
+        editor.coordinator?.lastEditorText = text
+        editor.setSelectedRange(
+            NSRange(
+                location: CaptureHighlight.utf16Offset(ofCharacter: caret, in: text),
+                length: 0
+            )
+        )
+        editor.needsDisplay = true
     }
 
     private func flushActiveEditor() {

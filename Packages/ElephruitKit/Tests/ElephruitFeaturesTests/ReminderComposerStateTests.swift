@@ -140,6 +140,45 @@ struct ReminderComposerStateTests {
         #expect(router.activeField == .notes)
     }
 
+    @Test("Arrow keys move suggestion selection and Return accepts it")
+    @MainActor
+    func editorSuggestionKeyboard() {
+        var moves: [Int] = []
+        var acceptances = 0
+        let editor = ReminderPlainTextEditor(
+            text: .constant("d"),
+            placeholder: "Which project?",
+            role: .body,
+            onTab: { _ in },
+            onReturn: {},
+            onCommandReturn: {},
+            onEscape: {},
+            field: .project,
+            focusRouter: ReminderComposerFocusRouter(),
+            onMove: { moves.append($0); return true },
+            onAcceptSuggestion: { acceptances += 1; return true }
+        )
+        let coordinator = editor.makeCoordinator()
+        let textView = ReminderEditorTextView()
+        textView.coordinator = coordinator
+
+        #expect(coordinator.textView(textView, doCommandBy: #selector(NSResponder.moveDown(_:))))
+        #expect(coordinator.textView(textView, doCommandBy: #selector(NSResponder.moveUp(_:))))
+        #expect(coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertNewline(_:))))
+        #expect(moves == [1, -1])
+        #expect(acceptances == 1)
+    }
+
+    @Test("Compact metadata text is vertically inset")
+    @MainActor
+    func metadataTextAlignment() {
+        #expect(ReminderPlainTextEditor.verticalInset(for: .body) == 3)
+        #expect(
+            ReminderPlainTextEditor.verticalInset(for: .body)
+                > ReminderPlainTextEditor.verticalInset(for: .notes)
+        )
+    }
+
     @Test("Checklist stays latent until typing is consumed")
     @MainActor
     func latentChecklistTyping() {
