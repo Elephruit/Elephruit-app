@@ -4,6 +4,33 @@ import ElephruitModel
 import ElephruitPersistence
 import SwiftUI
 
+/// The mutually exclusive keyboard-selection and inline-editing states of the time log.
+///
+/// Keeping them in one value makes it impossible for an edit to begin without also clearing the
+/// native `List` selection that would paint the expanded editor with the system accent color.
+struct TimeLogRowState: Equatable {
+    var selectedRowID: String?
+    var editingRowID: String?
+
+    mutating func beginEditing(_ rowID: String) {
+        editingRowID = rowID
+        selectedRowID = nil
+    }
+
+    mutating func select(_ rowID: String?) {
+        guard editingRowID == nil else {
+            selectedRowID = nil
+            return
+        }
+        selectedRowID = rowID
+    }
+
+    mutating func endEditing(restoringSelection rowID: String? = nil) {
+        editingRowID = nil
+        selectedRowID = rowID
+    }
+}
+
 /// The Time destination: what is running, what was tracked, and where it went.
 ///
 /// One screen rather than three. the layout's lesson is that tracking, reviewing and correcting are the
@@ -42,11 +69,8 @@ public struct TimeView: View {
 
     @State private var entries: [TimeEntrySnapshot] = []
     @State private var expandedGroups: Set<String> = []
-    @State private var editingRowID: String?
+    @State private var rowState = TimeLogRowState()
     @State private var reloadTick = 0
-
-    /// The row the keyboard is on. Also what the row actions act on when there is no pointer.
-    @State private var selectedRowID: String?
 
     /// The last deletion, until the offer to undo it expires or is taken.
     @State private var undoableDeletion: DeletedTimeEntries?
@@ -283,7 +307,7 @@ public struct TimeView: View {
                 action: { isAddingManually = true }
             )
         } else {
-            List(selection: $selectedRowID) {
+            List(selection: rowSelection) {
                 ForEach(sections) { section in
                     Section {
                         ForEach(section.groups) { group in
@@ -306,8 +330,10 @@ public struct TimeView: View {
             .alternatingRowBackgrounds(.disabled)
             .onDeleteCommand { deleteSelection() }
             .onKeyPress(.return) {
-                guard let selectedRowID, editingRowID == nil else { return .ignored }
-                editingRowID = selectedRowID
+                guard let selectedRowID = rowState.selectedRowID,
+                      rowState.editingRowID == nil
+                else { return .ignored }
+                beginEditing(selectedRowID)
                 return .handled
             }
         }
@@ -317,17 +343,17 @@ public struct TimeView: View {
         TimeEntryGroupRow(
             group: group,
             isExpanded: expandedGroups.contains(group.id),
-            isEditing: editingRowID == group.id,
-            isCurrent: selectedRowID == group.id,
+            isEditing: rowState.editingRowID == group.id,
+            isCurrent: rowState.selectedRowID == group.id,
             onToggleExpanded: { toggleExpanded(group) },
             onResume: { group.lead.map(resume) },
             onOpen: { group.lead?.itemID.map { navigation.selectItem($0) } },
-            onEdit: { editingRowID = group.id },
+            onEdit: { beginEditing(group.id) },
             onCommit: { edit in
                 apply(edit, to: group.entries.map(\.id))
-                editingRowID = nil
+                rowState.endEditing()
             },
-            onCancelEdit: { editingRowID = nil },
+            onCancelEdit: { endEditing(restoringSelection: group.id) },
             onDuplicate: { group.lead.map(duplicate) },
             onDelete: { delete(group.entries.map(\.id), describing: group.displayTitle) }
         )
@@ -336,14 +362,14 @@ public struct TimeView: View {
     private func entryRow(_ entry: TimeEntrySnapshot) -> some View {
         TimeEntryRow(
             entry: entry,
-            isEditing: editingRowID == entry.id.uuidString,
-            isCurrent: selectedRowID == entry.id.uuidString,
-            onEdit: { editingRowID = entry.id.uuidString },
+            isEditing: rowState.editingRowID == entry.id.uuidString,
+            isCurrent: rowState.selectedRowID == entry.id.uuidString,
+            onEdit: { beginEditing(entry.id.uuidString) },
             onCommit: { edit in
                 apply(edit, to: [entry.id])
-                editingRowID = nil
+                rowState.endEditing()
             },
-            onCancelEdit: { editingRowID = nil },
+            onCancelEdit: { endEditing(restoringSelection: entry.id.uuidString) },
             onDuplicate: { duplicate(entry) },
             onDelete: { delete([entry.id], describing: entry.displayTitle) }
         )
@@ -351,7 +377,7 @@ public struct TimeView: View {
 
     /// Removes whatever the keyboard is on, group or single stretch.
     private func deleteSelection() {
-        guard let selectedRowID else { return }
+        guard let selectedRowID = rowState.selectedRowID else { return }
 
         if let group = sections.flatMap(\.groups).first(where: { $0.id == selectedRowID }) {
             delete(group.entries.map(\.id), describing: group.displayTitle)
@@ -366,6 +392,32 @@ public struct TimeView: View {
         } else {
             expandedGroups.insert(group.id)
         }
+    }
+
+    /// Opens the inline form without leaving its enclosing `List` row selected.
+    ///
+    /// A selected macOS list row receives the system accent fill. Once that row grows into the
+    /// editor, the fill covers every field and button in the form. Selection is useful for moving
+    /// through the compact log, but it must yield while the selected row is an editing surface.
+    private func beginEditing(_ rowID: String) {
+        rowState.beginEditing(rowID)
+    }
+
+    /// Rejects native selection writes while a form is open. Controls inside a list row can cause
+    /// AppKit to select their enclosing row again on mouse-down; accepting that write would bring
+    /// the accent fill back as soon as somebody used the editor.
+    private var rowSelection: Binding<String?> {
+        Binding(
+            get: { rowState.selectedRowID },
+            set: { rowState.select($0) }
+        )
+    }
+
+    /// Canceling returns the keyboard to the row it came from; saving can regroup the entry, so its
+    /// caller deliberately leaves selection empty rather than selecting an identifier that may no
+    /// longer exist.
+    private func endEditing(restoringSelection rowID: String) {
+        rowState.endEditing(restoringSelection: rowID)
     }
 
     // MARK: - Toolbar
@@ -472,8 +524,9 @@ public struct TimeView: View {
         ids.forEach { services.mirrorTime(entryID: $0) }
         services.timer.refresh()
 
-        if selectedRowID != nil, ids.contains(where: { $0.uuidString == selectedRowID }) {
-            selectedRowID = nil
+        if let selectedRowID = rowState.selectedRowID,
+           ids.contains(where: { $0.uuidString == selectedRowID }) {
+            rowState.selectedRowID = nil
         }
         undoableDeletion = DeletedTimeEntries(ids: ids, title: title)
         bump()

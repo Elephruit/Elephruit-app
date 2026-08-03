@@ -13,6 +13,25 @@ import Testing
 @MainActor
 @Suite("Time navigation")
 struct TimeNavigationTests {
+    @Test("Editing a time row clears its native list selection")
+    func editingClearsListSelection() {
+        var state = TimeLogRowState(selectedRowID: "entry", editingRowID: nil)
+
+        state.beginEditing("entry")
+
+        #expect(state.editingRowID == "entry")
+        #expect(state.selectedRowID == nil, "The system accent must not fill the expanded editor")
+
+        state.select("entry")
+
+        #expect(state.selectedRowID == nil, "Clicks inside the editor must not reselect its row")
+
+        state.endEditing(restoringSelection: "entry")
+
+        #expect(state.editingRowID == nil)
+        #expect(state.selectedRowID == "entry")
+    }
+
     @Test("Only the modules with real navigation bring their own sidebar")
     func sidebarIsEarnedByNavigation() {
         #expect(AppModule.calendar.hasOwnSidebar)
