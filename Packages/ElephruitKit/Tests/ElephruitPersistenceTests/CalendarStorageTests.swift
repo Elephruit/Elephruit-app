@@ -332,8 +332,38 @@ struct EventAnnotationTests {
         try service.link(person: person, to: event())
 
         let annotation = try service.annotation(for: event().identity)
+        #expect(annotation.recordIDs == [person.id])
         #expect(annotation.personIDs == [person.id])
         #expect(annotation.meetingItemID != nil)
+    }
+
+    @Test("Tagging any Record creates a calendar interaction for it")
+    func taggingARecord() throws {
+        let fixture = try StoreFixture()
+        let service = makeService(fixture)
+        let people = SwiftDataPersonRepository(
+            context: fixture.context,
+            items: fixture.items,
+            dateProvider: fixture.dateProvider
+        )
+        let records = RecordsService(
+            context: fixture.context,
+            items: fixture.items,
+            people: people,
+            dateProvider: fixture.dateProvider
+        )
+        let vehicle = try records.create(RecordDraft(name: "Family wagon", type: .vehicle))
+
+        let meeting = try #require(try service.link(record: vehicle, to: event("Service appointment")))
+        let annotation = try service.annotation(for: event("Service appointment").identity)
+
+        #expect(annotation.recordIDs == [vehicle.id])
+        #expect(annotation.personIDs.isEmpty, "A vehicle is a Record, not a calendar attendee")
+        #expect(annotation.noteIDs.isEmpty, "A tagged Record must not be presented as a note")
+        #expect(meeting.kind == .meeting)
+        #expect(vehicle.incomingLinks.contains {
+            $0.kind == .participant && $0.source?.id == meeting.id
+        }, "The meeting link is the vehicle's durable calendar interaction")
     }
 
     @Test("Unlinking removes the link and keeps the person")

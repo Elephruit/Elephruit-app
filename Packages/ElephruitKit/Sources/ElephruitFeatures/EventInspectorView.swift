@@ -22,11 +22,11 @@ public struct EventInspectorView: View {
     let event: CalendarEventSummary
 
     @State private var annotation: EventAnnotation?
-    @State private var linkedPeople: [Item] = []
+    @State private var linkedRecords: [Item] = []
     @State private var linkedNotes: [Item] = []
     @State private var linkedProjects: [Item] = []
     @State private var priorMeetings: [Item] = []
-    @State private var isShowingPersonPicker = false
+    @State private var isShowingRecordPicker = false
     @State private var isShowingFollowUp = false
     @State private var debriefText = ""
     @State private var preparationText = ""
@@ -52,7 +52,7 @@ public struct EventInspectorView: View {
                 facts
 
                 if showsPersonContext {
-                    people
+                    records
                     if !brief.isEmpty { meetingBrief }
                     if !priorMeetings.isEmpty { history }
                     notes
@@ -67,8 +67,10 @@ public struct EventInspectorView: View {
             .padding(Theme.Spacing.medium)
         }
         .task(id: event.id) { await load() }
-        .sheet(isPresented: $isShowingPersonPicker) {
-            EventPersonPicker(event: event) { Task { await load() } }
+        .sheet(isPresented: $isShowingRecordPicker) {
+            EventRecordPicker(event: event, linkedRecordIDs: Set(linkedRecords.map(\.id))) {
+                Task { await load() }
+            }
         }
         .sheet(isPresented: $isShowingFollowUp) {
             FollowUpSheet(event: event, people: linkedPeople) { Task { await load() } }
@@ -174,6 +176,10 @@ public struct EventInspectorView: View {
         )
     }
 
+    /// People keep the richer attendee and briefing behavior; every other subject remains a first-
+    /// class Record tag without pretending that a pet or vehicle has an invitation or time zone.
+    private var linkedPeople: [Item] { linkedRecords.filter { $0.kind == .person } }
+
     // MARK: Facts
 
     @ViewBuilder
@@ -235,33 +241,33 @@ public struct EventInspectorView: View {
         }
     }
 
-    // MARK: People
+    // MARK: Records
 
-    private var people: some View {
-        InspectorSection("People") {
+    private var records: some View {
+        InspectorSection("Records") {
             VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                ForEach(linkedPeople) { person in
-                    EventPersonRow(person: person, isFromCalendar: false) {
-                        onOpenItem(person.id)
+                ForEach(linkedRecords) { record in
+                    EventRecordRow(record: record, type: services?.records.type(of: record) ?? .other) {
+                        onOpenItem(record.id)
                     } onUnlink: {
-                        unlink(person)
+                        unlink(record)
                     }
                 }
 
                 // Attendees the calendar knows about who are not yet linked to anybody.
                 ForEach(unmatchedAttendees, id: \.id) { attendee in
                     UnmatchedAttendeeRow(attendee: attendee) {
-                        isShowingPersonPicker = true
+                        isShowingRecordPicker = true
                     }
                 }
 
-                if linkedPeople.isEmpty, unmatchedAttendees.isEmpty {
-                    Text("Nobody linked yet.")
+                if linkedRecords.isEmpty, unmatchedAttendees.isEmpty {
+                    Text("No records tagged yet.")
                         .font(Theme.Text.metadata)
                         .foregroundStyle(Theme.Colors.tertiaryText)
                 }
 
-                Button("Link a person…") { isShowingPersonPicker = true }
+                Button("Tag a record…") { isShowingRecordPicker = true }
                     .buttonStyle(.borderless)
                     .font(Theme.Text.metadata)
             }
@@ -559,7 +565,7 @@ public struct EventInspectorView: View {
         let found = (try? services.eventLinks.annotation(for: event.identity)) ?? EventAnnotation(identity: event.identity)
         annotation = found
 
-        linkedPeople = found.personIDs.compactMap { try? services.items.item(id: $0) }
+        linkedRecords = found.recordIDs.compactMap { try? services.items.item(id: $0) }
         linkedNotes = found.noteIDs.compactMap { try? services.items.item(id: $0) }
         linkedProjects = found.projectIDs.compactMap { try? services.items.item(id: $0) }
         preparationText = found.preparationNotes
@@ -581,9 +587,9 @@ public struct EventInspectorView: View {
         }
     }
 
-    private func unlink(_ person: Item) {
+    private func unlink(_ record: Item) {
         guard let services else { return }
-        services.perform { try services.eventLinks.unlink(person: person, from: event.identity) }
+        services.perform { try services.eventLinks.unlink(record: record, from: event.identity) }
         Task { await load() }
     }
 
@@ -602,19 +608,27 @@ public struct EventInspectorView: View {
 
 // MARK: - Rows
 
-/// A person linked to this event.
-private struct EventPersonRow: View {
-    let person: Item
-    let isFromCalendar: Bool
+/// A reusable Record tagged on this event.
+private struct EventRecordRow: View {
+    let record: Item
+    let type: RecordType
     var onOpen: () -> Void
     var onUnlink: () -> Void
 
     var body: some View {
         HStack(spacing: Theme.Spacing.small) {
-            PersonAvatar(name: person.displayTitle, colorName: person.colorName, size: 22)
+            if type == .person {
+                PersonAvatar(name: record.displayTitle, colorName: record.colorName, size: 22)
+            } else {
+                Image(systemName: type.symbolName)
+                    .font(Theme.Text.keyHint)
+                    .foregroundStyle(Theme.Palette.color(named: record.colorName))
+                    .frame(width: 22, height: 22)
+                    .background { Circle().fill(Theme.Colors.subtleFill) }
+            }
 
             VStack(alignment: .leading, spacing: 0) {
-                Text(person.displayTitle)
+                Text(record.displayTitle)
                     .font(Theme.Text.rowSubtitle)
                     .lineLimit(1)
 
@@ -632,7 +646,7 @@ private struct EventPersonRow: View {
             }
             .buttonStyle(.borderless)
             .foregroundStyle(Theme.Colors.tertiaryText)
-            .accessibilityLabel("Unlink \(person.displayTitle)")
+            .accessibilityLabel("Remove \(record.displayTitle) from this event")
         }
         .contentShape(.rect)
         .onTapGesture(perform: onOpen)
@@ -642,7 +656,7 @@ private struct EventPersonRow: View {
 
     /// "It is 4:12 pm there" — only when it differs from here.
     private var localTime: String? {
-        person.personProfile?.localTime(at: Date())
+        record.personProfile?.localTime(at: Date())
     }
 }
 
@@ -718,14 +732,15 @@ private struct LinkedItemRow: View {
     }
 }
 
-// MARK: - Linking a person
+// MARK: - Tagging a Record
 
-/// Choosing somebody to link to an event.
-struct EventPersonPicker: View {
+/// Choosing a reusable Record to tag on an event.
+struct EventRecordPicker: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
 
     let event: CalendarEventSummary
+    let linkedRecordIDs: Set<UUID>
     var onLinked: () -> Void
 
     @State private var query = ""
@@ -733,30 +748,35 @@ struct EventPersonPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            Text("Link a person to “\(event.displayTitle)”")
+            Text("Tag a record on “\(event.displayTitle)”")
                 .font(Theme.Text.title)
                 .lineLimit(2)
 
-            TextField("Search people", text: $query)
+            TextField("Search people, pets, vehicles, and other records", text: $query)
                 .textFieldStyle(.roundedBorder)
                 .onChange(of: query) { _, _ in search() }
 
             if candidates.isEmpty {
-                Text(query.isEmpty ? "Start typing a name." : "Nobody matches “\(query)”.")
+                Text(query.isEmpty ? "No more records to tag." : "No records match “\(query)”.")
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        ForEach(candidates) { person in
-                            Button { link(person) } label: {
+                        ForEach(candidates) { record in
+                            Button { link(record) } label: {
                                 HStack(spacing: Theme.Spacing.small) {
-                                    PersonAvatar(
-                                        name: person.displayTitle, colorName: person.colorName, size: 22
-                                    )
-                                    Text(person.displayTitle)
-                                        .font(Theme.Text.rowSubtitle)
+                                    Image(systemName: services?.records.type(of: record).symbolName ?? "cube")
+                                        .foregroundStyle(Theme.Palette.color(named: record.colorName))
+                                        .frame(width: 22)
+                                    VStack(alignment: .leading, spacing: 0) {
+                                        Text(record.displayTitle)
+                                            .font(Theme.Text.rowSubtitle)
+                                        Text(services?.records.type(of: record).displayName ?? "Record")
+                                            .font(Theme.Text.keyHint)
+                                            .foregroundStyle(Theme.Colors.tertiaryText)
+                                    }
                                     Spacer(minLength: 0)
                                 }
                                 .contentShape(.rect)
@@ -770,7 +790,7 @@ struct EventPersonPicker: View {
                 .frame(maxHeight: 220)
             }
 
-            Text("The link is kept in Elephruit. It is never added to the calendar event.")
+            Text("This creates a private meeting interaction for the record. Nothing is added to the calendar event.")
                 .font(Theme.Text.keyHint)
                 .foregroundStyle(Theme.Colors.tertiaryText)
 
@@ -782,34 +802,39 @@ struct EventPersonPicker: View {
         }
         .padding(Theme.Spacing.large)
         .frame(width: 380)
-        .task { seedFromAttendees() }
+        .task { loadCandidates() }
     }
 
     /// Offers the event's own attendees first, since they are who somebody is most likely to want.
-    private func seedFromAttendees() {
+    private func loadCandidates() {
         guard let services else { return }
-        let names = event.attendeeNames
-        guard !names.isEmpty else { return }
-
-        let all = (try? services.persons.allPeople(includingPlaceholders: false)) ?? []
-        candidates = all.filter { person in
-            names.contains { TextNormalizer.foldedForMatching($0) == TextNormalizer.foldedForMatching(person.displayTitle) }
+        let all = ((try? services.records.allRecords()) ?? []).filter { !linkedRecordIDs.contains($0.id) }
+        let attendeeNames = Set(event.attendeeNames.map(TextNormalizer.foldedForMatching))
+        candidates = all.sorted { left, right in
+            let leftMatches = attendeeNames.contains(TextNormalizer.foldedForMatching(left.displayTitle))
+            let rightMatches = attendeeNames.contains(TextNormalizer.foldedForMatching(right.displayTitle))
+            if leftMatches != rightMatches { return leftMatches }
+            return left.displayTitle.localizedStandardCompare(right.displayTitle) == .orderedAscending
         }
     }
 
     private func search() {
         guard let services, !query.isEmpty else {
-            seedFromAttendees()
+            loadCandidates()
             return
         }
-        let all = (try? services.persons.allPeople(includingPlaceholders: false)) ?? []
+        let all = ((try? services.records.allRecords()) ?? []).filter { !linkedRecordIDs.contains($0.id) }
         let folded = TextNormalizer.foldedForMatching(query)
-        candidates = all.filter { TextNormalizer.foldedForMatching($0.displayTitle).contains(folded) }
+        candidates = all.filter { record in
+            let details = record.recordProfile?.details.values.joined(separator: " ") ?? ""
+            return TextNormalizer.foldedForMatching("\(record.displayTitle) \(record.body) \(details)")
+                .contains(folded)
+        }
     }
 
-    private func link(_ person: Item) {
+    private func link(_ record: Item) {
         guard let services else { return }
-        services.perform { try services.eventLinks.link(person: person, to: event) }
+        services.perform { try services.eventLinks.link(record: record, to: event) }
         onLinked()
         dismiss()
     }

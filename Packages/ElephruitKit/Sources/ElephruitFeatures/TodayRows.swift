@@ -22,6 +22,8 @@ struct TodayEventRow: View {
     let actions: TodayActions
 
     @State private var isHovering = false
+    @State private var isShowingRecordPicker = false
+    @State private var linkedRecordIDs: Set<UUID> = []
     @FocusState private var isFocused: Bool
 
     var body: some View {
@@ -73,7 +75,16 @@ struct TodayEventRow: View {
             }
             return .handled
         }
-        .contextMenu { TodayEventMenu(event: event, model: model, actions: actions) }
+        .contextMenu {
+            TodayEventMenu(event: event, model: model, actions: actions) {
+                showRecordPicker()
+            }
+        }
+        .sheet(isPresented: $isShowingRecordPicker) {
+            EventRecordPicker(event: event.event, linkedRecordIDs: linkedRecordIDs) {
+                loadTaggedRecordIDs()
+            }
+        }
         .help(tooltip)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
@@ -249,8 +260,28 @@ struct TodayEventRow: View {
             .foregroundStyle(Theme.Colors.secondaryText)
             .help("Notes for this meeting")
             .accessibilityLabel("Notes for \(event.event.displayTitle)")
+
+            Button(action: showRecordPicker) {
+                Image(systemName: "tag")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(Theme.Colors.secondaryText)
+            .help("Tag a Record")
+            .accessibilityLabel("Tag a Record on \(event.event.displayTitle)")
         }
         .transition(.opacity)
+    }
+
+    private func showRecordPicker() {
+        loadTaggedRecordIDs()
+        isShowingRecordPicker = true
+    }
+
+    private func loadTaggedRecordIDs() {
+        guard let services else { return }
+        linkedRecordIDs = Set(
+            (try? services.eventLinks.annotation(for: event.event.identity).recordIDs) ?? []
+        )
     }
 
     // MARK: Descriptions
@@ -325,6 +356,7 @@ struct TodayEventMenu: View {
     let event: DayEvent
     let model: TodayModel
     let actions: TodayActions
+    var onTagRecord: () -> Void
 
     var body: some View {
         if actions.joinLink(for: event) != nil {
@@ -333,6 +365,7 @@ struct TodayEventMenu: View {
 
         Button("Open in Calendar", systemImage: "calendar") { actions.openInCalendar(event) }
         Button("Meeting Notes", systemImage: "note.text") { actions.openNotes(for: event) }
+        Button("Tag a Record…", systemImage: "tag", action: onTagRecord)
 
         if !event.participants.isEmpty {
             Divider()
