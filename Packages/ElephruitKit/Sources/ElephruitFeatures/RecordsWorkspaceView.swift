@@ -4,8 +4,7 @@ import ElephruitModel
 import ElephruitPersistence
 import SwiftUI
 
-/// The production Records workspace. It reads and writes the shared Item graph; People remains in
-/// place as a richer, focused view over person records.
+/// The detail canvas for the record selected in Records' single browser column.
 struct RecordsWorkspaceView: View {
     @Environment(\.services) private var services
 
@@ -13,34 +12,13 @@ struct RecordsWorkspaceView: View {
     let scope: RecordsScope
 
     @State private var records: [Item] = []
-    @State private var selection: UUID?
-    @State private var searchText = ""
     @State private var tab = RecordsTab.overview
-    @State private var isShowingNewRecord = false
-    @State private var isShowingContactImport = false
     @State private var loadError: AppError?
 
     var body: some View {
         detail
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Colors.contentBackground)
-        .sheet(isPresented: $isShowingNewRecord) {
-            NewRecordSheet { draft in
-                guard let services else { return }
-                do {
-                    let record = try services.records.create(draft)
-                    refresh(selecting: record.id)
-                } catch {
-                    loadError = appError(error)
-                }
-            }
-        }
-        .sheet(isPresented: $isShowingContactImport, onDismiss: { refresh() }) {
-            ContactOnboardingView(
-                navigation: navigation,
-                completionSelection: .records(.unsorted)
-            )
-        }
         .task(id: navigation.selectedItemID) { refresh() }
         .onChange(of: services?.context.hasChanges) { _, _ in refresh() }
         .alert(
@@ -55,127 +33,13 @@ struct RecordsWorkspaceView: View {
         .accessibilityIdentifier("records.workspace")
     }
 
-    private var browser: some View {
-        VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-                HStack {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                        Text("Records").font(Theme.Text.title)
-                        Text(browserSubtitle)
-                            .font(Theme.Text.rowSubtitle)
-                            .foregroundStyle(Theme.Colors.secondaryText)
-                    }
-                    Spacer()
-                    Menu {
-                        Button("New Record", systemImage: "plus") { isShowingNewRecord = true }
-                        Divider()
-                        Button("Import from Contacts…", systemImage: "person.crop.rectangle.stack") {
-                            isShowingContactImport = true
-                        }
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .help("Add a record or import contacts")
-                }
-
-                TextField("Search records", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
-
-                scopeFilter
-            }
-            .padding(Theme.Spacing.large)
-
-            Divider()
-
-            if filteredRecords.isEmpty {
-                EmptyStateView(
-                    symbolName: scope.symbolName,
-                    headline: searchText.isEmpty ? emptyHeadline : "No records match",
-                    message: searchText.isEmpty ? emptyMessage : "Try another name, type, or detail.",
-                    actionTitle: searchText.isEmpty ? "New Record" : "Clear Search",
-                    action: searchText.isEmpty
-                        ? { isShowingNewRecord = true }
-                        : { searchText = "" }
-                )
-            } else {
-                List(filteredRecords, selection: $selection) { record in
-                    recordRow(record)
-                        .tag(record.id)
-                }
-                .listStyle(.inset)
-            }
-
-            Divider()
-
-            Button("Import from Contacts…", systemImage: "person.crop.rectangle.stack") {
-                isShowingContactImport = true
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Theme.Colors.secondaryText)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(Theme.Spacing.large)
-        }
-        .background(.regularMaterial)
-    }
-
-    /// Records already owns the browser column. Keeping its scopes here turns that column into the
-    /// whole Records navigator instead of placing a second navigation sidebar beside it.
-    private var scopeFilter: some View {
-        HStack(spacing: Theme.Spacing.tight) {
-            ForEach(RecordsScope.allCases) { candidate in
-                let isSelected = candidate == scope
-                Button {
-                    navigation.select(.records(candidate))
-                } label: {
-                    Image(systemName: candidate.symbolName)
-                        .frame(width: 28, height: 24)
-                        .background(isSelected ? Theme.Colors.selection : Theme.Colors.subtleFill)
-                        .foregroundStyle(isSelected ? Theme.Colors.onAccent : Theme.Colors.secondaryText)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
-                }
-                .buttonStyle(.plain)
-                .help(candidate.title)
-                .accessibilityLabel(candidate.title)
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
-                .accessibilityIdentifier("records.filter.\(candidate.rawValue)")
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func recordRow(_ record: Item) -> some View {
-        let type = services?.records.type(of: record) ?? .other
-        let selected = selection == record.id
-        return HStack(spacing: Theme.Spacing.medium) {
-            Image(systemName: type.symbolName)
-                .frame(width: 32, height: 32)
-                .background(Theme.Colors.subtleFill)
-                .clipShape(.circle)
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                Text(record.displayTitle)
-                    .font(Theme.Text.rowTitleEmphasised)
-                    .lineLimit(1)
-                Text(rowSubtitle(for: record, type: type))
-                    .font(Theme.Text.rowSubtitle)
-                    .foregroundStyle(selected ? Theme.Colors.onAccent.opacity(0.82) : Theme.Colors.secondaryText)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-            if services?.records.isUnsorted(record) == true {
-                Image(systemName: "tray")
-                    .foregroundStyle(selected ? Theme.Colors.onAccent.opacity(0.8) : Theme.Colors.tertiaryText)
-                    .help("Unsorted import")
-            }
-        }
-        .padding(.vertical, Theme.Spacing.tight)
-        .accessibilityLabel("\(record.displayTitle), \(type.displayName)")
-    }
-
     @ViewBuilder
     private var detail: some View {
-        if let record = selectedRecord {
+        if scope == .celebrations {
+            CelebrationsView(navigation: navigation)
+        } else if scope == .duplicates {
+            DuplicatesView(navigation: navigation)
+        } else if let record = selectedRecord {
             if record.kind == .person {
                 // Person records keep the full CRM portrait, timeline, contact actions, meeting
                 // brief, facts, and relationship charts that previously required leaving Records.
@@ -204,50 +68,13 @@ struct RecordsWorkspaceView: View {
 
     private var selectedRecord: Item? { records.first { $0.id == navigation.selectedItemID } }
 
-    private var filteredRecords: [Item] {
-        guard let services else { return [] }
-        return records.filter { record in
-            if scope == .unsorted, !services.records.isUnsorted(record) { return false }
-            if let required = scope.recordType, services.records.type(of: record) != required { return false }
-            guard !searchText.isEmpty else { return true }
-            let details = record.recordProfile?.details.values.joined(separator: " ") ?? ""
-            return "\(record.displayTitle) \(record.body) \(details)"
-                .localizedCaseInsensitiveContains(searchText)
-        }
-    }
-
     private func refresh(selecting id: UUID? = nil) {
         guard let services else { return }
         do {
             records = try services.records.allRecords()
             loadError = nil
             if let id { navigation.selectItem(id) }
-            if navigation.selectedItemID == nil
-                || records.contains(where: { $0.id == navigation.selectedItemID }) == false
-            {
-                navigation.selectItem(filteredRecords.first?.id)
-            }
         } catch { loadError = error }
-    }
-
-    private func rowSubtitle(for record: Item, type: RecordType) -> String {
-        if let summary = record.recordProfile?.details["summary"], !summary.isEmpty { return summary }
-        if type == .person {
-            return [record.personProfile?.roleTitle, record.personProfile?.organizationName]
-                .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ").nilIfEmpty ?? "Person"
-        }
-        return type.displayName
-    }
-
-    private var browserSubtitle: String {
-        scope == .unsorted ? "Contacts waiting to be filed" : "People and things you keep track of"
-    }
-
-    private var emptyHeadline: String { scope == .unsorted ? "Nothing to sort" : "No records yet" }
-    private var emptyMessage: String {
-        scope == .unsorted
-            ? "New contact imports wait here until you file them."
-            : "Add a person, pet, vehicle, organization, or anything else you track."
     }
 
     private func appError(_ error: any Error) -> AppError {

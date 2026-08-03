@@ -12,6 +12,7 @@ struct RecordsModuleSidebar: View {
     let navigation: NavigationModel
 
     @State private var records: [Item] = []
+    @State private var groups: [PersonGroup] = []
     @State private var searchText = ""
     @State private var isShowingNewRecord = false
     @State private var isShowingContactImport = false
@@ -106,7 +107,7 @@ struct RecordsModuleSidebar: View {
 
     private var scopeFilter: some View {
         HStack(spacing: Theme.Spacing.tight) {
-            ForEach(RecordsScope.allCases) { candidate in
+            ForEach(RecordsScope.typeFilters) { candidate in
                 let selected = candidate == scope
                 Button {
                     navigation.select(.records(candidate))
@@ -121,8 +122,43 @@ struct RecordsModuleSidebar: View {
                 .help(candidate.title)
                 .accessibilityLabel(candidate.title)
                 .accessibilityAddTraits(selected ? .isSelected : [])
-                .accessibilityIdentifier("records.filter.\(candidate.rawValue)")
+                .accessibilityIdentifier("records.filter.\(candidate.id)")
             }
+
+            Menu {
+                Section("Views") {
+                    ForEach(RecordsScope.personViews) { candidate in
+                        Button {
+                            navigation.select(.records(candidate))
+                        } label: {
+                            Label(candidate.title, systemImage: candidate.symbolName)
+                        }
+                    }
+                }
+
+                if !groups.isEmpty {
+                    Section("Groups") {
+                        ForEach(groups) { group in
+                            Button {
+                                navigation.select(.records(.group(id: group.id)))
+                            } label: {
+                                Label(group.name, systemImage: group.symbolName)
+                            }
+                        }
+                    }
+                }
+            } label: {
+                let isSelected = !RecordsScope.typeFilters.contains(scope)
+                Image(systemName: isSelected ? scope.symbolName : "line.3.horizontal.decrease")
+                    .frame(width: 26, height: 24)
+                    .background(isSelected ? Theme.Colors.selection : Theme.Colors.subtleFill)
+                    .foregroundStyle(isSelected ? Theme.Colors.onAccent : Theme.Colors.secondaryText)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .help(RecordsScope.typeFilters.contains(scope) ? "More record views" : scope.title)
+            .accessibilityLabel("More record views")
         }
     }
 
@@ -149,10 +185,8 @@ struct RecordsModuleSidebar: View {
     }
 
     private var filteredRecords: [Item] {
-        guard let services else { return [] }
+        guard services != nil else { return [] }
         return records.filter { record in
-            if scope == .unsorted, !services.records.isUnsorted(record) { return false }
-            if let required = scope.recordType, services.records.type(of: record) != required { return false }
             guard !searchText.isEmpty else { return true }
             let details = record.recordProfile?.details.values.joined(separator: " ") ?? ""
             return "\(record.displayTitle) \(record.body) \(details)"
@@ -170,7 +204,8 @@ struct RecordsModuleSidebar: View {
     private func refresh(selecting id: UUID? = nil) {
         guard let services else { return }
         do {
-            records = try services.records.allRecords()
+            records = try records(in: scope, services: services)
+            groups = try services.personGroups.allGroups()
             loadError = nil
             if let id { navigation.selectItem(id) }
             if navigation.selectedItemID == nil
@@ -179,6 +214,40 @@ struct RecordsModuleSidebar: View {
                 navigation.selectItem(filteredRecords.first?.id)
             }
         } catch { loadError = error }
+    }
+
+    private func records(in scope: RecordsScope, services: AppServices) throws(AppError) -> [Item] {
+        let all = try services.records.allRecords()
+        switch scope {
+        case .all:
+            return all
+        case .unsorted:
+            return all.filter { services.records.isUnsorted($0) }
+        case .people, .pets, .vehicles, .organizations, .other:
+            guard let type = scope.recordType else { return all }
+            return all.filter { services.records.type(of: $0) == type }
+        case .recentlyViewed:
+            return services.recentlyViewedPeople.compactMap { id in
+                try? services.persons.person(id: id)
+            }
+        case .favorites:
+            return all.filter(\.isFavorite)
+        case .celebrations, .duplicates:
+            return []
+        case .needsFollowUp:
+            guard services.showsFollowUpSuggestions else { return [] }
+            return try services.people.followUpSuggestions(
+                thresholdDays: services.followUpThresholdDays
+            ).compactMap { suggestion in
+                try? services.persons.person(id: suggestion.personID)
+            }
+        case .fromContacts:
+            let linked = Set(try services.contactImports.allLinks().compactMap { $0.person?.id })
+            return all.filter { linked.contains($0.id) }
+        case .group(let id):
+            guard let group = try services.personGroups.group(id: id) else { return [] }
+            return try services.personGroups.members(of: group)
+        }
     }
 
     private func subtitle(for record: Item, type: RecordType) -> String {

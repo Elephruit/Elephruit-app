@@ -274,7 +274,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .reminders: "sidebar.reminders"
         case .time: "sidebar.time"
         case .people(let scope): "sidebar.people.\(scope.title.lowercased().replacingOccurrences(of: " ", with: "-"))"
-        case .records(let scope): "sidebar.records.\(scope.rawValue)"
+        case .records(let scope): "sidebar.records.\(scope.id)"
         case .taskView(let view): "sidebar.tasks.\(view.rawValue)"
         case .smartList(let id): "sidebar.smartList.\(id.uuidString)"
         case .builtInSmartList(let id): "sidebar.smartList.\(id)"
