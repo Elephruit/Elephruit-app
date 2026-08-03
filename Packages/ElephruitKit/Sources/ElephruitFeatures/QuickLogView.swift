@@ -40,11 +40,6 @@ struct QuickLogView: View {
                 if running == nil {
                     stopped
                 } else if controller.presentation == .confirmReplacement {
-                    HStack {
-                        Spacer()
-                        timingBadge
-                    }
-
                     replacementConfirmation
                 } else {
                     naming
@@ -162,10 +157,16 @@ struct QuickLogView: View {
     /// the name and filing stay exactly as they were.
     private var replacementConfirmation: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-            FloatingCapturePanelPrompt(
-                "Timer already running",
-                message: "Stop and save it before starting a new timer?"
-            )
+            HStack(alignment: .top, spacing: Theme.Spacing.medium) {
+                FloatingCapturePanelPrompt(
+                    "Timer already running",
+                    message: "Stop and save it before starting a new timer?"
+                )
+
+                Spacer(minLength: Theme.Spacing.medium)
+
+                timingBadge
+            }
 
             if let running {
                 VStack(alignment: .leading, spacing: Theme.Spacing.small) {
