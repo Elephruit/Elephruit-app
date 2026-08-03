@@ -1,5 +1,7 @@
+import AppKit
 @testable import ElephruitFeatures
 import Foundation
+import SwiftUI
 import Testing
 
 @Suite("Reminder composer state")
@@ -30,5 +32,50 @@ struct ReminderComposerStateTests {
 
         #expect(draft.checklist.items.map(\.title) == ["Pack charger"])
         #expect(draft.pendingStep.isEmpty)
+    }
+
+    @Test("The AppKit editor consumes Tab and reports its direction")
+    @MainActor
+    func editorTabTraversal() throws {
+        var text = "unchanged"
+        var traversals: [Bool] = []
+        let editor = ReminderPlainTextEditor(
+            text: Binding(get: { text }, set: { text = $0 }),
+            placeholder: "Reminder",
+            role: .title,
+            onTab: { traversals.append($0) },
+            onReturn: {},
+            onCommandReturn: {},
+            onEscape: {}
+        )
+        let coordinator = editor.makeCoordinator()
+        let textView = ReminderEditorTextView()
+        textView.string = text
+        textView.coordinator = coordinator
+
+        textView.keyDown(with: try #require(keyEvent(keyCode: 48)))
+        textView.keyDown(with: try #require(keyEvent(keyCode: 48, modifiers: .shift)))
+
+        #expect(traversals == [false, true])
+        #expect(textView.string == "unchanged")
+    }
+
+    @MainActor
+    private func keyEvent(
+        keyCode: UInt16,
+        modifiers: NSEvent.ModifierFlags = []
+    ) -> NSEvent? {
+        NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: modifiers,
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "\t",
+            charactersIgnoringModifiers: "\t",
+            isARepeat: false,
+            keyCode: keyCode
+        )
     }
 }

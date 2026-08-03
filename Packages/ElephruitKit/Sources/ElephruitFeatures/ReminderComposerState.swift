@@ -31,6 +31,7 @@ struct ReminderComposerDraft: Sendable, Hashable {
     var notes = ""
     var startAt: Date?
     var dueAt: Date?
+    var isSomeday = false
     var tagSlugs: [String] = []
     var checklist = TaskChecklist()
     var pendingStep = ""
