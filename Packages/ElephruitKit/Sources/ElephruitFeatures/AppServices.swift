@@ -152,6 +152,9 @@ public final class AppServices {
     /// People, computed from the links that already exist.
     public let people: PeopleService
 
+    /// People and real-world things presented through one reusable workspace.
+    public let records: RecordsService
+
     // MARK: The People module
 
     /// People, their facts, their relationships, and their celebrations.
@@ -533,6 +536,10 @@ public final class AppServices {
 
         let persons = SwiftDataPersonRepository(context: context, items: items, dateProvider: dateProvider)
         self.persons = persons
+        let records = RecordsService(
+            context: context, items: items, people: persons, dateProvider: dateProvider
+        )
+        self.records = records
         self.personWorkspace = PersonWorkspaceService(people: persons, items: items, dateProvider: dateProvider)
         self.personIdentity = PersonIdentityService(
             context: context, people: persons, items: items, dateProvider: dateProvider
@@ -558,6 +565,7 @@ public final class AppServices {
             people: persons,
             items: items,
             identity: self.personIdentity,
+            records: records,
             dateProvider: dateProvider
         )
         self.contactImports = contactImports

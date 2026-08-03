@@ -23,6 +23,7 @@ public final class ContactImportService {
     private let people: any PersonRepository
     private let items: any ItemRepository
     private let identity: PersonIdentityService
+    private let records: RecordsService
     private let dateProvider: any DateProvider
 
     private var linkCache: [UUID: SystemContactLink]?
@@ -32,12 +33,14 @@ public final class ContactImportService {
         people: any PersonRepository,
         items: any ItemRepository,
         identity: PersonIdentityService,
+        records: RecordsService,
         dateProvider: any DateProvider
     ) {
         self.context = context
         self.people = people
         self.items = items
         self.identity = identity
+        self.records = records
         self.dateProvider = dateProvider
     }
 
@@ -157,6 +160,8 @@ public final class ContactImportService {
             // A record that arrived from the address book is not a placeholder somebody sketched.
             profile.isPlaceholder = false
         }
+
+        try records.markImported(person)
 
         try save()
     }
