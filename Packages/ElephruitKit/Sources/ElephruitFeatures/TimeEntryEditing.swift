@@ -38,8 +38,9 @@ struct TimeEntrySpan: Equatable {
 ///
 /// `since` is the moment the running stretch began, and `nil` for everything settled — which is
 /// almost every row, and those pay nothing: no timeline, no redraw, just the number they were
-/// given. Only a day that contains a running entry costs a redraw a second, and only for as long
-/// as it does.
+/// given. Only a day that contains a running entry costs a redraw twice a minute, and only for as long
+/// as it does. Running and settled durations intentionally use the same `h:mm` notation so stopping
+/// an entry never changes the meaning of its digits.
 struct LiveDuration: View {
     /// What the duration is when nothing is running: the settled total.
     let base: TimeInterval
@@ -49,20 +50,9 @@ struct LiveDuration: View {
 
     let font: Font
 
-    /// Whether to count in seconds rather than in hours and minutes.
-    ///
-    /// ### Why this is not simply "is it running"
-    /// Because it depends on what the number is *of*. A single stretch that is still going is the
-    /// same stretch the tracker is showing at the top of the screen, and the two must agree — the
-    /// version that did not was genuinely alarming to read: a card saying `0:56` above a row saying
-    /// `0:01` looks like the log has lost fifty-five seconds, when in fact one was counting seconds
-    /// and the other minutes. A *day's* total is a different quantity that nobody reads to the
-    /// second, and `4:25:13` in a section header is noise pretending to be precision.
-    var countsSeconds = false
-
     var body: some View {
         if let since {
-            TimelineView(.periodic(from: since, by: 1)) { context in
+            TimelineView(.periodic(from: since, by: 30)) { context in
                 text(base + max(0, context.date.timeIntervalSince(since)))
                     .contentTransition(.numericText())
             }
@@ -72,7 +62,7 @@ struct LiveDuration: View {
     }
 
     private func text(_ interval: TimeInterval) -> some View {
-        Text(countsSeconds ? TimeFormatting.stopwatch(interval) : TimeFormatting.short(interval))
+        Text(TimeFormatting.short(interval))
             .font(font)
             .monospacedDigit()
     }
@@ -236,8 +226,7 @@ struct TimeEntryGroupRow: View {
             LiveDuration(
                 base: group.settledTotal,
                 since: group.runningSince,
-                font: Theme.Text.rowTitle,
-                countsSeconds: group.isRunning
+                font: Theme.Text.rowTitle
             )
             .frame(width: 64, alignment: .trailing)
 
@@ -447,8 +436,7 @@ struct TimeEntryRow: View {
             LiveDuration(
                 base: entry.isRunning ? 0 : entry.duration(),
                 since: entry.isRunning ? entry.startedAt : nil,
-                font: Theme.Text.rowSubtitle,
-                countsSeconds: entry.isRunning
+                font: Theme.Text.rowSubtitle
             )
             .rowForeground(.secondary)
             .frame(width: 64, alignment: .trailing)
