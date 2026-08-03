@@ -138,12 +138,13 @@ struct QuickJotView: View {
     var body: some View {
         CaptureComposer(
             composition: $controller.composition,
+            presentationStyle: .panel,
             error: controller.lastError,
             onSave: { controller.save() },
             onCancel: { controller.hide() }
         )
         .frame(width: 560)
-        .background(.regularMaterial)
+        .background(Theme.FloatingCapturePanel.background)
         .accessibilityIdentifier(AccessibilityID.QuickCapture.root)
     }
 }

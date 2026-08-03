@@ -15,7 +15,7 @@ final class QuickJotPanel: NSPanel {
     init(content: NSView) {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 560, height: 260),
-            styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
+            styleMask: [.titled, .closable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )

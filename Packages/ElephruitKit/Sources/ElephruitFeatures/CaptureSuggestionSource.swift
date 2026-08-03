@@ -89,6 +89,40 @@ struct CaptureSuggestionSource {
     }
 }
 
+/// The shared keyboard-oriented completion list used by both global capture panels.
+struct CaptureSuggestionList: View {
+    let prefix: String
+    let suggestions: [String]
+    let selection: Int
+    let onSelect: (Int) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(suggestions.enumerated()), id: \.offset) { index, value in
+                HStack {
+                    Text(prefix)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(Theme.CaptureToken.accent)
+                    Text(value)
+                        .font(Theme.Text.metadata)
+                    Spacer()
+                }
+                .padding(.vertical, 3)
+                .padding(.horizontal, Theme.Spacing.small)
+                .background(
+                    index == selection ? Theme.Colors.selectionFill : Color.clear,
+                    in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
+                )
+                .contentShape(Rectangle())
+                .onTapGesture { onSelect(index) }
+            }
+        }
+        .accessibilityLabel(
+            "\(suggestions.count) suggestions. Use the arrow keys, then Tab to accept."
+        )
+    }
+}
+
 /// A search field and the list of what it found.
 ///
 /// ### Why a popover here and a menu for tags

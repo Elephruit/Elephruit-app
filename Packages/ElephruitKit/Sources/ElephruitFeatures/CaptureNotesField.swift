@@ -12,6 +12,9 @@ struct CaptureNotesField: NSViewRepresentable {
     @Binding var text: String
     @Binding var caret: Int
     var vocabulary: CaptureVocabulary = .empty
+    var placeholder = "Notes"
+    var font = Theme.AppKitText.captureSupportingInput
+    var isSingleLine = false
 
     var onSubmit: () -> Void
     var onCancel: () -> Void
@@ -24,7 +27,7 @@ struct CaptureNotesField: NSViewRepresentable {
         let scrollView = CaptureNotesScrollView()
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
-        scrollView.hasVerticalScroller = true
+        scrollView.hasVerticalScroller = !isSingleLine
         scrollView.autohidesScrollers = true
 
         let textView = CaptureNotesTextView()
@@ -35,9 +38,10 @@ struct CaptureNotesField: NSViewRepresentable {
         textView.isRichText = false
         textView.allowsUndo = true
         textView.drawsBackground = false
-        textView.font = NSFont.preferredFont(forTextStyle: .subheadline)
-        textView.textColor = NSColor.labelColor
-        textView.isVerticallyResizable = true
+        textView.font = font
+        textView.isFieldEditor = isSingleLine
+        textView.textColor = Theme.AppKitColors.primaryText
+        textView.isVerticallyResizable = !isSingleLine
         textView.isHorizontallyResizable = false
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(
@@ -58,7 +62,7 @@ struct CaptureNotesField: NSViewRepresentable {
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
-        textView.placeholder = "Notes"
+        textView.placeholder = placeholder
         textView.applyHighlighting()
         scrollView.documentView = textView
         return scrollView
@@ -68,6 +72,8 @@ struct CaptureNotesField: NSViewRepresentable {
         context.coordinator.parent = self
         guard let textView = scrollView.documentView as? CaptureNotesTextView else { return }
         textView.vocabulary = vocabulary
+        textView.placeholder = placeholder
+        textView.font = font
         guard textView.string != text,
               text != context.coordinator.lastEditorText,
               !textView.hasMarkedText()
@@ -127,6 +133,9 @@ struct CaptureNotesField: NSViewRepresentable {
             case #selector(NSResponder.cancelOperation(_:)):
                 parent.onCancel()
                 return true
+            case #selector(NSResponder.insertNewline(_:)) where parent.isSingleLine:
+                parent.onSubmit()
+                return true
             default:
                 return false
             }
@@ -156,12 +165,12 @@ final class CaptureNotesTextView: NSTextView {
     /// like a row of controls.
     func applyHighlighting() {
         guard let storage = textStorage else { return }
-        let bodyFont = font ?? NSFont.preferredFont(forTextStyle: .subheadline)
+        let bodyFont = font ?? Theme.AppKitText.captureSupportingInput
         let whole = NSRange(location: 0, length: storage.length)
 
         storage.beginEditing()
         storage.setAttributes(
-            [.font: bodyFont, .foregroundColor: NSColor.labelColor],
+            [.font: bodyFont, .foregroundColor: Theme.AppKitColors.primaryText],
             range: whole
         )
 
@@ -197,7 +206,7 @@ final class CaptureNotesTextView: NSTextView {
             utf16Base += (text as NSString).length + 1
         }
         storage.endEditing()
-        typingAttributes = [.font: bodyFont, .foregroundColor: NSColor.labelColor]
+        typingAttributes = [.font: bodyFont, .foregroundColor: Theme.AppKitColors.primaryText]
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -207,8 +216,8 @@ final class CaptureNotesTextView: NSTextView {
         NSAttributedString(
             string: placeholder,
             attributes: [
-                .font: font ?? NSFont.preferredFont(forTextStyle: .subheadline),
-                .foregroundColor: NSColor.placeholderTextColor,
+                .font: font ?? Theme.AppKitText.captureSupportingInput,
+                .foregroundColor: Theme.AppKitColors.placeholderText,
             ]
         ).draw(
             at: NSPoint(

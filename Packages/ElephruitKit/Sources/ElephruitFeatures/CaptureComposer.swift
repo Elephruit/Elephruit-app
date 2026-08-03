@@ -4,6 +4,15 @@ import ElephruitModel
 import ElephruitPersistence
 import SwiftUI
 
+/// The chrome around the shared capture fields.
+///
+/// The in-window sheet and floating panel share their open writing surface. Their only visual
+/// difference is spacing: the panel gets the roomier global-window rhythm.
+enum CaptureComposerPresentationStyle {
+    case sheet
+    case panel
+}
+
 /// Everything between the edges of a Quick Jot card, wherever it is being shown.
 ///
 /// ### Why this is one view rather than two
@@ -28,6 +37,8 @@ struct CaptureComposer: View {
     @Environment(\.services) private var services
 
     @Binding var composition: QuickJotComposition
+
+    var presentationStyle: CaptureComposerPresentationStyle = .sheet
 
     /// The most recent failure, if the caller keeps one. A sheet that dismisses on success has
     /// nowhere to show a failure and passes `nil`; the panel stays open and shows it.
@@ -72,10 +83,33 @@ struct CaptureComposer: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            content
-            Divider()
-            footer
+        Group {
+            if presentationStyle == .panel {
+                VStack(alignment: .leading, spacing: 0) {
+                    content
+                        .padding(Theme.FloatingCapturePanel.outerPadding)
+                        .background(Theme.FloatingCapturePanel.background)
+
+                    Divider()
+
+                    footer
+                        .padding(.horizontal, Theme.FloatingCapturePanel.outerPadding)
+                        .padding(.vertical, Theme.Spacing.medium)
+                        .background(Theme.FloatingCapturePanel.groupedBackground)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    content
+                        .padding(Theme.Spacing.large)
+
+                    Divider()
+
+                    footer
+                        .padding(.horizontal, Theme.Spacing.large)
+                        .padding(.vertical, Theme.Spacing.medium)
+                        .background(Theme.Colors.subtleFill)
+                }
+            }
         }
         .onChange(of: completion) { refreshSuggestions() }
         // Keyed on the change token rather than run once, because the panel outlives any single
@@ -105,34 +139,7 @@ struct CaptureComposer: View {
     /// word.
     private var content: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            CaptureTitleField(
-                composition: $composition,
-                caret: $caret,
-                vocabulary: vocabulary,
-                placeholder: composition.draft.kind == .task ? "New To-Do" : "New Note",
-                onSubmit: onSave,
-                onCancel: onCancel,
-                onMoveToNotes: { focus = .notes },
-                onMove: { direction in moveSelection(direction) },
-                onAccept: { acceptSuggestion() },
-                onRemoveLastChip: { removeLastChip() }
-            )
-            .frame(height: 26)
-            .focused($focus, equals: .title)
-            .accessibilityIdentifier(AccessibilityID.QuickCapture.textField)
-            .accessibilityLabel("What would you like to capture?")
-
-            CaptureNotesField(
-                text: $composition.notesText,
-                caret: $notesCaret,
-                vocabulary: vocabulary,
-                onSubmit: onSave,
-                onCancel: onCancel,
-                onMove: { direction in moveSelection(direction) },
-                onAccept: { acceptSuggestion() }
-            )
-                .frame(minHeight: 44, maxHeight: 96)
-                .focused($focus, equals: .notes)
+            captureFields
 
             if !suggestions.isEmpty {
                 suggestionList
@@ -163,33 +170,52 @@ struct CaptureComposer: View {
                     .lineLimit(2)
             }
         }
-        .padding(Theme.Spacing.large)
+    }
+
+    private var captureFields: some View {
+        VStack(alignment: .leading, spacing: Theme.FloatingCapturePanel.controlSpacing) {
+            CaptureTitleField(
+                composition: $composition,
+                caret: $caret,
+                vocabulary: vocabulary,
+                placeholder: composition.draft.kind == .task ? "New To-Do" : "New Note",
+                onSubmit: onSave,
+                onCancel: onCancel,
+                onMoveToNotes: { focus = .notes },
+                onMove: { direction in moveSelection(direction) },
+                onAccept: { acceptSuggestion() },
+                onRemoveLastChip: { removeLastChip() }
+            )
+            .frame(height: 26)
+            .focused($focus, equals: .title)
+            .accessibilityIdentifier(AccessibilityID.QuickCapture.textField)
+            .accessibilityLabel("What would you like to capture?")
+
+            CaptureNotesField(
+                text: $composition.notesText,
+                caret: $notesCaret,
+                vocabulary: vocabulary,
+                onSubmit: onSave,
+                onCancel: onCancel,
+                onMove: { direction in moveSelection(direction) },
+                onAccept: { acceptSuggestion() }
+            )
+            .frame(minHeight: 44, maxHeight: 96)
+            .focused($focus, equals: .notes)
+        }
     }
 
     // MARK: - Completions
 
     private var suggestionList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(suggestions.enumerated()), id: \.offset) { index, value in
-                HStack {
-                    Text(completion?.trigger.prefix ?? "")
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(Theme.CaptureToken.accent)
-                    Text(value)
-                        .font(Theme.Text.metadata)
-                    Spacer()
-                }
-                .padding(.vertical, 3)
-                .padding(.horizontal, Theme.Spacing.small)
-                .background(
-                    index == selection ? Theme.Colors.selectionFill : Color.clear,
-                    in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                )
-                .contentShape(Rectangle())
-                .onTapGesture { selection = index; acceptSuggestion() }
-            }
+        CaptureSuggestionList(
+            prefix: completion?.trigger.prefix ?? "",
+            suggestions: suggestions,
+            selection: selection
+        ) { index in
+            selection = index
+            acceptSuggestion()
         }
-        .accessibilityLabel("\(suggestions.count) suggestions. Use the arrow keys, then Tab to accept.")
     }
 
     @discardableResult
@@ -317,9 +343,6 @@ struct CaptureComposer: View {
                 .disabled(composition.isEmpty || isSaving)
                 .accessibilityIdentifier(AccessibilityID.QuickCapture.saveButton)
         }
-        .padding(.horizontal, Theme.Spacing.large)
-        .padding(.vertical, Theme.Spacing.medium)
-        .background(Theme.Colors.subtleFill)
     }
 
     /// ### Why the vocabulary is handed over rather than fetched again

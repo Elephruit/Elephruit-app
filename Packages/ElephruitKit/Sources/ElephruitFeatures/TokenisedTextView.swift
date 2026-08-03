@@ -167,7 +167,7 @@ final class TokenisedTextView: NSTextView {
             string: placeholder,
             attributes: [
                 .font: font ?? .preferredFont(forTextStyle: .body),
-                .foregroundColor: NSColor.placeholderTextColor,
+                .foregroundColor: Theme.AppKitColors.placeholderText,
             ]
         ).draw(at: NSPoint(x: origin.x + fragmentPadding, y: origin.y))
     }

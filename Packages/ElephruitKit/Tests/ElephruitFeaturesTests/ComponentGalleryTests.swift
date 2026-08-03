@@ -1,6 +1,7 @@
 import AppKit
 import ElephruitCore
 import ElephruitDesign
+import ElephruitPersistence
 import Foundation
 import SwiftUI
 import Testing
@@ -76,6 +77,54 @@ struct ComponentGalleryTests {
         }
 
         try png.write(to: outputDirectory.appending(path: "\(name).png"))
+    }
+
+    // MARK: - Quick Log
+
+    @Test("Quick Log naming panel")
+    func quickLogNamingPanel() throws {
+        let services = AppServices.inMemory(dateProvider: SystemDateProvider(), populated: false)
+        let controller = services.quickLog
+        controller.startTimerIfIdle()
+        let project = try services.items.create(ItemDraft(kind: .project, title: "Website"))
+        services.timer.setProject(project)
+        services.timer.setTags(["bugs"])
+        services.timer.setElapsed(4 * 60 + 37)
+
+        try write("quick-log-naming", width: 610) {
+            QuickLogView(controller: controller)
+                .appServices(services)
+        }
+    }
+
+    @Test("Quick Log replacement confirmation")
+    func quickLogReplacementConfirmation() throws {
+        let services = AppServices.inMemory(dateProvider: SystemDateProvider(), populated: false)
+        services.timer.switchTo(
+            item: nil,
+            description: "Reviewing the lease renewal",
+            tagSlugs: ["legal", "client-work"],
+            isBillable: true
+        )
+        services.timer.setElapsed(4 * 60 + 37)
+        let controller = services.quickLog
+        controller.startTimerIfIdle()
+
+        try write("quick-log-replacement", width: 610) {
+            QuickLogView(controller: controller)
+                .appServices(services)
+        }
+    }
+
+    @Test("Quick Jot panel")
+    func quickJotPanel() throws {
+        let services = AppServices.inMemory(dateProvider: SystemDateProvider(), populated: false)
+        let controller = QuickJotController(services: services)
+
+        try write("quick-jot", width: 610) {
+            QuickJotView(controller: controller)
+                .appServices(services)
+        }
     }
 
     // MARK: - The person action row

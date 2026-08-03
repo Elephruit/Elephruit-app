@@ -132,18 +132,20 @@ It is not a second way to track time. `QuickLogController.startTimerIfIdle()` ca
 same `setSubject`/`setProject`/`setPeople`/`setTags`. Two doors into one room, which is what
 `CaptureComposer` already established for Quick Jot after the panel and the sheet drifted apart.
 
-Four behaviours are the design, and `QuickLogTests` pins each one:
+Five behaviours are the design, and `QuickLogTests` pins the state transitions:
 
 1. **The clock starts before anything is named.** Requiring a name first is the friction the whole
    arrangement exists to remove — the same reason the tracker card has two states rather than two
    modes.
-2. **Pressing the keys twice starts one timer.** A global shortcut is pressed by reflex, and often
-   twice.
-3. **A timer already running is adopted, not switched away from.** Pressing a shortcut is not a
-   decision to end the work you are in the middle of. The header reads *Already timing* rather than
-   *Timing now*, because a window that took credit for a clock it did not start would be lying about
-   what the press did.
-4. **Closing is not stopping.** Escape and Done both write the name typed so far onto the entry and
+2. **Repeating the keys while the panel is open preserves the draft.** The existing panel comes
+   forward without re-reading the last committed description over text still being typed.
+3. **A timer already running is preserved while the user decides.** The panel shows the current
+   timer's name and filing read-only, then asks whether to keep timing or stop and start new. Opening
+   the panel alone changes nothing.
+4. **Replacement is explicit and lossless.** *Stop & Start New* records the current timer with its
+   description, subject, project, people, tags, and billable state intact before starting a blank
+   timer.
+5. **Closing is not stopping.** Escape and Done both write the name typed so far onto the entry and
    leave the clock running; the menu bar goes on showing it. Stop and Discard are labelled buttons.
    Discard exists because a shortcut hit by accident otherwise leaves a stray entry to be hunted down
    later, which is a worse tax than the mistake was.

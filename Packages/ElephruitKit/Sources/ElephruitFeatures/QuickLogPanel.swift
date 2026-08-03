@@ -1,6 +1,18 @@
 import AppKit
 import ElephruitCore
+import ElephruitModel
+import ElephruitPersistence
 import SwiftUI
+
+/// What Quick Log is asking the user to do.
+///
+/// An existing timer is a decision boundary, not an editing surface. Keeping that state explicit
+/// prevents the shortcut from silently turning "start something new" into "rename what is already
+/// running", and gives the view a stable state to render while the current timer remains untouched.
+public enum QuickLogPresentation: Sendable, Equatable {
+    case editing
+    case confirmReplacement
+}
 
 /// The floating window that starts a timer from wherever you are.
 ///
@@ -14,8 +26,8 @@ import SwiftUI
 final class QuickLogPanel: NSPanel {
     init(content: NSView) {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 220),
-            styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 260),
+            styleMask: [.titled, .closable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -37,16 +49,45 @@ final class QuickLogPanel: NSPanel {
     /// A panel is not key by default, and a name field that cannot be typed into is not naming.
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    /// Makes the description the typing destination whenever an editable Quick Log is raised.
+    ///
+    /// The SwiftUI focus state handles ordinary transitions, but the panel itself is retained when
+    /// hidden and its represented AppKit field may materialise a run-loop turn after the hosting
+    /// view. The explicit responder handoff is what guarantees the first keystroke lands in the
+    /// description on both the first opening and every reopening.
+    func focusDescription() {
+        contentView?.layoutSubtreeIfNeeded()
+        if focusDescriptionIfPresent() { return }
+
+        DispatchQueue.main.async { [weak self] in
+            _ = self?.focusDescriptionIfPresent()
+        }
+    }
+
+    @discardableResult
+    private func focusDescriptionIfPresent() -> Bool {
+        guard let editor = contentView?.quickLogDescendant(of: CaptureNotesTextView.self) else {
+            return false
+        }
+        return makeFirstResponder(editor)
+    }
+}
+
+private extension NSView {
+    func quickLogDescendant<View: NSView>(of type: View.Type) -> View? {
+        if let match = self as? View { return match }
+        return subviews.lazy.compactMap { $0.quickLogDescendant(of: type) }.first
+    }
 }
 
 /// Owns the one panel, the name being typed into it, and where focus goes when it closes.
 ///
 /// ### The promise this makes, which is the whole feature
-/// Pressing the shortcut **starts the clock first and asks afterwards**. Everything the panel offers
-/// — what the time is against, which project it is billed to, who was there, how it is tagged — is
-/// filled in while the seconds are already accumulating, and every one of them writes straight to
-/// the entry that is running. Nothing about this panel is a form that has to be completed before
-/// work can be measured, because a tracker you have to compose is a tracker nobody starts.
+/// With nothing running, pressing the shortcut **starts the clock first and asks afterwards**.
+/// Everything the panel offers — what the time is against, which project it is billed to, who was
+/// there, how it is tagged — is filled in while the seconds are already accumulating. When work is
+/// already being timed, the panel preserves that entry and asks before stopping and replacing it.
 ///
 /// That is not a new rule invented here. It is exactly what the Start button in the Time module
 /// does, and this is the same button reachable from a spreadsheet, a video call, or a terminal.
@@ -69,11 +110,13 @@ public final class QuickLogController {
 
     public private(set) var isVisible = false
 
+    /// Whether the panel is naming a timer it just started or asking about one already in progress.
+    public private(set) var presentation: QuickLogPresentation = .editing
+
     /// Whether the timer on screen is one this panel started.
     ///
-    /// The panel adopts a timer that was already going rather than switching away from it — pressing
-    /// a shortcut is not a decision to end the work you are in the middle of — and this is how the
-    /// window says which of the two happened instead of implying it started something it did not.
+    /// A timer the panel started is editable immediately; a timer already in progress first produces
+    /// a replacement confirmation. This flag lets the editable state describe its origin accurately.
     public private(set) var startedTheTimer = false
 
     private var panel: QuickLogPanel?
@@ -102,12 +145,23 @@ public final class QuickLogController {
     /// Returns whether a timer was started, so a caller that wants to say so can.
     @discardableResult
     public func show() -> Bool {
+        // Repeating the shortcut while the panel is already open means "bring this forward", not
+        // "reconsider the timer beneath it". In particular, do not replace an unfinished name in
+        // the field with the last value committed to the store.
+        if isVisible, let panel {
+            panel.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            if presentation == .editing { panel.focusDescription() }
+            return false
+        }
+
         let started = startTimerIfIdle()
 
         if let panel {
             panel.makeKeyAndOrderFront(nil)
             isVisible = true
             NSApp.activate()
+            if presentation == .editing { panel.focusDescription() }
             return started
         }
 
@@ -118,15 +172,6 @@ public final class QuickLogController {
         )
         hosting.sizingOptions = [.preferredContentSize]
 
-        // A `.titled` window has a title bar whether or not one is drawn, and AppKit reports a
-        // 32-point top safe-area inset for it even with the bar hidden, transparent, and the content
-        // told to fill the frame. SwiftUI honours that, so everything in the panel sat a title bar's
-        // height below where this file says it does. Nothing is clipped here — the window is roomier
-        // than its contents — but the panel was hanging low in its own window for no reason anybody
-        // reading the layout could have seen. See ``MiniTimerController``, where the same inset cost
-        // the collapsed timer its bottom edge.
-        hosting.safeAreaRegions = []
-
         let panel = QuickLogPanel(content: hosting)
         panel.center()
         self.panel = panel
@@ -136,6 +181,7 @@ public final class QuickLogController {
         // the first keystroke can be swallowed — which on a field somebody is typing a name into as
         // fast as they can think of one is the difference between working and infuriating.
         NSApp.activate()
+        if presentation == .editing { panel.focusDescription() }
         isVisible = true
         return started
     }
@@ -148,6 +194,7 @@ public final class QuickLogController {
     public func startTimerIfIdle() -> Bool {
         guard services.timer.running == nil else {
             startedTheTimer = false
+            presentation = .confirmReplacement
             syncFromRunning()
             return false
         }
@@ -156,19 +203,49 @@ public final class QuickLogController {
         // and a fresh sitting begins with a clock at zero. Nothing is running, so nothing is stopped.
         services.timer.switchTo(item: nil)
         startedTheTimer = services.timer.running != nil
+        presentation = .editing
         description = ""
         return startedTheTimer
     }
 
-    /// Fills the name from whatever is running, so an adopted timer arrives with the name it already
-    /// has rather than with whatever was last typed here.
+    /// Stops the timer the confirmation described and begins a blank replacement.
+    ///
+    /// `switchTo` is one repository operation: it closes the current entry with its description,
+    /// subject, project, people, tags and billable flag intact, then creates the new running entry.
+    /// Nothing is cleared until that transition succeeds.
+    @discardableResult
+    public func replaceRunningTimer() -> Bool {
+        guard services.timer.running != nil else { return startTimerIfIdle() }
+
+        guard services.timer.switchTo(item: nil), services.timer.running != nil else { return false }
+        startedTheTimer = true
+        presentation = .editing
+        description = ""
+
+        // The button began in the confirmation hierarchy. Let SwiftUI replace that hierarchy with
+        // the editor before asking AppKit for its first responder; `focusDescription()` supplies one
+        // further retry if the represented text view materialises on the following turn.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.presentation == .editing else { return }
+            self.panel?.focusDescription()
+        }
+        return true
+    }
+
+    /// Fills the name from whatever is running, so replacement confirmation describes the current
+    /// work rather than whatever was last typed here.
     public func syncFromRunning() {
         description = services.timer.running?.entryDescription ?? ""
     }
 
     /// Writes the name down and closes, leaving the clock running.
     public func hide() {
-        commitDescription()
+        // The confirmation state is read-only. In particular, a `#` that was already part of the
+        // saved description must not suddenly become filing merely because the shortcut was pressed
+        // and Keep Timing was chosen.
+        if presentation == .editing {
+            commitDescription()
+        }
         panel?.orderOut(nil)
         isVisible = false
         restoreFocus()
@@ -202,7 +279,40 @@ public final class QuickLogController {
     /// for one sentence — but an exit that did not write would be a name typed and thrown away.
     public func commitDescription() {
         guard services.timer.running != nil else { return }
-        services.timer.setDescription(description)
+
+        let vocabulary = (try? services.capture.vocabulary()) ?? .empty
+        let parsed = CaptureParser.parse(description, knowing: vocabulary)
+        services.timer.setDescription(parsed.title)
+
+        if !parsed.tagSlugs.isEmpty, let running = services.timer.running {
+            services.timer.setTags(orderedUnion(running.tagSlugs, parsed.tagSlugs))
+        }
+
+        if let projectHint = parsed.projectHint,
+           let project = try? services.capture.resolveContainer(named: projectHint) {
+            services.timer.setProject(project)
+        }
+
+        if !parsed.personHints.isEmpty, let running = services.timer.running {
+            let existing = running.people.compactMap { try? services.items.item(id: $0.id) }
+            let mentioned = parsed.personHints.compactMap {
+                try? services.persons.resolveOrCreatePlaceholder(named: $0)
+            }
+            let people = (existing + mentioned).reduce(into: [Item]()) { result, person in
+                guard !result.contains(where: { $0.id == person.id }) else { return }
+                result.append(person)
+            }
+            services.timer.setPeople(people)
+        }
+
+        description = parsed.title
+    }
+
+    private func orderedUnion(_ existing: [String], _ additions: [String]) -> [String] {
+        additions.reduce(into: existing) { result, value in
+            guard !result.contains(value) else { return }
+            result.append(value)
+        }
     }
 
     /// Hands activation back to whatever had it, without touching that process.

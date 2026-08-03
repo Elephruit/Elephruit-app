@@ -143,6 +143,8 @@ public enum AccessibilityID {
         public static let quickLogStop = "time.quickLog.stop"
         public static let quickLogDone = "time.quickLog.done"
         public static let quickLogStart = "time.quickLog.start"
+        public static let quickLogKeep = "time.quickLog.keep"
+        public static let quickLogReplace = "time.quickLog.replace"
 
         // The app, collapsed to the clock.
         public static let miniTimer = "time.mini"

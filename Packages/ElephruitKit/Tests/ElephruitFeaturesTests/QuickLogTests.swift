@@ -1,6 +1,7 @@
 import ElephruitCore
 import ElephruitFeatures
 import ElephruitModel
+import ElephruitPersistence
 import Foundation
 import Testing
 
@@ -29,31 +30,73 @@ struct QuickLogControllerTests {
         #expect(controller.description.isEmpty)
     }
 
-    /// A global shortcut is pressed by reflex, and often twice. Producing a fresh untitled entry each
-    /// time would fill a log with rubbish faster than anybody could delete it.
-    @Test("Pressing it again does not start a second timer")
-    func askingTwiceStartsOnce() throws {
+    /// An existing timer is not silently adopted or replaced. The current entry remains exactly as
+    /// it was until the user answers the replacement question.
+    @Test("An existing timer is preserved while replacement is confirmed")
+    func existingTimerWaitsForConfirmation() throws {
         let (controller, services) = makeController()
 
-        #expect(controller.startTimerIfIdle())
+        services.timer.switchTo(
+            item: nil,
+            description: "Reviewing the lease",
+            tagSlugs: ["legal", "review"],
+            isBillable: true
+        )
         let first = try #require(services.timer.running?.id)
 
         #expect(controller.startTimerIfIdle() == false)
         #expect(services.timer.running?.id == first)
+        #expect(services.timer.running?.entryDescription == "Reviewing the lease")
+        #expect(services.timer.running?.tagSlugs == ["legal", "review"])
+        #expect(services.timer.running?.isBillable == true)
+        #expect(controller.presentation == .confirmReplacement)
+        #expect(controller.description == "Reviewing the lease")
     }
 
-    /// Pressing a shortcut is not a decision to end the work you are in the middle of. The panel
-    /// arrives over what is already running, carrying the name it already has.
-    @Test("A timer already running is adopted, not switched away from")
-    func adoptsWhatIsRunning() throws {
+    @Test("Keeping an existing timer does not reinterpret its description")
+    func keepingExistingTimerIsReadOnly() {
         let (controller, services) = makeController()
-        services.timer.switchTo(item: nil, description: "Reviewing the lease")
+        services.timer.switchTo(item: nil, description: "Reviewing #section 4")
+        controller.startTimerIfIdle()
+
+        controller.hide()
+
+        #expect(services.timer.running?.entryDescription == "Reviewing #section 4")
+        #expect(services.timer.running?.tagSlugs.isEmpty == true)
+    }
+
+    /// Once confirmed, replacement is an explicit switch: the old entry is recorded with its
+    /// details and a fresh untitled timer begins.
+    @Test("Confirming replacement records the old timer and starts a blank one")
+    func replacesWhatIsRunning() throws {
+        let (controller, services) = makeController()
+        services.timer.switchTo(
+            item: nil,
+            description: "Reviewing the lease",
+            tagSlugs: ["legal"],
+            isBillable: true
+        )
         let existing = try #require(services.timer.running?.id)
 
         #expect(controller.startTimerIfIdle() == false)
         #expect(controller.startedTheTimer == false)
         #expect(services.timer.running?.id == existing)
         #expect(controller.description == "Reviewing the lease")
+
+        #expect(controller.replaceRunningTimer())
+        #expect(controller.presentation == .editing)
+        #expect(controller.startedTheTimer)
+        #expect(controller.description.isEmpty)
+        #expect(services.timer.running?.id != existing)
+        #expect(services.timer.running?.entryDescription.isEmpty == true)
+
+        let oldEntry = try #require(
+            try services.timeEntries.recentEntries(limit: 5).first { $0.id == existing }
+        )
+        #expect(oldEntry.entryDescription == "Reviewing the lease")
+        #expect(oldEntry.tagSlugs == ["legal"])
+        #expect(oldEntry.isBillable)
+        #expect(oldEntry.endedAt != nil)
     }
 
     /// The sentence in the footer, as a test. Dismissing the panel is a statement about a window, not
@@ -69,6 +112,24 @@ struct QuickLogControllerTests {
         #expect(services.timer.running != nil)
         #expect(services.timer.running?.entryDescription == "Drafting the quarterly note")
         #expect(controller.isVisible == false)
+    }
+
+    @Test("Inline filing grammar names and files the running timer")
+    func inlineFilingGrammar() throws {
+        let (controller, services) = makeController()
+        let project = try services.items.create(ItemDraft(kind: .project, title: "Website"))
+        let person = try services.items.create(ItemDraft(kind: .person, title: "Maya Chen"))
+        controller.startTimerIfIdle()
+        controller.description = "Review copy #launch >Website @Maya Chen"
+
+        controller.commitDescription()
+
+        let running = try #require(services.timer.running)
+        #expect(running.entryDescription == "Review copy")
+        #expect(running.tagSlugs == ["launch"])
+        #expect(running.projectID == project.id)
+        #expect(running.people.map(\.id) == [person.id])
+        #expect(controller.description == "Review copy")
     }
 
     @Test("Stopping keeps both the time and the name")
