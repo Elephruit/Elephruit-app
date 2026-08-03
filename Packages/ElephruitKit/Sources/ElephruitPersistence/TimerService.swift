@@ -238,9 +238,13 @@ public final class TimerService {
 
     public var isRunning: Bool { running != nil }
 
-    /// The elapsed time as a clock face.
+    /// The elapsed time in the same hours-and-minutes notation used by saved entries.
+    ///
+    /// A stopwatch-style `9:09` means nine minutes and nine seconds, while the saved entry's
+    /// `0:09` means zero hours and nine minutes. Using one notation throughout keeps stopping a
+    /// timer from appearing to change what the number means.
     public var elapsedDisplay: String {
-        TimeFormatting.stopwatch(elapsed)
+        TimeFormatting.short(elapsed)
     }
 
     // MARK: - Commands

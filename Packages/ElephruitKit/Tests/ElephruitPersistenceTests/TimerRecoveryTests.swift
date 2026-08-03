@@ -82,6 +82,7 @@ struct TimerRecoveryTests {
         #expect(service.isRunning)
         #expect(service.running?.id == crashed.entryID)
         #expect(service.elapsed == 3 * 3_600 + 1_800, "The closed-app interval counts as elapsed time")
+        #expect(service.elapsedDisplay == "3:30", "Running and saved entries use the same h:mm notation")
         #expect(service.pendingRecovery == nil, "Continuing a timer does not require a recovery choice")
     }
 
