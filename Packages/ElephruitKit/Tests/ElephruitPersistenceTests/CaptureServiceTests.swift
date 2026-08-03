@@ -36,7 +36,7 @@ struct CaptureServiceTests {
 
         let item = try #require(try service.capture(text: "- Send the invoice #urgent !tomorrow"))
 
-        #expect(item.kind == .task)
+        #expect(item.kind == .reminder)
         #expect(item.title == "Send the invoice")
         #expect(item.tagSlugs == ["urgent"])
         #expect(item.dueAt == fixture.dateProvider.startOfDay(daysFromToday: 1))

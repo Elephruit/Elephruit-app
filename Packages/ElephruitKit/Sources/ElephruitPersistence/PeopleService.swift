@@ -129,7 +129,7 @@ public final class PeopleService {
 
     /// Records one interaction and every action the user captured alongside it.
     ///
-    /// Every next step becomes an ordinary open task linked to each attendee. Returning every
+    /// Every next step becomes an ordinary open reminder linked to each attendee. Returning every
     /// created item lets the feature announce each change to the index without duplicating this
     /// persistence policy in multiple views. The second list remains in the API so drafts saved by
     /// an older build migrate without losing their contents.
@@ -194,7 +194,7 @@ public final class PeopleService {
         }
 
         // Older callers may still send the second legacy action list. It now creates the same
-        // ordinary linked tasks as every other next step; no new "promise" subtype is introduced.
+        // ordinary linked reminders as every other next step; no new "promise" subtype is introduced.
         for title in commitments {
             let task = try items.create(ItemDraft(kind: .reminder, title: title))
             for attendee in attendees { try items.link(task, to: attendee, kind: .mentions) }

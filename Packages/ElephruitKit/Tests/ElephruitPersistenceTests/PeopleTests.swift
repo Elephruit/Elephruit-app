@@ -210,7 +210,7 @@ struct InteractionTests {
         #expect(fixture.people.context(for: ana).daysSinceLastContact(using: fixture.clock) == 3)
     }
 
-    @Test("Logging an interaction turns every next step into a task")
+    @Test("Logging an interaction turns every next step into a reminder")
     func interactionBundleCreatesTasks() throws {
         let fixture = try PeopleFixture()
         let ana = try fixture.makePerson("Ana")
@@ -229,10 +229,10 @@ struct InteractionTests {
         #expect(interaction.body == "Talked about the launch")
         #expect(interaction.tagSlugs.contains("interaction/phone"))
 
-        let tasks = created.filter { $0.kind == .task }
-        #expect(tasks.count == 2)
-        #expect(tasks.allSatisfy { $0.status == .open })
-        #expect(tasks.allSatisfy { !$0.tagSlugs.contains("promise") })
+        let reminders = created.filter { $0.kind == .reminder }
+        #expect(reminders.count == 2)
+        #expect(reminders.allSatisfy { $0.status == .open })
+        #expect(reminders.allSatisfy { !$0.tagSlugs.contains("promise") })
         #expect(fixture.people.context(for: ana).openItemIDs.count == 2)
     }
 

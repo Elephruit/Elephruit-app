@@ -251,8 +251,8 @@ struct CalendarJourneyTests {
                 "…and the cached title keeps it readable")
     }
 
-    @Test("A follow-up lands in Tasks and is never a calendar event")
-    func followUpsGoToTasks() async throws {
+    @Test("A follow-up lands in Reminders and is never a calendar event")
+    func followUpsGoToReminders() async throws {
         let services = try Self.services()
         await services.calendar.enable()
         await services.calendar.load(range: Self.week)
@@ -268,14 +268,14 @@ struct CalendarJourneyTests {
 
         await services.calendar.load(range: Self.week)
 
-        #expect(task.kind == .task)
+        #expect(task.kind == .reminder)
         #expect(services.calendar.events.count == before, """
             A calendar that lists its own follow-ups is a to-do list with dates, which is a different \
             and worse product
             """)
 
         var query = ItemQuery()
-        query.kinds = [.task]
+        query.kinds = [.reminder]
         #expect(try services.items.items(matching: query).contains { $0.id == task.id })
     }
 

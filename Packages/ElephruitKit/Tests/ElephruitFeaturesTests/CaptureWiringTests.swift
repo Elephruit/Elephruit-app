@@ -49,7 +49,7 @@ struct CaptureWiringTests {
 
         let item = try #require(try services.captureText("- Call the framer #errand !tomorrow"))
 
-        #expect(item.kind == .task)
+        #expect(item.kind == .reminder)
         #expect(item.dueAt != nil)
         #expect(item.tags.contains { $0.slug == "errand" })
     }

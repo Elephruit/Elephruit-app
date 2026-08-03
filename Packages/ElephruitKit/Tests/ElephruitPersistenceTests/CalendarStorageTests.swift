@@ -422,7 +422,7 @@ struct EventAnnotationTests {
         #expect(split.preparation.isEmpty && split.debrief.isEmpty)
     }
 
-    @Test("A follow-up is a task, and it is linked to the meeting")
+    @Test("A follow-up is a reminder, and it is linked to the meeting")
     func followUps() throws {
         let fixture = try StoreFixture()
         let service = makeService(fixture)
@@ -437,7 +437,7 @@ struct EventAnnotationTests {
             aboutPeople: [person]
         )
 
-        #expect(task.kind == .task)
+        #expect(task.kind == .reminder)
         #expect(task.status == .open)
         #expect(task.dueAt != nil)
 
