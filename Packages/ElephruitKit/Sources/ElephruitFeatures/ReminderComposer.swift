@@ -328,11 +328,11 @@ struct ReminderComposer: View {
                             placeholder: "Add a checklist item",
                             role: .body,
                             onTab: { reverse in
-                                if !reverse { draft.commitPendingStep() }
+                                if !reverse { commitChecklistRow() }
                                 move(from: .checklist, reverse: reverse)
                             },
                             onReturn: {
-                                draft.commitPendingStep()
+                                commitChecklistRow()
                                 activate(.checklist)
                             },
                             onCommandReturn: commitAndClose,
@@ -1287,7 +1287,7 @@ struct ReminderComposer: View {
         case .people:
             peopleQuery = ""
         case .checklist:
-            draft.commitPendingStep()
+            commitChecklistRow()
         case .deadline:
             deadlineQuery = ""
         case .project:
@@ -1295,6 +1295,15 @@ struct ReminderComposer: View {
         case .title, .notes:
             break
         }
+    }
+
+    /// Commits both sides of the AppKit/SwiftUI checklist editor transaction. The draft clears its
+    /// pending value when it appends a row, but the live first-responder text view does not accept
+    /// that external update while it is still editing. Clear it explicitly so the next row starts
+    /// empty even when Return keeps focus in the same field.
+    private func commitChecklistRow() {
+        draft.commitPendingStep()
+        focusRouter.replaceText("", caret: 0, for: .checklist)
     }
 
     private func fieldHasPopup(_ field: ReminderComposerField) -> Bool {

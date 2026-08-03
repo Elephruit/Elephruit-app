@@ -122,6 +122,39 @@ struct ReminderComposerStateTests {
         #expect(draft.pendingStep.isEmpty)
     }
 
+    @Test("Committing a checklist row clears the live editor before the next row")
+    @MainActor
+    func committedChecklistEditorStartsBlank() {
+        var draft = ReminderComposerDraft()
+        draft.pendingStep = "First row"
+        let router = ReminderComposerFocusRouter()
+        let editor = ReminderPlainTextEditor(
+            text: Binding(get: { draft.pendingStep }, set: { draft.pendingStep = $0 }),
+            placeholder: "Add a checklist item",
+            role: .body,
+            onTab: { _ in },
+            onReturn: {},
+            onCommandReturn: {},
+            onEscape: {},
+            field: .checklist,
+            focusRouter: router
+        )
+        let coordinator = editor.makeCoordinator()
+        let textView = ReminderEditorTextView()
+        textView.coordinator = coordinator
+        textView.string = draft.pendingStep
+        router.register(textView, for: .checklist)
+
+        draft.commitPendingStep()
+        router.replaceText("", caret: 0, for: .checklist)
+
+        #expect(draft.checklist.map(\.title) == ["First row"])
+        #expect(draft.pendingStep.isEmpty)
+        #expect(textView.string.isEmpty)
+        #expect(coordinator.lastEditorText.isEmpty)
+        #expect(textView.selectedRange().location == 0)
+    }
+
     @Test("The AppKit editor consumes Tab and reports its direction")
     @MainActor
     func editorTabTraversal() throws {
