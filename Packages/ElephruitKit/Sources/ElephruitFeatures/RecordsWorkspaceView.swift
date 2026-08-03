@@ -329,7 +329,6 @@ struct NewRecordEditor: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.section) {
-                    introduction
                     typeChooser
                     identityCard
                     detailsCard
@@ -337,7 +336,7 @@ struct NewRecordEditor: View {
                 }
                 .frame(maxWidth: 820, alignment: .leading)
                 .padding(.horizontal, Theme.Spacing.section)
-                .padding(.vertical, 36)
+                .padding(.vertical, Theme.Spacing.section)
                 .frame(maxWidth: .infinity, alignment: .top)
             }
         }
@@ -375,17 +374,6 @@ struct NewRecordEditor: View {
         .frame(height: 68)
     }
 
-    private var introduction: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-            Text("What are you keeping track of?")
-                .font(.system(.title, weight: .semibold))
-            Text("Start with the essentials. You can add history, relationships, shared work, and richer details after creating the record.")
-                .font(Theme.Text.editorBody)
-                .foregroundStyle(Theme.Colors.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
     private var typeChooser: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
             Text("Record type")
@@ -404,17 +392,17 @@ struct NewRecordEditor: View {
         return Button {
             type = candidate
         } label: {
-            VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            HStack(spacing: Theme.Spacing.small) {
                 Image(systemName: candidate.symbolName)
-                    .font(.system(.title2, weight: .medium))
+                    .font(.system(.body, weight: .medium))
                     .foregroundStyle(selected ? Theme.Colors.onAccent : Theme.Colors.secondaryText)
 
                 Text(candidate.displayName)
                     .font(Theme.Text.rowTitleEmphasised)
                     .foregroundStyle(selected ? Theme.Colors.onAccent : Theme.Colors.primaryText)
             }
-            .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
-            .padding(Theme.Spacing.large)
+            .frame(maxWidth: .infinity, minHeight: 42, alignment: .center)
+            .padding(.horizontal, Theme.Spacing.medium)
             .background(selected ? Theme.Colors.selection : Theme.Colors.subtleFill)
             .clipShape(.rect(cornerRadius: Theme.Radius.large))
             .overlay {
