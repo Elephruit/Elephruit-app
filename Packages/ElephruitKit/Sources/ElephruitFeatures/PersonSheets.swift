@@ -92,7 +92,7 @@ struct ContactActionConfirmationSheet: View {
         }
         .padding(Theme.Spacing.section)
         .frame(width: 380)
-        .accessibilityIdentifier(AccessibilityID.People.contactConfirmation)
+        .accessibilityIdentifier(AccessibilityID.Records.contactConfirmation)
         .onAppear {
             // Preselect only when the app has a defensible basis for it: one candidate, or one the
             // user marked preferred. Two unmarked numbers means no default and a deliberate choice.
@@ -451,7 +451,7 @@ struct AddFactSheet: View {
         }
         .frame(width: 620, height: 650)
         .background(Theme.Colors.windowBackground)
-        .accessibilityIdentifier(AccessibilityID.People.addFactSheet)
+        .accessibilityIdentifier(AccessibilityID.Records.addFactSheet)
         .onAppear {
             observedOn = services?.dateProvider.now ?? Date()
             isValueFocused = true
@@ -540,7 +540,7 @@ struct CorrectFactSheet: View {
         }
         .padding(Theme.Spacing.section)
         .frame(width: 420)
-        .accessibilityIdentifier(AccessibilityID.People.correctFactSheet)
+        .accessibilityIdentifier(AccessibilityID.Records.correctFactSheet)
         .onAppear { isFocused = true }
     }
 }
@@ -689,7 +689,7 @@ struct AddRelationshipSheet: View {
         }
         .padding(Theme.Spacing.section)
         .frame(width: 440)
-        .accessibilityIdentifier(AccessibilityID.People.addRelationshipSheet)
+        .accessibilityIdentifier(AccessibilityID.Records.addRelationshipSheet)
         .onAppear { isNameFocused = true }
     }
 

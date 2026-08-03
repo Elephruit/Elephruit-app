@@ -73,9 +73,17 @@ public protocol ItemRepository: AnyObject {
     @discardableResult
     func create(_ draft: ItemDraft) throws(AppError) -> Item
 
+    /// Stages a simple imported item in the current context without saving it yet.
+    /// The caller owns the surrounding batch transaction.
+    @discardableResult
+    func stageCreate(_ draft: ItemDraft) throws(AppError) -> Item
+
     /// Applies a mutation, then validates, refreshes derived values, and saves as one
     /// unit. Nothing else is a sanctioned way to change an item.
     func update(_ item: Item, _ mutate: (Item) throws -> Void) throws(AppError)
+
+    /// Applies and validates an imported mutation without saving the surrounding batch.
+    func stageUpdate(_ item: Item, _ mutate: (Item) throws -> Void) throws(AppError)
 
     /// Writes synchronisation bookkeeping without touching ``Item/updatedAt``.
     ///
@@ -197,9 +205,18 @@ public final class SwiftDataItemRepository: ItemRepository {
 
     @discardableResult
     public func create(_ draft: ItemDraft) throws(AppError) -> Item {
+        try create(draft, stagingImport: false)
+    }
+
+    @discardableResult
+    public func stageCreate(_ draft: ItemDraft) throws(AppError) -> Item {
+        try create(draft, stagingImport: true)
+    }
+
+    private func create(_ draft: ItemDraft, stagingImport: Bool) throws(AppError) -> Item {
         // Uniqueness is enforced here rather than by a store constraint, because CloudKit
         // mirroring forbids unique attributes.
-        if try item(id: draft.id) != nil {
+        if !stagingImport, try item(id: draft.id) != nil {
             throw .duplicateIdentifier(id: draft.id)
         }
 
@@ -214,7 +231,9 @@ public final class SwiftDataItemRepository: ItemRepository {
             status: draft.kind.supportsStatus ? .open : .none,
             priority: draft.priority,
             source: draft.source,
-            sortOrder: try nextSortOrder(parentID: draft.parentID)
+            // Contact imports are shown alphabetically and have no parent, so ordering them all at
+            // zero avoids a max-order fetch for every staged person.
+            sortOrder: stagingImport ? 0 : try nextSortOrder(parentID: draft.parentID)
         )
 
         if let url = draft.url {
@@ -252,13 +271,13 @@ public final class SwiftDataItemRepository: ItemRepository {
             throw error
         }
 
-        try reconcileWikiLinks(for: item)
+        if !stagingImport { try reconcileWikiLinks(for: item) }
 
         if item.kind.isWorkItem, item.status == .open {
             rearmCompletionSuggestion(above: item)
         }
 
-        try save()
+        if !stagingImport { try save() }
 
         Diagnostics.persistence.debug("Created item kind=\(draft.kind.rawValue, privacy: .public)")
         return item
@@ -274,11 +293,25 @@ public final class SwiftDataItemRepository: ItemRepository {
     /// restore point below a validation failure would poison the object and make the user's
     /// next valid edit fail too. Covered by `itemRecoversAfterRejectedEdit`.
     public func update(_ item: Item, _ mutate: (Item) throws -> Void) throws(AppError) {
+        try update(item, stagingImport: false, mutate)
+    }
+
+    public func stageUpdate(_ item: Item, _ mutate: (Item) throws -> Void) throws(AppError) {
+        try update(item, stagingImport: true, mutate)
+    }
+
+    private func update(
+        _ item: Item,
+        stagingImport: Bool,
+        _ mutate: (Item) throws -> Void
+    ) throws(AppError) {
         let restorePoint = ItemRestorePoint(item)
 
         func abort(with error: AppError) -> AppError {
             restorePoint.restore(onto: item)
-            context.rollback()
+            // A staged contact import can share the context with already-valid staged people. A
+            // rejected row restores only itself; rolling back here would discard the whole batch.
+            if !stagingImport { context.rollback() }
             return error
         }
 
@@ -304,8 +337,8 @@ public final class SwiftDataItemRepository: ItemRepository {
         Self.syncNameParts(of: item)
         item.refreshSearchText()
 
-        try reconcileWikiLinks(for: item)
-        try save()
+        if !stagingImport { try reconcileWikiLinks(for: item) }
+        if !stagingImport { try save() }
     }
 
     /// Sync bookkeeping, saved without restamping the item.

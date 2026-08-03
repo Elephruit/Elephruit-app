@@ -18,11 +18,13 @@ public struct ContactOnboardingView: View {
     @Environment(\.dismiss) private var dismiss
 
     let navigation: NavigationModel
+    let completionSelection: SidebarSelection
 
     @State private var model: ContactImportModel?
 
-    public init(navigation: NavigationModel) {
+    public init(navigation: NavigationModel, completionSelection: SidebarSelection = .records(.unsorted)) {
         self.navigation = navigation
+        self.completionSelection = completionSelection
     }
 
     public var body: some View {
@@ -34,7 +36,7 @@ public struct ContactOnboardingView: View {
             }
         }
         .frame(width: 640, height: 560)
-        .accessibilityIdentifier(AccessibilityID.People.contactOnboarding)
+        .accessibilityIdentifier(AccessibilityID.Records.contactOnboarding)
         .task {
             guard model == nil, let services else { return }
             let created = ContactImportModel(services: services)
@@ -96,7 +98,7 @@ public struct ContactOnboardingView: View {
 
         case .importing(let progress):
             ContactWaitingView(
-                headline: "Adding people",
+                headline: "Adding contact records",
                 message: "You can stop at any time. Everything already added is kept.",
                 progress: progress,
                 onCancel: { model.cancel() }
@@ -107,7 +109,7 @@ public struct ContactOnboardingView: View {
                 report: report,
                 onReviewAgain: { model.reviewAgain() },
                 onDone: {
-                    navigation.select(.people(.all))
+                    navigation.select(completionSelection)
                     dismiss()
                 }
             )
@@ -116,7 +118,7 @@ public struct ContactOnboardingView: View {
             ContactAccessRefusedView(
                 title: "Contacts access was turned off",
                 message: """
-                    Everyone already in People is kept, along with everything you recorded about \
+                    Everyone already in Records is kept, along with everything you recorded about \
                     them. Linked details can no longer refresh until access is restored.
                     """,
                 showsSettingsButton: true,
@@ -148,12 +150,12 @@ struct ContactExplanationView: View {
                     .font(.system(size: 34))
                     .foregroundStyle(Theme.Colors.selection)
 
-                Text("Start from the people you already know")
+                Text("Start from the contacts you already know")
                     .font(Theme.Text.title)
 
                 Text("""
                     Elephruit can use the contacts already on this Mac — from iCloud, Google, \
-                    Exchange, or On My Mac — as the starting point for your People. You will see \
+                    Exchange, or On My Mac — as the starting point for your Records. You will see \
                     exactly what it proposes before anything is added.
                     """)
                     .font(Theme.Text.rowSubtitle)
@@ -162,12 +164,12 @@ struct ContactExplanationView: View {
             }
 
             VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-                promise(
+                factRow(
                     "lock.shield",
                     "Everything stays on this Mac",
                     "Contacts are read locally. Elephruit has no network access at all, so nothing can be uploaded."
                 )
-                promise(
+                factRow(
                     "arrow.left.arrow.right.circle",
                     "Your notes never go back into Contacts",
                     """
@@ -175,12 +177,12 @@ struct ContactExplanationView: View {
                     provenance stay in Elephruit. Your address book never sees them.
                     """
                 )
-                promise(
+                factRow(
                     "pencil.slash",
                     "Your contacts are never changed",
                     "Elephruit only reads. It has no code that could modify a contact, and it never will without you asking."
                 )
-                promise(
+                factRow(
                     "checkmark.shield",
                     "Turning access off later keeps your work",
                     "Everything you record here is yours and stays here, whatever happens to the permission."
@@ -206,10 +208,10 @@ struct ContactExplanationView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(Theme.Spacing.section)
-        .accessibilityIdentifier(AccessibilityID.People.contactExplanation)
+        .accessibilityIdentifier(AccessibilityID.Records.contactExplanation)
     }
 
-    private func promise(_ symbol: String, _ title: String, _ detail: String) -> some View {
+    private func factRow(_ symbol: String, _ title: String, _ detail: String) -> some View {
         HStack(alignment: .top, spacing: Theme.Spacing.medium) {
             Image(systemName: symbol)
                 .font(.system(size: 15))
@@ -308,7 +310,7 @@ struct ContactAccessRefusedView: View {
                 .frame(maxWidth: 400)
 
             Label(
-                "People still works. You can add people by hand, and everything already here is kept.",
+                "Records still works. You can add records by hand, and everything already here is kept.",
                 systemImage: "info.circle"
             )
             .font(Theme.Text.metadata)
@@ -329,7 +331,7 @@ struct ContactAccessRefusedView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(Theme.Spacing.section)
-        .accessibilityIdentifier(AccessibilityID.People.contactAccessRefused)
+        .accessibilityIdentifier(AccessibilityID.Records.contactAccessRefused)
     }
 }
 
@@ -430,7 +432,7 @@ struct ContactImportFinishedView: View {
                     Button("Review again", action: onReviewAgain)
                         .help("Nothing already added will be added twice")
                 }
-                Button("Go to People", action: onDone)
+                Button("Go to Records", action: onDone)
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
             }
@@ -440,7 +442,7 @@ struct ContactImportFinishedView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(Theme.Spacing.section)
-        .accessibilityIdentifier(AccessibilityID.People.contactImportFinished)
+        .accessibilityIdentifier(AccessibilityID.Records.contactImportFinished)
     }
 }
 

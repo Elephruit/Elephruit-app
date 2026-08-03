@@ -311,10 +311,10 @@ struct ModuleSidebarContentTests {
     /// The two modules whose navigation is not made of registry rows.
     ///
     /// Tasks draws `TaskSystemView`, which is a type of its own precisely so that "what does Anytime
-    /// mean" has one answer; People draws `PeopleScope`, for the same reason. Neither belongs in a
+    /// mean" has one answer; People draws `RecordsScope`, for the same reason. Neither belongs in a
     /// registry of fixed destinations, and forcing them in would be duplicating a vocabulary to
     /// satisfy a test.
-    static let modulesWithTheirOwnVocabulary: Set<AppModule> = [.tasks, .people]
+    static let modulesWithTheirOwnVocabulary: Set<AppModule> = [.tasks, .records]
 
     @Test("Every module draws something, and only its own rows")
     func everyModuleDrawsSomething() {
@@ -335,7 +335,7 @@ struct ModuleSidebarContentTests {
         // The two exceptions still have somewhere to open on, which is the property that actually
         // matters and the one an empty sidebar would break.
         #expect(AppModule.tasks.defaultSelection == .taskView(.today))
-        #expect(AppModule.people.defaultSelection == .people(.all))
+        #expect(AppModule.records.defaultSelection == .records(.all))
     }
 
     @Test("No destination is drawn by two modules")
@@ -361,7 +361,7 @@ struct ModuleSidebarContentTests {
             guard let first = SidebarRegistry.destinations(in: module).first else { continue }
 
             // Tasks and People are the deliberate exceptions — their sidebars are made of
-            // `TaskSystemView` and `PeopleScope`, not registry rows.
+            // `TaskSystemView` and `RecordsScope`, not registry rows.
             if Self.modulesWithTheirOwnVocabulary.contains(module) { continue }
             #expect(
                 first.selection == module.defaultSelection,

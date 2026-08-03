@@ -67,14 +67,14 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
     case goInbox
     case goNotes
     case goProjects
-    case goPeople
+    case goRecords = "goPeople"
     case toggleSidebar
     case toggleInspectorAlternate
     case focusMode
     case clearSelection
     case toggleTimer
     case quickLog
-    case peopleCommandBar
+    case recordsCommandBar = "peopleCommandBar"
     case quickTaskEntry
     case goTasks
     case completeTask
@@ -103,14 +103,14 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .goInbox: "Go to Inbox"
         case .goNotes: "Go to Notes"
         case .goProjects: "Go to Projects"
-        case .goPeople: "Go to People"
+        case .goRecords: "Go to Records"
         case .toggleSidebar: "Toggle Sidebar"
         case .toggleInspectorAlternate: "Toggle Inspector"
         case .focusMode: "Focus Mode"
         case .clearSelection: "Clear Selection"
         case .toggleTimer: "Start or Stop Timer"
         case .quickLog: "Quick Log"
-        case .peopleCommandBar: "People Command Bar"
+        case .recordsCommandBar: "Records Command Bar"
         case .goCalendar: "Go to Calendar"
         case .newEvent: "New Event"
         case .searchCalendar: "Search Calendar"
@@ -154,7 +154,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         // one, which is a worse trade than a free key.
         case .goNotes: KeyBinding("3")
         case .goProjects: KeyBinding("4")
-        case .goPeople: KeyBinding("5")
+        case .goRecords: KeyBinding("5")
         case .toggleSidebar: KeyBinding("s", [.command, .control])
         case .toggleInspectorAlternate: KeyBinding("i", [.command, .option])
         case .focusMode: KeyBinding("f", [.command, .option])
@@ -174,7 +174,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         // about people". Every binding still has exactly one owner — `ShortcutRegistryTests` proves
         // it over `allCases`, so a collision introduced here fails a test rather than silently
         // shadowing the palette.
-        case .peopleCommandBar: KeyBinding("k", [.command, .shift])
+        case .recordsCommandBar: KeyBinding("k", [.command, .shift])
 
         // ⌘6, continuing the numeric run that already reaches People at ⌘5.
         case .goCalendar: KeyBinding("6")

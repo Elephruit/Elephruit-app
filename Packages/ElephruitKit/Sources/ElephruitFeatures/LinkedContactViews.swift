@@ -35,7 +35,7 @@ struct LinkedContactSection: View {
             }
         }
         .padding(.horizontal, Theme.Spacing.large)
-        .accessibilityIdentifier(AccessibilityID.People.linkedContactSection)
+        .accessibilityIdentifier(AccessibilityID.Records.linkedContactSection)
         .task(id: person.id) { reload() }
         .sheet(isPresented: $isRelinking) {
             RelinkContactSheet(person: person) { didLink in

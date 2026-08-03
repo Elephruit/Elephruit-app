@@ -20,7 +20,7 @@ import SwiftUI
 /// A line the parser cannot claim *does* become a search — that is the honest fallback, and it means
 /// the bar is never a dead end. What it must never do is guess: an unknown name produces an offer to
 /// create that person, never a call to the closest match.
-struct PeopleCommandBarView: View {
+struct RecordsCommandBarView: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
 
@@ -65,7 +65,7 @@ struct PeopleCommandBarView: View {
         }
         .frame(width: 620)
         .background(.regularMaterial)
-        .accessibilityIdentifier(AccessibilityID.People.commandBar)
+        .accessibilityIdentifier(AccessibilityID.Records.commandBar)
         .sheet(item: $pendingConfirmation) { pending in
             CommandConfirmationSheet(pending: pending) { confirmed in
                 pendingConfirmation = nil
@@ -91,7 +91,7 @@ struct PeopleCommandBarView: View {
                 // Escape has to reach the sheet even though the field owns the keyboard, which is
                 // the whole reason this sits on the field and not on the container around it.
                 .onExitCommand { dismiss() }
-                .accessibilityIdentifier(AccessibilityID.People.commandField)
+                .accessibilityIdentifier(AccessibilityID.Records.commandField)
                 .accessibilityLabel("Command bar")
                 .accessibilityValue(parsed?.summary ?? "")
 
@@ -179,7 +179,7 @@ struct PeopleCommandBarView: View {
                 .font(Theme.Text.metadata)
                 .foregroundStyle(Theme.Colors.secondaryText)
                 .keyboardShortcut(.cancelAction)
-                .accessibilityIdentifier("people.commandBar.close")
+                .accessibilityIdentifier("records.commandBar.close")
 
             KeyHint("esc")
         }
@@ -527,7 +527,7 @@ struct CommandPreview: View {
             }
         }
         .padding(Theme.Spacing.medium)
-        .accessibilityIdentifier(AccessibilityID.People.commandPreview)
+        .accessibilityIdentifier(AccessibilityID.Records.commandPreview)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(command.summary)
     }
@@ -573,7 +573,7 @@ struct CommandConfirmationSheet: View {
         }
         .padding(Theme.Spacing.section)
         .frame(width: 460)
-        .accessibilityIdentifier(AccessibilityID.People.groupActionPreview)
+        .accessibilityIdentifier(AccessibilityID.Records.groupActionPreview)
     }
 
     private var groupPreview: GroupActionPreview? {

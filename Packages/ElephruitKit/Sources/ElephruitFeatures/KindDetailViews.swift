@@ -263,11 +263,11 @@ struct PersonDetailView: View {
                 Button("Record a conversation") { isRecordingInteraction = true }
                     .buttonStyle(.borderless)
                     .controlSize(.small)
-                    .accessibilityIdentifier(AccessibilityID.People.recordInteraction)
+                    .accessibilityIdentifier(AccessibilityID.Records.recordInteraction)
             }
             .padding(.horizontal, Theme.Spacing.large)
             .accessibilityElement(children: .contain)
-            .accessibilityIdentifier(AccessibilityID.People.relationshipSummary)
+            .accessibilityIdentifier(AccessibilityID.Records.relationshipSummary)
             .sheet(isPresented: $isRecordingInteraction) {
                 LogInteractionSheet(
                     person: item,

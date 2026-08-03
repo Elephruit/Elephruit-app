@@ -61,7 +61,7 @@ struct ModuleNavigationTests {
         // `module(for:)`.
         #expect(
             AppModule.displayOrder == [
-                .calendar, .reminders, .tasks, .people, .notes, .time,
+                .calendar, .reminders, .tasks, .records, .notes, .time,
                 .areas, .bookmarks, .archive, .trash,
             ]
         )
@@ -122,8 +122,8 @@ struct ModuleNavigationTests {
     func selectingDerivesTheModule() {
         let navigation = NavigationModel()
 
-        navigation.select(.people(.celebrations))
-        #expect(navigation.activeModule == .people)
+        navigation.select(.records(.celebrations))
+        #expect(navigation.activeModule == .records)
 
         // A deep link into the calendar, which is what an intent or a menu bar click produces.
         navigation.select(.calendar)
@@ -159,15 +159,15 @@ struct ModuleNavigationTests {
     @Test("Leaving a module returns to a real main view")
     func leavingReturnsToToday() {
         let navigation = NavigationModel()
-        navigation.enterModule(.people)
-        navigation.select(.people(.favorites))
+        navigation.enterModule(.records)
+        navigation.select(.records(.favorites))
         navigation.leaveModule()
 
         #expect(navigation.activeModule == nil)
         #expect(navigation.selection == .today)
         navigation.goBack()
-        #expect(navigation.activeModule == .people)
-        #expect(navigation.selection == .people(.favorites))
+        #expect(navigation.activeModule == .records)
+        #expect(navigation.selection == .records(.favorites))
     }
 
     @Test("Re-entering a module resumes where it was left")
@@ -176,8 +176,8 @@ struct ModuleNavigationTests {
         navigation.enterModule(.tasks)
         navigation.select(.taskView(.someday))
 
-        navigation.enterModule(.people)
-        #expect(navigation.selection == .people(.all))
+        navigation.enterModule(.records)
+        #expect(navigation.selection == .records(.all))
 
         navigation.enterModule(.tasks)
         #expect(navigation.selection == .taskView(.someday), "Tasks resumed rather than restarting")
@@ -236,10 +236,10 @@ struct ModuleNavigationTests {
         navigation.select(.kind(.note))
         #expect(flushes == 1)
 
-        navigation.enterModule(.people)
+        navigation.enterModule(.records)
         #expect(flushes == 2, "Switching module must not be the one navigation that loses a draft")
 
-        navigation.select(.people(.favorites))
+        navigation.select(.records(.favorites))
         #expect(flushes == 3)
     }
 
@@ -275,8 +275,8 @@ struct ModuleNavigationTests {
     @Test("A window comes back in the module and the destination it was left in")
     func restorationRoundTrips() {
         let navigation = NavigationModel()
-        navigation.enterModule(.people)
-        navigation.select(.people(.needsFollowUp))
+        navigation.enterModule(.records)
+        navigation.select(.records(.needsFollowUp))
 
         let encoded = navigation.restorationState.encoded
         #expect(encoded != nil)
@@ -284,8 +284,8 @@ struct ModuleNavigationTests {
         let restored = NavigationModel()
         restored.restore(NavigationModel.RestorationState(encoded: encoded ?? "") ?? .init(module: nil, selection: .today))
 
-        #expect(restored.activeModule == .people)
-        #expect(restored.selection == .people(.needsFollowUp))
+        #expect(restored.activeModule == .records)
+        #expect(restored.selection == .records(.needsFollowUp))
     }
 
     @Test("A restored tag comes back inside the module it was being read in")
@@ -309,8 +309,8 @@ struct ModuleNavigationTests {
         let navigation = NavigationModel()
         navigation.enterModule(.tasks)
         navigation.select(.taskView(.flagged))
-        navigation.enterModule(.people)
-        navigation.select(.people(.favorites))
+        navigation.enterModule(.records)
+        navigation.select(.records(.favorites))
 
         let restored = NavigationModel()
         restored.restore(navigation.restorationState)

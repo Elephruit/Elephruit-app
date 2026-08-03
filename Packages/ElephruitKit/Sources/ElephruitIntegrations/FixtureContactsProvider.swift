@@ -194,6 +194,34 @@ public actor FixtureContactsProvider: ContactsProviding {
 
     // MARK: - Writing
 
+    public func create(_ contact: ContactCreate) async -> ContactCreateOutcome {
+        guard currentAuthorization == .authorized else { return .notPermitted }
+
+        let container = containers.first { !$0.isReadOnly }
+        let created = SystemContact(
+            id: UUID().uuidString,
+            givenName: contact.givenName,
+            middleName: contact.middleName,
+            familyName: contact.familyName,
+            namePrefix: contact.namePrefix,
+            nameSuffix: contact.nameSuffix,
+            nickname: contact.nickname,
+            organizationName: contact.organizationName,
+            departmentName: contact.departmentName,
+            jobTitle: contact.jobTitle,
+            emailAddresses: contact.emailAddresses,
+            phoneNumbers: contact.phoneNumbers,
+            urlAddresses: contact.urlAddresses,
+            containerIdentifier: container?.id,
+            containerName: container?.name
+        )
+        contacts.append(created)
+        version += 1
+        history[version] = ContactChangeSet(changedIdentifiers: [created.id])
+        announceChange()
+        return .created(created)
+    }
+
     /// Applies a write to the synthetic store, with the same refusals the real one makes.
     ///
     /// Faithful about the refusals in particular: a fixture that always succeeds would let the

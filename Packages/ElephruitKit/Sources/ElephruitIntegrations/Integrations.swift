@@ -332,6 +332,9 @@ public protocol ContactsProviding: Sendable {
 
     // MARK: Writing
 
+    /// Creates a new contact from a person record after the user explicitly asks for it.
+    func create(_ contact: ContactCreate) async -> ContactCreateOutcome
+
     /// Writes an edit back into the system address book.
     ///
     /// ### The one write in the app, and what it is fenced with
@@ -358,6 +361,64 @@ public protocol ContactsProviding: Sendable {
     /// Returns what happened, rather than throwing: every outcome here is something the user needs
     /// telling about in ordinary words, and none of them is exceptional.
     func write(_ change: ContactWrite) async -> ContactWriteOutcome
+}
+
+/// The structured subset of a person record that can become a new Apple contact.
+public struct ContactCreate: Sendable, Hashable {
+    public var givenName: String
+    public var middleName: String
+    public var familyName: String
+    public var namePrefix: String
+    public var nameSuffix: String
+    public var nickname: String
+    public var jobTitle: String
+    public var departmentName: String
+    public var organizationName: String
+    public var emailAddresses: [ContactLabelledValue]
+    public var phoneNumbers: [ContactLabelledValue]
+    public var urlAddresses: [ContactLabelledValue]
+
+    public init(
+        givenName: String = "",
+        middleName: String = "",
+        familyName: String = "",
+        namePrefix: String = "",
+        nameSuffix: String = "",
+        nickname: String = "",
+        jobTitle: String = "",
+        departmentName: String = "",
+        organizationName: String = "",
+        emailAddresses: [ContactLabelledValue] = [],
+        phoneNumbers: [ContactLabelledValue] = [],
+        urlAddresses: [ContactLabelledValue] = []
+    ) {
+        self.givenName = givenName
+        self.middleName = middleName
+        self.familyName = familyName
+        self.namePrefix = namePrefix
+        self.nameSuffix = nameSuffix
+        self.nickname = nickname
+        self.jobTitle = jobTitle
+        self.departmentName = departmentName
+        self.organizationName = organizationName
+        self.emailAddresses = emailAddresses
+        self.phoneNumbers = phoneNumbers
+        self.urlAddresses = urlAddresses
+    }
+}
+
+public enum ContactCreateOutcome: Sendable, Hashable {
+    case created(SystemContact)
+    case notPermitted
+    case failed(String)
+
+    public var explanation: String? {
+        switch self {
+        case .created: nil
+        case .notPermitted: "Elephruit does not have permission to add this person to Apple Contacts."
+        case .failed(let reason): "Apple Contacts could not add this person: \(reason)"
+        }
+    }
 }
 
 /// An edit destined for a system contact.
@@ -523,6 +584,7 @@ public struct NoContactsProvider: ContactsProviding {
 
     /// Nothing is configured, so nothing was written. Reported as the refusal it is rather than as a
     /// success, because a caller told "written" would stop showing the user their unsaved change.
+    public func create(_ contact: ContactCreate) async -> ContactCreateOutcome { .notPermitted }
     public func write(_ change: ContactWrite) async -> ContactWriteOutcome { .notPermitted }
 }
 

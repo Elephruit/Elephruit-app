@@ -44,7 +44,7 @@ struct PersonContactSection: View {
                 .buttonStyle(.borderless)
                 .font(Theme.Text.metadata)
                 .help("Edit these details")
-                .accessibilityIdentifier(AccessibilityID.People.editContactDetails)
+                .accessibilityIdentifier(AccessibilityID.Records.editContactDetails)
             }
 
             if groups.isEmpty {
@@ -98,7 +98,7 @@ struct PersonContactSection: View {
         }
         .padding(.horizontal, Theme.Spacing.large)
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(AccessibilityID.People.contactDetails)
+        .accessibilityIdentifier(AccessibilityID.Records.contactDetails)
     }
 
     private var details: [ContactDetail] {

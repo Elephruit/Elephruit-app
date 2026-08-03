@@ -54,7 +54,7 @@ struct DuplicatesView: View {
                 }
             }
         }
-        .accessibilityIdentifier(AccessibilityID.People.duplicates)
+        .accessibilityIdentifier(AccessibilityID.Records.duplicates)
         .task { reload() }
         .sheet(item: $pendingPlan) { plan in
             MergeConfirmationSheet(plan: plan) { confirmed in
@@ -225,7 +225,7 @@ public struct ContactsSettingsSection: View {
                 }
             }
         }
-        .accessibilityIdentifier(AccessibilityID.People.contactsSettings)
+        .accessibilityIdentifier(AccessibilityID.Records.contactsSettings)
         .task {
             guard coordinator == nil, let services else { return }
             let created = ContactRefreshCoordinator(services: services)

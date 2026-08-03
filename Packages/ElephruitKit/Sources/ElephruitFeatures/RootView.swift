@@ -137,11 +137,8 @@ public struct RootView: View {
         .sheet(isPresented: commandPaletteBinding) {
             CommandPaletteView(navigation: navigation, commands: paletteCommands)
         }
-        .sheet(isPresented: peopleCommandBarBinding) {
-            PeopleCommandBarView(navigation: navigation)
-        }
-        .sheet(isPresented: newPersonBinding) {
-            NewPersonSheet(navigation: navigation)
+        .sheet(isPresented: recordsCommandBarBinding) {
+            RecordsCommandBarView(navigation: navigation)
         }
         // The sheet the sidebar's "All Tags…" button always promised. The flag existed and was
         // set; nothing observed it, so the button was the one control in the app that did nothing.
@@ -461,7 +458,11 @@ public struct RootView: View {
     /// without moving or resizing the fixed sibling at the window's leading edge.
     @ViewBuilder
     private var contentPanes: some View {
-        HStack(spacing: 0) {
+        if case .records(let scope) = navigation.selection {
+            RecordsWorkspaceView(navigation: navigation, scope: scope)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            HStack(spacing: 0) {
             if navigation.layoutMode.showsList || shellWidths.detail == nil {
                 primaryPane
                     .frame(width: shellWidths.detail == nil ? nil : shellWidths.primary)
@@ -483,8 +484,9 @@ public struct RootView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -506,19 +508,6 @@ public struct RootView: View {
             CalendarWorkspaceView(navigation: navigation)
         } else if navigation.selection == .today {
             TodayView(navigation: navigation)
-        } else if case .people(let scope) = navigation.selection {
-            if PeoplePerformanceIsolation.usesIsolatedList {
-                IsolatedPeopleListView()
-            } else {
-                switch scope {
-                case .celebrations:
-                    CelebrationsView(navigation: navigation)
-                case .duplicates:
-                    DuplicatesView(navigation: navigation)
-                default:
-                    PeopleListView(navigation: navigation, scope: scope)
-                }
-            }
         } else {
             ItemListView(navigation: navigation)
         }
@@ -684,14 +673,15 @@ public struct RootView: View {
                 navigation.select(.calendar)
                 navigation.isCalendarSearchVisible = true
             },
-            PaletteCommand(id: "new-person", title: "New Person…", category: .create, symbolName: "person.badge.plus") {
-                navigation.isNewPersonVisible = true
+            PaletteCommand(id: "new-record", title: "New Record…", category: .create, symbolName: "plus.square.on.square") {
+                navigation.select(.records(.all))
+                navigation.isNewRecordVisible = true
             },
-            PaletteCommand(id: "people-bar", title: "People Command Bar", category: .navigate, symbolName: "person.text.rectangle") {
-                navigation.isPeopleCommandBarVisible = true
+            PaletteCommand(id: "records-bar", title: "Records Command Bar", category: .navigate, symbolName: "person.text.rectangle") {
+                navigation.isRecordsCommandBarVisible = true
             },
             PaletteCommand(id: "go-celebrations", title: "Go to Celebrations", category: .navigate, symbolName: "birthday.cake") {
-                navigation.select(.people(.celebrations))
+                navigation.select(.records(.celebrations))
             },
             PaletteCommand(id: "toggle-inspector", title: "Toggle Inspector", category: .view, symbolName: "sidebar.trailing", command: .toggleInspectorAlternate, in: registry) {
                 navigation.isInspectorVisible.toggle()
@@ -783,17 +773,10 @@ public struct RootView: View {
         Binding(get: { navigation.isTagBrowserVisible }, set: { navigation.isTagBrowserVisible = $0 })
     }
 
-    private var peopleCommandBarBinding: Binding<Bool> {
+    private var recordsCommandBarBinding: Binding<Bool> {
         Binding(
-            get: { navigation.isPeopleCommandBarVisible },
-            set: { navigation.isPeopleCommandBarVisible = $0 }
-        )
-    }
-
-    private var newPersonBinding: Binding<Bool> {
-        Binding(
-            get: { navigation.isNewPersonVisible },
-            set: { navigation.isNewPersonVisible = $0 }
+            get: { navigation.isRecordsCommandBarVisible },
+            set: { navigation.isRecordsCommandBarVisible = $0 }
         )
     }
 

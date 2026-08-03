@@ -213,9 +213,9 @@ struct SidebarRegistryTests {
         }
     }
 
-    @Test("Every People scope explains the rule that decides who appears in it")
-    func everyPeopleScopeHasAHint() {
-        let scopes: [PeopleScope] = [
+    @Test("Every Records scope explains its inclusion rule")
+    func everyRecordsScopeHasAHint() {
+        let scopes: [RecordsScope] = [
             .all, .recentlyViewed, .favorites, .celebrations, .needsFollowUp,
             .group(id: UUID()), .duplicates, .fromContacts,
         ]

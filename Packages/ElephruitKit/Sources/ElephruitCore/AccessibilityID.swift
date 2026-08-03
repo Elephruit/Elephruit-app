@@ -192,63 +192,63 @@ public enum AccessibilityID {
         public static func row(id: String) -> String { "attachments.row.\(id)" }
     }
 
-    public enum People {
-        public static let relationshipSummary = "people.summary"
-        public static let recordInteraction = "people.recordInteraction"
-        public static let interactionSheet = "people.interactionSheet"
+    public enum Records {
+        public static let relationshipSummary = "records.summary"
+        public static let recordInteraction = "records.recordInteraction"
+        public static let interactionSheet = "records.interactionSheet"
 
         // The workspace.
-        public static let workspace = "people.workspace"
-        public static let header = "people.header"
-        public static let quickActions = "people.quickActions"
-        public static let contactDetails = "people.contactDetails"
-        public static let editContactDetails = "people.editContactDetails"
-        public static let contactEditor = "people.contactEditor"
-        public static let contactWriteBackSheet = "people.contactWriteBackSheet"
-        public static let timeline = "people.timeline"
-        public static let contextSidebar = "people.contextSidebar"
-        public static let list = "people.list"
-        public static let sortMenu = "people.sortMenu"
+        public static let workspace = "records.workspace"
+        public static let header = "records.header"
+        public static let quickActions = "records.quickActions"
+        public static let contactDetails = "records.contactDetails"
+        public static let editContactDetails = "records.editContactDetails"
+        public static let contactEditor = "records.contactEditor"
+        public static let contactWriteBackSheet = "records.contactWriteBackSheet"
+        public static let timeline = "records.timeline"
+        public static let contextSidebar = "records.contextSidebar"
+        public static let list = "records.list"
+        public static let sortMenu = "records.sortMenu"
 
         // Facts.
-        public static let addFact = "people.addFact"
-        public static let addFactSheet = "people.addFactSheet"
-        public static let correctFactSheet = "people.correctFactSheet"
-        public static let staleFacts = "people.staleFacts"
+        public static let addFact = "records.addFact"
+        public static let addFactSheet = "records.addFactSheet"
+        public static let correctFactSheet = "records.correctFactSheet"
+        public static let staleFacts = "records.staleFacts"
 
         // Relationships.
-        public static let charts = "people.charts"
-        public static let chartSheet = "people.chartSheet"
-        public static let addRelationshipSheet = "people.addRelationshipSheet"
+        public static let charts = "records.charts"
+        public static let chartSheet = "records.chartSheet"
+        public static let addRelationshipSheet = "records.addRelationshipSheet"
 
         // Actions.
-        public static let contactConfirmation = "people.contactConfirmation"
-        public static let meetingBrief = "people.meetingBrief"
-        public static let groupActionPreview = "people.groupActionPreview"
+        public static let contactConfirmation = "records.contactConfirmation"
+        public static let meetingBrief = "records.meetingBrief"
+        public static let groupActionPreview = "records.groupActionPreview"
 
         // Adding somebody by hand.
-        public static let newPersonSheet = "people.newPersonSheet"
+        public static let newPersonSheet = "records.newPersonSheet"
 
         // The command bar.
-        public static let commandBar = "people.commandBar"
-        public static let commandField = "people.commandField"
-        public static let commandPreview = "people.commandPreview"
+        public static let commandBar = "records.commandBar"
+        public static let commandField = "records.commandField"
+        public static let commandPreview = "records.commandPreview"
 
         // Other destinations.
-        public static let celebrations = "people.celebrations"
-        public static let myCard = "people.myCard"
-        public static let cardScan = "people.cardScan"
-        public static let contactsSettings = "people.contactsSettings"
-        public static let duplicates = "people.duplicates"
+        public static let celebrations = "records.celebrations"
+        public static let myCard = "records.myCard"
+        public static let cardScan = "records.cardScan"
+        public static let contactsSettings = "records.contactsSettings"
+        public static let duplicates = "records.duplicates"
 
         // Bringing the address book in.
-        public static let contactOnboarding = "people.contactOnboarding"
-        public static let contactExplanation = "people.contactExplanation"
-        public static let contactAccessRefused = "people.contactAccessRefused"
-        public static let contactReview = "people.contactReview"
-        public static let contactDuplicate = "people.contactDuplicate"
-        public static let contactImportFinished = "people.contactImportFinished"
-        public static let linkedContactSection = "people.linkedContact"
+        public static let contactOnboarding = "records.contactOnboarding"
+        public static let contactExplanation = "records.contactExplanation"
+        public static let contactAccessRefused = "records.contactAccessRefused"
+        public static let contactReview = "records.contactReview"
+        public static let contactDuplicate = "records.contactDuplicate"
+        public static let contactImportFinished = "records.contactImportFinished"
+        public static let linkedContactSection = "records.linkedContact"
     }
 
     /// The day, whole. Replaces the identifiers Home and Upcoming used between them.

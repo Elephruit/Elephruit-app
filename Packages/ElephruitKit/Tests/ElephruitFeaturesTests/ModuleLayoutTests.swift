@@ -30,9 +30,9 @@ struct ModuleLayoutTests {
     @Test("A wide People pane does not follow the user into the calendar")
     func peopleWidthDoesNotLeakIntoCalendar() {
         let layout = store()
-        layout.setWidth(760, of: .detail, in: .people, available: wideWindow)
+        layout.setWidth(760, of: .detail, in: .records, available: wideWindow)
 
-        #expect(layout.width(of: .detail, in: .people, available: wideWindow) == 760)
+        #expect(layout.width(of: .detail, in: .records, available: wideWindow) == 760)
         #expect(
             layout.width(of: .detail, in: .calendar, available: wideWindow) == 0,
             "the calendar has no detail column to inherit one"
@@ -52,9 +52,9 @@ struct ModuleLayoutTests {
     @Test("People keeps the widest detail pane in the app")
     func peopleIsTheWidest() {
         let layout = store()
-        let people = layout.width(of: .detail, in: .people, available: wideWindow)
+        let people = layout.width(of: .detail, in: .records, available: wideWindow)
 
-        for module in AppModule.allCases where module != .people && module != .notes {
+        for module in AppModule.allCases where module != .records && module != .notes {
             let other = layout.width(of: .detail, in: module, available: wideWindow)
             #expect(people >= other, "\(module) claims more room than a person's profile")
         }
@@ -63,22 +63,22 @@ struct ModuleLayoutTests {
     @Test("The contact list has its own width, separate from the profile")
     func contactListIsSizedSeparately() {
         let layout = store()
-        layout.setWidth(760, of: .detail, in: .people, available: wideWindow)
+        layout.setWidth(760, of: .detail, in: .records, available: wideWindow)
 
         #expect(
-            layout.width(of: .primary, in: .people, available: wideWindow)
-                == AppModule.people.shellLayout.primary.ideal,
+            layout.width(of: .primary, in: .records, available: wideWindow)
+                == AppModule.records.shellLayout.primary.ideal,
             "widening the profile moved the contact list"
         )
     }
 
     @Test("The contact list stays compact beside the profile")
     func contactListStaysCompact() {
-        let bounds = AppModule.people.shellLayout.primary
+        let bounds = AppModule.records.shellLayout.primary
 
         #expect(bounds.ideal == 280)
         #expect(bounds.maximum == 340)
-        #expect(bounds.ideal < AppModule.people.shellLayout.detail.width.ideal)
+        #expect(bounds.ideal < AppModule.records.shellLayout.detail.width.ideal)
     }
 
     /// The complaint this answers: AppKit restores its remembered divider a beat after the window
@@ -87,7 +87,7 @@ struct ModuleLayoutTests {
     /// exceeds this ceiling; a column with no declared maximum must never be "corrected".
     @Test("The ceiling a laid-out column is checked against is the declared maximum")
     func declaredCeilingMatchesThePolicy() {
-        let people = AppModule.people.shellLayout
+        let people = AppModule.records.shellLayout
 
         #expect(people.declaredCeiling(of: .primary) == 340)
         // The profile is unbounded on purpose — no laid-out width of it is ever a violation.
@@ -101,7 +101,7 @@ struct ModuleLayoutTests {
     /// pane on the far right took a permanent slice of both.
     @Test("A person's profile is the column that takes the spare width")
     func theProfileIsTheFlexibleColumn() {
-        let layout = AppModule.people.shellLayout
+        let layout = AppModule.records.shellLayout
 
         // No ceiling, which is what makes it the column the shell settles last and hands the
         // remainder to. Every other column in the module is firmly bounded.
@@ -125,7 +125,7 @@ struct ModuleLayoutTests {
 
     @Test("The inspector does not open itself every time a name is clicked")
     func theInspectorIsContextual() {
-        let inspector = AppModule.people.shellLayout.inspector
+        let inspector = AppModule.records.shellLayout.inspector
 
         // It hides when nothing is selected *and* declines to reappear on the next selection. Both
         // are needed: `hidesWhenNothingSelected` alone made every click reopen a pane the user had
@@ -161,11 +161,11 @@ struct ModuleLayoutTests {
     @Test("Switching back and forth changes nothing")
     func repeatedSwitchingIsStable() {
         let layout = store()
-        layout.setWidth(700, of: .detail, in: .people, available: wideWindow)
+        layout.setWidth(700, of: .detail, in: .records, available: wideWindow)
         layout.setWidth(500, of: .detail, in: .notes, available: wideWindow)
 
         for _ in 0..<20 {
-            #expect(layout.width(of: .detail, in: .people, available: wideWindow) == 700)
+            #expect(layout.width(of: .detail, in: .records, available: wideWindow) == 700)
             #expect(layout.width(of: .detail, in: .calendar, available: wideWindow) == 0)
             #expect(layout.width(of: .detail, in: .notes, available: wideWindow) == 500)
             // Tasks joined the canvases when the card replaced its detail column, so it answers 0
@@ -181,21 +181,21 @@ struct ModuleLayoutTests {
     @Test("A width restored from a larger window is clamped to this one")
     func restoredWidthIsClampedToTheWindow() {
         let layout = store()
-        layout.setWidth(900, of: .detail, in: .people, available: 3200)
+        layout.setWidth(900, of: .detail, in: .records, available: 3200)
 
-        let onALaptop = layout.width(of: .detail, in: .people, available: 1280)
+        let onALaptop = layout.width(of: .detail, in: .records, available: 1280)
         #expect(onALaptop <= 1280)
-        #expect(onALaptop >= AppModule.people.shellLayout.detail.width.minimum)
+        #expect(onALaptop >= AppModule.records.shellLayout.detail.width.minimum)
     }
 
     /// Clamping happens on the way out, so the original request survives a visit to a small window.
     @Test("A clamped width is not forgotten")
     func clampingIsNotDestructive() {
         let layout = store()
-        layout.setWidth(800, of: .detail, in: .people, available: 3200)
-        _ = layout.width(of: .detail, in: .people, available: 900)
+        layout.setWidth(800, of: .detail, in: .records, available: 3200)
+        _ = layout.width(of: .detail, in: .records, available: 900)
 
-        #expect(layout.width(of: .detail, in: .people, available: 3200) == 800)
+        #expect(layout.width(of: .detail, in: .records, available: 3200) == 800)
     }
 
     @Test("A width outside the module's own range is brought back inside it")
@@ -212,9 +212,9 @@ struct ModuleLayoutTests {
     @Test("A pane never resolves below its minimum, even in a window that cannot hold it")
     func minimumWins() {
         let layout = store()
-        let minimum = AppModule.people.shellLayout.detail.width.minimum
+        let minimum = AppModule.records.shellLayout.detail.width.minimum
 
-        #expect(layout.width(of: .detail, in: .people, available: 200) == minimum)
+        #expect(layout.width(of: .detail, in: .records, available: 200) == minimum)
     }
 
     // MARK: - Persistence
@@ -226,11 +226,11 @@ struct ModuleLayoutTests {
         defer { defaults.removeSuite(named: suite) }
 
         let first = ModuleLayoutStore(defaults: defaults)
-        first.setWidth(700, of: .detail, in: .people, available: wideWindow)
+        first.setWidth(700, of: .detail, in: .records, available: wideWindow)
         first.setWidth(420, of: .detail, in: .notes, available: wideWindow)
 
         let afterRelaunch = ModuleLayoutStore(defaults: defaults)
-        #expect(afterRelaunch.width(of: .detail, in: .people, available: wideWindow) == 700)
+        #expect(afterRelaunch.width(of: .detail, in: .records, available: wideWindow) == 700)
         #expect(afterRelaunch.width(of: .detail, in: .notes, available: wideWindow) == 420)
     }
 
@@ -252,7 +252,7 @@ struct ModuleLayoutTests {
         )
 
         let loaded = ModuleLayoutStore(defaults: defaults)
-        #expect(loaded.width(of: .detail, in: .people, available: wideWindow) == 640)
+        #expect(loaded.width(of: .detail, in: .records, available: wideWindow) == 640)
         #expect(
             loaded.width(of: .detail, in: .notes, available: wideWindow)
                 == AppModule.notes.shellLayout.detail.width.ideal
@@ -286,13 +286,13 @@ struct ModuleLayoutTests {
     /// state lives, and collapsing it would make the window jump every time the list was cleared.
     @Test("The person pane stays when nothing is selected")
     func peopleDetailStaysWhenEmpty() {
-        let policy = AppModule.people.shellLayout.detail
+        let policy = AppModule.records.shellLayout.detail
         #expect(policy.isVisible(userWants: true, hasSelection: false, windowWidth: wideWindow))
     }
 
     @Test("A narrow window drops the pane and a wide one brings it back")
     func narrowWindowsDropTheInspector() {
-        let policy = AppModule.people.shellLayout.inspector
+        let policy = AppModule.records.shellLayout.inspector
         let threshold = policy.compactWindowWidth
 
         #expect(!policy.isVisible(userWants: true, hasSelection: true, windowWidth: threshold - 1))
@@ -302,7 +302,7 @@ struct ModuleLayoutTests {
     @Test("Closing a pane is not undone by the next selection")
     func aClosedPaneStaysClosed() {
         // People's context sidebar does not hide itself when empty, so nothing should reopen it.
-        #expect(!AppModule.people.shellLayout.detail.shouldOpenAfterSelection())
+        #expect(!AppModule.records.shellLayout.detail.shouldOpenAfterSelection())
         // The calendar's does, so selecting an event should bring it back.
         #expect(AppModule.calendar.shellLayout.inspector.shouldOpenAfterSelection())
     }
@@ -319,7 +319,7 @@ struct ModuleLayoutTests {
 
     @Test("A window too narrow for every column drops them from the trailing edge inwards")
     func columnsAreDroppedInPriorityOrder() {
-        let layout = AppModule.people.shellLayout
+        let layout = AppModule.records.shellLayout
         let sidebar = Theme.Size.sidebarIdealWidth
 
         #expect(layout.columns(fittingWindowOfWidth: 1800, sidebarWidth: sidebar).count == 4)
@@ -666,8 +666,8 @@ struct PersistedWidthHealingTests {
 
         let layout = ModuleLayoutStore(defaults: store)
 
-        #expect(layout.width(of: .detail, in: .people, available: 2000) == 800)
-        #expect(layout.width(of: .detail, in: .people, available: 500) == 500)
+        #expect(layout.width(of: .detail, in: .records, available: 2000) == 800)
+        #expect(layout.width(of: .detail, in: .records, available: 500) == 500)
     }
 }
 
@@ -845,7 +845,7 @@ struct ShellFitTests {
     /// dropping a column is the shell's answer to that, not squeezing one below its minimum.
     @Test("Room never falls below the column's own minimum")
     func roomNeverGoesBelowTheMinimum() {
-        let layout = AppModule.people.shellLayout
+        let layout = AppModule.records.shellLayout
 
         let room = layout.room(
             for: .detail,
@@ -1023,7 +1023,7 @@ struct WindowSizeSweepTests {
     /// reach a ceiling above the detail pane's own ideal. That is the same shape of problem, in
     /// modules outside this pass; changing their declared widths is a decision about Tasks, not a
     /// consequence of a decision about People, so it is reported rather than made here.
-    private static let contentFirstModules: [AppModule] = [.calendar, .time, .people]
+    private static let contentFirstModules: [AppModule] = [.calendar, .time, .records]
 
     @Test("No module in this pass leaves its main content the narrowest column")
     func mainContentIsNeverTheNarrowest() {
@@ -1098,7 +1098,7 @@ struct WindowSizeSweepTests {
     /// The complaint, at the size it was reported at and at the two either side.
     @Test("People gives the profile the room at every size")
     func peopleProportionsHold() {
-        let layout = AppModule.people.shellLayout
+        let layout = AppModule.records.shellLayout
 
         for window in Self.windows {
             let result = layout.widths(
@@ -1124,7 +1124,7 @@ struct WindowSizeSweepTests {
     /// in margins rather than in a contact row eighteen hundred points wide.
     @Test("The profile column grows without the profile itself stretching")
     func theProfileCapsItsOwnMeasure() {
-        let layout = AppModule.people.shellLayout
+        let layout = AppModule.records.shellLayout
         let ultrawide = layout.widths(
             windowWidth: 2_560,
             sidebarWidth: sidebar,
