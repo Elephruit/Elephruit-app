@@ -65,7 +65,7 @@ struct RecordsWorkspaceView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
                 HStack {
                     VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                        Text(scope.title).font(Theme.Text.title)
+                        Text("Records").font(Theme.Text.title)
                         Text(browserSubtitle)
                             .font(Theme.Text.rowSubtitle)
                             .foregroundStyle(Theme.Colors.secondaryText)
@@ -86,6 +86,8 @@ struct RecordsWorkspaceView: View {
 
                 TextField("Search records", text: $searchText)
                     .textFieldStyle(.roundedBorder)
+
+                scopeFilter
             }
             .padding(Theme.Spacing.large)
 
@@ -120,6 +122,31 @@ struct RecordsWorkspaceView: View {
             .padding(Theme.Spacing.large)
         }
         .background(.regularMaterial)
+    }
+
+    /// Records already owns the browser column. Keeping its scopes here turns that column into the
+    /// whole Records navigator instead of placing a second navigation sidebar beside it.
+    private var scopeFilter: some View {
+        HStack(spacing: Theme.Spacing.tight) {
+            ForEach(RecordsScope.allCases) { candidate in
+                let isSelected = candidate == scope
+                Button {
+                    navigation.select(.records(candidate))
+                } label: {
+                    Image(systemName: candidate.symbolName)
+                        .frame(width: 28, height: 24)
+                        .background(isSelected ? Theme.Colors.selection : Theme.Colors.subtleFill)
+                        .foregroundStyle(isSelected ? Theme.Colors.onAccent : Theme.Colors.secondaryText)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
+                }
+                .buttonStyle(.plain)
+                .help(candidate.title)
+                .accessibilityLabel(candidate.title)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+                .accessibilityIdentifier("records.filter.\(candidate.rawValue)")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func recordRow(_ record: Item) -> some View {

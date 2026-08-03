@@ -61,7 +61,7 @@ struct ModuleNavigationTests {
         // `module(for:)`.
         #expect(
             AppModule.displayOrder == [
-                .calendar, .reminders, .tasks, .people, .notes, .time,
+                .calendar, .reminders, .tasks, .records, .people, .notes, .time,
                 .areas, .bookmarks, .archive, .trash,
             ]
         )

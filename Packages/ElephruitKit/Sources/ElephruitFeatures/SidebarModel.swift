@@ -205,6 +205,15 @@ public enum SidebarRegistry {
             symbolName: "square.grid.2x2",
             hint: "Standing responsibilities, which never finish."
         ),
+        SidebarDestination(
+            id: "records",
+            selection: .records(.all),
+            band: .module,
+            module: .records,
+            title: "All Records",
+            symbolName: "circle.grid.2x2",
+            hint: "Every person and thing you keep track of."
+        ),
         // Superseded by `PeopleSidebarSection`, which is the People module's own sidebar.
         //
         // Declared rather than deleted, on the same terms as every other unavailable destination: a
