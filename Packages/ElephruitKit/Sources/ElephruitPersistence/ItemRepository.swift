@@ -20,6 +20,15 @@ public struct ItemDraft: Sendable, Hashable {
     /// When this should come back into view. Never overdue — see ``Item/deferUntil``.
     public var deferUntil: Date?
 
+    /// Task-only values collected before the item exists.
+    ///
+    /// Keeping these on the creation value lets an inline composer write one complete task in one
+    /// save. Creating an empty task and then applying each choice through a separate update is both
+    /// slower and briefly exposes an object that does not yet match what the user entered.
+    public var checklist: TaskChecklist
+    public var todayCommittedOn: Date?
+    public var isSomeday: Bool
+
     public var priority: Priority
     public var source: ItemSource
     public var url: URL?
@@ -35,6 +44,9 @@ public struct ItemDraft: Sendable, Hashable {
         dueAt: Date? = nil,
         startAt: Date? = nil,
         deferUntil: Date? = nil,
+        checklist: TaskChecklist = TaskChecklist(),
+        todayCommittedOn: Date? = nil,
+        isSomeday: Bool = false,
         priority: Priority = .normal,
         source: ItemSource = .manual,
         url: URL? = nil,
@@ -49,6 +61,9 @@ public struct ItemDraft: Sendable, Hashable {
         self.dueAt = dueAt
         self.startAt = startAt
         self.deferUntil = deferUntil
+        self.checklist = checklist
+        self.todayCommittedOn = todayCommittedOn
+        self.isSomeday = isSomeday
         self.priority = priority
         self.source = source
         self.url = url
@@ -225,6 +240,11 @@ public final class SwiftDataItemRepository: ItemRepository {
         if fields.contains(.dueDate) { item.dueAt = draft.dueAt }
         if fields.contains(.startDate) { item.startAt = draft.startAt }
         if fields.contains(.deferDate) { item.deferUntil = draft.deferUntil }
+        if draft.kind == .task {
+            item.checklistData = draft.checklist.encoded()
+            item.todayCommittedOn = draft.todayCommittedOn
+            item.isSomeday = draft.isSomeday
+        }
         if fields.contains(.dayKey) { item.dayKey = draft.dayKey }
         if !fields.contains(.priority) { item.priority = .normal }
 
