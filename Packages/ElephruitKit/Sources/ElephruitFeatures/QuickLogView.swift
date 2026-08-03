@@ -172,11 +172,13 @@ struct QuickLogView: View {
                 suggestionList
             }
 
-            Spacer(minLength: 72)
+            // Enough air to keep the field calm, without making a one-line timer feel like a
+            // document editor. Suggestions still grow the panel naturally when they are present.
+            Spacer(minLength: 32)
 
             CaptureGrammarHints(hints: timerGrammarHints)
         }
-        .frame(minHeight: 150)
+        .frame(minHeight: 108)
     }
 
     private var timerGrammarHints: [(sigil: String, meaning: String, example: String)] {

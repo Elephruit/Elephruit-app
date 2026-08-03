@@ -49,6 +49,36 @@ final class QuickLogPanel: NSPanel {
     /// A panel is not key by default, and a name field that cannot be typed into is not naming.
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    /// Makes the description the typing destination whenever an editable Quick Log is raised.
+    ///
+    /// The SwiftUI focus state handles ordinary transitions, but the panel itself is retained when
+    /// hidden and its represented AppKit field may materialise a run-loop turn after the hosting
+    /// view. The explicit responder handoff is what guarantees the first keystroke lands in the
+    /// description on both the first opening and every reopening.
+    func focusDescription() {
+        contentView?.layoutSubtreeIfNeeded()
+        if focusDescriptionIfPresent() { return }
+
+        DispatchQueue.main.async { [weak self] in
+            _ = self?.focusDescriptionIfPresent()
+        }
+    }
+
+    @discardableResult
+    private func focusDescriptionIfPresent() -> Bool {
+        guard let editor = contentView?.quickLogDescendant(of: CaptureNotesTextView.self) else {
+            return false
+        }
+        return makeFirstResponder(editor)
+    }
+}
+
+private extension NSView {
+    func quickLogDescendant<View: NSView>(of type: View.Type) -> View? {
+        if let match = self as? View { return match }
+        return subviews.lazy.compactMap { $0.quickLogDescendant(of: type) }.first
+    }
 }
 
 /// Owns the one panel, the name being typed into it, and where focus goes when it closes.
@@ -121,6 +151,7 @@ public final class QuickLogController {
         if isVisible, let panel {
             panel.makeKeyAndOrderFront(nil)
             NSApp.activate()
+            if presentation == .editing { panel.focusDescription() }
             return false
         }
 
@@ -130,6 +161,7 @@ public final class QuickLogController {
             panel.makeKeyAndOrderFront(nil)
             isVisible = true
             NSApp.activate()
+            if presentation == .editing { panel.focusDescription() }
             return started
         }
 
@@ -149,6 +181,7 @@ public final class QuickLogController {
         // the first keystroke can be swallowed — which on a field somebody is typing a name into as
         // fast as they can think of one is the difference between working and infuriating.
         NSApp.activate()
+        if presentation == .editing { panel.focusDescription() }
         isVisible = true
         return started
     }
