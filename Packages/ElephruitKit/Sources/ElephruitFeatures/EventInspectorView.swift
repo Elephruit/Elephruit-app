@@ -751,6 +751,7 @@ struct EventRecordPicker: View {
     @State private var query = ""
     @State private var candidates: [Item] = []
     @State private var selectedRecordIDs: Set<UUID> = []
+    @State private var hasLoadedCandidates = false
 
     init(
         event: CalendarEventSummary,
@@ -773,51 +774,61 @@ struct EventRecordPicker: View {
                 .textFieldStyle(.roundedBorder)
                 .onChange(of: query) { _, _ in search() }
 
-            if candidates.isEmpty {
-                Text(query.isEmpty ? "No records yet." : "No records match “\(query)”.")
-                    .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.secondaryText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(candidates) { record in
-                            Button { toggle(record) } label: {
-                                HStack(spacing: Theme.Spacing.small) {
-                                    Image(systemName: services?.records.type(of: record).symbolName ?? "cube")
-                                        .foregroundStyle(Theme.Palette.color(named: record.colorName))
-                                        .frame(width: 22)
-                                    VStack(alignment: .leading, spacing: 0) {
-                                        Text(record.displayTitle)
-                                            .font(Theme.Text.rowSubtitle)
-                                        Text(services?.records.type(of: record).displayName ?? "Record")
-                                            .font(Theme.Text.keyHint)
-                                            .foregroundStyle(Theme.Colors.tertiaryText)
+            Group {
+                if !hasLoadedCandidates {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if candidates.isEmpty {
+                    Text(query.isEmpty ? "No records yet." : "No records match “\(query)”.")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 1) {
+                            ForEach(candidates) { record in
+                                Button { toggle(record) } label: {
+                                    HStack(spacing: Theme.Spacing.small) {
+                                        Image(systemName: services?.records.type(of: record).symbolName ?? "cube")
+                                            .foregroundStyle(Theme.Palette.color(named: record.colorName))
+                                            .frame(width: 24)
+                                        VStack(alignment: .leading, spacing: 0) {
+                                            Text(record.displayTitle)
+                                                .font(Theme.Text.rowSubtitle)
+                                            Text(services?.records.type(of: record).displayName ?? "Record")
+                                                .font(Theme.Text.keyHint)
+                                                .foregroundStyle(Theme.Colors.tertiaryText)
+                                        }
+                                        Spacer(minLength: 0)
+                                        if selectedRecordIDs.contains(record.id) {
+                                            Image(systemName: "checkmark")
+                                                .font(Theme.Text.metadata)
+                                                .foregroundStyle(Theme.Colors.selection)
+                                        }
                                     }
-                                    Spacer(minLength: 0)
-                                    if selectedRecordIDs.contains(record.id) {
-                                        Image(systemName: "checkmark")
-                                            .font(Theme.Text.metadata)
-                                            .foregroundStyle(Theme.Colors.selection)
-                                    }
+                                    .contentShape(.rect)
+                                    .padding(.horizontal, Theme.Spacing.small)
+                                    .frame(height: 40)
                                 }
-                                .contentShape(.rect)
-                                .padding(.horizontal, Theme.Spacing.tight)
-                                .padding(.vertical, 4)
+                                .buttonStyle(.plain)
+                                .background(
+                                    selectedRecordIDs.contains(record.id)
+                                        ? Theme.Colors.selectionFill
+                                        : Color.clear,
+                                    in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
+                                )
+                                .hoverHighlight(extending: Theme.Spacing.tight)
                             }
-                            .buttonStyle(.plain)
-                            .background(
-                                selectedRecordIDs.contains(record.id)
-                                    ? Theme.Colors.selectionFill
-                                    : Color.clear,
-                                in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                            )
-                            .hoverHighlight(extending: Theme.Spacing.tight)
                         }
                     }
                 }
-                .frame(maxHeight: 240)
             }
+            // The popover is first measured before the store query completes. A maximum alone lets
+            // that empty first pass collapse the window to one row, after which AppKit keeps the
+            // tiny size even when results arrive. A stable viewport both fixes that race and uses
+            // the available desktop space for the list this control exists to show.
+            .frame(height: 300)
 
             Text("Selected records receive a private meeting interaction. Nothing is added to the calendar event itself.")
                 .font(Theme.Text.keyHint)
@@ -830,7 +841,7 @@ struct EventRecordPicker: View {
             }
         }
         .padding(Theme.Spacing.medium)
-        .frame(width: 300)
+        .frame(width: 380)
         .task { loadCandidates() }
     }
 
@@ -845,6 +856,7 @@ struct EventRecordPicker: View {
             if leftMatches != rightMatches { return leftMatches }
             return left.displayTitle.localizedStandardCompare(right.displayTitle) == .orderedAscending
         }
+        hasLoadedCandidates = true
     }
 
     private func search() {
@@ -859,6 +871,7 @@ struct EventRecordPicker: View {
             return TextNormalizer.foldedForMatching("\(record.displayTitle) \(record.body) \(details)")
                 .contains(folded)
         }
+        hasLoadedCandidates = true
     }
 
     private func toggle(_ record: Item) {
