@@ -65,8 +65,8 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     /// top level of the primary sidebar, and swapping that away was taking the navigation with it.
     public var hasOwnSidebar: Bool {
         switch self {
-        case .calendar, .tasks, .people, .notes, .areas: true
-        case .records, .reminders, .projects, .time, .bookmarks, .archive, .trash: false
+        case .calendar, .tasks, .records, .people, .notes, .areas: true
+        case .reminders, .projects, .time, .bookmarks, .archive, .trash: false
         }
     }
 
@@ -158,8 +158,8 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     /// rows that are not declared destinations at all.
     public var hasNavigationOfItsOwn: Bool {
         switch self {
-        case .calendar, .time, .tasks, .people: true
-        case .records, .reminders, .notes, .projects, .areas, .bookmarks, .archive, .trash: false
+        case .calendar, .time, .tasks, .records, .people: true
+        case .reminders, .notes, .projects, .areas, .bookmarks, .archive, .trash: false
         }
     }
 

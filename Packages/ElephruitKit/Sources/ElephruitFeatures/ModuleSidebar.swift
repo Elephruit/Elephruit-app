@@ -23,33 +23,36 @@ struct ModuleSidebar: View {
 
     @ScaledMetric(relativeTo: .body) private var rowHeight = SidebarMetrics.baseRowHeight
 
+    @ViewBuilder
     var body: some View {
-        List(selection: selectionBinding) {
-            switch module {
-            case .calendar:
-                CalendarSidebarSection(navigation: navigation)
-            case .tasks:
-                TasksSidebarSection(navigation: navigation)
-            case .people:
-                if PeoplePerformanceIsolation.usesIsolatedSidebar {
-                    IsolatedPeopleSidebarSection(navigation: navigation)
-                } else {
-                    PeopleSidebarSection(navigation: navigation)
+        if module == .records {
+            RecordsModuleSidebar(navigation: navigation)
+        } else {
+            List(selection: selectionBinding) {
+                switch module {
+                case .calendar:
+                    CalendarSidebarSection(navigation: navigation)
+                case .tasks:
+                    TasksSidebarSection(navigation: navigation)
+                case .people:
+                    if PeoplePerformanceIsolation.usesIsolatedSidebar {
+                        IsolatedPeopleSidebarSection(navigation: navigation)
+                    } else {
+                        PeopleSidebarSection(navigation: navigation)
+                    }
+                case .notes:
+                    NotesSidebarSection(navigation: navigation)
+                case .areas:
+                    AreasSidebarSection(navigation: navigation)
+                case .records, .reminders, .projects, .time, .bookmarks, .archive, .trash:
+                    EmptyView()
                 }
-            case .notes:
-                NotesSidebarSection(navigation: navigation)
-            case .areas:
-                AreasSidebarSection(navigation: navigation)
-            case .records, .reminders, .projects, .time, .bookmarks, .archive, .trash:
-                // Unreachable: these declare `hasOwnSidebar == false`, so `SidebarView` never
-                // swaps levels for them — the primary list stays, with the module's own row
-                // marked current. The arms stay because the switch is exhaustive and the cases
-                // still exist for layout.
-                EmptyView()
             }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .padding(.top, Theme.Spacing.small)
+            .accessibilityIdentifier("sidebar.module.\(module.rawValue).list")
         }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
         // ### Why the list is held clear of the header's divider
         // The module header sits above this list with a `Divider` between them, and a `List` starts
         // its first row flush against its own bounds. A selected first row therefore drew its
@@ -67,8 +70,6 @@ struct ModuleSidebar: View {
         // list draws — selected, hovering, a disclosure's — is clipped to those bounds, so none of
         // them can reach the divider however far the list is scrolled. The gap shows the same
         // sidebar material the list is drawn on, so there is no seam to see.
-        .padding(.top, Theme.Spacing.small)
-        .accessibilityIdentifier("sidebar.module.\(module.rawValue).list")
     }
 
     private var selectionBinding: Binding<SidebarSelection?> {

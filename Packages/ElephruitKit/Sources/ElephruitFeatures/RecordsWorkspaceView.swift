@@ -21,12 +21,7 @@ struct RecordsWorkspaceView: View {
     @State private var loadError: AppError?
 
     var body: some View {
-        HStack(spacing: 0) {
-            browser
-                .frame(width: 310)
-            Divider()
-            detail
-        }
+        detail
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Colors.contentBackground)
         .sheet(isPresented: $isShowingNewRecord) {
@@ -46,7 +41,7 @@ struct RecordsWorkspaceView: View {
                 completionSelection: .records(.unsorted)
             )
         }
-        .task(id: scope) { refresh() }
+        .task(id: navigation.selectedItemID) { refresh() }
         .onChange(of: services?.context.hasChanges) { _, _ in refresh() }
         .alert(
             "Records could not be updated",
@@ -201,7 +196,7 @@ struct RecordsWorkspaceView: View {
         }
     }
 
-    private var selectedRecord: Item? { records.first { $0.id == selection } }
+    private var selectedRecord: Item? { records.first { $0.id == navigation.selectedItemID } }
 
     private var filteredRecords: [Item] {
         guard let services else { return [] }
@@ -220,9 +215,11 @@ struct RecordsWorkspaceView: View {
         do {
             records = try services.records.allRecords()
             loadError = nil
-            if let id { selection = id }
-            if selection == nil || records.contains(where: { $0.id == selection }) == false {
-                selection = filteredRecords.first?.id
+            if let id { navigation.selectItem(id) }
+            if navigation.selectedItemID == nil
+                || records.contains(where: { $0.id == navigation.selectedItemID }) == false
+            {
+                navigation.selectItem(filteredRecords.first?.id)
             }
         } catch { loadError = error }
     }
@@ -460,7 +457,7 @@ private struct RecordDetail: View {
     }
 }
 
-private struct NewRecordSheet: View {
+struct NewRecordSheet: View {
     @Environment(\.dismiss) private var dismiss
     let onCreate: (RecordDraft) -> Void
 
