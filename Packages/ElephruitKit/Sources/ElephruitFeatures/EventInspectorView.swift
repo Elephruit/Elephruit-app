@@ -67,11 +67,6 @@ public struct EventInspectorView: View {
             .padding(Theme.Spacing.medium)
         }
         .task(id: event.id) { await load() }
-        .sheet(isPresented: $isShowingRecordPicker) {
-            EventRecordPicker(event: event, linkedRecordIDs: Set(linkedRecords.map(\.id))) {
-                Task { await load() }
-            }
-        }
         .sheet(isPresented: $isShowingFollowUp) {
             FollowUpSheet(event: event, people: linkedPeople) { Task { await load() } }
         }
@@ -267,9 +262,19 @@ public struct EventInspectorView: View {
                         .foregroundStyle(Theme.Colors.tertiaryText)
                 }
 
-                Button("Tag a record…") { isShowingRecordPicker = true }
+                Button("Add Record…", systemImage: "circle.grid.2x2") {
+                    isShowingRecordPicker = true
+                }
                     .buttonStyle(.borderless)
                     .font(Theme.Text.metadata)
+                    .popover(isPresented: $isShowingRecordPicker, arrowEdge: .bottom) {
+                        EventRecordPicker(
+                            event: event,
+                            linkedRecordIDs: Set(linkedRecords.map(\.id))
+                        ) {
+                            Task { await load() }
+                        }
+                    }
             }
         }
     }
@@ -741,15 +746,27 @@ struct EventRecordPicker: View {
 
     let event: CalendarEventSummary
     let linkedRecordIDs: Set<UUID>
-    var onLinked: () -> Void
+    var onChanged: () -> Void
 
     @State private var query = ""
     @State private var candidates: [Item] = []
+    @State private var selectedRecordIDs: Set<UUID> = []
+
+    init(
+        event: CalendarEventSummary,
+        linkedRecordIDs: Set<UUID>,
+        onChanged: @escaping () -> Void
+    ) {
+        self.event = event
+        self.linkedRecordIDs = linkedRecordIDs
+        self.onChanged = onChanged
+        _selectedRecordIDs = State(initialValue: linkedRecordIDs)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            Text("Add a record to “\(event.displayTitle)”")
-                .font(Theme.Text.title)
+            Label("Records", systemImage: "circle.grid.2x2")
+                .font(Theme.Text.sectionHeader)
                 .lineLimit(2)
 
             TextField("Search people, pets, vehicles, and other records", text: $query)
@@ -757,7 +774,7 @@ struct EventRecordPicker: View {
                 .onChange(of: query) { _, _ in search() }
 
             if candidates.isEmpty {
-                Text(query.isEmpty ? "No more records to tag." : "No records match “\(query)”.")
+                Text(query.isEmpty ? "No records yet." : "No records match “\(query)”.")
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -765,7 +782,7 @@ struct EventRecordPicker: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(candidates) { record in
-                            Button { link(record) } label: {
+                            Button { toggle(record) } label: {
                                 HStack(spacing: Theme.Spacing.small) {
                                     Image(systemName: services?.records.type(of: record).symbolName ?? "cube")
                                         .foregroundStyle(Theme.Palette.color(named: record.colorName))
@@ -778,19 +795,31 @@ struct EventRecordPicker: View {
                                             .foregroundStyle(Theme.Colors.tertiaryText)
                                     }
                                     Spacer(minLength: 0)
+                                    if selectedRecordIDs.contains(record.id) {
+                                        Image(systemName: "checkmark")
+                                            .font(Theme.Text.metadata)
+                                            .foregroundStyle(Theme.Colors.selection)
+                                    }
                                 }
                                 .contentShape(.rect)
-                                .padding(.vertical, 2)
+                                .padding(.horizontal, Theme.Spacing.tight)
+                                .padding(.vertical, 4)
                             }
                             .buttonStyle(.plain)
-                            .hoverHighlight(extending: Theme.Spacing.small)
+                            .background(
+                                selectedRecordIDs.contains(record.id)
+                                    ? Theme.Colors.selectionFill
+                                    : Color.clear,
+                                in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
+                            )
+                            .hoverHighlight(extending: Theme.Spacing.tight)
                         }
                     }
                 }
-                .frame(maxHeight: 220)
+                .frame(maxHeight: 240)
             }
 
-            Text("This creates a private meeting interaction for the record. Nothing is added to the calendar event itself.")
+            Text("Selected records receive a private meeting interaction. Nothing is added to the calendar event itself.")
                 .font(Theme.Text.keyHint)
                 .foregroundStyle(Theme.Colors.tertiaryText)
 
@@ -800,15 +829,15 @@ struct EventRecordPicker: View {
                     .keyboardShortcut(.cancelAction)
             }
         }
-        .padding(Theme.Spacing.large)
-        .frame(width: 380)
+        .padding(Theme.Spacing.medium)
+        .frame(width: 300)
         .task { loadCandidates() }
     }
 
     /// Offers the event's own attendees first, since they are who somebody is most likely to want.
     private func loadCandidates() {
         guard let services else { return }
-        let all = ((try? services.records.allRecords()) ?? []).filter { !linkedRecordIDs.contains($0.id) }
+        let all = (try? services.records.allRecords()) ?? []
         let attendeeNames = Set(event.attendeeNames.map(TextNormalizer.foldedForMatching))
         candidates = all.sorted { left, right in
             let leftMatches = attendeeNames.contains(TextNormalizer.foldedForMatching(left.displayTitle))
@@ -823,7 +852,7 @@ struct EventRecordPicker: View {
             loadCandidates()
             return
         }
-        let all = ((try? services.records.allRecords()) ?? []).filter { !linkedRecordIDs.contains($0.id) }
+        let all = (try? services.records.allRecords()) ?? []
         let folded = TextNormalizer.foldedForMatching(query)
         candidates = all.filter { record in
             let details = record.recordProfile?.details.values.joined(separator: " ") ?? ""
@@ -832,11 +861,16 @@ struct EventRecordPicker: View {
         }
     }
 
-    private func link(_ record: Item) {
+    private func toggle(_ record: Item) {
         guard let services else { return }
-        services.perform { try services.eventLinks.link(record: record, to: event) }
-        onLinked()
-        dismiss()
+        if selectedRecordIDs.contains(record.id) {
+            services.perform { try services.eventLinks.unlink(record: record, from: event.identity) }
+            selectedRecordIDs.remove(record.id)
+        } else {
+            services.perform { try services.eventLinks.link(record: record, to: event) }
+            selectedRecordIDs.insert(record.id)
+        }
+        onChanged()
     }
 }
 

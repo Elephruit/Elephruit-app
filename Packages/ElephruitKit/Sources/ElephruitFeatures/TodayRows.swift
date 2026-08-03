@@ -393,13 +393,6 @@ private struct TodayEventInlineDetail: View {
         .padding(.horizontal, Theme.Spacing.medium)
         .padding(.bottom, Theme.Spacing.medium)
         .task { loadRecords() }
-        .sheet(isPresented: $isShowingRecordPicker) {
-            EventRecordPicker(
-                event: event.event,
-                linkedRecordIDs: Set(linkedRecords.map(\.id)),
-                onLinked: loadRecords
-            )
-        }
         .accessibilityIdentifier("today.eventDetails.\(event.id)")
     }
 
@@ -450,6 +443,13 @@ private struct TodayEventInlineDetail: View {
                 }
                 .buttonStyle(.borderless)
                 .font(Theme.Text.metadata)
+                .popover(isPresented: $isShowingRecordPicker, arrowEdge: .bottom) {
+                    EventRecordPicker(
+                        event: event.event,
+                        linkedRecordIDs: Set(linkedRecords.map(\.id)),
+                        onChanged: loadRecords
+                    )
+                }
             }
 
             if linkedRecords.isEmpty {
