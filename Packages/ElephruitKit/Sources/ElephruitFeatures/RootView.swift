@@ -391,17 +391,21 @@ public struct RootView: View {
         // The content begins below the unified toolbar, but the sidebar is a window region rather
         // than page content. Paint its surface and boundary through the title bar as well.
         .background(alignment: .leading) {
-            Theme.Colors.windowBackground
-                .frame(width: sidebarWidth)
-                .ignoresSafeArea()
+            if navigation.layoutMode.showsSidebar {
+                Theme.Colors.windowBackground
+                    .frame(width: sidebarWidth)
+                    .ignoresSafeArea()
+            }
         }
         .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(Theme.Colors.separator)
-                .frame(width: 1)
-                .offset(x: sidebarWidth)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
+            if navigation.layoutMode.showsSidebar {
+                Rectangle()
+                    .fill(Theme.Colors.separator)
+                    .frame(width: 1)
+                    .offset(x: sidebarWidth)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
         }
         .background {
             WindowFullScreenReader(isFullScreen: $isWindowFullScreen)
