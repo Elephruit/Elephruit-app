@@ -158,6 +158,7 @@ struct TaskWorkspaceView: View {
             }
         )
         .tag(task.id)
+        .nativeListSelectionHighlightDisabled()
         .listRowSeparator(.hidden)
         // ### Why the selection is ours rather than the system's
         // macOS draws a solid accent fill behind a selected row. Compact rows use a quiet tint of

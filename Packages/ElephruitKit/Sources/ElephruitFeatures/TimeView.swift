@@ -333,6 +333,11 @@ public struct TimeView: View {
             onDuplicate: { group.lead.map(duplicate) },
             onDelete: { delete(group.entries.map(\.id), describing: group.displayTitle) }
         )
+        .nativeListSelectionHighlightDisabled()
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                .fill(selectedRowID == group.id ? Theme.Colors.selectionFill : Color.clear)
+        )
     }
 
     private func entryRow(_ entry: TimeEntrySnapshot) -> some View {
@@ -348,6 +353,11 @@ public struct TimeView: View {
             onCancelEdit: { endEditing(restoringSelection: entry.id.uuidString) },
             onDuplicate: { duplicate(entry) },
             onDelete: { delete([entry.id], describing: entry.displayTitle) }
+        )
+        .nativeListSelectionHighlightDisabled()
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                .fill(selectedRowID == entry.id.uuidString ? Theme.Colors.selectionFill : Color.clear)
         )
     }
 
