@@ -221,6 +221,14 @@ public final class QuickLogController {
         startedTheTimer = true
         presentation = .editing
         description = ""
+
+        // The button began in the confirmation hierarchy. Let SwiftUI replace that hierarchy with
+        // the editor before asking AppKit for its first responder; `focusDescription()` supplies one
+        // further retry if the represented text view materialises on the following turn.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.presentation == .editing else { return }
+            self.panel?.focusDescription()
+        }
         return true
     }
 
