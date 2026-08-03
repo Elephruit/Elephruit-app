@@ -225,6 +225,7 @@ struct KanbanColumnView: View {
             TextField("Type a card title…", text: $quickAddDraft)
                 .textFieldStyle(.plain)
                 .font(Theme.Text.rowTitle)
+                .frame(maxWidth: .infinity)
                 .focused($isQuickAddFocused)
                 .onSubmit(commitQuickAdd)
                 .onExitCommand(perform: endAdding)
@@ -243,8 +244,22 @@ struct KanbanColumnView: View {
                     style: StrokeStyle(lineWidth: 1, dash: isQuickAddFocused ? [] : [5, 4])
                 )
         }
+        .overlay {
+            if !isQuickAddFocused {
+                // Before the field is first responder, one transparent button owns the whole card.
+                // This avoids the dead zone between the field's intrinsic text bounds and the
+                // card's trailing edge. Once focused, the overlay disappears so selection and
+                // cursor placement belong to the TextField normally.
+                Button(action: focusQuickAdd) {
+                    Color.clear
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .focusEffectDisabled()
+                .accessibilityLabel("Start typing a card title")
+            }
+        }
         .contentShape(Rectangle())
-        .onTapGesture { beginAdding() }
         .onChange(of: isQuickAddFocused) { _, focused in
             model.isEditingText = focused
             if focused {
@@ -259,6 +274,10 @@ struct KanbanColumnView: View {
     private func beginAdding() {
         showsQuickAdd = true
         // Let SwiftUI insert the ghost card before asking AppKit to make its field first responder.
+        focusQuickAdd()
+    }
+
+    private func focusQuickAdd() {
         DispatchQueue.main.async { isQuickAddFocused = true }
     }
 
