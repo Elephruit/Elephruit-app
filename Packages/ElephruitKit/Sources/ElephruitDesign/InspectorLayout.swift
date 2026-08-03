@@ -4,7 +4,7 @@ import SwiftUI
 ///
 /// The previous inspector gave the label a fixed 78pt column and let the control have whatever was
 /// left. At the pane's own 280pt ideal width that left roughly 162pt, and a three-way segmented
-/// control needs about 240 — so "Cancelled" was cut off and the tag field ran past the edge. The
+/// control needs about 240 — so "Canceled" was cut off and the tag field ran past the edge. The
 /// control had a larger intrinsic width than the space it was given, and nothing yielded.
 ///
 /// The fix is to let the *arrangement* change rather than the content be cut.

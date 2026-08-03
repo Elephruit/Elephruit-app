@@ -45,7 +45,7 @@ struct NewPersonSheet: View {
                     .onChange(of: name) { _, newValue in findExisting(newValue) }
                     .accessibilityIdentifier("people.newPerson.name")
 
-                TextField("Organisation (optional)", text: $organization)
+                TextField("Organization (optional)", text: $organization)
                 TextField("Role (optional)", text: $role)
                 TextField("Email (optional)", text: $email)
                 TextField("Phone (optional)", text: $phone)

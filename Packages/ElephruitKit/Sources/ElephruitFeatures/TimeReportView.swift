@@ -236,7 +236,7 @@ struct TimeReportView: View {
                 Spacer()
 
                 if isStacked {
-                    Text("Coloured by \(grouping.displayName.lowercased())")
+                    Text("Colored by \(grouping.displayName.lowercased())")
                         .font(Theme.Text.metadata)
                         .foregroundStyle(Theme.Colors.tertiaryText)
                 }

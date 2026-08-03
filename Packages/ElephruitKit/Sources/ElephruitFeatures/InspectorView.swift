@@ -548,7 +548,7 @@ public struct InspectorView: View {
 /// The status control, in whichever form fits.
 ///
 /// A three-way segmented control needs roughly 220pt and does not shrink below its intrinsic size —
-/// it clips, which is exactly what the previous inspector did to "Cancelled". Below that width it
+/// it clips, which is exactly what the previous inspector did to "Canceled". Below that width it
 /// becomes a menu, which is a control that genuinely adapts. Two branches rather than a conditional
 /// style, because `.segmented` and `.menu` are different types.
 private struct StatusPicker: View {

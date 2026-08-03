@@ -76,7 +76,7 @@ public struct AppearanceSettingsSection: View {
         } header: {
             Text("Appearance")
         } footer: {
-            Text("Colours, selection, and contrast follow macOS either way — including your accent colour and Increase Contrast. This only decides which appearance is asked for.")
+            Text("Colors, selection, and contrast follow macOS either way — including your accent color and Increase Contrast. This only decides which appearance is asked for.")
                 .font(Theme.Text.metadata)
                 .foregroundStyle(Theme.Colors.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)

@@ -26,6 +26,131 @@ struct SourceHygieneTests {
         #expect(Self.swiftFiles().count > 15, "Expected the module sources to be discoverable")
     }
 
+    /// Interface language is a product decision, not whichever dictionary the last contributor
+    /// happened to use. Scan string literals in both the package and the app target so a new label,
+    /// tooltip, intent description, or accessibility phrase cannot quietly switch dialects.
+    ///
+    /// The small allowlist is compatibility data, never displayed copy: persisted values must keep
+    /// decoding and parsers should continue accepting the spelling somebody may already have typed.
+    @Test("User-facing copy uses US English")
+    func userFacingCopyUsesUSEnglish() {
+        let britishSpellings: Set<String> = [
+            "artefact", "artefacts", "authorisation", "behaviour", "behaviours",
+            "cancelled", "cancelling", "centre", "centred", "centres",
+            "colour", "coloured", "colouring", "colours", "customisation", "customised",
+            "dialogue", "dialogues", "favourite", "favourites", "grey", "greyed",
+            "initialised", "labelled", "labelling", "localisation", "modelled", "modelling",
+            "neighbour", "neighbours", "normalised", "normalising", "optimised",
+            "organisation", "organisations", "organiser", "organisers", "prioritised",
+            "prioritising", "recognised", "recognising", "recolour", "recoloured",
+            "serialised", "summarised", "synchronised", "towards", "travelled", "travelling",
+            "uncoloured", "visualisation",
+        ]
+        let compatibilityLiterals: Set<String> = [
+            "calendar.favouriteTimeZones",
+            "cancelled",
+            "e.status = 'cancelled'",
+            "events.is_cancelled = 1",
+            "organisation",
+            "search.unrecognised",
+        ]
+        var offenders: [String] = []
+
+        for file in Self.shippingSwiftFiles() {
+            guard let contents = try? String(contentsOf: file, encoding: .utf8) else { continue }
+
+            for (index, line) in contents.components(separatedBy: .newlines).enumerated() {
+                for literal in Self.quotedLiterals(in: line) where !compatibilityLiterals.contains(literal) {
+                    let visibleText = Self.removingInterpolations(from: literal)
+                    let words = Set(visibleText.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init))
+                    let matches = words.intersection(britishSpellings)
+                    if !matches.isEmpty {
+                        offenders.append(
+                            "\(file.lastPathComponent):\(index + 1) — \(matches.sorted().joined(separator: ", "))"
+                        )
+                    }
+                }
+            }
+        }
+
+        #expect(
+            offenders.isEmpty,
+            "Displayed copy uses US English; compatibility-only stored values may be allowlisted: \(offenders)"
+        )
+    }
+
+    private static func shippingSwiftFiles() -> [URL] {
+        var files = swiftFiles()
+        var directory = URL(filePath: #filePath).deletingLastPathComponent()
+
+        for _ in 0..<10 {
+            let appDirectory = directory.appending(path: "Elephruit", directoryHint: .isDirectory)
+            let appEntry = appDirectory.appending(path: "ElephruitApp.swift")
+            if FileManager.default.fileExists(atPath: appEntry.path(percentEncoded: false)),
+               let enumerator = FileManager.default.enumerator(
+                   at: appDirectory,
+                   includingPropertiesForKeys: nil
+               ) {
+                files += enumerator
+                    .compactMap { $0 as? URL }
+                    .filter { $0.pathExtension == "swift" }
+                break
+            }
+            directory = directory.deletingLastPathComponent()
+        }
+        return files
+    }
+
+    /// String literals written wholly on one source line. Interpolation is removed separately so a
+    /// legacy identifier such as `cancelled` does not make otherwise-US copy fail the rule.
+    private static func quotedLiterals(in line: String) -> [String] {
+        var literals: [String] = []
+        var current = ""
+        var isInsideString = false
+        var isEscaped = false
+
+        for character in line {
+            if isEscaped {
+                if isInsideString { current.append(character) }
+                isEscaped = false
+            } else if character == "\\" {
+                if isInsideString { current.append(character) }
+                isEscaped = true
+            } else if character == "\"" {
+                if isInsideString {
+                    literals.append(current)
+                    current = ""
+                }
+                isInsideString.toggle()
+            } else if isInsideString {
+                current.append(character)
+            }
+        }
+        return literals
+    }
+
+    private static func removingInterpolations(from literal: String) -> String {
+        let characters = Array(literal)
+        var result = ""
+        var index = 0
+
+        while index < characters.count {
+            if characters[index] == "\\", index + 1 < characters.count, characters[index + 1] == "(" {
+                index += 2
+                var depth = 1
+                while index < characters.count, depth > 0 {
+                    if characters[index] == "(" { depth += 1 }
+                    if characters[index] == ")" { depth -= 1 }
+                    index += 1
+                }
+            } else {
+                result.append(characters[index])
+                index += 1
+            }
+        }
+        return result
+    }
+
     @Test("No force-unwrapped try")
     func noForceTry() {
         var offenders: [String] = []

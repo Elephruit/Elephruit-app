@@ -193,7 +193,7 @@ struct ProjectsSidebarSection: View {
     private func menu(for row: ProjectSidebarRow) -> some View {
         Button("Open") { navigation.select(selection(for: row)) }
         Button("Rename") { beginRename(row) }
-        Button(row.isFavorite ? "Remove from Favourites" : "Add to Favourites") {
+        Button(row.isFavorite ? "Remove from Favorites" : "Add to Favorites") {
             toggleFavourite(row)
         }
         Divider()
