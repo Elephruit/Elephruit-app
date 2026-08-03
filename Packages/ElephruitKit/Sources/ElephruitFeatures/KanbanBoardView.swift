@@ -35,7 +35,6 @@ struct KanbanColumnView: View {
     let model: ProjectWorkspaceModel
     let drag: KanbanDragCoordinator
 
-    @State private var showsQuickAdd = false
     @State private var quickAddDraft = ""
     @FocusState private var isQuickAddFocused: Bool
 
@@ -152,11 +151,10 @@ struct KanbanColumnView: View {
                 )
             )
 
-            quickAddControl
+            quickAddCard
 
             Spacer(minLength: 0)
         }
-        .animation(.easeOut(duration: 0.14), value: showsQuickAdd)
     }
 
     private var header: some View {
@@ -189,111 +187,60 @@ struct KanbanColumnView: View {
         }
     }
 
-    @ViewBuilder
-    private var quickAddControl: some View {
-        if showsQuickAdd || !quickAddDraft.isEmpty {
-            quickAddCard
-                .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
-        } else {
-            Button(action: beginAdding) {
-                HStack(spacing: Theme.Spacing.small) {
-                    Image(systemName: "plus")
-                    Text("Click here to add a card")
-                    Spacer(minLength: 0)
-                }
-                .font(Theme.Text.rowSubtitle)
-                .foregroundStyle(Theme.Colors.tertiaryText)
-                .padding(Theme.Spacing.small)
-                .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .background(Theme.Colors.contentBackground.opacity(0.36), in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Radius.medium)
-                    .stroke(Theme.Colors.separator, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-            }
-            .accessibilityIdentifier("kanban.quickAddPrompt.\(column.key)")
-        }
-    }
-
     private var quickAddCard: some View {
         HStack(spacing: Theme.Spacing.small) {
             Image(systemName: "plus.circle.fill")
                 .foregroundStyle(isQuickAddFocused ? Theme.Colors.selection : Theme.Colors.tertiaryText)
 
-            TextField("Type a card title…", text: $quickAddDraft)
+            TextField(
+                isQuickAddFocused ? "Type a card title…" : "Click here to add a card",
+                text: $quickAddDraft
+            )
                 .textFieldStyle(.plain)
                 .font(Theme.Text.rowTitle)
                 .frame(maxWidth: .infinity)
                 .focused($isQuickAddFocused)
                 .onSubmit(commitQuickAdd)
-                .onExitCommand(perform: endAdding)
+                .onExitCommand(perform: commitQuickAdd)
         }
         .padding(Theme.Spacing.small)
         .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: Theme.Radius.medium)
                 .fill(Theme.Colors.contentBackground.opacity(isQuickAddFocused ? 0.96 : 0.62))
-                .shadow(color: Theme.Colors.shadow.opacity(isQuickAddFocused ? 0.18 : 0.10), radius: 8, y: 3)
+                .shadow(color: Theme.Colors.shadow.opacity(isQuickAddFocused ? 0.18 : 0.06), radius: 8, y: 3)
         )
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.medium)
                 .stroke(
                     isQuickAddFocused ? Theme.Colors.selection.opacity(0.55) : Theme.Colors.separator,
-                    style: StrokeStyle(lineWidth: 1, dash: isQuickAddFocused ? [] : [5, 4])
+                    lineWidth: isQuickAddFocused ? 1 : 0.5
                 )
         }
-        .overlay {
-            if !isQuickAddFocused {
-                // Before the field is first responder, one transparent button owns the whole card.
-                // This avoids the dead zone between the field's intrinsic text bounds and the
-                // card's trailing edge. Once focused, the overlay disappears so selection and
-                // cursor placement belong to the TextField normally.
-                Button(action: focusQuickAdd) {
-                    Color.clear
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .focusEffectDisabled()
-                .accessibilityLabel("Start typing a card title")
-            }
-        }
         .contentShape(Rectangle())
+        .simultaneousGesture(TapGesture().onEnded { focusQuickAdd() })
         .onChange(of: isQuickAddFocused) { _, focused in
             model.isEditingText = focused
-            if focused {
-                showsQuickAdd = true
-            } else if quickAddDraft.isEmpty {
-                showsQuickAdd = false
-            }
+            if !focused { commitQuickAdd() }
         }
+        .onDisappear(perform: commitQuickAdd)
         .accessibilityIdentifier("kanban.quickAdd.\(column.key)")
     }
 
     private func beginAdding() {
-        showsQuickAdd = true
-        // Let SwiftUI insert the ghost card before asking AppKit to make its field first responder.
         focusQuickAdd()
     }
 
     private func focusQuickAdd() {
-        DispatchQueue.main.async { isQuickAddFocused = true }
+        isQuickAddFocused = true
     }
 
     private func commitQuickAdd() {
         guard let title = quickAddDraft.nilIfBlank else { return }
+        // Clear first so losing focus during the model refresh cannot submit the same draft twice.
+        quickAddDraft = ""
         add(title)
-        quickAddDraft = ""
-        showsQuickAdd = false
         isQuickAddFocused = false
-        model.isEditingText = false
-    }
-
-    private func endAdding() {
-        quickAddDraft = ""
-        isQuickAddFocused = false
-        showsQuickAdd = false
         model.isEditingText = false
     }
 
