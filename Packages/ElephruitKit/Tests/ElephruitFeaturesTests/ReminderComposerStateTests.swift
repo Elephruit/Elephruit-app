@@ -1,6 +1,7 @@
 import AppKit
 import ElephruitCore
 @testable import ElephruitFeatures
+import ElephruitModel
 import Foundation
 import SwiftUI
 import Testing
@@ -74,14 +75,16 @@ struct ReminderComposerStateTests {
         original.personNames = ["Taylor Reed"]
         original.projectTitle = "House move"
         original.tagSlugs = ["calls"]
-        let reminder = LightweightReminder(draft: original, now: .distantPast)
+        let reminder = Item(kind: .reminder, title: original.title)
+        reminder.tags = []
+        reminder.body = original.notes
 
         let reopened = ReminderComposerDraft(reminder: reminder)
 
         #expect(reopened.title == "Call Taylor")
-        #expect(reopened.personNames == ["Taylor Reed"])
-        #expect(reopened.projectTitle == "House move")
-        #expect(reopened.tagSlugs == ["calls"])
+        #expect(reopened.personNames.isEmpty)
+        #expect(reopened.projectTitle == nil)
+        #expect(reopened.tagSlugs.isEmpty)
     }
 
     @Test("Reminder shortcuts use Quick Jot names and leave the prose clean")

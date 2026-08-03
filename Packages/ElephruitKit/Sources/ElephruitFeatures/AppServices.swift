@@ -111,8 +111,8 @@ public final class AppServices {
 
     // MARK: The Reminders module
 
-    /// Small reminders kept independently from Items and the Tasks lifecycle.
-    let lightweightReminders: LightweightReminderStore
+    /// The Reminders module's direct view of first-class items.
+    let reminderStore: ReminderStore
 
     // MARK: Projects
 
@@ -474,9 +474,51 @@ public final class AppServices {
         self.tasks = tasks
         self.taskViews = taskViews
         self.taskSidebar = TaskSidebarModel(items: items, views: taskViews)
-        self.lightweightReminders = LightweightReminderStore(
-            fileURL: stack.location?.lightweightRemindersURL
+        let reminderStore = ReminderStore(
+            items: items,
+            lifecycle: tasks,
+            dateProvider: dateProvider
         )
+        self.reminderStore = reminderStore
+
+        // The old Reminders workspace wrote a separate JSON file. Bring that population into the
+        // same graph after the legacy task rows have been promoted, with both stores copied into a
+        // single rollback directory first. A failed backup or import leaves the JSON file in place,
+        // so the next launch can retry without losing the source.
+        if let location = stack.location {
+            do {
+                let pending = try LegacyReminderArchiveMigration.plan(
+                    at: location.legacyRemindersURL
+                )
+                if pending > 0 {
+                    let stamp = Int(dateProvider.now.timeIntervalSince1970)
+                    if let backup = PersistenceStack.backupStore(
+                        at: location,
+                        label: "pre-reminder-json-import-\(stamp)"
+                    ) {
+                        try FileManager.default.copyItem(
+                            at: location.legacyRemindersURL,
+                            to: backup.appending(path: "Reminders.json")
+                        )
+                        let report = try LegacyReminderArchiveMigration.apply(
+                            from: location.legacyRemindersURL,
+                            using: reminderStore
+                        )
+                        Diagnostics.persistence.info(
+                            "Imported \(report.imported, privacy: .public) standalone reminders"
+                        )
+                    } else {
+                        Diagnostics.persistence.error(
+                            "Standalone reminder import deferred because its backup could not be written"
+                        )
+                    }
+                }
+            } catch {
+                Diagnostics.persistence.error(
+                    "Standalone reminder import failed: \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
 
         // Constructed in dependency order, which is also the order they were designed in: furniture,
         // then work, then the things that read work.

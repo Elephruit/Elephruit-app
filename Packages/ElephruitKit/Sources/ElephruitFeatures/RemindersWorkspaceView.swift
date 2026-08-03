@@ -1,4 +1,5 @@
 import ElephruitDesign
+import ElephruitModel
 import SwiftUI
 
 /// The lightweight Reminders module.
@@ -101,11 +102,13 @@ struct RemindersWorkspaceView: View {
         .background(.bar)
     }
 
-    private func reminderRow(_ reminder: LightweightReminder) -> some View {
+    private func reminderRow(_ reminder: Item) -> some View {
         HStack(alignment: .top, spacing: Theme.Spacing.small) {
             Button {
                 services?.perform {
-                    try services?.lightweightReminders.toggleCompletion(of: reminder.id)
+                    guard let services else { return }
+                    try services.reminderStore.toggleCompletion(of: reminder)
+                    services.noteChange(to: reminder)
                 }
             } label: {
                 Image(systemName: reminder.isCompleted ? "checkmark.circle.fill" : "circle")
@@ -123,8 +126,8 @@ struct RemindersWorkspaceView: View {
                         reminder.isCompleted ? Theme.Colors.secondaryText : Theme.Colors.primaryText
                     )
 
-                if !reminder.notes.isEmpty {
-                    Text(reminder.notes)
+                if !reminder.body.isEmpty {
+                    Text(reminder.body)
                         .font(Theme.Text.rowSubtitle)
                         .foregroundStyle(Theme.Colors.secondaryText)
                         .lineLimit(2)
@@ -145,13 +148,17 @@ struct RemindersWorkspaceView: View {
                 openComposer(editing: reminder)
             }
             Button("Delete", systemImage: "trash", role: .destructive) {
-                services?.perform { try services?.lightweightReminders.delete(reminder.id) }
+                services?.perform {
+                    guard let services else { return }
+                    try services.reminderStore.delete(reminder)
+                    services.noteChange(to: reminder)
+                }
             }
         }
     }
 
     @ViewBuilder
-    private func metadata(for reminder: LightweightReminder) -> some View {
+    private func metadata(for reminder: Item) -> some View {
         let labels = metadataLabels(for: reminder)
         if !labels.isEmpty {
             HStack(spacing: Theme.Spacing.small) {
@@ -164,7 +171,7 @@ struct RemindersWorkspaceView: View {
         }
     }
 
-    private func metadataLabels(for reminder: LightweightReminder) -> [String] {
+    private func metadataLabels(for reminder: Item) -> [String] {
         var labels: [String] = []
         if reminder.isSomeday {
             labels.append("Someday")
@@ -175,18 +182,25 @@ struct RemindersWorkspaceView: View {
             labels.append("Deadline " + dueAt.formatted(.dateTime.month(.abbreviated).day()))
         }
         labels.append(contentsOf: reminder.tagSlugs.map { "#" + $0 })
-        labels.append(contentsOf: reminder.personNames.map { "@" + $0 })
-        if let projectTitle = reminder.projectTitle {
+        let people = reminder.outgoingLinks.compactMap { link -> String? in
+            guard link.kind == .mentions,
+                  let target = link.target,
+                  target.kind == .person || target.kind == .organization
+            else { return nil }
+            return target.displayTitle
+        }
+        labels.append(contentsOf: people.sorted().map { "@" + $0 })
+        if reminder.parent?.kind == .project, let projectTitle = reminder.parent?.title {
             labels.append(">" + projectTitle)
         }
-        if !reminder.checklist.isEmpty {
-            labels.append("\(reminder.checklist.count) checklist")
+        if !reminder.checklist.items.isEmpty {
+            labels.append("\(reminder.checklist.items.count) checklist")
         }
         return labels
     }
 
-    private var visibleReminders: [LightweightReminder] {
-        services?.lightweightReminders.reminders ?? []
+    private var visibleReminders: [Item] {
+        services?.reminderStore.reminders ?? []
     }
 
     private func openComposer() {
@@ -198,7 +212,7 @@ struct RemindersWorkspaceView: View {
         }
     }
 
-    private func openComposer(editing reminder: LightweightReminder) {
+    private func openComposer(editing reminder: Item) {
         guard !isComposing else { return }
         draft = ReminderComposerDraft(reminder: reminder)
         editingReminderID = reminder.id
@@ -227,10 +241,13 @@ struct RemindersWorkspaceView: View {
         let committed = draft
         let reminderID = editingReminderID
         services.perform {
-            if let reminderID {
-                try services.lightweightReminders.update(reminderID, from: committed)
+            if let reminderID,
+               let reminder = services.reminderStore.reminders.first(where: { $0.id == reminderID }) {
+                try services.reminderStore.update(reminder, from: committed)
+                services.noteChange(to: reminder)
             } else {
-                try services.lightweightReminders.create(from: committed, now: services.dateProvider.now)
+                let reminder = try services.reminderStore.create(from: committed)
+                services.noteChange(to: reminder)
             }
         }
 
