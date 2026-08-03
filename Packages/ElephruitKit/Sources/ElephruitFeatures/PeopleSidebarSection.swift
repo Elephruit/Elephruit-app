@@ -101,7 +101,7 @@ struct PeopleSidebarSection: View {
 
     /// The fixed scopes, in the order they are shown.
     static let scopes: [PeopleScope] = [
-        .recordsDemo, .all, .recentlyViewed, .favorites, .celebrations, .needsFollowUp,
+        .all, .recentlyViewed, .favorites, .celebrations, .needsFollowUp,
     ]
 
     /// Shown only once something is actually linked, so an unused integration adds no row.

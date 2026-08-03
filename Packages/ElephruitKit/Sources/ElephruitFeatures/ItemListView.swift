@@ -319,7 +319,7 @@ public struct ItemListView: View {
                 headline: "Nothing archived",
                 message: "Archiving keeps something without leaving it in your way."
             )
-        case .people:
+        case .people, .records:
             // People are shown by `PeopleListView`, which has its own per-scope empty state — "you
             // have nobody" and "nobody is overdue" are different pieces of news and must not share
             // a sentence.

@@ -73,6 +73,13 @@ public struct DetailEmptyState: Sendable, Hashable {
                 message: "Choose someone to see their profile, what you have recorded, and when you last spoke."
             )
 
+        case .records:
+            DetailEmptyState(
+                symbolName: "circle.grid.2x2",
+                headline: "No record selected",
+                message: "Choose a person or thing to see its details, notes, history, and relationships."
+            )
+
         case .inbox:
             DetailEmptyState(
                 symbolName: "tray",

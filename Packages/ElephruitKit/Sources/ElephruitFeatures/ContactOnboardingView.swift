@@ -18,11 +18,13 @@ public struct ContactOnboardingView: View {
     @Environment(\.dismiss) private var dismiss
 
     let navigation: NavigationModel
+    let completionSelection: SidebarSelection
 
     @State private var model: ContactImportModel?
 
-    public init(navigation: NavigationModel) {
+    public init(navigation: NavigationModel, completionSelection: SidebarSelection = .people(.all)) {
         self.navigation = navigation
+        self.completionSelection = completionSelection
     }
 
     public var body: some View {
@@ -107,7 +109,7 @@ public struct ContactOnboardingView: View {
                 report: report,
                 onReviewAgain: { model.reviewAgain() },
                 onDone: {
-                    navigation.select(.people(.all))
+                    navigation.select(completionSelection)
                     dismiss()
                 }
             )
@@ -162,12 +164,12 @@ struct ContactExplanationView: View {
             }
 
             VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-                promise(
+                factRow(
                     "lock.shield",
                     "Everything stays on this Mac",
                     "Contacts are read locally. Elephruit has no network access at all, so nothing can be uploaded."
                 )
-                promise(
+                factRow(
                     "arrow.left.arrow.right.circle",
                     "Your notes never go back into Contacts",
                     """
@@ -175,12 +177,12 @@ struct ContactExplanationView: View {
                     provenance stay in Elephruit. Your address book never sees them.
                     """
                 )
-                promise(
+                factRow(
                     "pencil.slash",
                     "Your contacts are never changed",
                     "Elephruit only reads. It has no code that could modify a contact, and it never will without you asking."
                 )
-                promise(
+                factRow(
                     "checkmark.shield",
                     "Turning access off later keeps your work",
                     "Everything you record here is yours and stays here, whatever happens to the permission."
@@ -209,7 +211,7 @@ struct ContactExplanationView: View {
         .accessibilityIdentifier(AccessibilityID.People.contactExplanation)
     }
 
-    private func promise(_ symbol: String, _ title: String, _ detail: String) -> some View {
+    private func factRow(_ symbol: String, _ title: String, _ detail: String) -> some View {
         HStack(alignment: .top, spacing: Theme.Spacing.medium) {
             Image(systemName: symbol)
                 .font(.system(size: 15))

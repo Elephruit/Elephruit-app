@@ -66,6 +66,9 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
     /// this enum and a scene restored from a newer version still decodes.
     case people(PeopleScope)
 
+    /// One slice of the reusable Records module. Imports are a filing state, not a landing page.
+    case records(RecordsScope)
+
     /// A project's workspace, open on one of its views.
     ///
     /// Carries the view so that leaving a project on its board and coming back lands on the board,
@@ -164,7 +167,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
             // view use it by mistake. Home and Upcoming are redirected to Today before anything can
             // ask them, and answer the same way if anything ever does.
             ItemQuery()
-        case .people:
+        case .people, .records:
             // People are fetched through `PersonRepository`, which knows about placeholders and
             // profiles. A kind query would return them but would also return the sketches nobody
             // asked to see.
@@ -204,6 +207,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .reminders: .note
         case .time: .note
         case .people: .person
+        case .records: .reference
         case .taskView, .smartList, .builtInSmartList: .task
         }
     }
@@ -222,6 +226,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .reminders: "Reminders"
         case .time: "Time"
         case .people(let scope): scope.title
+        case .records(let scope): scope.title
         case .taskView(let view): view.title
         case .project: "Project"
         case .projectInbox: "Project Inbox"
@@ -246,6 +251,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .reminders: "bell"
         case .time: "timer"
         case .people(let scope): scope.symbolName
+        case .records(let scope): scope.symbolName
         case .taskView(let view): view.symbolName
         case .smartList: "line.3.horizontal.decrease.circle"
         case .builtInSmartList(let id): BuiltInSmartList.list(id: id)?.symbolName ?? "line.3.horizontal.decrease.circle"
@@ -268,6 +274,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .reminders: "sidebar.reminders"
         case .time: "sidebar.time"
         case .people(let scope): "sidebar.people.\(scope.title.lowercased().replacingOccurrences(of: " ", with: "-"))"
+        case .records(let scope): "sidebar.records.\(scope.rawValue)"
         case .taskView(let view): "sidebar.tasks.\(view.rawValue)"
         case .smartList(let id): "sidebar.smartList.\(id.uuidString)"
         case .builtInSmartList(let id): "sidebar.smartList.\(id)"

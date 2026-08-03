@@ -461,8 +461,8 @@ public struct RootView: View {
     /// without moving or resizing the fixed sibling at the window's leading edge.
     @ViewBuilder
     private var contentPanes: some View {
-        if navigation.selection == .people(.recordsDemo) {
-            RecordsDemoView()
+        if case .records(let scope) = navigation.selection {
+            RecordsWorkspaceView(navigation: navigation, scope: scope)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             HStack(spacing: 0) {
@@ -516,8 +516,6 @@ public struct RootView: View {
                 IsolatedPeopleListView()
             } else {
                 switch scope {
-                case .recordsDemo:
-                    RecordsDemoView()
                 case .celebrations:
                     CelebrationsView(navigation: navigation)
                 case .duplicates:

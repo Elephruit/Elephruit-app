@@ -57,7 +57,7 @@ extension AppModule {
                 )
             )
 
-        case .people:
+        case .records, .people:
             // A document module whose document is the profile, and the *only* one whose profile is
             // unbounded.
             //

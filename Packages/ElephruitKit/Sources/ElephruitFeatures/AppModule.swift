@@ -24,6 +24,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     case calendar
     case reminders
     case tasks
+    case records
     case people
     case notes
     case time
@@ -64,7 +65,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     /// top level of the primary sidebar, and swapping that away was taking the navigation with it.
     public var hasOwnSidebar: Bool {
         switch self {
-        case .calendar, .tasks, .people, .notes, .areas: true
+        case .calendar, .tasks, .records, .people, .notes, .areas: true
         case .reminders, .projects, .time, .bookmarks, .archive, .trash: false
         }
     }
@@ -74,6 +75,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         case .calendar: "Calendar"
         case .reminders: "Reminders"
         case .tasks: "Tasks"
+        case .records: "Records"
         case .people: "People"
         case .notes: "Notes"
         case .time: "Time"
@@ -90,6 +92,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         case .calendar: "calendar"
         case .reminders: "bell"
         case .tasks: "checkmark.circle"
+        case .records: "circle.grid.2x2"
         case .people: "person.2"
         case .notes: "note.text"
         case .time: "timer"
@@ -111,6 +114,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         case .calendar: "Your days, laid out, and everything you know about them."
         case .reminders: "Small things to remember, captured without becoming tasks."
         case .tasks: "What needs doing, when it becomes workable, and what you chose for today."
+        case .records: "People and things, with their notes, history, relationships, and shared work."
         case .people: "Who you know, what you owe them, and what is coming up for them."
         case .notes: "Everything written down, with the tags and searches that reach across it."
         case .time: "Tracked time, and what it went on."
@@ -128,6 +132,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         case .calendar: .calendar
         case .reminders: .reminders
         case .tasks: .taskView(.today)
+        case .records: .records(.all)
         case .people: .people(.all)
         case .notes: .kind(.note)
         case .time: .time
@@ -153,7 +158,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     /// rows that are not declared destinations at all.
     public var hasNavigationOfItsOwn: Bool {
         switch self {
-        case .calendar, .time, .tasks, .people: true
+        case .calendar, .time, .tasks, .records, .people: true
         case .reminders, .notes, .projects, .areas, .bookmarks, .archive, .trash: false
         }
     }
@@ -173,6 +178,8 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
             .reminders
         case .taskView, .smartList, .builtInSmartList:
             .tasks
+        case .records:
+            .records
         case .people:
             .people
         case .time:

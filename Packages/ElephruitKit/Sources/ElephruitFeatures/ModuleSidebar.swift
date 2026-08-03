@@ -30,6 +30,8 @@ struct ModuleSidebar: View {
                 CalendarSidebarSection(navigation: navigation)
             case .tasks:
                 TasksSidebarSection(navigation: navigation)
+            case .records:
+                RecordsSidebarSection(navigation: navigation)
             case .people:
                 if PeoplePerformanceIsolation.usesIsolatedSidebar {
                     IsolatedPeopleSidebarSection(navigation: navigation)
