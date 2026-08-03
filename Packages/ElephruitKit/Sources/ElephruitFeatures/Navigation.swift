@@ -44,6 +44,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
     case home
 
     case calendar
+    case reminders
     case time
 
     /// One of the Tasks module's system views.
@@ -153,7 +154,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
             .archive()
         case .trash:
             .trash()
-        case .today, .home, .upcoming, .calendar, .time:
+        case .today, .home, .upcoming, .calendar, .reminders, .time:
             // These destinations replace the list rather than filtering it, so there is no query to
             // answer with. An empty one is the honest result rather than a crash.
             //
@@ -200,6 +201,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         // A meeting, in the calendar. `⌘N` there means an event rather than a note, and the
         // workspace intercepts it before this is consulted — this is the honest fallback.
         case .calendar: .meeting
+        case .reminders: .note
         case .time: .note
         case .people: .person
         case .taskView, .smartList, .builtInSmartList: .task
@@ -217,6 +219,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .archive: "Archive"
         case .trash: "Trash"
         case .calendar: "Calendar"
+        case .reminders: "Reminders"
         case .time: "Time"
         case .people(let scope): scope.title
         case .taskView(let view): view.title
@@ -240,6 +243,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .archive: "archivebox"
         case .trash: "trash"
         case .calendar: "calendar.day.timeline.left"
+        case .reminders: "bell"
         case .time: "timer"
         case .people(let scope): scope.symbolName
         case .taskView(let view): view.symbolName
@@ -261,6 +265,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .archive: "sidebar.archive"
         case .trash: AccessibilityID.Sidebar.trash
         case .calendar: "sidebar.calendar"
+        case .reminders: "sidebar.reminders"
         case .time: "sidebar.time"
         case .people(let scope): "sidebar.people.\(scope.title.lowercased().replacingOccurrences(of: " ", with: "-"))"
         case .taskView(let view): "sidebar.tasks.\(view.rawValue)"

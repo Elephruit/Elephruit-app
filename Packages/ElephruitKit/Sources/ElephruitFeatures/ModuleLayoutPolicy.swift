@@ -38,6 +38,13 @@ extension AppModule {
                 )
             )
 
+        case .reminders:
+            ModuleShellLayout(
+                primary: PaneWidth(minimum: 420, ideal: 900),
+                detail: .unavailable,
+                inspector: .unavailable
+            )
+
         case .time:
             // The other canvas: a week of recorded hours, read across.
             ModuleShellLayout(

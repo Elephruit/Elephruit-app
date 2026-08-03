@@ -51,6 +51,11 @@ public struct StoreLocation: Sendable, Hashable {
         root.appending(path: "CalendarIndex.sqlite", directoryHint: .notDirectory)
     }
 
+    /// The intentionally small, independent store for the Reminders module.
+    public var lightweightRemindersURL: URL {
+        root.appending(path: "Reminders.json", directoryHint: .notDirectory)
+    }
+
     public init(root: URL, cachesRoot: URL) {
         self.root = root
         self.cachesRoot = cachesRoot

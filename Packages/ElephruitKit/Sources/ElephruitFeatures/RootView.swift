@@ -471,6 +471,8 @@ public struct RootView: View {
             ProjectWorkspaceView(navigation: navigation, projectID: id, viewID: viewID)
         } else if navigation.selection.isTaskDestination {
             TaskWorkspaceView(navigation: navigation)
+        } else if navigation.selection == .reminders {
+            RemindersWorkspaceView()
         } else if navigation.selection == .time {
             switch navigation.timeSurface {
             case .log:
