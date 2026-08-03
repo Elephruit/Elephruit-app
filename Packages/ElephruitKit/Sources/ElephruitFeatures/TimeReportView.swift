@@ -88,11 +88,10 @@ struct TimeReportView: View {
         .navigationTitle("Time Reports")
         .navigationSubtitle(period.displayName)
         .toolbar { toolbarContent }
-        .task(id: reloadToken) { reload() }
-        // Keyed on the grouping as well as the entries, because which rows exist — and therefore
-        // which ranks they hold and what colour each takes — changes the moment somebody switches
-        // from Project to Person.
-        .task(id: "\(reloadToken)|\(grouping.rawValue)") { resolveSeriesColors() }
+        // One task loads the entries and then resolves their colours. Running those as sibling
+        // tasks allowed colour resolution to win the race against the fetch and keep an empty or
+        // previous report's palette until the next reload.
+        .task(id: "\(reloadToken)|\(grouping.rawValue)") { reload() }
         .alert("The report could not be written", isPresented: exportProblemBinding) {
             Button("OK") { exportProblem = nil }
         } message: {
@@ -536,16 +535,21 @@ struct TimeReportView: View {
             return
         }
 
-        // Ranked by the report's own ordering — largest first — so the biggest slice of the chart is
-        // the same colour as the top row of the table under it.
         var resolved: [String: Color] = [:]
-        for (rank, row) in report.rows.enumerated() {
-            let colorName = row.itemID.flatMap { id in
-                (try? services.items.item(id: id))??.colorName
+        for row in report.rows {
+            let colorName: String?
+            if grouping == .tag {
+                colorName = (try? services.tags.tag(slug: row.key))??.colorName
+            } else {
+                colorName = row.itemID.flatMap { id in
+                    (try? services.items.item(id: id))??.colorName
+                }
             }
             resolved[row.key] = ReportSeriesPalette.color(
                 colorName: colorName,
-                rank: rank,
+                // The visible identity is deliberate: two legacy records that appear under the
+                // same project name must not look like two different projects in adjacent bars.
+                identity: row.title,
                 isUnassigned: ReportSeriesPalette.isUnassignedKey(row.key)
             )
         }
@@ -685,9 +689,12 @@ struct TimeReportView: View {
     private func reload() {
         guard let services else { return }
         let window = range
-        services.perform {
-            entries = try services.timeEntries.snapshots(in: window, limit: nil)
-        }
+        var loaded: [TimeEntrySnapshot] = []
+        guard services.perform({
+            loaded = try services.timeEntries.snapshots(in: window, limit: nil)
+        }) else { return }
+        entries = loaded
+        resolveSeriesColors()
     }
 
     // MARK: - Export

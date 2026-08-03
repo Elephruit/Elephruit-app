@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 // MARK: - Report series
@@ -12,12 +13,8 @@ import SwiftUI
 ///
 /// What is new is the fallback. Most rows have no tint of their own — a tag, a person, a project
 /// nobody has coloured — and a chart of six identical bars is not colour-coded. Those take a palette
-/// entry by their **rank in the report**, largest first, so the colour says something true about the
-/// picture: the biggest slice is always the same colour as the top row of the table beneath it.
-///
-/// Ranked rather than hashed, because a hash is stable across *renames* and nothing else anybody can
-/// see, while a rank is what the eye is comparing. The cost is that a series changes colour when it
-/// changes place in the ranking, which is a change the user has just caused and can see happening.
+/// entry derived from their visible identity. The mapping is deterministic rather than based on a
+/// report's ranking, so the same label keeps its colour across days, periods, and report charts.
 public enum ReportSeriesPalette {
     /// The palette entries used for series with no colour of their own, in order.
     ///
@@ -32,7 +29,7 @@ public enum ReportSeriesPalette {
     /// says what it is at a glance: ten entries of the app's own palette, which adapt to light,
     /// dark, Increase Contrast and a non-default accent, rather than ten SwiftUI literals that do
     /// not.
-    public static let ranked: [Theme.Palette] = [
+    public static let fallbacks: [Theme.Palette] = [
         Theme.Palette.blue,
         Theme.Palette.orange,
         Theme.Palette.teal,
@@ -45,22 +42,49 @@ public enum ReportSeriesPalette {
         Theme.Palette.pink,
     ]
 
-    /// The colour for a series, given what it carries and where it ranks.
+    /// The palette entry for a series, exposed separately so the deterministic mapping is testable
+    /// without comparing environment-resolved SwiftUI colours.
     ///
     /// - Parameters:
     ///   - colorName: the item's own stored palette name, when the row has an item and it has one.
-    ///   - rank: the row's position in the report, largest first.
+    ///   - identity: the label a person uses to recognise the row across charts.
     ///   - isUnassigned: whether this row is an *absence* — "No project", "Untagged", "On your own".
-    public static func color(colorName: String?, rank: Int, isUnassigned: Bool) -> Color {
+    public static func palette(
+        colorName: String?,
+        identity: String,
+        isUnassigned: Bool
+    ) -> Theme.Palette? {
         // An absence is not a category and must not look like one. Grey says "these are the ones
         // that are not filed", which is what the row means, and it keeps the palette for the rows
         // that are actually about something.
-        if isUnassigned { return Theme.Palette.graphite.color }
+        if isUnassigned { return Theme.Palette.graphite }
 
-        if let colorName, let entry = Theme.Palette(rawValue: colorName) { return entry.color }
+        if let colorName, let entry = Theme.Palette(rawValue: colorName) { return entry }
 
-        guard !ranked.isEmpty else { return Theme.Colors.selection }
-        return ranked[rank % ranked.count].color
+        guard !fallbacks.isEmpty else { return nil }
+        return fallbacks[stableIndex(for: identity, count: fallbacks.count)]
+    }
+
+    /// The colour for a series, given what it carries and the identity it keeps across charts.
+    public static func color(colorName: String?, identity: String, isUnassigned: Bool) -> Color {
+        palette(colorName: colorName, identity: identity, isUnassigned: isUnassigned)?.color
+            ?? Theme.Colors.selection
+    }
+
+    /// Swift's `hashValue` is deliberately randomised between launches. FNV-1a is small, stable,
+    /// and sufficient for spreading human-readable labels over this short visual palette.
+    private static func stableIndex(for identity: String, count: Int) -> Int {
+        let canonical = identity
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .precomposedStringWithCanonicalMapping
+            .lowercased()
+
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in canonical.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return Int(hash % UInt64(count))
     }
 
     /// Whether a report row's key is one of the sentinels the reporting rules use for "not filed".
