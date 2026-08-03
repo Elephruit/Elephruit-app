@@ -748,7 +748,7 @@ struct EventRecordPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            Text("Tag a record on “\(event.displayTitle)”")
+            Text("Add a record to “\(event.displayTitle)”")
                 .font(Theme.Text.title)
                 .lineLimit(2)
 
@@ -763,7 +763,7 @@ struct EventRecordPicker: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(candidates) { record in
                             Button { link(record) } label: {
                                 HStack(spacing: Theme.Spacing.small) {
@@ -790,7 +790,7 @@ struct EventRecordPicker: View {
                 .frame(maxHeight: 220)
             }
 
-            Text("This creates a private meeting interaction for the record. Nothing is added to the calendar event.")
+            Text("This creates a private meeting interaction for the record. Nothing is added to the calendar event itself.")
                 .font(Theme.Text.keyHint)
                 .foregroundStyle(Theme.Colors.tertiaryText)
 

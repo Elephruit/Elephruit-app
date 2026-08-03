@@ -55,6 +55,10 @@ public final class RecordsService {
     public func allRecords() throws(AppError) -> [Item] {
         var query = ItemQuery()
         query.scope = .active
+        // Records can only use these three storage kinds. Asking for every kind made opening a
+        // Record chooser scan every task, note, project, meeting, and daily entry before throwing
+        // almost all of them away.
+        query.kinds = [.person, .organization, .reference]
         query.sort = .titleAscending
         let candidates = try items.items(matching: query)
         return candidates.filter { $0.recordProfile != nil || $0.kind == .person }

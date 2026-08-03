@@ -36,6 +36,10 @@ public final class TodayModel {
     /// Future days the reader has opened out.
     public private(set) var expandedDays: Set<Date> = []
 
+    /// The one calendar row whose details are open. Kept on the page model rather than on each row
+    /// so expanding one event closes the previous one and scrolling cannot create a stack of editors.
+    public private(set) var expandedEventID: String?
+
     static let initialFutureDayCount = 4
     static let previousDayCount = 3
     static let dayLoadIncrement = 7
@@ -108,6 +112,14 @@ public final class TodayModel {
         }
     }
 
+    public func toggleEventDetails(_ eventID: String) {
+        expandedEventID = expandedEventID == eventID ? nil : eventID
+    }
+
+    public func collapseEventDetails() {
+        expandedEventID = nil
+    }
+
     // MARK: - Moving between days
 
     public func select(_ date: Date) {
@@ -118,6 +130,7 @@ public final class TodayModel {
         // than the days after wherever the page was opened.
         futureDayCount = Self.initialFutureDayCount
         expandedDays = []
+        expandedEventID = nil
     }
 
     public func step(days count: Int) {
@@ -268,6 +281,10 @@ public final class TodayModel {
                 filters: services.todayPreferences.filters
             )
             days = window.days
+            if let expandedEventID,
+               !window.days.flatMap(\.events).contains(where: { $0.id == expandedEventID }) {
+                self.expandedEventID = nil
+            }
             tasksByID = window.tasks
             peopleByID = window.people
             activeContainers = window.containers
