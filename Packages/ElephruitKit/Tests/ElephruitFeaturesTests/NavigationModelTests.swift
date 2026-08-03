@@ -52,7 +52,7 @@ struct BrowserNavigationHistoryTests {
     @Test("A new destination after going back clears forward history")
     func branchingClearsForwardHistory() {
         let navigation = NavigationModel()
-        navigation.select(.people(.all))
+        navigation.select(.records(.people))
         navigation.selectItem(UUID())
         navigation.goBack()
 
@@ -64,16 +64,16 @@ struct BrowserNavigationHistoryTests {
     @Test("History crosses module boundaries")
     func moduleHistory() {
         let navigation = NavigationModel()
-        navigation.enterModule(.people)
+        navigation.enterModule(.records)
 
-        #expect(navigation.activeModule == .people)
+        #expect(navigation.activeModule == .records)
         navigation.goBack()
         #expect(navigation.selection == .today)
         #expect(navigation.activeModule == nil)
 
         navigation.goForward()
-        #expect(navigation.selection == .people(.all))
-        #expect(navigation.activeModule == .people)
+        #expect(navigation.selection == .records(.all))
+        #expect(navigation.activeModule == .records)
     }
 }
 

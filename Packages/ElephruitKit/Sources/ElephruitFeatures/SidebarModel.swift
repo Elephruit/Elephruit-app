@@ -214,22 +214,6 @@ public enum SidebarRegistry {
             symbolName: "circle.grid.2x2",
             hint: "Every person and thing you keep track of."
         ),
-        // Superseded by `PeopleSidebarSection`, which is the People module's own sidebar.
-        //
-        // Declared rather than deleted, on the same terms as every other unavailable destination: a
-        // scene restored from a build that predates the People module still decodes, and the row is
-        // never enumerated because the accessors filter on availability. A flat `.kind(.person)` list
-        // answers "who do I know" and none of the questions people actually arrive with.
-        SidebarDestination(
-            id: "people",
-            selection: .kind(.person),
-            band: .module,
-            module: .people,
-            title: "People",
-            symbolName: "person",
-            hint: "Everybody in the library, as a flat list.",
-            isAvailable: false
-        ),
         SidebarDestination(
             id: "bookmarks",
             selection: .kind(.bookmark),

@@ -103,7 +103,7 @@ public enum SchemaV3: VersionedSchema {
     }
 }
 
-/// The fourth schema: the People module.
+/// The fourth schema introduced person-record metadata.
 ///
 /// Three new entities — ``PersonObservationRecord``, ``PersonRelationship``, ``PersonCelebration`` —
 /// and thirteen new optional attributes on ``PersonProfile``. **Additive throughout.** Nothing

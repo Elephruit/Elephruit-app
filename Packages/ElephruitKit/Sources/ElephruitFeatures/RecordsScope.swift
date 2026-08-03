@@ -82,6 +82,25 @@ public enum RecordsScope: Hashable, Sendable, Codable, Identifiable {
         }
     }
 
+    public var hint: String {
+        switch self {
+        case .all: "Every person and thing you track."
+        case .unsorted: "Imported records waiting for you to file them."
+        case .people: "Human records, with contact history and relationship context."
+        case .pets: "Pets, with care notes, appointments, and medication details."
+        case .vehicles: "Vehicles, with maintenance history and identifying details."
+        case .organizations: "Companies, teams, and other organizations."
+        case .other: "Records that do not fit one of the named types."
+        case .recentlyViewed: "People whose records you opened most recently."
+        case .favorites: "People you marked for quick access."
+        case .celebrations: "Birthdays, anniversaries, and other dates coming up."
+        case .needsFollowUp: "People you have not contacted within your follow-up window."
+        case .fromContacts: "Person records linked to the system Contacts app."
+        case .duplicates: "Person records that may describe the same person."
+        case .group: "Person records collected in this saved group."
+        }
+    }
+
     public var recordType: RecordType? {
         switch self {
         case .all, .unsorted, .recentlyViewed, .favorites, .celebrations, .needsFollowUp,

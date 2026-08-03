@@ -36,7 +36,7 @@ public struct ContactOnboardingView: View {
             }
         }
         .frame(width: 640, height: 560)
-        .accessibilityIdentifier(AccessibilityID.People.contactOnboarding)
+        .accessibilityIdentifier(AccessibilityID.Records.contactOnboarding)
         .task {
             guard model == nil, let services else { return }
             let created = ContactImportModel(services: services)
@@ -208,7 +208,7 @@ struct ContactExplanationView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(Theme.Spacing.section)
-        .accessibilityIdentifier(AccessibilityID.People.contactExplanation)
+        .accessibilityIdentifier(AccessibilityID.Records.contactExplanation)
     }
 
     private func factRow(_ symbol: String, _ title: String, _ detail: String) -> some View {
@@ -310,7 +310,7 @@ struct ContactAccessRefusedView: View {
                 .frame(maxWidth: 400)
 
             Label(
-                "People still works. You can add people by hand, and everything already here is kept.",
+                "Records still works. You can add records by hand, and everything already here is kept.",
                 systemImage: "info.circle"
             )
             .font(Theme.Text.metadata)
@@ -331,7 +331,7 @@ struct ContactAccessRefusedView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(Theme.Spacing.section)
-        .accessibilityIdentifier(AccessibilityID.People.contactAccessRefused)
+        .accessibilityIdentifier(AccessibilityID.Records.contactAccessRefused)
     }
 }
 
@@ -442,7 +442,7 @@ struct ContactImportFinishedView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(Theme.Spacing.section)
-        .accessibilityIdentifier(AccessibilityID.People.contactImportFinished)
+        .accessibilityIdentifier(AccessibilityID.Records.contactImportFinished)
     }
 }
 

@@ -3,7 +3,7 @@ import ElephruitIntegrations
 import Foundation
 import Testing
 
-/// The People module's promise about the address book: **one write, and it can only say five things.**
+/// Records' address-book safety rule: **one write, and it can only say five things.**
 ///
 /// ### What changed, and what did not
 /// This suite used to assert that no system contact could ever be written, on the reasoning that the

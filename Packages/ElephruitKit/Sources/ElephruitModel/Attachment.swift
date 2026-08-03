@@ -142,7 +142,7 @@ public final class PersonProfile {
     /// A pointer only — Contacts owns the data it holds.
     public var contactsIdentifier: String?
 
-    // MARK: Added with the People module
+    // MARK: Added with person records
     //
     // Every one of these is optional or defaulted, so the store gains nullable columns and nothing
     // is rewritten. See `SchemaV4`.

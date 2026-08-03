@@ -45,7 +45,7 @@ struct DesignReviewLaunchTests {
     func startsInAModule() {
         #expect(
             DesignReviewLaunch.start(in: ["-ElephruitStartModule", "people"])
-                == .module(.people)
+                == .module(.records)
         )
     }
 
@@ -68,7 +68,7 @@ struct DesignReviewLaunchTests {
     func startIsCaseInsensitive() {
         #expect(
             DesignReviewLaunch.start(in: ["-ElephruitStartModule", "PeOpLe"])
-                == .module(.people)
+                == .module(.records)
         )
     }
 

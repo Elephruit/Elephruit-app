@@ -33,7 +33,7 @@ struct ContactImportReviewView: View {
             Divider()
             footer
         }
-        .accessibilityIdentifier(AccessibilityID.People.contactReview)
+        .accessibilityIdentifier(AccessibilityID.Records.contactReview)
         .sheet(item: $reviewingProposal) { proposal in
             ContactDuplicateResolutionView(proposal: proposal) { outcome, personID in
                 model.resolve(proposal.id, as: outcome, personID: personID)
@@ -460,7 +460,7 @@ struct ContactDuplicateResolutionView: View {
         }
         .padding(Theme.Spacing.section)
         .frame(width: 560, height: 460)
-        .accessibilityIdentifier(AccessibilityID.People.contactDuplicate)
+        .accessibilityIdentifier(AccessibilityID.Records.contactDuplicate)
     }
 
     private func sideBySide(title: String, name: String, details: [String]) -> some View {

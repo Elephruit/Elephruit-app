@@ -34,12 +34,6 @@ struct ModuleSidebar: View {
                     CalendarSidebarSection(navigation: navigation)
                 case .tasks:
                     TasksSidebarSection(navigation: navigation)
-                case .people:
-                    if PeoplePerformanceIsolation.usesIsolatedSidebar {
-                        IsolatedPeopleSidebarSection(navigation: navigation)
-                    } else {
-                        PeopleSidebarSection(navigation: navigation)
-                    }
                 case .notes:
                     NotesSidebarSection(navigation: navigation)
                 case .areas:

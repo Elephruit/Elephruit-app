@@ -402,7 +402,7 @@ struct ElephruitCommands: Commands {
         let command: ShortcutCommand? = switch module {
         case .calendar: .goCalendar
         case .notes: .goNotes
-        case .records: .goPeople
+        case .records: .goRecords
         default: nil
         }
 
@@ -484,7 +484,7 @@ struct SettingsView: View {
             }
 
             Tab("Records", systemImage: "circle.grid.2x2") {
-                people.accessibilityIdentifier(AccessibilityID.People.contactsSettings)
+                records.accessibilityIdentifier(AccessibilityID.Records.contactsSettings)
             }
 
             Tab("Shortcuts", systemImage: "keyboard") {
@@ -536,7 +536,7 @@ struct SettingsView: View {
     /// ongoing state — linked counts, a last-refresh time, conflicts awaiting a decision — and burying
     /// that under a Trash preference would make it undiscoverable at exactly the moment somebody goes
     /// looking for why a phone number is out of date.
-    private var people: some View {
+    private var records: some View {
         Form {
             if case .ready(let services) = environment.state {
                 ContactsSettingsSection()
@@ -595,7 +595,7 @@ struct SettingsView: View {
     ///
     /// Its own tab rather than a paragraph at the bottom of General. It is the claim this whole app
     /// is built around, it is the thing somebody checks before trusting it with a decade of notes,
-    /// and a promise buried under a Trash preference reads like one somebody hoped nobody would find.
+    /// and a privacy claim buried under a Trash preference is too easy to miss.
     private var privacy: some View {
         Form {
             Section {

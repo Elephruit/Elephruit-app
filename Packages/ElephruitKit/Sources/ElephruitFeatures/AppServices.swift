@@ -155,7 +155,7 @@ public final class AppServices {
     /// People and real-world things presented through one reusable workspace.
     public let records: RecordsService
 
-    // MARK: The People module
+    // MARK: Human record services
 
     /// People, their facts, their relationships, and their celebrations.
     public let persons: any PersonRepository

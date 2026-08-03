@@ -257,7 +257,7 @@ struct TodayActions {
     /// Opens the channel and records that it happened.
     ///
     /// ### Why the interaction is written
-    /// Because "when did we last speak" is the question the whole People module is built around, and
+    /// Because "when did we last speak" is a core question for a human record, and
     /// it is answered from recorded contact rather than from mentions. A call placed from this page
     /// that leaves no trace makes the follow-up suggestions quietly wrong for the person you just
     /// rang, which is the worst possible person for them to be wrong about.

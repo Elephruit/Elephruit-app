@@ -59,7 +59,7 @@ struct EditContactDetailsSheet: View {
         }
         .frame(width: 860, height: 620)
         .background(Theme.Colors.windowBackground)
-        .accessibilityIdentifier(AccessibilityID.People.contactEditor)
+        .accessibilityIdentifier(AccessibilityID.Records.contactEditor)
     }
 
     private var editorSidebar: some View {

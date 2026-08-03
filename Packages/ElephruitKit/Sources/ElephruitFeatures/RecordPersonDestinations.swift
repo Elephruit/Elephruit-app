@@ -69,7 +69,7 @@ struct CelebrationsView: View {
                 }
             }
         }
-        .accessibilityIdentifier(AccessibilityID.People.celebrations)
+        .accessibilityIdentifier(AccessibilityID.Records.celebrations)
         .task(id: horizonDays) { reload() }
     }
 
@@ -227,7 +227,7 @@ struct MyCardView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .accessibilityIdentifier(AccessibilityID.People.myCard)
+        .accessibilityIdentifier(AccessibilityID.Records.myCard)
         .fileExporter(
             isPresented: $isExporting,
             document: VCardDocument(text: exportedText),
@@ -448,7 +448,7 @@ struct CardScanView: View {
         }
         .padding(Theme.Spacing.section)
         .frame(width: 520)
-        .accessibilityIdentifier(AccessibilityID.People.cardScan)
+        .accessibilityIdentifier(AccessibilityID.Records.cardScan)
         .fileImporter(
             isPresented: $isImporting,
             allowedContentTypes: [.image, .pdf],

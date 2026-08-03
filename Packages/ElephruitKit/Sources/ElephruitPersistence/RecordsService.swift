@@ -61,11 +61,24 @@ public final class RecordsService {
     public func create(_ draft: RecordDraft) throws(AppError) -> Item {
         let trimmed = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw .invalidQuery(reason: "A record needs a name.") }
+        let cleanedDetails = draft.details.reduce(into: [String: String]()) { result, entry in
+            let value = entry.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty { result[entry.key] = value }
+        }
 
         let item: Item
         switch draft.type {
         case .person:
-            item = try people.createPerson(PersonDraft(fullName: trimmed))
+            item = try people.createPerson(
+                PersonDraft(
+                    fullName: trimmed,
+                    roleTitle: cleanedDetails["role"],
+                    organizationName: cleanedDetails["organization"],
+                    emails: cleanedDetails["email"].map { [LabelledValue(label: "email", value: $0)] } ?? [],
+                    phones: cleanedDetails["phone"].map { [LabelledValue(label: "phone", value: $0)] } ?? []
+                )
+            )
+            item.body = draft.notes
         case .organization:
             item = try items.create(ItemDraft(kind: .organization, title: trimmed, body: draft.notes))
         case .pet, .vehicle, .other:
@@ -77,8 +90,10 @@ public final class RecordsService {
         let profile = RecordProfile(
             type: draft.type,
             origin: .manual,
-            details: draft.details.merging(
-                draft.summary.isEmpty ? [:] : ["summary": draft.summary],
+            details: cleanedDetails.merging(
+                draft.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? [:]
+                    : ["summary": draft.summary.trimmingCharacters(in: .whitespacesAndNewlines)],
                 uniquingKeysWith: { current, _ in current }
             ),
             createdAt: dateProvider.now,

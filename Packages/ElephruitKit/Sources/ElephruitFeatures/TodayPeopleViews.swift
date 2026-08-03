@@ -218,8 +218,8 @@ struct TodayPersonCard: View {
         let contacts = actions.contactActions(for: item)
 
         HStack(spacing: Theme.Spacing.tight) {
-            // Whichever channel their own record actually supports, in the order the People module
-            // already ranks them. A Call button on somebody with no number is a button that fails.
+            // Whichever channel their own record actually supports, in the order Records already
+            // ranks them. A Call button on somebody with no number is a button that fails.
             if let primary = contacts.first(where: \.isRunnable) {
                 Button { actions.contact(primary, person: item) } label: {
                     Image(systemName: primary.channel.symbolName)

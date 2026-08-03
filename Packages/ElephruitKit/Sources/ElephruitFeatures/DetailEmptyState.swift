@@ -66,13 +66,6 @@ public struct DetailEmptyState: Sendable, Hashable {
 
         // People. ⌘N makes a note, not a person, so it is not offered — the way to add somebody is
         // the + button above the list, and naming the wrong shortcut would teach the wrong habit.
-        case .people:
-            DetailEmptyState(
-                symbolName: "person.2",
-                headline: "Nobody selected",
-                message: "Choose someone to see their profile, what you have recorded, and when you last spoke."
-            )
-
         case .records:
             DetailEmptyState(
                 symbolName: "circle.grid.2x2",

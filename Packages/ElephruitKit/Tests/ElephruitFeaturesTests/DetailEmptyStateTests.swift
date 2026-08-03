@@ -21,8 +21,8 @@ struct DetailEmptyStateTests {
     static let mustNotOfferNewItem: [SidebarSelection] = [
         .trash,
         .archive,
-        .people(.all),
-        .people(.favorites),
+        .records(.people),
+        .records(.favorites),
         .kind(.person),
     ]
 
@@ -65,9 +65,9 @@ struct DetailEmptyStateTests {
         #expect(state.message.contains("put back"))
     }
 
-    @Test("People says nobody rather than nothing")
-    func peopleSaysNobody() {
-        #expect(DetailEmptyState.forSelection(.people(.all)).headline == "Nobody selected")
+    @Test("Records names the empty selection clearly")
+    func recordsNamesTheEmptySelection() {
+        #expect(DetailEmptyState.forSelection(.records(.people)).headline == "No record selected")
     }
 
     /// Every destination gets a sentence, and none of them gets an empty one. Enumerated rather than
@@ -89,7 +89,7 @@ struct DetailEmptyStateTests {
             .today, .upcoming, .inbox, .archive, .trash, .home, .calendar, .time,
             .tag(slug: "work"), .savedSearch(id: UUID()), .item(id: UUID()),
             .taskView(.inbox), .smartList(id: UUID()), .builtInSmartList(id: "overdue"),
-            .people(.all), .people(.celebrations), .people(.group(id: UUID())),
+            .records(.people), .records(.celebrations), .records(.group(id: UUID())),
         ]
         destinations.append(contentsOf: ItemKind.allCases.map { SidebarSelection.kind($0) })
         return destinations
