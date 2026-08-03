@@ -1896,6 +1896,7 @@ final class ReminderComposerFocusRouter: ObservableObject {
 
     private var editors: [ReminderComposerField: WeakReminderEditor] = [:]
     private var focusGeneration = 0
+    private(set) var pendingRegistrationFocusField: ReminderComposerField?
 
     func register(_ editor: NSTextView, for field: ReminderComposerField) {
         editors[field] = WeakReminderEditor(editor)
@@ -1908,10 +1909,11 @@ final class ReminderComposerFocusRouter: ObservableObject {
         // continues to use `focus(_:)` below and remains immediate.
         focusGeneration += 1
         let generation = focusGeneration
+        pendingRegistrationFocusField = field
         DispatchQueue.main.async { [weak self] in
-            guard let self,
-                  self.focusGeneration == generation,
-                  self.activeField == field
+            guard let self, self.focusGeneration == generation else { return }
+            self.pendingRegistrationFocusField = nil
+            guard self.activeField == field
             else { return }
             _ = self.focusNow(field)
         }
@@ -1925,6 +1927,7 @@ final class ReminderComposerFocusRouter: ObservableObject {
 
     func focus(_ field: ReminderComposerField) {
         focusGeneration += 1
+        pendingRegistrationFocusField = nil
         let generation = focusGeneration
         _ = focusNow(field)
         DispatchQueue.main.async { [weak self] in
