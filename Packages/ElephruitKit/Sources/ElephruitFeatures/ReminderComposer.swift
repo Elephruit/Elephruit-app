@@ -63,12 +63,24 @@ struct ReminderComposer: View {
         }
         .shadow(color: Theme.Colors.shadow.opacity(0.14), radius: 8, y: 2)
         .background {
-            ReminderComposerKeyboardMonitor(router: focusRouter)
-            .frame(width: 0, height: 0)
+            // This AppKit view occupies the card's exact bounds. Its event monitor can therefore
+            // distinguish a click in the composer from one elsewhere in the main window without
+            // putting a gesture above the text editors or stealing their clicks.
+            ReminderComposerEventMonitor(
+                router: focusRouter,
+                onClickOutside: commitAndClose
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
             focusRouter.onTab = { reverse in
                 move(from: focusRouter.activeField, reverse: reverse)
+            }
+            focusRouter.onVerticalMove = { direction in
+                moveVertically(direction, from: focusRouter.activeField)
+            }
+            focusRouter.onHorizontalMove = { direction in
+                moveHorizontally(direction, from: focusRouter.activeField)
             }
             focusRouter.onTextInput = { characters in
                 guard focusRouter.activeField == .checklist, !draft.hasChecklistContent else {
@@ -94,6 +106,8 @@ struct ReminderComposer: View {
         .onChange(of: projectQuery) { _, _ in resetMetadataSuggestion() }
         .onDisappear {
             focusRouter.onTab = nil
+            focusRouter.onVerticalMove = nil
+            focusRouter.onHorizontalMove = nil
             focusRouter.onTextInput = nil
         }
         .accessibilityIdentifier("tasks.reminderComposer")
@@ -1103,6 +1117,37 @@ struct ReminderComposer: View {
         return true
     }
 
+    /// Routes directional navigation from the always-mounted composer event monitor. Metadata
+    /// editors are mounted conditionally, so making them own the only arrow handlers introduces a
+    /// reconciliation-sized window where a freshly activated picker cannot respond.
+    @discardableResult
+    private func moveVertically(
+        _ direction: Int,
+        from field: ReminderComposerField
+    ) -> Bool {
+        switch field {
+        case .title, .notes:
+            return moveInlineSuggestion(direction)
+        case .when, .tags, .people, .deadline, .project:
+            return moveMetadataSuggestion(direction, for: field)
+        case .checklist:
+            return false
+        }
+    }
+
+    @discardableResult
+    private func moveHorizontally(
+        _ direction: Int,
+        from field: ReminderComposerField
+    ) -> Bool {
+        switch field {
+        case .when, .deadline:
+            return moveDateHorizontally(direction, for: field)
+        case .title, .notes, .tags, .people, .checklist, .project:
+            return false
+        }
+    }
+
     @discardableResult
     private func acceptMetadataSuggestion(for field: ReminderComposerField) -> Bool {
         if field == .when || field == .deadline {
@@ -1436,6 +1481,10 @@ struct ReminderComposer: View {
     }
 
     private func commitAndClose() {
+        // A local mouse monitor sees the outside click before AppKit resigns the current editor.
+        // Pull its live text into the draft now so clicking elsewhere can never save the previous
+        // keystroke snapshot.
+        focusRouter.flushActiveEditor()
         settleInlineShortcuts()
         onCommitAndClose()
     }
@@ -1672,7 +1721,6 @@ struct ReminderPlainTextEditor: NSViewRepresentable {
     func updateNSView(_ scroll: ReminderEditorScrollView, context: Context) {
         context.coordinator.parent = self
         guard let editor = scroll.documentView as? ReminderEditorTextView else { return }
-        focusRouter.register(editor, for: field)
         editor.placeholder = placeholder
         context.coordinator.reconciliationGeneration += 1
         let generation = context.coordinator.reconciliationGeneration
@@ -1893,14 +1941,33 @@ final class ReminderEditorTextView: NSTextView {
 final class ReminderComposerFocusRouter: ObservableObject {
     @Published private(set) var activeField: ReminderComposerField = .title
     var onTab: ((Bool) -> Void)?
+    var onVerticalMove: ((Int) -> Bool)?
+    var onHorizontalMove: ((Int) -> Bool)?
     var onTextInput: ((String) -> Bool)?
 
     private var editors: [ReminderComposerField: WeakReminderEditor] = [:]
     private var focusGeneration = 0
+    private(set) var pendingRegistrationFocusField: ReminderComposerField?
 
     func register(_ editor: NSTextView, for field: ReminderComposerField) {
         editors[field] = WeakReminderEditor(editor)
-        if activeField == field { focus(field) }
+        guard activeField == field else { return }
+
+        // Registration happens from `makeNSView` and `viewDidMoveToWindow`, both of which can run
+        // inside SwiftUI's view-reconciliation pass. Making the editor first responder there also
+        // changes its selection, whose delegate writes the caret back to SwiftUI state. AppKit is
+        // therefore allowed to focus only after that pass has finished. User-driven `activate`
+        // continues to use `focus(_:)` below and remains immediate.
+        focusGeneration += 1
+        let generation = focusGeneration
+        pendingRegistrationFocusField = field
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.focusGeneration == generation else { return }
+            self.pendingRegistrationFocusField = nil
+            guard self.activeField == field
+            else { return }
+            _ = self.focusNow(field)
+        }
     }
 
     func activate(_ field: ReminderComposerField) {
@@ -1911,6 +1978,7 @@ final class ReminderComposerFocusRouter: ObservableObject {
 
     func focus(_ field: ReminderComposerField) {
         focusGeneration += 1
+        pendingRegistrationFocusField = nil
         let generation = focusGeneration
         _ = focusNow(field)
         DispatchQueue.main.async { [weak self] in
@@ -1938,6 +2006,14 @@ final class ReminderComposerFocusRouter: ObservableObject {
         onTab?(reverse)
     }
 
+    func handleVerticalMove(_ direction: Int) -> Bool {
+        onVerticalMove?(direction) == true
+    }
+
+    func handleHorizontalMove(_ direction: Int) -> Bool {
+        onHorizontalMove?(direction) == true
+    }
+
     func handleTextInput(_ characters: String) -> Bool {
         onTextInput?(characters) == true
     }
@@ -1955,7 +2031,7 @@ final class ReminderComposerFocusRouter: ObservableObject {
         editor.needsDisplay = true
     }
 
-    private func flushActiveEditor() {
+    func flushActiveEditor() {
         guard let editor = editors[activeField]?.value as? ReminderEditorTextView,
               !editor.hasMarkedText()
         else { return }
@@ -1971,15 +2047,45 @@ private final class WeakReminderEditor {
     }
 }
 
-// MARK: - Window-level keyboard routing
+// MARK: - Window-level composer routing
 
-/// Captures Tab before AppKit decides whether it means text insertion, field-editor traversal, or
-/// an accessibility key-view action. It exists only while one composer exists and only consumes
-/// events belonging to that composer's window.
-struct ReminderComposerKeyboardMonitor: NSViewRepresentable {
+/// Captures keyboard traversal and outside clicks before AppKit changes first responder.
+///
+/// It exists only while one composer exists and only consumes events belonging to that composer's
+/// main window. Native metadata popovers live in another window, so interacting with one remains
+/// an interaction *inside* the composer rather than an accidental save.
+struct ReminderComposerEventMonitor: NSViewRepresentable {
     let router: ReminderComposerFocusRouter
+    let onClickOutside: () -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(router: router) }
+    static func shouldCommitClick(
+        eventWindowIsComposerWindow: Bool,
+        composerContainsLocation: Bool
+    ) -> Bool {
+        eventWindowIsComposerWindow && !composerContainsLocation
+    }
+
+    @MainActor
+    static func handleArrowKey(
+        _ keyCode: UInt16,
+        using router: ReminderComposerFocusRouter
+    ) -> Bool {
+        switch keyCode {
+        case 126: router.handleVerticalMove(-1) // Up Arrow
+        case 125: router.handleVerticalMove(1) // Down Arrow
+        case 123: router.handleHorizontalMove(-1) // Left Arrow
+        case 124: router.handleHorizontalMove(1) // Right Arrow
+        default: false
+        }
+    }
+
+    static func allowsArrowRouting(with modifiers: NSEvent.ModifierFlags) -> Bool {
+        modifiers.intersection([.shift, .control, .option, .command]).isEmpty
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(router: router, onClickOutside: onClickOutside)
+    }
 
     func makeNSView(context: Context) -> ReminderComposerKeyboardMonitorView {
         let view = ReminderComposerKeyboardMonitorView()
@@ -1987,7 +2093,10 @@ struct ReminderComposerKeyboardMonitor: NSViewRepresentable {
         return view
     }
 
-    func updateNSView(_ view: ReminderComposerKeyboardMonitorView, context: Context) {}
+    func updateNSView(_ view: ReminderComposerKeyboardMonitorView, context: Context) {
+        context.coordinator.router = router
+        context.coordinator.onClickOutside = onClickOutside
+    }
 
     static func dismantleNSView(
         _ view: ReminderComposerKeyboardMonitorView,
@@ -1999,15 +2108,18 @@ struct ReminderComposerKeyboardMonitor: NSViewRepresentable {
     @MainActor
     final class Coordinator {
         weak var router: ReminderComposerFocusRouter?
-        private var monitor: Any?
+        var onClickOutside: () -> Void
+        private var keyboardMonitor: Any?
+        private var mouseMonitor: Any?
 
-        init(router: ReminderComposerFocusRouter) {
+        init(router: ReminderComposerFocusRouter, onClickOutside: @escaping () -> Void) {
             self.router = router
+            self.onClickOutside = onClickOutside
         }
 
         func install(for view: ReminderComposerKeyboardMonitorView) {
-            guard monitor == nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak view] event in
+            guard keyboardMonitor == nil, mouseMonitor == nil else { return }
+            keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak view] event in
                 guard let self,
                       let view,
                       let composerWindow = view.window,
@@ -2016,6 +2128,11 @@ struct ReminderComposerKeyboardMonitor: NSViewRepresentable {
                 else { return event }
 
                 let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                if ReminderComposerEventMonitor.allowsArrowRouting(with: modifiers),
+                   let router = self.router,
+                   ReminderComposerEventMonitor.handleArrowKey(event.keyCode, using: router) {
+                    return nil
+                }
                 if event.keyCode == 48,
                    !modifiers.contains(.command),
                    !modifiers.contains(.control),
@@ -2036,11 +2153,36 @@ struct ReminderComposerKeyboardMonitor: NSViewRepresentable {
                 else { return event }
                 return nil
             }
+
+            mouseMonitor = NSEvent.addLocalMonitorForEvents(
+                matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+            ) { [weak self, weak view] event in
+                guard let self,
+                      let view,
+                      let composerWindow = view.window,
+                      NSApp.isActive,
+                      !view.bounds.isEmpty
+                else { return event }
+
+                let eventWindowIsComposerWindow = event.window === composerWindow
+                let composerContainsLocation = eventWindowIsComposerWindow
+                    ? view.bounds.contains(view.convert(event.locationInWindow, from: nil))
+                    : false
+                guard ReminderComposerEventMonitor.shouldCommitClick(
+                    eventWindowIsComposerWindow: eventWindowIsComposerWindow,
+                    composerContainsLocation: composerContainsLocation
+                ) else { return event }
+
+                self.onClickOutside()
+                return event
+            }
         }
 
         func uninstall() {
-            if let monitor { NSEvent.removeMonitor(monitor) }
-            monitor = nil
+            if let keyboardMonitor { NSEvent.removeMonitor(keyboardMonitor) }
+            if let mouseMonitor { NSEvent.removeMonitor(mouseMonitor) }
+            keyboardMonitor = nil
+            mouseMonitor = nil
         }
 
     }

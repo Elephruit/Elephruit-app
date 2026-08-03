@@ -214,6 +214,92 @@ struct ReminderComposerStateTests {
         #expect(router.activeField == .notes)
     }
 
+    @Test("Registering an editor never changes SwiftUI-bound selection synchronously")
+    @MainActor
+    func editorRegistrationDefersFocus() {
+        var selectionChanges = 0
+        let router = ReminderComposerFocusRouter()
+        let editor = ReminderPlainTextEditor(
+            text: .constant("Reminder"),
+            placeholder: "Reminder",
+            role: .title,
+            onTab: { _ in },
+            onReturn: {},
+            onCommandReturn: {},
+            onEscape: {},
+            field: .title,
+            focusRouter: router,
+            onSelectionChange: { _ in selectionChanges += 1 }
+        )
+        let coordinator = editor.makeCoordinator()
+        let textView = ReminderEditorTextView()
+        textView.delegate = coordinator
+        textView.coordinator = coordinator
+        textView.string = "Reminder"
+        selectionChanges = 0
+
+        router.register(textView, for: .title)
+
+        #expect(selectionChanges == 0)
+        #expect(router.pendingRegistrationFocusField == .title)
+    }
+
+    @Test("Only a click elsewhere in the composer window commits")
+    @MainActor
+    func outsideClickBoundary() {
+        #expect(ReminderComposerEventMonitor.shouldCommitClick(
+            eventWindowIsComposerWindow: true,
+            composerContainsLocation: false
+        ))
+        #expect(!ReminderComposerEventMonitor.shouldCommitClick(
+            eventWindowIsComposerWindow: true,
+            composerContainsLocation: true
+        ))
+        #expect(!ReminderComposerEventMonitor.shouldCommitClick(
+            eventWindowIsComposerWindow: false,
+            composerContainsLocation: false
+        ))
+    }
+
+    @Test("Arrow routing is available before the destination editor mounts")
+    @MainActor
+    func persistentArrowRouting() {
+        let router = ReminderComposerFocusRouter()
+        var verticalMoves: [Int] = []
+        var horizontalMoves: [Int] = []
+        router.onVerticalMove = { verticalMoves.append($0); return true }
+        router.onHorizontalMove = { horizontalMoves.append($0); return true }
+
+        #expect(ReminderComposerEventMonitor.handleArrowKey(126, using: router))
+        #expect(ReminderComposerEventMonitor.handleArrowKey(125, using: router))
+        #expect(ReminderComposerEventMonitor.handleArrowKey(123, using: router))
+        #expect(ReminderComposerEventMonitor.handleArrowKey(124, using: router))
+
+        #expect(verticalMoves == [-1, 1])
+        #expect(horizontalMoves == [-1, 1])
+    }
+
+    @Test("Unclaimed arrows remain available for normal caret movement")
+    @MainActor
+    func unclaimedArrowRouting() {
+        let router = ReminderComposerFocusRouter()
+
+        #expect(!ReminderComposerEventMonitor.handleArrowKey(126, using: router))
+        #expect(!ReminderComposerEventMonitor.handleArrowKey(123, using: router))
+        #expect(!ReminderComposerEventMonitor.handleArrowKey(48, using: router))
+    }
+
+    @Test("Hardware arrow flags do not disable persistent routing")
+    @MainActor
+    func hardwareArrowModifiers() {
+        #expect(ReminderComposerEventMonitor.allowsArrowRouting(with: []))
+        #expect(ReminderComposerEventMonitor.allowsArrowRouting(with: [.function]))
+        #expect(ReminderComposerEventMonitor.allowsArrowRouting(with: [.numericPad]))
+        #expect(ReminderComposerEventMonitor.allowsArrowRouting(with: [.capsLock]))
+        #expect(!ReminderComposerEventMonitor.allowsArrowRouting(with: [.shift]))
+        #expect(!ReminderComposerEventMonitor.allowsArrowRouting(with: [.command]))
+    }
+
     @Test("Arrow keys move suggestion selection and Return accepts it")
     @MainActor
     func editorSuggestionKeyboard() {

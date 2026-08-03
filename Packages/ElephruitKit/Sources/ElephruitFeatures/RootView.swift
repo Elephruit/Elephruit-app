@@ -395,12 +395,19 @@ public struct RootView: View {
             WindowFullScreenReader(isFullScreen: $isWindowFullScreen)
         }
         .inspector(isPresented: inspectorBinding) {
-            InspectorView(navigation: navigation)
-                .inspectorColumnWidth(
-                    min: shellLayout.inspector.width.minimum,
-                    ideal: shellWidths.inspector ?? shellLayout.inspector.width.ideal,
-                    max: shellWidths.inspector ?? shellLayout.inspector.width.ideal
-                )
+            // SwiftUI retains the inspector content even while its binding is false. Building the
+            // real inspector for a module whose policy says it is unavailable gave AppKit both the
+            // inspector's 300-point content minimum and the policy's zero-point split-item maximum.
+            // Omitting that content removes the contradictory constraints instead of asking the
+            // split view to recover from them during layout.
+            if shellLayout.inspector.isAvailable {
+                InspectorView(navigation: navigation)
+                    .inspectorColumnWidth(
+                        min: shellLayout.inspector.width.minimum,
+                        ideal: shellWidths.inspector ?? shellLayout.inspector.width.ideal,
+                        max: shellWidths.inspector ?? shellLayout.inspector.width.ideal
+                    )
+            }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
             guard width > 0 else { return }
@@ -724,7 +731,15 @@ public struct RootView: View {
     private var inspectorBinding: Binding<Bool> {
         Binding(
             get: { shellWidths.inspector != nil },
-            set: { navigation.isInspectorVisible = $0 }
+            set: { isVisible in
+                // A hidden native inspector may echo `false` while SwiftUI is reconciling it. Do
+                // not turn that echo into an observable-model write, especially for modules such
+                // as Reminders that have no inspector in the first place.
+                guard shellLayout.inspector.isAvailable,
+                      navigation.isInspectorVisible != isVisible
+                else { return }
+                navigation.isInspectorVisible = isVisible
+            }
         )
     }
 
