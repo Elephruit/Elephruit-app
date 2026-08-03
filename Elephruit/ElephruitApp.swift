@@ -402,7 +402,7 @@ struct ElephruitCommands: Commands {
         let command: ShortcutCommand? = switch module {
         case .calendar: .goCalendar
         case .notes: .goNotes
-        case .people: .goPeople
+        case .records: .goPeople
         default: nil
         }
 
@@ -483,7 +483,7 @@ struct SettingsView: View {
                 .accessibilityIdentifier(AccessibilityID.Settings.calendarTab)
             }
 
-            Tab("People", systemImage: "person.2") {
+            Tab("Records", systemImage: "circle.grid.2x2") {
                 people.accessibilityIdentifier(AccessibilityID.People.contactsSettings)
             }
 

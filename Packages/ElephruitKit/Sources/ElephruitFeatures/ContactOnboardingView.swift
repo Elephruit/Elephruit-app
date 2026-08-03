@@ -22,7 +22,7 @@ public struct ContactOnboardingView: View {
 
     @State private var model: ContactImportModel?
 
-    public init(navigation: NavigationModel, completionSelection: SidebarSelection = .people(.all)) {
+    public init(navigation: NavigationModel, completionSelection: SidebarSelection = .records(.unsorted)) {
         self.navigation = navigation
         self.completionSelection = completionSelection
     }
@@ -98,7 +98,7 @@ public struct ContactOnboardingView: View {
 
         case .importing(let progress):
             ContactWaitingView(
-                headline: "Adding people",
+                headline: "Adding contact records",
                 message: "You can stop at any time. Everything already added is kept.",
                 progress: progress,
                 onCancel: { model.cancel() }
@@ -118,7 +118,7 @@ public struct ContactOnboardingView: View {
             ContactAccessRefusedView(
                 title: "Contacts access was turned off",
                 message: """
-                    Everyone already in People is kept, along with everything you recorded about \
+                    Everyone already in Records is kept, along with everything you recorded about \
                     them. Linked details can no longer refresh until access is restored.
                     """,
                 showsSettingsButton: true,
@@ -150,12 +150,12 @@ struct ContactExplanationView: View {
                     .font(.system(size: 34))
                     .foregroundStyle(Theme.Colors.selection)
 
-                Text("Start from the people you already know")
+                Text("Start from the contacts you already know")
                     .font(Theme.Text.title)
 
                 Text("""
                     Elephruit can use the contacts already on this Mac — from iCloud, Google, \
-                    Exchange, or On My Mac — as the starting point for your People. You will see \
+                    Exchange, or On My Mac — as the starting point for your Records. You will see \
                     exactly what it proposes before anything is added.
                     """)
                     .font(Theme.Text.rowSubtitle)
@@ -432,7 +432,7 @@ struct ContactImportFinishedView: View {
                     Button("Review again", action: onReviewAgain)
                         .help("Nothing already added will be added twice")
                 }
-                Button("Go to People", action: onDone)
+                Button("Go to Records", action: onDone)
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
             }

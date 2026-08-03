@@ -176,16 +176,22 @@ struct RecordsWorkspaceView: View {
     @ViewBuilder
     private var detail: some View {
         if let record = selectedRecord {
-            RecordDetail(record: record, tab: $tab) {
-                do {
-                    try services?.records.file(record)
-                    refresh(selecting: record.id)
-                } catch { loadError = appError(error) }
-            } onSave: { summary, notes, details in
-                do {
-                    try services?.records.update(record, summary: summary, notes: notes, details: details)
-                    refresh(selecting: record.id)
-                } catch { loadError = appError(error) }
+            if record.kind == .person {
+                // Person records keep the full CRM portrait, timeline, contact actions, meeting
+                // brief, facts, and relationship charts that previously required leaving Records.
+                ItemDetailView(navigation: navigation)
+            } else {
+                RecordDetail(record: record, tab: $tab) {
+                    do {
+                        try services?.records.file(record)
+                        refresh(selecting: record.id)
+                    } catch { loadError = appError(error) }
+                } onSave: { summary, notes, details in
+                    do {
+                        try services?.records.update(record, summary: summary, notes: notes, details: details)
+                        refresh(selecting: record.id)
+                    } catch { loadError = appError(error) }
+                }
             }
         } else {
             EmptyStateView(

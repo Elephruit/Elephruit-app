@@ -233,7 +233,7 @@ struct ContactImportReviewView: View {
         HStack(spacing: Theme.Spacing.small) {
             Label(
                 plan.alreadyLinkedCount > 0
-                    ? "Everything on this Mac is already in People."
+                    ? "Everything on this Mac is already in Records."
                     : "There is nothing here to add.",
                 systemImage: plan.alreadyLinkedCount > 0 ? "checkmark.circle.fill" : "tray"
             )
@@ -272,7 +272,7 @@ struct ContactImportReviewView: View {
             Button("Cancel", role: .cancel, action: onCancel)
                 .keyboardShortcut(.cancelAction)
 
-            Button("Add Contacts to People") { model.startImport() }
+            Button("Add Contacts to Records") { model.startImport() }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
                 .disabled(model.plan?.isRunnable != true)
@@ -400,7 +400,7 @@ struct ContactDuplicateResolutionView: View {
                     .padding(.top, Theme.Spacing.section)
 
                 sideBySide(
-                    title: "Already in People",
+                    title: "Already in Records",
                     name: proposal.matchedPersonName ?? "—",
                     details: existingDetails
                 )

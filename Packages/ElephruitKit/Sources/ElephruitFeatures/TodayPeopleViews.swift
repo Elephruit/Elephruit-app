@@ -243,7 +243,7 @@ struct TodayPersonCard: View {
     private var menu: some View {
         if let item = model.person(person.personID) {
             Button("Open Profile", systemImage: "person.crop.circle") { actions.select(item.id) }
-            Button("Open in People", systemImage: "person.2") { actions.openInModule(item) }
+            Button("Open in Records", systemImage: "circle.grid.2x2") { actions.openInModule(item) }
 
             let contacts = actions.contactActions(for: item).filter(\.isRunnable)
             if !contacts.isEmpty {
@@ -267,7 +267,7 @@ struct TodayPersonCard: View {
             // On an invitation, not in the library. Saying so is more useful than a menu of
             // controls that cannot run, and linking them by hand is the calendar's own job — where
             // the choice between two people with the same name can actually be made.
-            Text("\(person.name) is on the invitation but not in your people")
+            Text("\(person.name) is on the invitation but not in your records")
             Button("Link in Calendar", systemImage: "link") {
                 if let event = meetingEvent { actions.openInCalendar(event) }
             }

@@ -114,7 +114,7 @@ struct TodayActions {
         case .task:
             navigation.select(.taskView(.today))
         case .person:
-            navigation.select(.people(.all))
+            navigation.select(.records(.people))
         default:
             navigation.select(.kind(item.kind))
         }
