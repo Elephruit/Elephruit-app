@@ -14,7 +14,6 @@ struct RecordsModuleSidebar: View {
     @State private var records: [Item] = []
     @State private var groups: [PersonGroup] = []
     @State private var searchText = ""
-    @State private var isShowingNewRecord = false
     @State private var isShowingContactImport = false
     @State private var loadError: AppError?
 
@@ -30,7 +29,7 @@ struct RecordsModuleSidebar: View {
                     TextField("Search records", text: $searchText)
                         .textFieldStyle(.roundedBorder)
                     Menu {
-                        Button("New Record", systemImage: "plus") { isShowingNewRecord = true }
+                        Button("New Record", systemImage: "plus", action: beginNewRecord)
                         Divider()
                         Button("Import from Contacts…", systemImage: "person.crop.rectangle.stack") {
                             isShowingContactImport = true
@@ -55,7 +54,7 @@ struct RecordsModuleSidebar: View {
                     message: searchText.isEmpty ? emptyMessage : "Try another name, type, or detail.",
                     actionTitle: searchText.isEmpty ? "New Record" : "Clear Search",
                     action: searchText.isEmpty
-                        ? { isShowingNewRecord = true }
+                        ? beginNewRecord
                         : { searchText = "" }
                 )
             } else {
@@ -75,15 +74,6 @@ struct RecordsModuleSidebar: View {
             .foregroundStyle(Theme.Colors.secondaryText)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Theme.Spacing.large)
-        }
-        .sheet(isPresented: $isShowingNewRecord) {
-            NewRecordSheet { draft in
-                guard let services else { return }
-                do {
-                    let record = try services.records.create(draft)
-                    refresh(selecting: record.id)
-                } catch { loadError = appError(error) }
-            }
         }
         .sheet(isPresented: $isShowingContactImport, onDismiss: { refresh() }) {
             ContactOnboardingView(
@@ -197,8 +187,15 @@ struct RecordsModuleSidebar: View {
     private var selectionBinding: Binding<UUID?> {
         Binding(
             get: { navigation.selectedItemID },
-            set: { navigation.selectItem($0) }
+            set: { id in
+                navigation.isNewRecordVisible = false
+                navigation.selectItem(id)
+            }
         )
+    }
+
+    private func beginNewRecord() {
+        navigation.isNewRecordVisible = true
     }
 
     private func refresh(selecting id: UUID? = nil) {

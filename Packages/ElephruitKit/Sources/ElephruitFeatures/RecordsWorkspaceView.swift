@@ -21,6 +21,7 @@ struct RecordsWorkspaceView: View {
         .background(Theme.Colors.contentBackground)
         .task(id: navigation.selectedItemID) { refresh() }
         .onChange(of: services?.context.hasChanges) { _, _ in refresh() }
+        .onDisappear { navigation.isNewRecordVisible = false }
         .alert(
             "Records could not be updated",
             isPresented: Binding(get: { loadError != nil }, set: { if !$0 { loadError = nil } }),
@@ -35,7 +36,12 @@ struct RecordsWorkspaceView: View {
 
     @ViewBuilder
     private var detail: some View {
-        if scope == .celebrations {
+        if navigation.isNewRecordVisible {
+            NewRecordEditor(
+                onCancel: cancelNewRecord,
+                onCreate: createRecord
+            )
+        } else if scope == .celebrations {
             CelebrationsView(navigation: navigation)
         } else if scope == .duplicates {
             DuplicatesView(navigation: navigation)
@@ -67,6 +73,21 @@ struct RecordsWorkspaceView: View {
     }
 
     private var selectedRecord: Item? { records.first { $0.id == navigation.selectedItemID } }
+
+    private func cancelNewRecord() {
+        navigation.isNewRecordVisible = false
+    }
+
+    private func createRecord(_ draft: RecordDraft) {
+        guard let services else { return }
+        do {
+            let record = try services.records.create(draft)
+            navigation.isNewRecordVisible = false
+            refresh(selecting: record.id)
+        } catch {
+            loadError = appError(error)
+        }
+    }
 
     private func refresh(selecting id: UUID? = nil) {
         guard let services else { return }
@@ -290,8 +311,8 @@ private struct RecordDetail: View {
     }
 }
 
-struct NewRecordSheet: View {
-    @Environment(\.dismiss) private var dismiss
+struct NewRecordEditor: View {
+    let onCancel: () -> Void
     let onCreate: (RecordDraft) -> Void
 
     @State private var name = ""
@@ -299,60 +320,206 @@ struct NewRecordSheet: View {
     @State private var summary = ""
     @State private var notes = ""
     @State private var details: [String: String] = [:]
+    @FocusState private var focusedField: String?
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                    Text("New Record").font(Theme.Text.title)
-                    Text("People and things share one workspace; the type controls the useful details.")
-                        .font(Theme.Text.rowSubtitle)
-                        .foregroundStyle(Theme.Colors.secondaryText)
-                }
-                Spacer()
-            }
-            .padding(Theme.Spacing.section)
+            header
             Divider()
 
-            Form {
-                Picker("Type", selection: $type) {
-                    ForEach(RecordType.allCases) { Label($0.displayName, systemImage: $0.symbolName).tag($0) }
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+                    introduction
+                    typeChooser
+                    identityCard
+                    detailsCard
+                    notesCard
                 }
-                .pickerStyle(.segmented)
+                .frame(maxWidth: 820, alignment: .leading)
+                .padding(.horizontal, Theme.Spacing.section)
+                .padding(.vertical, 36)
+                .frame(maxWidth: .infinity, alignment: .top)
+            }
+        }
+        .background(Theme.Colors.contentBackground)
+        .onAppear { focusedField = "name" }
+        .onChange(of: type) { _, _ in
+            details = [:]
+            focusedField = "name"
+        }
+        .accessibilityIdentifier("records.new.editor")
+    }
 
-                TextField(namePrompt, text: $name)
-                TextField("Short description", text: $summary)
+    private var header: some View {
+        HStack(spacing: Theme.Spacing.medium) {
+            Button(action: onCancel) {
+                Label("Back to Records", systemImage: "chevron.left")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.Colors.secondaryText)
+            .keyboardShortcut(.cancelAction)
 
-                Section("Useful details") {
-                    ForEach(detailFields, id: \.key) { field in
-                        TextField(field.label, text: binding(field.key))
+            Divider().frame(height: 20)
+
+            Text("New Record")
+                .font(Theme.Text.title)
+
+            Spacer()
+
+            Button("Add Record", systemImage: "plus", action: create)
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(trimmedName.isEmpty)
+        }
+        .padding(.horizontal, Theme.Spacing.section)
+        .frame(height: 68)
+    }
+
+    private var introduction: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+            Text("What are you keeping track of?")
+                .font(.system(.title, weight: .semibold))
+            Text("Start with the essentials. You can add history, relationships, shared work, and richer details after creating the record.")
+                .font(Theme.Text.editorBody)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var typeChooser: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            Text("Record type")
+                .font(Theme.Text.rowTitleEmphasised)
+
+            HStack(spacing: Theme.Spacing.medium) {
+                ForEach(RecordType.allCases) { candidate in
+                    typeButton(candidate)
+                }
+            }
+        }
+    }
+
+    private func typeButton(_ candidate: RecordType) -> some View {
+        let selected = type == candidate
+        return Button {
+            type = candidate
+        } label: {
+            VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+                Image(systemName: candidate.symbolName)
+                    .font(.system(.title2, weight: .medium))
+                    .foregroundStyle(selected ? Theme.Colors.onAccent : Theme.Colors.secondaryText)
+
+                Text(candidate.displayName)
+                    .font(Theme.Text.rowTitleEmphasised)
+                    .foregroundStyle(selected ? Theme.Colors.onAccent : Theme.Colors.primaryText)
+            }
+            .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
+            .padding(Theme.Spacing.large)
+            .background(selected ? Theme.Colors.selection : Theme.Colors.subtleFill)
+            .clipShape(.rect(cornerRadius: Theme.Radius.large))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Radius.large)
+                    .stroke(selected ? Color.clear : Theme.Colors.separator.opacity(0.7))
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private var identityCard: some View {
+        editorCard {
+            editorField(label: namePrompt, text: $name, focusID: "name")
+            Divider()
+            editorField(label: "Short description", text: $summary, focusID: "summary")
+        }
+    }
+
+    private var detailsCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            sectionTitle("Useful details", symbol: "list.bullet.rectangle")
+
+            editorCard {
+                ForEach(Array(detailFields.enumerated()), id: \.element.key) { index, field in
+                    editorField(label: field.label, text: binding(field.key), focusID: field.key)
+                    if index < detailFields.count - 1 { Divider() }
+                }
+            }
+        }
+    }
+
+    private var notesCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            sectionTitle("Notes", symbol: "note.text")
+
+            TextEditor(text: $notes)
+                .font(Theme.Text.editorBody)
+                .scrollContentBackground(.hidden)
+                .padding(Theme.Spacing.medium)
+                .frame(minHeight: 170)
+                .background(Theme.Colors.subtleFill)
+                .clipShape(.rect(cornerRadius: Theme.Radius.large))
+                .overlay(alignment: .topLeading) {
+                    if notes.isEmpty {
+                        Text(notesPrompt)
+                            .font(Theme.Text.editorBody)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
+                            .padding(.horizontal, Theme.Spacing.large)
+                            .padding(.vertical, Theme.Spacing.large)
+                            .allowsHitTesting(false)
                     }
                 }
-
-                Section("Notes") {
-                    TextEditor(text: $notes).frame(minHeight: 100)
-                }
-            }
-            .formStyle(.grouped)
-
-            Divider()
-            HStack {
-                Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Add Record") {
-                    onCreate(RecordDraft(name: name, type: type, summary: summary, notes: notes, details: details))
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            .padding(Theme.Spacing.large)
         }
-        .frame(width: 620, height: 620)
-        .onChange(of: type) { _, _ in details = [:] }
+    }
+
+    private func sectionTitle(_ title: String, symbol: String) -> some View {
+        Label(title, systemImage: symbol)
+            .font(Theme.Text.rowTitleEmphasised)
+    }
+
+    private func editorCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 0, content: content)
+            .padding(.horizontal, Theme.Spacing.large)
+            .background(Theme.Colors.subtleFill)
+            .clipShape(.rect(cornerRadius: Theme.Radius.large))
+    }
+
+    private func editorField(
+        label: String,
+        text: Binding<String>,
+        focusID: String
+    ) -> some View {
+        HStack(spacing: Theme.Spacing.large) {
+            Text(label)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .frame(width: 150, alignment: .leading)
+
+            TextField(label, text: text)
+                .textFieldStyle(.plain)
+                .focused($focusedField, equals: focusID)
+
+            Spacer()
+        }
+        .frame(minHeight: 54)
     }
 
     private var namePrompt: String { type == .person ? "Full name" : type == .vehicle ? "Vehicle name" : "Name" }
+
+    private var notesPrompt: String {
+        switch type {
+        case .person: "Background, interests, context, or anything useful to remember."
+        case .pet: "Care instructions, temperament, dietary notes, or health context."
+        case .vehicle: "Maintenance context, quirks, service preferences, or history."
+        case .organization: "Background, key contacts, working context, or useful details."
+        case .other: "Anything useful to remember about this record."
+        }
+    }
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private func create() {
+        guard !trimmedName.isEmpty else { return }
+        onCreate(RecordDraft(name: trimmedName, type: type, summary: summary, notes: notes, details: details))
+    }
 
     private var detailFields: [(key: String, label: String)] {
         switch type {

@@ -140,20 +140,6 @@ public struct RootView: View {
         .sheet(isPresented: recordsCommandBarBinding) {
             RecordsCommandBarView(navigation: navigation)
         }
-        .sheet(isPresented: newRecordBinding) {
-            NewRecordSheet { draft in
-                guard let services else { return }
-                do {
-                    let record = try services.records.create(draft)
-                    navigation.select(.records(.all))
-                    navigation.selectItem(record.id)
-                } catch let error as AppError {
-                    services.lastError = error
-                } catch {
-                    services.lastError = .storeUnavailable(underlying: error.localizedDescription)
-                }
-            }
-        }
         // The sheet the sidebar's "All Tags…" button always promised. The flag existed and was
         // set; nothing observed it, so the button was the one control in the app that did nothing.
         .sheet(isPresented: tagBrowserBinding) {
@@ -688,6 +674,7 @@ public struct RootView: View {
                 navigation.isCalendarSearchVisible = true
             },
             PaletteCommand(id: "new-record", title: "New Record…", category: .create, symbolName: "plus.square.on.square") {
+                navigation.select(.records(.all))
                 navigation.isNewRecordVisible = true
             },
             PaletteCommand(id: "records-bar", title: "Records Command Bar", category: .navigate, symbolName: "person.text.rectangle") {
@@ -790,13 +777,6 @@ public struct RootView: View {
         Binding(
             get: { navigation.isRecordsCommandBarVisible },
             set: { navigation.isRecordsCommandBarVisible = $0 }
-        )
-    }
-
-    private var newRecordBinding: Binding<Bool> {
-        Binding(
-            get: { navigation.isNewRecordVisible },
-            set: { navigation.isNewRecordVisible = $0 }
         )
     }
 
