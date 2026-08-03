@@ -27,16 +27,44 @@ struct ReminderComposerStateTests {
         #expect(ReminderComposerField.project.advanced(reverse: true) == .notes)
     }
 
-    @Test("A stale popover dismissal cannot cancel a newer visit to the same field")
-    func stalePopoverRequest() {
-        var gate = ReminderPopoverPresentationGate()
-        let firstVisit = gate.nextRequest()
-        gate.cancel()
-        let secondVisit = gate.nextRequest()
+    @Test("Native reminder popovers follow presentation state without a deferred handoff")
+    @MainActor
+    func nativePopoverPresentationIsImmediate() {
+        _ = NSApplication.shared
+        let window = NSWindow(
+            contentRect: NSRect(x: 100, y: 100, width: 240, height: 120),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let anchor = ReminderPopoverAnchorView(
+            frame: NSRect(x: 80, y: 40, width: 80, height: 24)
+        )
+        window.contentView = anchor
+        window.orderFrontRegardless()
 
-        #expect(!gate.accepts(firstVisit, for: .when, activeField: .when))
-        #expect(gate.accepts(secondVisit, for: .when, activeField: .when))
-        #expect(!gate.accepts(secondVisit, for: .when, activeField: .tags))
+        let coordinator = ReminderNativePopoverCoordinator()
+        coordinator.attach(to: anchor)
+        for visit in 0..<100 {
+            coordinator.update(
+                anchor: anchor,
+                content: AnyView(Text("Picker \(visit)")),
+                isPresented: true,
+                preferredEdge: .minY
+            )
+            #expect(coordinator.isPopoverShown)
+
+            coordinator.update(
+                anchor: anchor,
+                content: AnyView(Text("Picker \(visit)")),
+                isPresented: false,
+                preferredEdge: .minY
+            )
+            #expect(!coordinator.isPopoverShown)
+        }
+
+        coordinator.detach(from: anchor)
+        window.close()
     }
 
     @Test("A saved reminder can repopulate the entire composer")

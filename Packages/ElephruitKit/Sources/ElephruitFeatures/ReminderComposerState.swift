@@ -24,32 +24,6 @@ enum ReminderComposerField: Int, CaseIterable, Sendable, Hashable {
     }
 }
 
-/// Invalidates asynchronous popover work from an older focus traversal.
-///
-/// AppKit can finish dismissing a popover after the keyboard has already looped back to the same
-/// field. Field identity alone cannot distinguish those two presentations, so every request also
-/// carries this monotonically increasing generation.
-struct ReminderPopoverPresentationGate: Sendable, Hashable {
-    private(set) var generation = 0
-
-    mutating func nextRequest() -> Int {
-        generation += 1
-        return generation
-    }
-
-    mutating func cancel() {
-        generation += 1
-    }
-
-    func accepts(
-        _ request: Int,
-        for field: ReminderComposerField,
-        activeField: ReminderComposerField
-    ) -> Bool {
-        request == generation && field == activeField
-    }
-}
-
 /// One row in the Things-style date search shown by When and Deadline.
 ///
 /// The row keeps its presentation alongside the resolved day so a keystroke can select the exact

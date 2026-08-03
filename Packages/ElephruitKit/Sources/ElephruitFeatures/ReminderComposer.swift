@@ -25,7 +25,6 @@ struct ReminderComposer: View {
     @State private var availablePeople: [String] = []
     @State private var availableProjects: [String] = []
     @State private var popupField: ReminderComposerField?
-    @State private var popupPresentationGate = ReminderPopoverPresentationGate()
     @State private var titleCaret = 0
     @State private var notesCaret = 0
     @State private var inlineSuggestionSelection = 0
@@ -406,17 +405,19 @@ struct ReminderComposer: View {
                 }
             }
         }
-        .popover(isPresented: popupBinding(for: .when), arrowEdge: .bottom) {
-            reminderDatePopover(
-                field: .when,
-                selected: draft.startAt,
-                allowsSomeday: true,
-                onPick: { date in
-                    draft.startAt = date
-                    draft.isSomeday = false
-                    activate(.tags)
-                }
-            )
+        .background {
+            ReminderNativePopover(isPresented: popupField == .when) {
+                reminderDatePopover(
+                    field: .when,
+                    selected: draft.startAt,
+                    allowsSomeday: true,
+                    onPick: { date in
+                        draft.startAt = date
+                        draft.isSomeday = false
+                        activate(.tags)
+                    }
+                )
+            }
         }
     }
 
@@ -444,8 +445,10 @@ struct ReminderComposer: View {
                 }
             }
         }
-        .popover(isPresented: popupBinding(for: .tags), arrowEdge: .bottom) {
-            reminderTagPopover
+        .background {
+            ReminderNativePopover(isPresented: popupField == .tags) {
+                reminderTagPopover
+            }
         }
     }
 
@@ -473,8 +476,10 @@ struct ReminderComposer: View {
                 }
             }
         }
-        .popover(isPresented: popupBinding(for: .people), arrowEdge: .bottom) {
-            reminderPeoplePopover
+        .background {
+            ReminderNativePopover(isPresented: popupField == .people) {
+                reminderPeoplePopover
+            }
         }
     }
 
@@ -513,8 +518,10 @@ struct ReminderComposer: View {
                 .help(draft.projectTitle.map { "Project: \($0)" } ?? "Associate with a project")
             }
         }
-        .popover(isPresented: popupBinding(for: .project), arrowEdge: .bottom) {
-            reminderProjectPopover
+        .background {
+            ReminderNativePopover(isPresented: popupField == .project) {
+                reminderProjectPopover
+            }
         }
     }
 
@@ -557,35 +564,19 @@ struct ReminderComposer: View {
                 }
             }
         }
-        .popover(isPresented: popupBinding(for: .deadline), arrowEdge: .bottom) {
-            reminderDatePopover(
-                field: .deadline,
-                selected: draft.dueAt,
-                allowsSomeday: false,
-                onPick: { date in
-                    draft.dueAt = date
-                    activate(.title)
-                }
-            )
-        }
-    }
-
-    private func popupBinding(for field: ReminderComposerField) -> Binding<Bool> {
-        // A native popover may report dismissal after focus has traversed all the way back to the
-        // same field. Capture the request generation so that late notification cannot tear down
-        // the newer presentation.
-        let generation = popupPresentationGate.generation
-        return Binding(
-            get: { popupField == field },
-            set: { isPresented in
-                guard !isPresented,
-                      popupField == field,
-                      popupPresentationGate.generation == generation
-                else { return }
-                popupPresentationGate.cancel()
-                popupField = nil
+        .background {
+            ReminderNativePopover(isPresented: popupField == .deadline) {
+                reminderDatePopover(
+                    field: .deadline,
+                    selected: draft.dueAt,
+                    allowsSomeday: false,
+                    onPick: { date in
+                        draft.dueAt = date
+                        activate(.title)
+                    }
+                )
             }
-        )
+        }
     }
 
     private func metadataQueryEditor(
@@ -622,12 +613,6 @@ struct ReminderComposer: View {
         .frame(width: width, height: 24)
         .padding(.horizontal, Theme.Spacing.small)
         .background(Theme.Colors.selectionFill, in: Capsule())
-        .onAppear {
-            // The query editor is the popover's anchor. Asking again here guarantees that anchor
-            // exists even when several Tab events are processed in one render pass.
-            guard activeField == field else { return }
-            presentPopupAfterLayout(for: field)
-        }
     }
 
     private func actionButton(
@@ -1279,15 +1264,14 @@ struct ReminderComposer: View {
     private func activate(_ field: ReminderComposerField) {
         if activeField == field {
             focusRouter.focus(field)
-            presentPopupAfterLayout(for: field)
+            popupField = fieldHasPopup(field) ? field : nil
             return
         }
         collapseTransientEditor(activeField)
         resetMetadataSuggestion()
         dateNavigation.reset()
-        cancelPopupPresentation()
+        popupField = fieldHasPopup(field) ? field : nil
         focusRouter.activate(field)
-        presentPopupAfterLayout(for: field)
     }
 
     /// Query text belongs to an open picker, not to the reminder itself. Leaving a picker without
@@ -1311,38 +1295,6 @@ struct ReminderComposer: View {
         case .title, .notes:
             break
         }
-    }
-
-    private func presentPopupAfterLayout(for field: ReminderComposerField) {
-        guard fieldHasPopup(field), activeField == field else { return }
-        if popupField == field { return }
-
-        // Always close the previous presentation and defer the new one. Even when the SwiftUI
-        // binding is already nil, AppKit may still be dismissing its popover or laying out the new
-        // query editor. Generation checks cancel every request except the final focused field.
-        let generation = popupPresentationGate.nextRequest()
-        popupField = nil
-
-        Task { @MainActor in
-            await Task.yield()
-            // One short beat lets the native dismissal finish as well as the SwiftUI layout pass.
-            // Staying below 100 ms keeps the response perceptually immediate while avoiding a
-            // second presentation during AppKit's teardown window.
-            try? await Task.sleep(for: .milliseconds(80))
-            guard popupPresentationGate.accepts(
-                      generation,
-                      for: field,
-                      activeField: activeField
-                  ),
-                  fieldHasPopup(field)
-            else { return }
-            popupField = field
-        }
-    }
-
-    private func cancelPopupPresentation() {
-        popupPresentationGate.cancel()
-        popupField = nil
     }
 
     private func fieldHasPopup(_ field: ReminderComposerField) -> Bool {
@@ -1491,6 +1443,139 @@ struct ReminderComposer: View {
         guard draft.pendingStep.isEmpty else { return false }
         if !draft.checklist.isEmpty { draft.checklist.removeLast() }
         return true
+    }
+}
+
+// MARK: - Deterministic popover presentation
+
+/// Presents reminder pickers from a persistent AppKit anchor.
+///
+/// SwiftUI's `popover(isPresented:)` writes dismissal back through its binding. During fast focus
+/// traversal that dismissal can arrive after the next field has already become active, which makes
+/// a newly requested picker disappear. Reminder focus is authoritative, so this presenter only
+/// reads the desired visibility. It never lets a native dismissal mutate composer state.
+struct ReminderNativePopover<Content: View>: NSViewRepresentable {
+    let isPresented: Bool
+    let preferredEdge: NSRectEdge
+    let content: Content
+
+    init(
+        isPresented: Bool,
+        preferredEdge: NSRectEdge = .minY,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.isPresented = isPresented
+        self.preferredEdge = preferredEdge
+        self.content = content()
+    }
+
+    func makeCoordinator() -> ReminderNativePopoverCoordinator {
+        ReminderNativePopoverCoordinator()
+    }
+
+    func makeNSView(context: Context) -> ReminderPopoverAnchorView {
+        let anchor = ReminderPopoverAnchorView()
+        context.coordinator.attach(to: anchor)
+        return anchor
+    }
+
+    func updateNSView(_ anchor: ReminderPopoverAnchorView, context: Context) {
+        context.coordinator.update(
+            anchor: anchor,
+            content: AnyView(content),
+            isPresented: isPresented,
+            preferredEdge: preferredEdge
+        )
+    }
+
+    static func dismantleNSView(
+        _ anchor: ReminderPopoverAnchorView,
+        coordinator: ReminderNativePopoverCoordinator
+    ) {
+        coordinator.detach(from: anchor)
+    }
+}
+
+final class ReminderPopoverAnchorView: NSView {
+    var onWindowChange: (() -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        onWindowChange?()
+    }
+}
+
+@MainActor
+final class ReminderNativePopoverCoordinator: NSObject, NSPopoverDelegate {
+    private weak var anchor: ReminderPopoverAnchorView?
+    private let popover = NSPopover()
+    private let hosting = NSHostingController(rootView: AnyView(EmptyView()))
+    private var desiredPresented = false
+    private var preferredEdge: NSRectEdge = .minY
+    private var reopenScheduled = false
+
+    override init() {
+        super.init()
+        hosting.sizingOptions = [.preferredContentSize]
+        popover.contentViewController = hosting
+        popover.behavior = .applicationDefined
+        popover.animates = false
+        popover.delegate = self
+    }
+
+    var isPopoverShown: Bool { popover.isShown }
+
+    func attach(to anchor: ReminderPopoverAnchorView) {
+        self.anchor = anchor
+        anchor.onWindowChange = { [weak self] in self?.synchronize() }
+        synchronize()
+    }
+
+    func update(
+        anchor: ReminderPopoverAnchorView,
+        content: AnyView,
+        isPresented: Bool,
+        preferredEdge: NSRectEdge
+    ) {
+        if self.anchor !== anchor { attach(to: anchor) }
+        hosting.rootView = content
+        desiredPresented = isPresented
+        self.preferredEdge = preferredEdge
+        synchronize()
+    }
+
+    func detach(from anchor: ReminderPopoverAnchorView) {
+        guard self.anchor === anchor else { return }
+        desiredPresented = false
+        anchor.onWindowChange = nil
+        popover.close()
+        self.anchor = nil
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        // AppKit may close a popover because its parent window is changing. If the field is still
+        // active, restore it on the very next main-loop turn; focus remains the single owner.
+        guard desiredPresented, !reopenScheduled else { return }
+        reopenScheduled = true
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self else { return }
+            self.reopenScheduled = false
+            self.synchronize()
+        }
+    }
+
+    private func synchronize() {
+        guard desiredPresented else {
+            if popover.isShown { popover.close() }
+            return
+        }
+        guard !popover.isShown,
+              let anchor,
+              anchor.window != nil,
+              !anchor.bounds.isEmpty
+        else { return }
+        popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: preferredEdge)
     }
 }
 
