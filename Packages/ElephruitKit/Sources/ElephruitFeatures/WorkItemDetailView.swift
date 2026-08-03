@@ -141,14 +141,11 @@ struct WorkItemDetailView: View {
             .keyboardShortcut(.escape, modifiers: [])
         }
         .padding(Theme.Spacing.large)
-        .background(Theme.Colors.contentBackground)
-        .overlay(alignment: .bottom) { Divider() }
-        .overlay(alignment: .leading) {
-            Capsule()
-                .fill(accentTint)
-                .frame(width: 3)
-                .padding(.vertical, Theme.Spacing.medium)
+        .background {
+            Theme.Colors.contentBackground
+                .overlay(accentTint.opacity(0.045))
         }
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     private var accentTint: Color {
@@ -162,46 +159,42 @@ struct WorkItemDetailView: View {
         tint: Color,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
             Label(title, systemImage: symbol)
                 .font(Theme.Text.sectionHeader)
                 .foregroundStyle(tint)
+                .padding(.horizontal, Theme.Spacing.small)
+                .padding(.vertical, Theme.Spacing.tight)
+                .background(tint.opacity(0.10), in: Capsule())
             content()
         }
-        .padding(Theme.Spacing.large)
+        .padding(Theme.Spacing.medium)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: Theme.Radius.large))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.large)
                 .stroke(Theme.Colors.separator, lineWidth: 0.5)
         }
-        .overlay(alignment: .leading) {
-            Capsule()
-                .fill(tint)
-                .frame(width: 3)
-                .padding(.vertical, Theme.Spacing.large)
-        }
     }
 
     // MARK: - Metadata
 
     private var fields: some View {
-        Grid(alignment: .leading, horizontalSpacing: Theme.Spacing.medium, verticalSpacing: Theme.Spacing.small) {
-            GridRow {
-                fieldLabel("Status")
+        FlowLayout(spacing: Theme.Spacing.small, lineSpacing: Theme.Spacing.small) {
+            compactControl("Status") {
                 Picker("Status", selection: statusBinding) {
                     ForEach([ItemStatus.open, .completed, .cancelled], id: \.self) { status in
                         Text(status.displayName).tag(status)
                     }
                 }
                 .labelsHidden()
-                .fixedSize()
+                .pickerStyle(.segmented)
+                .frame(width: 220)
                 .accessibilityIdentifier("workItem.status")
             }
 
             if !model.stages.isEmpty {
-                GridRow {
-                    fieldLabel("Stage")
+                compactControl("Stage") {
                     Picker("Stage", selection: stageBinding) {
                         Text("No Stage").tag(UUID?.none)
                         ForEach(model.stages) { stage in
@@ -209,25 +202,26 @@ struct WorkItemDetailView: View {
                         }
                     }
                     .labelsHidden()
+                    .pickerStyle(.menu)
+                    .controlSize(.small)
                     .fixedSize()
                     .accessibilityIdentifier("workItem.stage")
                 }
             }
 
-            GridRow {
-                fieldLabel("Priority")
+            compactControl("Priority") {
                 Picker("Priority", selection: priorityBinding) {
                     ForEach(Priority.allCases, id: \.self) { priority in
                         Text(priority.displayName).tag(priority)
                     }
                 }
                 .labelsHidden()
-                .fixedSize()
+                .pickerStyle(.segmented)
+                .frame(width: 205)
                 .accessibilityIdentifier("workItem.priority")
             }
 
-            GridRow {
-                fieldLabel("Assignee")
+            compactControl("Assignee") {
                 Picker("Assignee", selection: assigneeBinding) {
                     Text("Nobody").tag(UUID?.none)
                     ForEach(editor?.assignableCandidates ?? []) { person in
@@ -235,12 +229,13 @@ struct WorkItemDetailView: View {
                     }
                 }
                 .labelsHidden()
+                .pickerStyle(.menu)
+                .controlSize(.small)
                 .fixedSize()
                 .accessibilityIdentifier("workItem.assignee")
             }
 
-            GridRow {
-                fieldLabel("Due")
+            compactControl("Due") {
                 HStack(spacing: Theme.Spacing.tight) {
                     if let due = item.dueAt {
                         DatePicker(
@@ -252,6 +247,7 @@ struct WorkItemDetailView: View {
                             displayedComponents: .date
                         )
                         .labelsHidden()
+                        .controlSize(.small)
                         .fixedSize()
                         Button("Clear") { editor?.setDueDate(nil) }
                             .buttonStyle(.plain)
@@ -267,39 +263,38 @@ struct WorkItemDetailView: View {
                 .accessibilityIdentifier("workItem.due")
             }
 
-            GridRow {
-                fieldLabel("Estimate")
+            compactControl("Estimate") {
                 HStack(spacing: Theme.Spacing.tight) {
                     TextField("None", text: $estimateText)
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: 64)
+                        .controlSize(.small)
+                        .frame(width: 54)
                         .focused($focusedField, equals: .estimate)
                         .onSubmit { commit(.estimate) }
-                    Text("minutes")
+                    Text("min")
                         .font(Theme.Text.rowSubtitle)
                         .foregroundStyle(Theme.Colors.secondaryText)
                 }
                 .accessibilityIdentifier("workItem.estimate")
             }
 
-            markerRow(
+            markerControl(
                 "Milestone",
                 kind: .milestone,
                 current: item.linkedTarget(kind: .targetsMilestone),
                 set: { editor?.setMilestone($0) }
             )
-            markerRow(
+            markerControl(
                 "Release",
                 kind: .release,
                 current: item.linkedTarget(kind: .relatesToRelease),
                 set: { editor?.setRelease($0) }
             )
         }
-        .font(Theme.Text.rowTitle)
     }
 
     @ViewBuilder
-    private func markerRow(
+    private func markerControl(
         _ label: String,
         kind: ItemKind,
         current: Item?,
@@ -307,8 +302,7 @@ struct WorkItemDetailView: View {
     ) -> some View {
         let candidates = model.markers.filter { $0.kind == kind }
         if !candidates.isEmpty || current != nil {
-            GridRow {
-                fieldLabel(label)
+            compactControl(label) {
                 Picker(label, selection: Binding(
                     get: { current?.id },
                     set: { id in set(id.flatMap { target in candidates.first { $0.id == target } }) }
@@ -319,15 +313,26 @@ struct WorkItemDetailView: View {
                     }
                 }
                 .labelsHidden()
+                .pickerStyle(.menu)
+                .controlSize(.small)
                 .fixedSize()
             }
         }
     }
 
-    private func fieldLabel(_ text: String) -> some View {
-        Text(text)
-            .foregroundStyle(Theme.Colors.secondaryText)
-            .gridColumnAlignment(.leading)
+    private func compactControl<Content: View>(
+        _ label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+            Text(label)
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.tertiaryText)
+            content()
+        }
+        .padding(.horizontal, Theme.Spacing.small)
+        .padding(.vertical, 6)
+        .background(Theme.Colors.subtleFill.opacity(0.72), in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
     }
 
     // MARK: - Notes
@@ -336,7 +341,7 @@ struct WorkItemDetailView: View {
         sectionCard("Notes", symbol: "text.alignleft", tint: Theme.Colors.secondaryText) {
             TextEditor(text: $notesText)
                 .font(Theme.Text.rowTitle)
-                .frame(minHeight: 82)
+                .frame(minHeight: 58)
                 .focused($focusedField, equals: .body)
                 .scrollContentBackground(.hidden)
                 .padding(Theme.Spacing.small)
@@ -365,70 +370,65 @@ struct WorkItemDetailView: View {
     /// do, and which read as "this bug cannot be edited".
     private var bugSection: some View {
         sectionCard("Bug report", symbol: "ladybug.fill", tint: accentTint) {
-            Grid(alignment: .leading, horizontalSpacing: Theme.Spacing.medium, verticalSpacing: Theme.Spacing.small) {
-                GridRow {
-                    fieldLabel("Severity")
+            FlowLayout(spacing: Theme.Spacing.small, lineSpacing: Theme.Spacing.small) {
+                compactControl("Severity") {
                     Picker("Severity", selection: severityBinding) {
                         ForEach(BugSeverity.allCases, id: \.self) { severity in
                             Text(severity.displayName).tag(severity)
                         }
                     }
                     .labelsHidden()
-                    .fixedSize()
+                    .pickerStyle(.segmented)
+                    .frame(width: 310)
                     .accessibilityIdentifier("workItem.severity")
                 }
 
-                GridRow {
-                    fieldLabel("Regression")
-                    Toggle("Regression", isOn: regressionBinding)
-                        .labelsHidden()
-                        .toggleStyle(.checkbox)
-                        .help("Whether this used to work. A regression means something changed, and that is a lead.")
-                        .accessibilityIdentifier("workItem.regression")
+                compactControl("Signals") {
+                    HStack(spacing: Theme.Spacing.medium) {
+                        Toggle("Regression", isOn: regressionBinding)
+                            .help("Whether this used to work. A regression means something changed, and that is a lead.")
+                            .accessibilityIdentifier("workItem.regression")
+                        Toggle("Verified", isOn: verifiedBinding)
+                            .help("Fixed and verified are two different claims by two different people. This is the second one.")
+                            .accessibilityIdentifier("workItem.verified")
+                    }
+                    .font(Theme.Text.rowSubtitle)
+                    .controlSize(.small)
+                    .toggleStyle(.checkbox)
                 }
 
-                GridRow {
-                    fieldLabel("Verified")
-                    Toggle("Verified", isOn: verifiedBinding)
-                        .labelsHidden()
-                        .toggleStyle(.checkbox)
-                        .help("Fixed and verified are two different claims by two different people. This is the second one.")
-                        .accessibilityIdentifier("workItem.verified")
-                }
-
-                GridRow {
-                    fieldLabel("Affected Version")
-                    TextField("The version it was found in", text: $affectedVersion)
+                compactControl("Affected version") {
+                    TextField("Found in", text: $affectedVersion)
                         .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 220)
+                        .controlSize(.small)
+                        .frame(width: 125)
                         .focused($focusedField, equals: .affected)
                         .onSubmit { commit(.affected) }
                         .accessibilityIdentifier("workItem.affectedVersion")
                 }
 
-                GridRow {
-                    fieldLabel("Fix Version")
-                    TextField("Set when the fix lands", text: $fixVersion)
+                compactControl("Fix version") {
+                    TextField("Fixed in", text: $fixVersion)
                         .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 220)
+                        .controlSize(.small)
+                        .frame(width: 125)
                         .focused($focusedField, equals: .fix)
                         .onSubmit { commit(.fix) }
                         .accessibilityIdentifier("workItem.fixVersion")
                 }
 
-                GridRow {
-                    fieldLabel("Environment")
+                compactControl("Environment") {
                     TextField("Machine, OS, build", text: $environmentText)
                         .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 320)
+                        .controlSize(.small)
+                        .frame(width: 190)
                         .focused($focusedField, equals: .environment)
                         .onSubmit { commit(.environment) }
                         .accessibilityIdentifier("workItem.environment")
                 }
             }
-            .font(Theme.Text.rowTitle)
 
-            reportEditor("Steps to reproduce", text: $steps, field: .steps, id: "workItem.steps", minHeight: 70)
+            reportEditor("Steps to reproduce", text: $steps, field: .steps, id: "workItem.steps", minHeight: 54)
 
             HStack(alignment: .top, spacing: Theme.Spacing.medium) {
                 reportEditor("Expected", text: $expected, field: .expected, id: "workItem.expected")

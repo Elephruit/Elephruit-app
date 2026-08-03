@@ -35,10 +35,8 @@ struct KanbanColumnView: View {
     let model: ProjectWorkspaceModel
     let drag: KanbanDragCoordinator
 
-    @State private var isHovering = false
     @State private var showsQuickAdd = false
     @State private var quickAddDraft = ""
-    @FocusState private var isColumnFocused: Bool
     @FocusState private var isQuickAddFocused: Bool
 
     private var displayedItems: [TaskFacts] {
@@ -97,26 +95,6 @@ struct KanbanColumnView: View {
         }
         .animation(.easeOut(duration: 0.16), value: isDropTargeted)
         .animation(.snappy(duration: 0.12), value: displayedItems.map(\.id))
-        .focusable()
-        .focused($isColumnFocused)
-        .onHover { hovering in
-            isHovering = hovering
-            if hovering {
-                isColumnFocused = true
-            } else if quickAddDraft.isEmpty, !isQuickAddFocused {
-                showsQuickAdd = false
-            }
-        }
-        .onKeyPress(characters: .alphanumerics, phases: .down) { press in
-            guard !drag.isDragging,
-                  !model.isEditingText,
-                  press.modifiers.isEmpty || press.modifiers == .shift
-            else { return .ignored }
-
-            quickAddDraft = press.characters
-            beginAdding()
-            return .handled
-        }
     }
 
     private var columnContents: some View {
@@ -174,14 +152,11 @@ struct KanbanColumnView: View {
                 )
             )
 
-            if isHovering || showsQuickAdd || !quickAddDraft.isEmpty {
-                quickAddCard
-                    .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
-            }
+            quickAddControl
 
             Spacer(minLength: 0)
         }
-        .animation(.easeOut(duration: 0.14), value: isHovering || showsQuickAdd)
+        .animation(.easeOut(duration: 0.14), value: showsQuickAdd)
     }
 
     private var header: some View {
@@ -211,6 +186,34 @@ struct KanbanColumnView: View {
             .help("Add to \(column.title)")
             .accessibilityLabel("Add to \(column.title)")
             .accessibilityIdentifier("kanban.add.\(column.key)")
+        }
+    }
+
+    @ViewBuilder
+    private var quickAddControl: some View {
+        if showsQuickAdd || !quickAddDraft.isEmpty {
+            quickAddCard
+                .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+        } else {
+            Button(action: beginAdding) {
+                HStack(spacing: Theme.Spacing.small) {
+                    Image(systemName: "plus")
+                    Text("Click here to add a card")
+                    Spacer(minLength: 0)
+                }
+                .font(Theme.Text.rowSubtitle)
+                .foregroundStyle(Theme.Colors.tertiaryText)
+                .padding(Theme.Spacing.small)
+                .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .background(Theme.Colors.contentBackground.opacity(0.36), in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                    .stroke(Theme.Colors.separator, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+            }
+            .accessibilityIdentifier("kanban.quickAddPrompt.\(column.key)")
         }
     }
 
@@ -244,7 +247,11 @@ struct KanbanColumnView: View {
         .onTapGesture { beginAdding() }
         .onChange(of: isQuickAddFocused) { _, focused in
             model.isEditingText = focused
-            if focused { showsQuickAdd = true }
+            if focused {
+                showsQuickAdd = true
+            } else if quickAddDraft.isEmpty {
+                showsQuickAdd = false
+            }
         }
         .accessibilityIdentifier("kanban.quickAdd.\(column.key)")
     }
@@ -259,8 +266,9 @@ struct KanbanColumnView: View {
         guard let title = quickAddDraft.nilIfBlank else { return }
         add(title)
         quickAddDraft = ""
-        showsQuickAdd = true
-        isQuickAddFocused = true
+        showsQuickAdd = false
+        isQuickAddFocused = false
+        model.isEditingText = false
     }
 
     private func endAdding() {
@@ -268,7 +276,6 @@ struct KanbanColumnView: View {
         isQuickAddFocused = false
         showsQuickAdd = false
         model.isEditingText = false
-        if isHovering { isColumnFocused = true }
     }
 
     private func add(_ title: String) {
