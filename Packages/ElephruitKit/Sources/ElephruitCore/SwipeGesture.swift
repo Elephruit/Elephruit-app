@@ -62,6 +62,26 @@ public enum SwipeMetrics {
     public static let deadSideLimit: CGFloat = 22
 }
 
+/// The sidebar change requested by a horizontal two-finger trackpad gesture.
+public enum SidebarSwipeDirection: Sendable, Hashable {
+    case hide
+    case show
+}
+
+/// Decides when a window-level horizontal swipe is deliberate enough to change the sidebar.
+///
+/// The direction lock is shared with row swipes, but changing the whole window waits for more
+/// travel than merely beginning to reveal a row. That keeps a small sideways wobble in an empty
+/// scrolling area from rearranging the shell.
+public enum SidebarSwipeGesture {
+    public static let activationTravel: CGFloat = 40
+
+    public static func direction(forTranslation translation: CGFloat) -> SidebarSwipeDirection? {
+        guard abs(translation) >= activationTravel else { return nil }
+        return translation < 0 ? .hide : .show
+    }
+}
+
 /// One row's swipe, as arithmetic.
 ///
 /// ### The sign convention

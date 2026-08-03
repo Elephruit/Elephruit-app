@@ -60,6 +60,20 @@ struct SwipeGestureTests {
         #expect(oneDeleteAction.outcome(forTranslation: -4) == .closed)
     }
 
+    @Test("A deliberate window swipe maps left to hide and right to show")
+    func sidebarSwipeDirection() {
+        let travel = SidebarSwipeGesture.activationTravel
+        #expect(SidebarSwipeGesture.direction(forTranslation: -travel) == .hide)
+        #expect(SidebarSwipeGesture.direction(forTranslation: travel) == .show)
+    }
+
+    @Test("A short horizontal movement does not rearrange the window")
+    func shortSidebarSwipeDoesNothing() {
+        let short = SidebarSwipeGesture.activationTravel - 1
+        #expect(SidebarSwipeGesture.direction(forTranslation: -short) == nil)
+        #expect(SidebarSwipeGesture.direction(forTranslation: short) == nil)
+    }
+
     // MARK: - Partial swipes
 
     @Test("A short swipe snaps shut")

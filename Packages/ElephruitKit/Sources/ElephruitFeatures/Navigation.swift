@@ -977,6 +977,21 @@ public final class NavigationModel {
         setLayoutMode(layoutMode == .full ? .twoPane : .full)
     }
 
+    /// Shows or hides the leading sidebar without making an already-satisfied gesture toggle it.
+    ///
+    /// Directional trackpad gestures can arrive more than once near their threshold. Expressing
+    /// the intended visibility, rather than toggling, makes repeated left events stay hidden and
+    /// repeated right events stay shown.
+    public func setSidebarVisible(_ isVisible: Bool) {
+        if isVisible {
+            guard !layoutMode.showsSidebar else { return }
+            setLayoutMode(.full)
+        } else {
+            guard layoutMode.showsSidebar else { return }
+            setLayoutMode(.twoPane)
+        }
+    }
+
     public func toggleFocusMode() {
         setLayoutMode(layoutMode == .focus ? .full : .focus)
     }
