@@ -59,6 +59,31 @@ struct LightweightReminderStoreTests {
         #expect(reminder.createdAt == Date(timeIntervalSince1970: 100))
     }
 
+    @Test("Reminders saved before people and projects were added still open")
+    func legacyMetadataDefaults() throws {
+        let directory = URL.temporaryDirectory
+            .appending(path: "LightweightReminderStoreTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appending(path: "Reminders.json")
+
+        var draft = ReminderComposerDraft()
+        draft.title = "Already saved"
+        let encoded = try JSONEncoder().encode([
+            LightweightReminder(draft: draft, now: Date(timeIntervalSince1970: 100)),
+        ])
+        var legacy = try #require(JSONSerialization.jsonObject(with: encoded) as? [[String: Any]])
+        legacy[0].removeValue(forKey: "personNames")
+        legacy[0].removeValue(forKey: "projectTitle")
+        try JSONSerialization.data(withJSONObject: legacy).write(to: file)
+
+        let reopened = LightweightReminderStore(fileURL: file)
+        let reminder = try #require(reopened.reminders.first)
+        #expect(reminder.title == "Already saved")
+        #expect(reminder.personNames.isEmpty)
+        #expect(reminder.projectTitle == nil)
+    }
+
     @Test("Typing only mutates a draft")
     func typingDoesNotPersist() {
         let store = LightweightReminderStore(fileURL: nil)

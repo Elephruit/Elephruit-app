@@ -5,10 +5,9 @@ import SwiftUI
 
 /// A complete reminder, composed in place without touching the store until it is ready.
 ///
-/// The title, notes, date phrases, tag filter and checklist line are AppKit text views because this
-/// card promises an exact Tab path. SwiftUI's key-view order cannot express that path once two of
-/// the stops live in popovers, and an `NSTextView` would otherwise insert a tab into Notes instead
-/// of moving on.
+/// The title, notes and metadata filters are AppKit text views because this card promises an exact
+/// Tab path. SwiftUI's key-view order cannot express that path once stops live in popovers, and an
+/// `NSTextView` would otherwise insert a tab into Notes instead of moving on.
 struct ReminderComposer: View {
     @Environment(\.services) private var services
 
@@ -20,29 +19,38 @@ struct ReminderComposer: View {
     @State private var whenQuery = ""
     @State private var deadlineQuery = ""
     @State private var tagQuery = ""
+    @State private var peopleQuery = ""
+    @State private var projectQuery = ""
     @State private var availableTags: [String] = []
+    @State private var availablePeople: [String] = []
+    @State private var availableProjects: [String] = []
     @State private var popupField: ReminderComposerField?
     @StateObject private var focusRouter = ReminderComposerFocusRouter()
 
     private var activeField: ReminderComposerField { focusRouter.activeField }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            titleLine
-            notes
-            checklist
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                titleLine
+                notes
+                checklist
+            }
+            .padding(Theme.Spacing.medium)
+
+            Divider()
             actionRow
         }
-        .padding(Theme.Spacing.medium)
         .background {
             RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                 .fill(Theme.Colors.contentBackground)
-                .shadow(color: Theme.Colors.shadow.opacity(0.14), radius: 8, y: 2)
         }
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                 .stroke(Theme.Colors.separator, lineWidth: 1)
         }
+        .shadow(color: Theme.Colors.shadow.opacity(0.14), radius: 8, y: 2)
         .background {
             ReminderComposerKeyboardMonitor(router: focusRouter)
             .frame(width: 0, height: 0)
@@ -58,11 +66,14 @@ struct ReminderComposer: View {
                 draft.pendingStep.append(contentsOf: characters)
                 return true
             }
-            availableTags = (try? services?.tags.allTags().map(\.slug).sorted()) ?? []
+            refreshLibraryFacts()
             Task { @MainActor in
                 await Task.yield()
                 activate(.title)
             }
+        }
+        .task(id: services?.changeToken) {
+            refreshLibraryFacts()
         }
         .onDisappear {
             focusRouter.onTab = nil
@@ -179,26 +190,28 @@ struct ReminderComposer: View {
     }
 
     private var actionRow: some View {
-        HStack(spacing: Theme.Spacing.small) {
+        HStack(spacing: Theme.Spacing.medium) {
+            projectControl
             Spacer(minLength: 0)
             whenControl
             tagsControl
+            peopleControl
             checklistControl
             deadlineControl
         }
-        .padding(.top, Theme.Spacing.tight)
-        .popover(isPresented: popupPresented, arrowEdge: .bottom) {
-            metadataPopup
-        }
+        .padding(.horizontal, Theme.Spacing.medium)
+        .padding(.vertical, Theme.Spacing.small)
+        .background(Theme.Colors.subtleFill)
     }
 
     private var whenControl: some View {
         HStack(spacing: 0) {
             if activeField == .when {
-                ReminderPlainTextEditor(
+                metadataQueryEditor(
                     text: $whenQuery,
                     placeholder: "When",
-                    role: .body,
+                    symbol: "calendar",
+                    field: .when,
                     onTab: { reverse in
                         commitWhenQuery()
                         move(from: .when, reverse: reverse)
@@ -207,15 +220,8 @@ struct ReminderComposer: View {
                         commitWhenQuery()
                         activate(.tags)
                     },
-                    onCommandReturn: onCommitAndClose,
-                    onEscape: { popupField = nil; activate(.notes) },
-                    field: .when,
-                    focusRouter: focusRouter,
-                    onFocus: { activate(.when) }
+                    escapeTo: .notes
                 )
-                .frame(width: 116, height: 24)
-                .padding(.horizontal, Theme.Spacing.small)
-                .background(Theme.Colors.subtleFill, in: Capsule())
             } else {
                 actionButton(
                     title: draft.isSomeday ? "Someday" : draft.startAt.map(shortDate) ?? "When",
@@ -226,28 +232,33 @@ struct ReminderComposer: View {
                 }
             }
         }
+        .popover(isPresented: popupBinding(for: .when), arrowEdge: .bottom) {
+            reminderDatePopover(
+                selected: draft.startAt,
+                allowsSomeday: true,
+                onPick: { date in
+                    draft.startAt = date
+                    draft.isSomeday = false
+                    activate(.tags)
+                }
+            )
+        }
     }
 
     private var tagsControl: some View {
         HStack(spacing: 0) {
             if activeField == .tags {
-                ReminderPlainTextEditor(
+                metadataQueryEditor(
                     text: $tagQuery,
                     placeholder: "Tags",
-                    role: .body,
+                    symbol: "tag",
+                    field: .tags,
                     onTab: { reverse in
                         move(from: .tags, reverse: reverse)
                     },
                     onReturn: toggleFirstMatchingTag,
-                    onCommandReturn: onCommitAndClose,
-                    onEscape: { popupField = nil; activate(.when) },
-                    field: .tags,
-                    focusRouter: focusRouter,
-                    onFocus: { activate(.tags) }
+                    escapeTo: .when
                 )
-                .frame(width: 116, height: 24)
-                .padding(.horizontal, Theme.Spacing.small)
-                .background(Theme.Colors.subtleFill, in: Capsule())
             } else {
                 actionButton(
                     title: draft.tagSlugs.isEmpty ? "Tags" : draft.tagSlugs.joined(separator: ", "),
@@ -257,6 +268,78 @@ struct ReminderComposer: View {
                     activate(.tags)
                 }
             }
+        }
+        .popover(isPresented: popupBinding(for: .tags), arrowEdge: .bottom) {
+            reminderTagPopover
+        }
+    }
+
+    private var peopleControl: some View {
+        HStack(spacing: 0) {
+            if activeField == .people {
+                metadataQueryEditor(
+                    text: $peopleQuery,
+                    placeholder: "Who?",
+                    symbol: "person",
+                    field: .people,
+                    onTab: { reverse in move(from: .people, reverse: reverse) },
+                    onReturn: toggleFirstMatchingPerson,
+                    escapeTo: .tags
+                )
+            } else {
+                actionButton(
+                    title: draft.personNames.isEmpty
+                        ? "People"
+                        : draft.personNames.joined(separator: ", "),
+                    symbol: "person",
+                    isActive: !draft.personNames.isEmpty
+                ) {
+                    activate(.people)
+                }
+            }
+        }
+        .popover(isPresented: popupBinding(for: .people), arrowEdge: .bottom) {
+            reminderPeoplePopover
+        }
+    }
+
+    private var projectControl: some View {
+        HStack(spacing: 0) {
+            if activeField == .project {
+                metadataQueryEditor(
+                    text: $projectQuery,
+                    placeholder: "Which project?",
+                    symbol: "square.stack.3d.up",
+                    field: .project,
+                    width: 160,
+                    onTab: { reverse in move(from: .project, reverse: reverse) },
+                    onReturn: chooseFirstMatchingProject,
+                    escapeTo: .deadline
+                )
+            } else {
+                Button { activate(.project) } label: {
+                    Label(
+                        draft.projectTitle ?? "Project",
+                        systemImage: draft.projectTitle == nil
+                            ? "square.stack.3d.up"
+                            : "square.stack.3d.up.fill"
+                    )
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(
+                        draft.projectTitle == nil
+                            ? Theme.Colors.secondaryText
+                            : Theme.CaptureToken.accent
+                    )
+                    .lineLimit(1)
+                    .frame(maxWidth: 180, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(draft.projectTitle.map { "Project: \($0)" } ?? "Associate with a project")
+            }
+        }
+        .popover(isPresented: popupBinding(for: .project), arrowEdge: .bottom) {
+            reminderProjectPopover
         }
     }
 
@@ -274,27 +357,21 @@ struct ReminderComposer: View {
     private var deadlineControl: some View {
         HStack(spacing: 0) {
             if activeField == .deadline {
-                ReminderPlainTextEditor(
+                metadataQueryEditor(
                     text: $deadlineQuery,
                     placeholder: "Deadline",
-                    role: .body,
+                    symbol: "flag",
+                    field: .deadline,
                     onTab: { reverse in
                         commitDeadlineQuery()
                         move(from: .deadline, reverse: reverse)
                     },
                     onReturn: {
                         commitDeadlineQuery()
-                        activate(.title)
+                        activate(.project)
                     },
-                    onCommandReturn: onCommitAndClose,
-                    onEscape: { popupField = nil; activate(.checklist) },
-                    field: .deadline,
-                    focusRouter: focusRouter,
-                    onFocus: { activate(.deadline) }
+                    escapeTo: .checklist
                 )
-                .frame(width: 116, height: 24)
-                .padding(.horizontal, Theme.Spacing.small)
-                .background(Theme.Colors.subtleFill, in: Capsule())
             } else {
                 actionButton(
                     title: draft.dueAt.map(shortDate) ?? "Deadline",
@@ -305,43 +382,58 @@ struct ReminderComposer: View {
                 }
             }
         }
-    }
-
-    private var popupPresented: Binding<Bool> {
-        Binding(
-            get: { popupField != nil },
-            set: { if !$0 { popupField = nil } }
-        )
-    }
-
-    @ViewBuilder
-    private var metadataPopup: some View {
-        switch popupField {
-        case .when:
-            reminderDatePopover(
-                selected: draft.startAt,
-                allowsSomeday: true,
-                onPick: { date in
-                    draft.startAt = date
-                    draft.isSomeday = false
-                    activate(.tags)
-                }
-            )
-        case .tags:
-            reminderTagPopover
-        case .deadline:
+        .popover(isPresented: popupBinding(for: .deadline), arrowEdge: .bottom) {
             reminderDatePopover(
                 selected: draft.dueAt,
                 allowsSomeday: false,
                 onPick: { date in
                     draft.dueAt = date
-                    popupField = nil
-                    activate(.title)
+                    activate(.project)
                 }
             )
-        case .title, .notes, .people, .checklist, .project, nil:
-            EmptyView()
         }
+    }
+
+    private func popupBinding(for field: ReminderComposerField) -> Binding<Bool> {
+        Binding(
+            get: { popupField == field },
+            set: { isPresented in
+                if !isPresented, popupField == field { popupField = nil }
+            }
+        )
+    }
+
+    private func metadataQueryEditor(
+        text: Binding<String>,
+        placeholder: String,
+        symbol: String,
+        field: ReminderComposerField,
+        width: CGFloat = 132,
+        onTab: @escaping (Bool) -> Void,
+        onReturn: @escaping () -> Void,
+        escapeTo: ReminderComposerField
+    ) -> some View {
+        HStack(spacing: Theme.Spacing.tight) {
+            Image(systemName: symbol)
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.CaptureToken.accent)
+
+            ReminderPlainTextEditor(
+                text: text,
+                placeholder: placeholder,
+                role: .body,
+                onTab: onTab,
+                onReturn: onReturn,
+                onCommandReturn: onCommitAndClose,
+                onEscape: { popupField = nil; activate(escapeTo) },
+                field: field,
+                focusRouter: focusRouter,
+                onFocus: { activate(field) }
+            )
+        }
+        .frame(width: width, height: 24)
+        .padding(.horizontal, Theme.Spacing.small)
+        .background(Theme.Colors.selectionFill, in: Capsule())
     }
 
     private func actionButton(
@@ -352,15 +444,14 @@ struct ReminderComposer: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Label(title, systemImage: activeSymbol(symbol, isActive: isActive))
-                .font(Theme.Text.metadata)
-                .lineLimit(1)
+            Image(systemName: activeSymbol(symbol, isActive: isActive))
+                .font(.system(size: 13))
                 .foregroundStyle(
-                    isActive || isFocused ? Theme.Colors.selection : Theme.Colors.tertiaryText
+                    isActive || isFocused ? Theme.CaptureToken.accent : Theme.Colors.tertiaryText
                 )
                 .padding(.horizontal, isFocused ? Theme.Spacing.small : 0)
-                .frame(height: 24)
-                .background(isFocused ? Theme.Colors.subtleFill : .clear, in: Capsule())
+                .frame(width: isFocused ? 36 : 22, height: 24)
+                .background(isFocused ? Theme.Colors.selectionFill : .clear, in: Capsule())
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -401,6 +492,74 @@ struct ReminderComposer: View {
         }
         .padding(Theme.Spacing.small)
         .frame(width: 220)
+    }
+
+    private var reminderPeoplePopover: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            if matchingPeople.isEmpty {
+                Text(availablePeople.isEmpty ? "Nobody here yet" : "Nothing by that name")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+                    .padding(Theme.Spacing.small)
+            } else {
+                ForEach(matchingPeople, id: \.self) { name in
+                    Button {
+                        togglePerson(name)
+                    } label: {
+                        Label(
+                            name,
+                            systemImage: draft.personNames.contains(name) ? "checkmark" : "person"
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(Theme.Spacing.small)
+        .frame(width: 240)
+    }
+
+    private var reminderProjectPopover: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            if draft.projectTitle != nil {
+                Button {
+                    draft.projectTitle = nil
+                    projectQuery = ""
+                    activate(.title)
+                } label: {
+                    Label("No Project", systemImage: "xmark.circle")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+
+                Divider()
+            }
+
+            if matchingProjects.isEmpty {
+                Text(availableProjects.isEmpty ? "No projects yet" : "Nothing by that name")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+                    .padding(Theme.Spacing.small)
+            } else {
+                ForEach(matchingProjects, id: \.self) { title in
+                    Button {
+                        chooseProject(title)
+                    } label: {
+                        Label(
+                            title,
+                            systemImage: draft.projectTitle == title
+                                ? "checkmark"
+                                : "square.stack.3d.up"
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(Theme.Spacing.small)
+        .frame(width: 240)
     }
 
     private func reminderDatePopover(
@@ -450,6 +609,34 @@ struct ReminderComposer: View {
         return Array(availableTags.lazy.filter { $0.localizedCaseInsensitiveContains(query) }.prefix(12))
     }
 
+    private var matchingPeople: [String] {
+        matchingNames(peopleQuery, in: availablePeople)
+    }
+
+    private var matchingProjects: [String] {
+        matchingNames(projectQuery, in: availableProjects)
+    }
+
+    private func matchingNames(_ query: String, in names: [String]) -> [String] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return Array(names.prefix(12)) }
+
+        let prefixed = names.filter { name in
+            name.range(
+                of: query,
+                options: [.caseInsensitive, .diacriticInsensitive, .anchored]
+            ) != nil
+        }
+        let contained = names.filter {
+            $0.range(
+                of: query,
+                options: [.caseInsensitive, .diacriticInsensitive, .anchored]
+            ) == nil
+                && $0.localizedCaseInsensitiveContains(query)
+        }
+        return Array((prefixed + contained).prefix(12))
+    }
+
     private func moveFromTitle(reverse: Bool) {
         move(from: .title, reverse: reverse)
     }
@@ -459,10 +646,7 @@ struct ReminderComposer: View {
         activate(next)
     }
 
-    /// Moves through the product's focus path and switches the single metadata popover.
-    ///
-    /// The action row is a permanent anchor, so popup presentation never waits on a conditional
-    /// view and calendar-to-tags traversal does not perform a dismiss/present race.
+    /// Moves through the product's focus path and switches the anchored metadata popover.
     private func activate(_ field: ReminderComposerField) {
         if activeField == field {
             focusRouter.focus(field)
@@ -471,7 +655,7 @@ struct ReminderComposer: View {
         }
         focusRouter.activate(field)
 
-        if field != .when, field != .tags, field != .deadline {
+        if !fieldHasPopup(field) {
             popupField = nil
         }
 
@@ -479,9 +663,30 @@ struct ReminderComposer: View {
     }
 
     private func presentPopupAfterLayout(for field: ReminderComposerField) {
-        guard field == .when || field == .tags || field == .deadline else { return }
+        guard fieldHasPopup(field) else { return }
         if popupField == field { return }
-        popupField = field
+
+        // Native popovers belong to their individual controls. Close the old anchor, let SwiftUI
+        // lay out the newly focused query field, then present from that field on the next turn.
+        let needsHandoff = popupField != nil
+        popupField = nil
+        if needsHandoff {
+            Task { @MainActor in
+                await Task.yield()
+                guard activeField == field else { return }
+                popupField = field
+            }
+        } else {
+            popupField = field
+        }
+    }
+
+    private func fieldHasPopup(_ field: ReminderComposerField) -> Bool {
+        field == .when
+            || field == .tags
+            || field == .people
+            || field == .deadline
+            || field == .project
     }
 
     private func commitWhenQuery() {
@@ -521,6 +726,43 @@ struct ReminderComposer: View {
         } else {
             draft.tagSlugs.append(slug)
             draft.tagSlugs.sort()
+        }
+    }
+
+    private func toggleFirstMatchingPerson() {
+        guard let first = matchingPeople.first else { return }
+        togglePerson(first)
+        peopleQuery = ""
+    }
+
+    private func togglePerson(_ name: String) {
+        if draft.personNames.contains(name) {
+            draft.personNames.removeAll { $0 == name }
+        } else {
+            draft.personNames.append(name)
+            draft.personNames.sort { $0.localizedStandardCompare($1) == .orderedAscending }
+        }
+    }
+
+    private func chooseFirstMatchingProject() {
+        guard let first = matchingProjects.first else { return }
+        chooseProject(first)
+    }
+
+    private func chooseProject(_ title: String) {
+        draft.projectTitle = title
+        projectQuery = ""
+        activate(.title)
+    }
+
+    private func refreshLibraryFacts() {
+        availableTags = (try? services?.tags.allTags().map(\.slug).sorted()) ?? []
+        let vocabulary = (try? services?.capture.vocabulary()) ?? .empty
+        availablePeople = vocabulary.people.sorted {
+            $0.localizedStandardCompare($1) == .orderedAscending
+        }
+        availableProjects = vocabulary.projects.sorted {
+            $0.localizedStandardCompare($1) == .orderedAscending
         }
     }
 
