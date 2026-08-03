@@ -61,7 +61,7 @@ struct CaptureTitleField: NSViewRepresentable {
         // A field editor: one line, no wrapping, and Return arrives as `insertNewline:` for the
         // coordinator to redirect rather than as a character in the string.
         textView.isFieldEditor = true
-        textView.font = .preferredFont(forTextStyle: .title3)
+        textView.font = Theme.AppKitText.capturePrimaryInput
         textView.drawsBackground = false
         // Straight quotes and no substitutions. The grammar is punctuation, and a smart quote is not
         // the character the parser is looking for.

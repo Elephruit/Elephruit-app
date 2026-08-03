@@ -82,10 +82,19 @@ graph TD
 | **Model** | `@Model` classes, `SchemaV1`, migration plan, `#Index`/`#Unique`. | SwiftUI, features |
 | **Persistence** | `ModelContainer` construction, `Repository` protocols + SwiftData implementations, undo coordination, Trash policy, sync status. | SwiftUI views |
 | **Search** | Query token grammar + parser, `SearchEngine` protocol + implementation, index projection, Core Spotlight donation. | Views |
-| **Design** | Spacing/type/colour tokens, `ItemRow`, `EmptyStateView`, `Chip`, `InspectorSection`, focus-ring conventions. | Domain semantics beyond `ItemKind` |
+| **Design** | Primitive spacing/type/colour tokens; semantic component layers such as `FloatingCapturePanel`; `ItemRow`, `EmptyStateView`, `Chip`, `InspectorSection`; focus-ring conventions. | Domain semantics beyond `ItemKind` |
 | **Transfer** | Versioned archive codec, Markdown+front-matter codec, importer pipeline with validation and duplicate detection. | Views |
 | **Integrations** | EventKit, Contacts, UserNotifications, QuickLook, NaturalLanguage — each behind a protocol with a no-op default. | Domain rules |
 | **Features** | One folder per feature: view + `@Observable` model. Composes the above. | Other features' internals |
+
+The Design module has two deliberate levels. `Theme.Spacing`, `Theme.Text`, and `Theme.Colors` are
+the primitives—the equivalent of CSS custom properties. Semantic layers then name recurring UI
+roles and assemble those primitives into components. For example, `Theme.FloatingCapturePanel`
+defines the type hierarchy, adaptive colours, and rhythm for global capture windows, while
+`FloatingCapturePanelHeader`, `FloatingCapturePanelPrompt`, and `FloatingCapturePanelField` make
+that hierarchy structural. Feature views consume those roles rather than choosing fonts, colours,
+and borders independently. A visual change therefore has one owner, while genuine differences such
+as a prompt being stronger than supporting text remain explicit rather than accidental drift.
 
 ## State and concurrency
 

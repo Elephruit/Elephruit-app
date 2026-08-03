@@ -1,6 +1,20 @@
 import AppKit
 
 extension Theme {
+    /// The capture-panel type scale at the AppKit boundary.
+    ///
+    /// Quick Jot needs real `NSTextView`s for caret-aware grammar completion. Naming these fonts
+    /// here keeps those fields on the same semantic scale as the SwiftUI Quick Log field.
+    public enum AppKitText {
+        public static var capturePrimaryInput: NSFont {
+            NSFont.preferredFont(forTextStyle: .title3)
+        }
+
+        public static var captureSupportingInput: NSFont {
+            NSFont.preferredFont(forTextStyle: .subheadline)
+        }
+    }
+
     /// The design system's colours, as AppKit sees them.
     ///
     /// The note editor draws with AppKit — fonts, paragraph decorations, list markers — and AppKit

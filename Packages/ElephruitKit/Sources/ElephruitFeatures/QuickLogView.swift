@@ -33,7 +33,7 @@ struct QuickLogView: View {
     private var running: RunningTimer? { services?.timer.running }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.large) {
+        VStack(alignment: .leading, spacing: Theme.FloatingCapturePanel.sectionSpacing) {
             header
 
             if running == nil {
@@ -46,9 +46,9 @@ struct QuickLogView: View {
 
             footer
         }
-        .padding(Theme.Spacing.section)
+        .padding(Theme.FloatingCapturePanel.outerPadding)
         .frame(width: 460)
-        .background(Theme.Colors.windowBackground)
+        .background(Theme.FloatingCapturePanel.background)
         .onAppear {
             syncFromRunning()
             focusDescriptionIfEditing()
@@ -75,13 +75,7 @@ struct QuickLogView: View {
 
     /// The feature name stays quiet; the live clock gets the visual weight.
     private var header: some View {
-        HStack(spacing: Theme.Spacing.medium) {
-            Label("Quick Log", systemImage: "timer")
-                .font(.system(.headline, design: .default, weight: .semibold))
-                .foregroundStyle(Theme.Colors.primaryText)
-
-            Spacer(minLength: Theme.Spacing.small)
-
+        FloatingCapturePanelHeader("Quick Log", systemImage: "timer") {
             if running != nil {
                 HStack(spacing: Theme.Spacing.small) {
                     Circle()
@@ -94,7 +88,7 @@ struct QuickLogView: View {
                 .padding(.vertical, Theme.Spacing.small)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(Theme.Colors.subtleFill)
+                        .fill(Theme.FloatingCapturePanel.groupedBackground)
                 )
             }
         }
@@ -123,28 +117,17 @@ struct QuickLogView: View {
     /// every time and the chips are the ones usually left alone.
     private var naming: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            Text("WHAT ARE YOU WORKING ON?")
-                .font(Theme.Text.sectionHeader)
-                .tracking(Theme.Text.Tracking.caps)
-                .foregroundStyle(Theme.Colors.secondaryText)
+            FloatingCapturePanelSectionLabel("What are you working on?")
 
-            TextField("Add a description", text: $controller.description)
-                .textFieldStyle(.plain)
-                .font(.system(.title3, design: .default, weight: .regular))
-                .focused($isDescriptionFocused)
-                .onSubmit { controller.hide() }
-                .padding(.horizontal, Theme.Spacing.medium)
-                .padding(.vertical, Theme.Spacing.medium)
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
-                        .fill(Theme.Colors.contentBackground)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
-                        .strokeBorder(Theme.Colors.separator)
-                )
-                .accessibilityLabel("What are you working on?")
-                .accessibilityIdentifier(AccessibilityID.Time.quickLogDescription)
+            FloatingCapturePanelField {
+                TextField("Add a description", text: $controller.description)
+                    .textFieldStyle(.plain)
+                    .font(Theme.FloatingCapturePanel.primaryInputFont)
+                    .focused($isDescriptionFocused)
+                    .onSubmit { controller.hide() }
+                    .accessibilityLabel("What are you working on?")
+                    .accessibilityIdentifier(AccessibilityID.Time.quickLogDescription)
+            }
 
             filingChips
                 .padding(.top, Theme.Spacing.tight)
@@ -160,49 +143,48 @@ struct QuickLogView: View {
     /// the name and filing stay exactly as they were.
     private var replacementConfirmation: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-                Text("A timer is already running")
-                    .font(Theme.Text.title)
-                    .tracking(Theme.Text.Tracking.title)
-
-                Text("Stop and save it before starting a new timer?")
-                    .font(Theme.Text.rowSubtitle)
-                    .foregroundStyle(Theme.Colors.secondaryText)
-            }
+            FloatingCapturePanelPrompt(
+                "A timer is already running",
+                message: "Stop and save it before starting a new timer?"
+            )
 
             if let running {
                 VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                     HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
                         Text(running.displayTitle)
-                            .font(.system(.body, design: .default, weight: .semibold))
+                            .font(Theme.FloatingCapturePanel.recordTitleFont)
+                            .foregroundStyle(Theme.FloatingCapturePanel.primaryText)
                             .lineLimit(2)
 
                         Spacer(minLength: Theme.Spacing.small)
 
                         Text("CURRENT")
-                            .font(Theme.Text.keyHint)
+                            .font(Theme.FloatingCapturePanel.statusFont)
                             .foregroundStyle(Theme.Colors.recording)
                     }
 
                     if let secondaryDescription = secondaryDescription(for: running) {
                         Text(secondaryDescription)
-                            .font(Theme.Text.rowSubtitle)
-                            .foregroundStyle(Theme.Colors.secondaryText)
+                            .font(Theme.FloatingCapturePanel.supportingFont)
+                            .foregroundStyle(Theme.FloatingCapturePanel.secondaryText)
                             .lineLimit(2)
                     }
 
                     if let details = filingSummary(for: running) {
                         Text(details)
-                            .font(Theme.Text.metadata)
-                            .foregroundStyle(Theme.Colors.tertiaryText)
+                            .font(Theme.FloatingCapturePanel.metadataFont)
+                            .foregroundStyle(Theme.FloatingCapturePanel.tertiaryText)
                             .lineLimit(2)
                     }
                 }
                 .padding(Theme.Spacing.medium)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
-                    RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
-                        .fill(Theme.Colors.subtleFill)
+                    RoundedRectangle(
+                        cornerRadius: Theme.FloatingCapturePanel.cornerRadius,
+                        style: .continuous
+                    )
+                        .fill(Theme.FloatingCapturePanel.groupedBackground)
                 )
             }
         }
@@ -272,14 +254,10 @@ struct QuickLogView: View {
     /// what happened and offers the one thing there is left to do.
     private var stopped: some View {
         HStack(spacing: Theme.Spacing.medium) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Nothing is being timed")
-                    .font(.system(.title3, design: .default, weight: .medium))
-
-                Text("The timer was stopped somewhere else.")
-                    .font(Theme.Text.rowSubtitle)
-                    .foregroundStyle(Theme.Colors.secondaryText)
-            }
+            FloatingCapturePanelPrompt(
+                "Nothing is being timed",
+                message: "The timer was stopped somewhere else."
+            )
 
             Spacer(minLength: Theme.Spacing.small)
 
@@ -298,8 +276,8 @@ struct QuickLogView: View {
     private var footer: some View {
         HStack(spacing: Theme.Spacing.small) {
             Text(footerNote)
-                .font(Theme.Text.metadata)
-                .foregroundStyle(Theme.Colors.tertiaryText)
+                .font(Theme.FloatingCapturePanel.metadataFont)
+                .foregroundStyle(Theme.FloatingCapturePanel.tertiaryText)
 
             Spacer()
 

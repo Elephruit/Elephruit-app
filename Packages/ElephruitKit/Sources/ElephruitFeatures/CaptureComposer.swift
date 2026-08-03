@@ -86,13 +86,13 @@ struct CaptureComposer: View {
     var body: some View {
         Group {
             if presentationStyle == .panel {
-                VStack(alignment: .leading, spacing: Theme.Spacing.large) {
+                VStack(alignment: .leading, spacing: Theme.FloatingCapturePanel.sectionSpacing) {
                     content
-                        .padding(.horizontal, Theme.Spacing.section)
+                        .padding(.horizontal, Theme.FloatingCapturePanel.outerPadding)
 
                     footer
-                        .padding(.horizontal, Theme.Spacing.section)
-                        .padding(.bottom, Theme.Spacing.section)
+                        .padding(.horizontal, Theme.FloatingCapturePanel.outerPadding)
+                        .padding(.bottom, Theme.FloatingCapturePanel.outerPadding)
                 }
             } else {
                 VStack(alignment: .leading, spacing: 0) {
@@ -136,34 +136,13 @@ struct CaptureComposer: View {
     /// word.
     private var content: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            CaptureTitleField(
-                composition: $composition,
-                caret: $caret,
-                vocabulary: vocabulary,
-                placeholder: composition.draft.kind == .task ? "New To-Do" : "New Note",
-                onSubmit: onSave,
-                onCancel: onCancel,
-                onMoveToNotes: { focus = .notes },
-                onMove: { direction in moveSelection(direction) },
-                onAccept: { acceptSuggestion() },
-                onRemoveLastChip: { removeLastChip() }
-            )
-            .frame(height: 26)
-            .focused($focus, equals: .title)
-            .accessibilityIdentifier(AccessibilityID.QuickCapture.textField)
-            .accessibilityLabel("What would you like to capture?")
+            if presentationStyle == .panel {
+                FloatingCapturePanelSectionLabel("What would you like to capture?")
 
-            CaptureNotesField(
-                text: $composition.notesText,
-                caret: $notesCaret,
-                vocabulary: vocabulary,
-                onSubmit: onSave,
-                onCancel: onCancel,
-                onMove: { direction in moveSelection(direction) },
-                onAccept: { acceptSuggestion() }
-            )
-                .frame(minHeight: 44, maxHeight: 96)
-                .focused($focus, equals: .notes)
+                FloatingCapturePanelField { captureFields }
+            } else {
+                captureFields
+            }
 
             if !suggestions.isEmpty {
                 suggestionList
@@ -193,6 +172,39 @@ struct CaptureComposer: View {
                     .foregroundStyle(Theme.Colors.unresolvedLink)
                     .lineLimit(2)
             }
+        }
+    }
+
+    private var captureFields: some View {
+        VStack(alignment: .leading, spacing: Theme.FloatingCapturePanel.controlSpacing) {
+            CaptureTitleField(
+                composition: $composition,
+                caret: $caret,
+                vocabulary: vocabulary,
+                placeholder: composition.draft.kind == .task ? "New To-Do" : "New Note",
+                onSubmit: onSave,
+                onCancel: onCancel,
+                onMoveToNotes: { focus = .notes },
+                onMove: { direction in moveSelection(direction) },
+                onAccept: { acceptSuggestion() },
+                onRemoveLastChip: { removeLastChip() }
+            )
+            .frame(height: 26)
+            .focused($focus, equals: .title)
+            .accessibilityIdentifier(AccessibilityID.QuickCapture.textField)
+            .accessibilityLabel("What would you like to capture?")
+
+            CaptureNotesField(
+                text: $composition.notesText,
+                caret: $notesCaret,
+                vocabulary: vocabulary,
+                onSubmit: onSave,
+                onCancel: onCancel,
+                onMove: { direction in moveSelection(direction) },
+                onAccept: { acceptSuggestion() }
+            )
+            .frame(minHeight: 44, maxHeight: 96)
+            .focused($focus, equals: .notes)
         }
     }
 

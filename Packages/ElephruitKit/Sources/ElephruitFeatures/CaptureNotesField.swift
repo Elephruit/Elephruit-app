@@ -35,8 +35,8 @@ struct CaptureNotesField: NSViewRepresentable {
         textView.isRichText = false
         textView.allowsUndo = true
         textView.drawsBackground = false
-        textView.font = NSFont.preferredFont(forTextStyle: .subheadline)
-        textView.textColor = NSColor.labelColor
+        textView.font = Theme.AppKitText.captureSupportingInput
+        textView.textColor = Theme.AppKitColors.primaryText
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.minSize = NSSize(width: 0, height: 0)
@@ -156,12 +156,12 @@ final class CaptureNotesTextView: NSTextView {
     /// like a row of controls.
     func applyHighlighting() {
         guard let storage = textStorage else { return }
-        let bodyFont = font ?? NSFont.preferredFont(forTextStyle: .subheadline)
+        let bodyFont = font ?? Theme.AppKitText.captureSupportingInput
         let whole = NSRange(location: 0, length: storage.length)
 
         storage.beginEditing()
         storage.setAttributes(
-            [.font: bodyFont, .foregroundColor: NSColor.labelColor],
+            [.font: bodyFont, .foregroundColor: Theme.AppKitColors.primaryText],
             range: whole
         )
 
@@ -197,7 +197,7 @@ final class CaptureNotesTextView: NSTextView {
             utf16Base += (text as NSString).length + 1
         }
         storage.endEditing()
-        typingAttributes = [.font: bodyFont, .foregroundColor: NSColor.labelColor]
+        typingAttributes = [.font: bodyFont, .foregroundColor: Theme.AppKitColors.primaryText]
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -207,8 +207,8 @@ final class CaptureNotesTextView: NSTextView {
         NSAttributedString(
             string: placeholder,
             attributes: [
-                .font: font ?? NSFont.preferredFont(forTextStyle: .subheadline),
-                .foregroundColor: NSColor.placeholderTextColor,
+                .font: font ?? Theme.AppKitText.captureSupportingInput,
+                .foregroundColor: Theme.AppKitColors.placeholderText,
             ]
         ).draw(
             at: NSPoint(

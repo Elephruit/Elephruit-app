@@ -136,12 +136,10 @@ struct QuickJotView: View {
     @Bindable var controller: QuickJotController
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.large) {
-            Label("Quick Jot", systemImage: "square.and.pencil")
-                .font(.system(.headline, design: .default, weight: .semibold))
-                .foregroundStyle(Theme.Colors.primaryText)
-                .padding(.horizontal, Theme.Spacing.section)
-                .padding(.top, Theme.Spacing.section)
+        VStack(alignment: .leading, spacing: Theme.FloatingCapturePanel.sectionSpacing) {
+            FloatingCapturePanelHeader("Quick Jot", systemImage: "square.and.pencil")
+                .padding(.horizontal, Theme.FloatingCapturePanel.outerPadding)
+                .padding(.top, Theme.FloatingCapturePanel.outerPadding)
 
             CaptureComposer(
                 composition: $controller.composition,
@@ -152,7 +150,7 @@ struct QuickJotView: View {
             )
         }
         .frame(width: 560)
-        .background(Theme.Colors.windowBackground)
+        .background(Theme.FloatingCapturePanel.background)
         .accessibilityIdentifier(AccessibilityID.QuickCapture.root)
     }
 }
