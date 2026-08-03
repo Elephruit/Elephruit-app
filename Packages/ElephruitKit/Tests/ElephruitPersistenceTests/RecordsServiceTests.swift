@@ -1,0 +1,77 @@
+import ElephruitCore
+import ElephruitModel
+import ElephruitPersistence
+import Testing
+
+@Suite("Records service")
+@MainActor
+struct RecordsServiceTests {
+    private func fixture() throws -> (
+        StoreFixture,
+        SwiftDataPersonRepository,
+        RecordsService
+    ) {
+        let store = try StoreFixture()
+        let people = SwiftDataPersonRepository(
+            context: store.context,
+            items: store.items,
+            dateProvider: store.dateProvider
+        )
+        let records = RecordsService(
+            context: store.context,
+            items: store.items,
+            people: people,
+            dateProvider: store.dateProvider
+        )
+        return (store, people, records)
+    }
+
+    @Test("Different subject types share one persisted records collection")
+    func createsPeoplePetsAndVehicles() throws {
+        let (store, _, records) = try fixture()
+
+        let person = try records.create(RecordDraft(name: "Maya Chen", type: .person))
+        let pet = try records.create(RecordDraft(
+            name: "Juniper",
+            type: .pet,
+            details: ["species": "Dog", "vet": "Lakeview Animal Hospital"]
+        ))
+        let vehicle = try records.create(RecordDraft(
+            name: "Family wagon",
+            type: .vehicle,
+            details: ["year": "2024", "make": "Volvo"]
+        ))
+
+        #expect(try records.allRecords().map(\.title) == ["Family wagon", "Juniper", "Maya Chen"])
+        #expect(records.type(of: person) == .person)
+        #expect(records.type(of: pet) == .pet)
+        #expect(records.type(of: vehicle) == .vehicle)
+
+        let persistedPet = try store.requireItem(id: pet.id)
+        #expect(persistedPet.recordProfile?.details["vet"] == "Lakeview Animal Hospital")
+    }
+
+    @Test("Contact imports wait in Unsorted until explicitly filed")
+    func importFilingState() throws {
+        let (store, people, records) = try fixture()
+        let person = try people.createPerson(PersonDraft(fullName: "Ari Reed"))
+
+        try records.markImported(person)
+        #expect(records.isUnsorted(person))
+        #expect(try store.requireItem(id: person.id).recordProfile?.origin == .contacts)
+
+        try records.file(person)
+        #expect(!records.isUnsorted(person))
+        #expect(try store.requireItem(id: person.id).recordProfile?.isUnsorted == false)
+    }
+
+    @Test("Legacy People appear in Records without changing their profile")
+    func projectsExistingPeople() throws {
+        let (_, people, records) = try fixture()
+        let person = try people.createPerson(PersonDraft(fullName: "Legacy Person"))
+
+        #expect(person.recordProfile == nil)
+        #expect(try records.allRecords().contains { $0.id == person.id })
+        #expect(person.recordProfile == nil)
+    }
+}
