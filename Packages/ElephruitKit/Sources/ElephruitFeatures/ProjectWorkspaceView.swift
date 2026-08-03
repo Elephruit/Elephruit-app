@@ -135,7 +135,10 @@ struct ProjectWorkspaceView: View {
 
     @ViewBuilder
     private func body(for model: ProjectWorkspaceModel) -> some View {
-        if model.isEmpty {
+        // A board's empty columns are useful structure, not an empty state. They show a new
+        // project's workflow and provide the click-to-add targets that create its first work.
+        // Other views still get the explanatory empty state until there is something to display.
+        if model.isEmpty, model.activeView?.kind != .board {
             ProjectEmptyState(model: model)
         } else if model.hasNoMatches {
             ProjectNoMatchesState(model: model)
