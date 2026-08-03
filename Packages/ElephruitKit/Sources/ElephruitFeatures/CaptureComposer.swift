@@ -4,6 +4,16 @@ import ElephruitModel
 import ElephruitPersistence
 import SwiftUI
 
+/// The chrome around the shared capture fields.
+///
+/// The in-window sheet belongs to the window beneath it and keeps its grouped footer. The floating
+/// Quick Jot panel is the whole window, so it uses the same open, crisp surface as Quick Log instead
+/// of putting a second grey bar inside a grey material panel.
+enum CaptureComposerPresentationStyle {
+    case sheet
+    case panel
+}
+
 /// Everything between the edges of a Quick Jot card, wherever it is being shown.
 ///
 /// ### Why this is one view rather than two
@@ -28,6 +38,8 @@ struct CaptureComposer: View {
     @Environment(\.services) private var services
 
     @Binding var composition: QuickJotComposition
+
+    var presentationStyle: CaptureComposerPresentationStyle = .sheet
 
     /// The most recent failure, if the caller keeps one. A sheet that dismisses on success has
     /// nowhere to show a failure and passes `nil`; the panel stays open and shows it.
@@ -72,10 +84,29 @@ struct CaptureComposer: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            content
-            Divider()
-            footer
+        Group {
+            if presentationStyle == .panel {
+                VStack(alignment: .leading, spacing: Theme.Spacing.large) {
+                    content
+                        .padding(.horizontal, Theme.Spacing.section)
+
+                    footer
+                        .padding(.horizontal, Theme.Spacing.section)
+                        .padding(.bottom, Theme.Spacing.section)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    content
+                        .padding(Theme.Spacing.large)
+
+                    Divider()
+
+                    footer
+                        .padding(.horizontal, Theme.Spacing.large)
+                        .padding(.vertical, Theme.Spacing.medium)
+                        .background(Theme.Colors.subtleFill)
+                }
+            }
         }
         .onChange(of: completion) { refreshSuggestions() }
         // Keyed on the change token rather than run once, because the panel outlives any single
@@ -163,7 +194,6 @@ struct CaptureComposer: View {
                     .lineLimit(2)
             }
         }
-        .padding(Theme.Spacing.large)
     }
 
     // MARK: - Completions
@@ -317,9 +347,6 @@ struct CaptureComposer: View {
                 .disabled(composition.isEmpty || isSaving)
                 .accessibilityIdentifier(AccessibilityID.QuickCapture.saveButton)
         }
-        .padding(.horizontal, Theme.Spacing.large)
-        .padding(.vertical, Theme.Spacing.medium)
-        .background(Theme.Colors.subtleFill)
     }
 
     /// ### Why the vocabulary is handed over rather than fetched again

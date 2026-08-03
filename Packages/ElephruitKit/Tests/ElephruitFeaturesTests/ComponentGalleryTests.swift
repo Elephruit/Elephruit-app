@@ -112,6 +112,17 @@ struct ComponentGalleryTests {
         }
     }
 
+    @Test("Quick Jot panel")
+    func quickJotPanel() throws {
+        let services = AppServices.inMemory(dateProvider: SystemDateProvider(), populated: false)
+        let controller = QuickJotController(services: services)
+
+        try write("quick-jot", width: 610) {
+            QuickJotView(controller: controller)
+                .appServices(services)
+        }
+    }
+
     // MARK: - The person action row
 
     /// The row that was three saturated pills, then a row of identical grey buttons, and is now
