@@ -91,10 +91,10 @@ The Design module has two deliberate levels. `Theme.Spacing`, `Theme.Text`, and 
 the primitives—the equivalent of CSS custom properties. Semantic layers then name recurring UI
 roles and assemble those primitives into components. For example, `Theme.FloatingCapturePanel`
 defines the type hierarchy, adaptive colours, and rhythm for global capture windows, while
-`FloatingCapturePanelHeader`, `FloatingCapturePanelPrompt`, and `FloatingCapturePanelField` make
-that hierarchy structural. Feature views consume those roles rather than choosing fonts, colours,
-and borders independently. A visual change therefore has one owner, while genuine differences such
-as a prompt being stronger than supporting text remain explicit rather than accidental drift.
+`FloatingCapturePanelPrompt` makes the decision hierarchy structural. Feature views consume those
+roles rather than choosing fonts and colours independently. A visual change therefore has one
+owner, while genuine differences such as a prompt being stronger than supporting text remain
+explicit rather than accidental drift.
 
 ## State and concurrency
 

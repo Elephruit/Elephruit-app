@@ -34,11 +34,14 @@ struct QuickLogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.FloatingCapturePanel.sectionSpacing) {
-            header
-
             if running == nil {
                 stopped
             } else if controller.presentation == .confirmReplacement {
+                HStack {
+                    Spacer()
+                    timingBadge
+                }
+
                 replacementConfirmation
             } else {
                 naming
@@ -71,27 +74,21 @@ struct QuickLogView: View {
         .accessibilityIdentifier(AccessibilityID.Time.quickLog)
     }
 
-    // MARK: - Header
+    /// The clock identifies this as a timer without making the panel announce its own feature name.
+    private var timingBadge: some View {
+        HStack(spacing: Theme.Spacing.small) {
+            Circle()
+                .fill(Theme.Colors.recording)
+                .frame(width: 7, height: 7)
 
-    /// The feature name stays quiet; the live clock gets the visual weight.
-    private var header: some View {
-        FloatingCapturePanelHeader("Quick Log", systemImage: "timer") {
-            if running != nil {
-                HStack(spacing: Theme.Spacing.small) {
-                    Circle()
-                        .fill(Theme.Colors.recording)
-                        .frame(width: 7, height: 7)
-
-                    clock
-                }
-                .padding(.horizontal, Theme.Spacing.medium)
-                .padding(.vertical, Theme.Spacing.small)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(Theme.FloatingCapturePanel.groupedBackground)
-                )
-            }
+            clock
         }
+        .padding(.horizontal, Theme.Spacing.medium)
+        .padding(.vertical, Theme.Spacing.small)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Theme.FloatingCapturePanel.groupedBackground)
+        )
     }
 
     /// A running clock is a pure function of one stored date and the current moment, so it is drawn
@@ -117,9 +114,7 @@ struct QuickLogView: View {
     /// every time and the chips are the ones usually left alone.
     private var naming: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            FloatingCapturePanelSectionLabel("What are you working on?")
-
-            FloatingCapturePanelField {
+            HStack(spacing: Theme.Spacing.medium) {
                 TextField("Add a description", text: $controller.description)
                     .textFieldStyle(.plain)
                     .font(Theme.FloatingCapturePanel.primaryInputFont)
@@ -127,6 +122,8 @@ struct QuickLogView: View {
                     .onSubmit { controller.hide() }
                     .accessibilityLabel("What are you working on?")
                     .accessibilityIdentifier(AccessibilityID.Time.quickLogDescription)
+
+                timingBadge
             }
 
             filingChips
@@ -144,7 +141,7 @@ struct QuickLogView: View {
     private var replacementConfirmation: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
             FloatingCapturePanelPrompt(
-                "A timer is already running",
+                "Timer already running",
                 message: "Stop and save it before starting a new timer?"
             )
 

@@ -6,9 +6,8 @@ import SwiftUI
 
 /// The chrome around the shared capture fields.
 ///
-/// The in-window sheet belongs to the window beneath it and keeps its grouped footer. The floating
-/// Quick Jot panel is the whole window, so it uses the same open, crisp surface as Quick Log instead
-/// of putting a second grey bar inside a grey material panel.
+/// The in-window sheet and floating panel share their open writing surface. Their only visual
+/// difference is spacing: the panel gets the roomier global-window rhythm.
 enum CaptureComposerPresentationStyle {
     case sheet
     case panel
@@ -86,13 +85,17 @@ struct CaptureComposer: View {
     var body: some View {
         Group {
             if presentationStyle == .panel {
-                VStack(alignment: .leading, spacing: Theme.FloatingCapturePanel.sectionSpacing) {
+                VStack(alignment: .leading, spacing: 0) {
                     content
-                        .padding(.horizontal, Theme.FloatingCapturePanel.outerPadding)
+                        .padding(Theme.FloatingCapturePanel.outerPadding)
+                        .background(Theme.FloatingCapturePanel.background)
+
+                    Divider()
 
                     footer
                         .padding(.horizontal, Theme.FloatingCapturePanel.outerPadding)
-                        .padding(.bottom, Theme.FloatingCapturePanel.outerPadding)
+                        .padding(.vertical, Theme.Spacing.medium)
+                        .background(Theme.FloatingCapturePanel.groupedBackground)
                 }
             } else {
                 VStack(alignment: .leading, spacing: 0) {
@@ -136,13 +139,7 @@ struct CaptureComposer: View {
     /// word.
     private var content: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            if presentationStyle == .panel {
-                FloatingCapturePanelSectionLabel("What would you like to capture?")
-
-                FloatingCapturePanelField { captureFields }
-            } else {
-                captureFields
-            }
+            captureFields
 
             if !suggestions.isEmpty {
                 suggestionList
