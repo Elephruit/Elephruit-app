@@ -297,7 +297,7 @@ struct LogInteractionSheet: View {
             loadPeople()
             focusedField = .summary
         }
-        .accessibilityIdentifier(AccessibilityID.People.interactionSheet)
+        .accessibilityIdentifier(AccessibilityID.Records.interactionSheet)
     }
 
     private var header: some View {

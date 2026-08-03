@@ -5,7 +5,7 @@ import ElephruitModel
 import ElephruitPersistence
 import Foundation
 
-/// The People module in Shortcuts.
+/// Person-record workflows exposed through Shortcuts.
 ///
 /// ### What is exposed, and what deliberately is not
 /// Everything here **reads or writes Elephruit's own store**. Nothing sends an email, places a call,
@@ -24,7 +24,7 @@ struct FindPersonIntent: AppIntent {
 
     static let description = IntentDescription(
         "Searches your people by name, by what you have recorded about them, or by how they are related to somebody.",
-        categoryName: "People"
+        categoryName: "Records"
     )
 
     static let openAppWhenRun = false
@@ -55,7 +55,7 @@ struct OpenPersonIntent: AppIntent {
 
     static let description = IntentDescription(
         "Brings Elephruit forward on somebody's page.",
-        categoryName: "People"
+        categoryName: "Records"
     )
 
     /// The one intent here that does bring the app forward, because opening a page is the whole ask.
@@ -72,7 +72,7 @@ struct OpenPersonIntent: AppIntent {
             return .result(dialog: "No one called “\(name)”.")
         }
 
-        PeopleIntentRouting.requestedPersonID = match.id
+        RecordIntentRouting.requestedPersonID = match.id
         return .result(dialog: "Opening \(match.name).")
     }
 }
@@ -84,7 +84,7 @@ struct CreatePersonIntent: AppIntent {
 
     static let description = IntentDescription(
         "Adds somebody to Elephruit. Creates a local record only — your system contacts are never changed.",
-        categoryName: "People"
+        categoryName: "Records"
     )
 
     static let openAppWhenRun = false
@@ -123,7 +123,7 @@ struct AddPersonNoteIntent: AppIntent {
 
     static let description = IntentDescription(
         "Writes a timestamped note and links it to somebody, so it appears in their history.",
-        categoryName: "People"
+        categoryName: "Records"
     )
 
     static let openAppWhenRun = false
@@ -138,7 +138,7 @@ struct AddPersonNoteIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let services = try CaptureBridge.services()
 
-        guard let person = try PeopleIntentRouting.resolve(name, in: services) else {
+        guard let person = try RecordIntentRouting.resolve(name, in: services) else {
             return .result(dialog: "No one called “\(name)”.")
         }
 
@@ -155,7 +155,7 @@ struct LogInteractionIntent: AppIntent {
 
     static let description = IntentDescription(
         "Records that you spoke to somebody, with a summary. This is a record you are making, not something detected.",
-        categoryName: "People"
+        categoryName: "Records"
     )
 
     static let openAppWhenRun = false
@@ -170,7 +170,7 @@ struct LogInteractionIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let services = try CaptureBridge.services()
 
-        guard let person = try PeopleIntentRouting.resolve(name, in: services) else {
+        guard let person = try RecordIntentRouting.resolve(name, in: services) else {
             return .result(dialog: "No one called “\(name)”.")
         }
 
@@ -190,7 +190,7 @@ struct RecordFactIntent: AppIntent {
 
     static let description = IntentDescription(
         "Records something you learned, with today's date, so any estimate derived from it advances correctly.",
-        categoryName: "People"
+        categoryName: "Records"
     )
 
     static let openAppWhenRun = false
@@ -205,7 +205,7 @@ struct RecordFactIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let services = try CaptureBridge.services()
 
-        guard let person = try PeopleIntentRouting.resolve(name, in: services) else {
+        guard let person = try RecordIntentRouting.resolve(name, in: services) else {
             return .result(dialog: "No one called “\(name)”.")
         }
 
@@ -228,7 +228,7 @@ struct CreateFollowUpIntent: AppIntent {
 
     static let description = IntentDescription(
         "Adds a task linked to somebody, so it appears in their history and in your Today list.",
-        categoryName: "People"
+        categoryName: "Records"
     )
 
     static let openAppWhenRun = false
@@ -239,20 +239,20 @@ struct CreateFollowUpIntent: AppIntent {
     @Parameter(title: "What needs doing", requestValueDialog: "What needs doing?")
     var text: String
 
-    @Parameter(title: "Is this a promise you made?", default: false)
-    var isPromise: Bool
+    @Parameter(title: "Is this something you owe them?", default: false)
+    var isOwed: Bool
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let services = try CaptureBridge.services()
 
-        guard let person = try PeopleIntentRouting.resolve(name, in: services) else {
+        guard let person = try RecordIntentRouting.resolve(name, in: services) else {
             return .result(dialog: "No one called “\(name)”.")
         }
 
-        // A promise is tagged, never inferred from the wording — see `PersonWorkspaceService`.
+        // Owed work is tagged explicitly rather than inferred from its wording.
         let task = try services.items.create(
-            ItemDraft(kind: .task, title: text, tagSlugs: isPromise ? ["promise"] : [])
+            ItemDraft(kind: .task, title: text, tagSlugs: isOwed ? ["owed"] : [])
         )
         try services.items.link(task, to: person, kind: .mentions)
         services.noteChange(to: task)
@@ -268,7 +268,7 @@ struct MeetingBriefIntent: AppIntent {
 
     static let description = IntentDescription(
         "Everything worth knowing before you see somebody. Estimates are labeled as estimates.",
-        categoryName: "People"
+        categoryName: "Records"
     )
 
     static let openAppWhenRun = false
@@ -280,7 +280,7 @@ struct MeetingBriefIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
         let services = try CaptureBridge.services()
 
-        guard let person = try PeopleIntentRouting.resolve(name, in: services) else {
+        guard let person = try RecordIntentRouting.resolve(name, in: services) else {
             return .result(value: "", dialog: "No one called “\(name)”.")
         }
 
@@ -309,7 +309,7 @@ struct UpcomingCelebrationsIntent: AppIntent {
 
     static let description = IntentDescription(
         "Birthdays, anniversaries, and milestones coming up.",
-        categoryName: "People"
+        categoryName: "Records"
     )
 
     static let openAppWhenRun = false
@@ -339,9 +339,9 @@ struct UpcomingCelebrationsIntent: AppIntent {
 
 // MARK: - Support
 
-/// Shared plumbing for the People intents.
+/// Shared plumbing for person-record intents.
 @MainActor
-enum PeopleIntentRouting {
+enum RecordIntentRouting {
     /// Set by ``OpenPersonIntent`` and read by the app when it comes forward.
     ///
     /// A stored identifier rather than a URL scheme, because the intent runs in the same process and
@@ -358,6 +358,6 @@ enum PeopleIntentRouting {
     }
 }
 
-/// The People intents are surfaced through the app's single ``ElephruitShortcuts`` provider, which
+/// These intents are surfaced through the app's single ``ElephruitShortcuts`` provider, which
 /// App Intents allows exactly one of per target. Adding a second conformance compiles and then
 /// silently registers nothing, which is the worst of both.

@@ -57,7 +57,7 @@ public enum DesignReviewLaunch {
 
     /// Where the window should open, overriding whatever the scene was last left showing.
     ///
-    /// Accepts either a module (`people`, `calendar`, `tasks`, …) or one of the four destinations
+    /// Accepts either a module (`records`, `calendar`, `tasks`, …) or one of the four destinations
     /// that belong to no module (`home`, `today`, `upcoming`, `inbox`) — the same vocabulary the
     /// sidebar uses, so the argument reads as the name of the thing the reviewer wants to see.
     public static var start: Start? {
@@ -83,6 +83,9 @@ public enum DesignReviewLaunch {
         case "today": return .destination(.today)
         case "upcoming": return .destination(.upcoming)
         case "inbox": return .destination(.inbox)
+        case "records": return .destination(.records(.all))
+        // Compatibility for saved review scripts from before Records replaced the People module.
+        case "people": return .module(.records)
         default:
             guard let module = AppModule(rawValue: raw) else { return nil }
             return .module(module)
@@ -255,7 +258,7 @@ public enum DesignReviewLaunch {
 
     /// The person whose profile the window should open on, by name.
     ///
-    /// A profile is the densest screen in this app and the one the People module exists for, and it
+    /// A profile is one of the densest Records screens in this app, and it
     /// is unreachable without selecting somebody — which needs a click. So on a locked machine it
     /// could not be photographed at all, and this pass reviewed it by reading it.
     static func selectedPersonName(in arguments: [String]) -> String? {

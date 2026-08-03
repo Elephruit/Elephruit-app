@@ -40,10 +40,10 @@ public struct InspectorView: View {
                     navigation.selectItem(id)
                 }
             } else if let item = currentItem, item.kind == .person {
-                // A person's inspector is the *context* pane the People module specifies — upcoming
+                // A person's inspector is the contextual pane Records specifies — upcoming
                 // events, open promises, related people, stale facts — rather than the generic field
                 // editor, whose dates, status, and priority a person has none of.
-                PersonContextSidebar(person: item, navigation: navigation)
+                RecordContextSidebar(person: item, navigation: navigation)
             } else if let item = currentItem {
                 content(for: item)
             } else {
@@ -400,7 +400,7 @@ public struct InspectorView: View {
     /// time. The answer changes when the selection changes or when something is written; those are
     /// the two things this is keyed on.
     private func loadPossibleParents(for item: Item?) {
-        // A person gets the People module's context pane rather than the field editor, so there is
+        // A person gets Records' contextual pane rather than the field editor, so there is
         // no picker to fill and no reason to ask.
         guard let services, let item, item.kind != .person else {
             possibleParents = []

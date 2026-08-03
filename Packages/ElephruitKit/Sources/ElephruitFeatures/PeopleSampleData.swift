@@ -3,7 +3,7 @@ import ElephruitModel
 import ElephruitPersistence
 import Foundation
 
-/// The People module's sample library.
+/// Sample human records used by previews and design-review builds.
 ///
 /// ### Why the awkward cases are the point
 /// A design that looks right against three tidy contacts falls apart against a real address book. So

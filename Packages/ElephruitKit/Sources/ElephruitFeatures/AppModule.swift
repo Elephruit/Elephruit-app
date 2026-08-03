@@ -5,7 +5,7 @@ import Foundation
 ///
 /// ### Why a module rather than another band
 /// The sidebar had grown to hold every destination of every feature at once — the day's work, the
-/// task system's nine views, the People module's seven scopes, the library's kinds, tags, saved
+/// task system's nine views, the Records module's scopes, the library's kinds, tags, saved
 /// searches, and the Trash — all visible simultaneously. That is not a navigation hierarchy; it is
 /// an index. Nobody reads an index to find out where they are.
 ///
@@ -24,7 +24,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     case calendar
     case reminders
     case tasks
-    case people
+    case records
     case notes
     case time
     case projects
@@ -57,14 +57,14 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     ///
     /// The rule: a module swaps the sidebar only when it has real navigation to put there.
     /// Calendar brings its views, calendars and sets; Tasks its system views and containers;
-    /// People its scopes and groups; Notes and Areas their kind rows. The rest were paying a
+    /// Records its scopes and groups; Notes and Areas their kind rows. The rest were paying a
     /// whole column swap for almost nothing — Time for a two-button mode toggle whose job the
     /// toolbar already does, and Bookmarks, Archive and Trash for a single front-door row naming
     /// the module the header had just named. Projects is the founding case: its tree lives at the
     /// top level of the primary sidebar, and swapping that away was taking the navigation with it.
     public var hasOwnSidebar: Bool {
         switch self {
-        case .calendar, .tasks, .people, .notes, .areas: true
+        case .calendar, .tasks, .records, .notes, .areas: true
         case .reminders, .projects, .time, .bookmarks, .archive, .trash: false
         }
     }
@@ -74,7 +74,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         case .calendar: "Calendar"
         case .reminders: "Reminders"
         case .tasks: "Tasks"
-        case .people: "People"
+        case .records: "Records"
         case .notes: "Notes"
         case .time: "Time"
         case .projects: "Projects"
@@ -90,7 +90,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         case .calendar: "calendar"
         case .reminders: "bell"
         case .tasks: "checkmark.circle"
-        case .people: "person.2"
+        case .records: "circle.grid.2x2"
         case .notes: "note.text"
         case .time: "timer"
         case .projects: "square.stack.3d.up"
@@ -111,7 +111,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         case .calendar: "Your days, laid out, and everything you know about them."
         case .reminders: "Small things to remember, captured without becoming tasks."
         case .tasks: "What needs doing, when it becomes workable, and what you chose for today."
-        case .people: "Who you know, what you owe them, and what is coming up for them."
+        case .records: "People and things, with their notes, history, relationships, and shared work."
         case .notes: "Everything written down, with the tags and searches that reach across it."
         case .time: "Tracked time, and what it went on."
         case .projects: "Work with an outcome and an end."
@@ -128,7 +128,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         case .calendar: .calendar
         case .reminders: .reminders
         case .tasks: .taskView(.today)
-        case .people: .people(.all)
+        case .records: .records(.all)
         case .notes: .kind(.note)
         case .time: .time
         case .projects: .kind(.project)
@@ -144,7 +144,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     /// Whether this module's sidebar holds navigation beyond its own front door.
     ///
     /// Calendar offers six views, every calendar it can read, and the sets composed from them; Time
-    /// offers two surfaces, a period and a grouping; Tasks and People build their columns from the
+    /// offers two surfaces, a period and a grouping; Tasks and Records build their columns from the
     /// store. None of them needs a row naming the module underneath a header naming the module —
     /// see ``SidebarRegistry/sidebarRows(in:)``, which is where the consequence is applied.
     ///
@@ -153,7 +153,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     /// rows that are not declared destinations at all.
     public var hasNavigationOfItsOwn: Bool {
         switch self {
-        case .calendar, .time, .tasks, .people: true
+        case .calendar, .time, .tasks, .records: true
         case .reminders, .notes, .projects, .areas, .bookmarks, .archive, .trash: false
         }
     }
@@ -173,8 +173,8 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
             .reminders
         case .taskView, .smartList, .builtInSmartList:
             .tasks
-        case .people:
-            .people
+        case .records:
+            .records
         case .time:
             .time
         case .archive:
@@ -195,8 +195,8 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     /// The module that owns a kind's list.
     ///
     /// Only the kinds that have a module of their own answer. A meeting note or an idea is a note by
-    /// every other measure in this app, so it belongs to Notes; a person belongs to People even
-    /// though `.kind(.person)` is not the row the People module actually shows.
+    /// every other measure in this app, so it belongs to Notes; person and organization records
+    /// belong to Records even though their kind rows are not the browser entry points.
     private static func module(for kind: ItemKind) -> AppModule? {
         switch kind {
         case .task: .tasks
@@ -206,7 +206,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         // bug and a feature are work by every other measure in this app.
         case .bug, .feature, .milestone, .release: .projects
         case .area: .areas
-        case .person, .organization: .people
+        case .person, .organization: .records
         case .bookmark: .bookmarks
         case .note, .idea, .reference, .meeting, .dailyEntry, .decision: .notes
         case .interaction, .list, .heading: nil

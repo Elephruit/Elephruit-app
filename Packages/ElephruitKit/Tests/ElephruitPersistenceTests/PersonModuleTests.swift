@@ -5,15 +5,15 @@ import Foundation
 import SwiftData
 import Testing
 
-/// The People module against a real store.
+/// Person records against a real store.
 ///
 /// The assertions that matter here are the ones a value-type test cannot make: that a reciprocal
 /// relationship survives a round trip through the store, that correcting a fact leaves both rows on
 /// disk, and that a merge moves everything it said it would and destroys nothing.
-@Suite("People module")
+@Suite("Person records")
 @MainActor
-struct PersonModuleTests {
-    /// A fixture with the People services wired over one in-memory store.
+struct PersonRecordPersistenceTests {
+    /// A fixture with the person-record services wired over one in-memory store.
     struct Fixture {
         let store: StoreFixture
         let people: SwiftDataPersonRepository

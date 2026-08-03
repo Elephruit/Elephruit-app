@@ -401,6 +401,11 @@ public final class Item {
     @Relationship(deleteRule: .cascade, inverse: \PersonProfile.item)
     public var personProfile: PersonProfile?
 
+    /// Present when this item participates in the Records module. A person may have both this and
+    /// `personProfile`: the latter owns CRM details, while this owns shared filing and type state.
+    @Relationship(deleteRule: .cascade, inverse: \RecordProfile.item)
+    public var recordProfile: RecordProfile?
+
     /// Present only for ``ItemKind/meeting``.
     @Relationship(deleteRule: .cascade, inverse: \EventReference.item)
     public var eventReference: EventReference?

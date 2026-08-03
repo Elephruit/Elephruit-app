@@ -8,7 +8,7 @@ import SwiftUI
 ///
 /// ### Two levels, not one list
 /// The previous sidebar showed every destination of every feature at the same time: the day's work,
-/// the task system's nine views, the People module's seven scopes, the library's kinds, tags, saved
+/// the task system's nine views, the Records module's scopes, the library's kinds, tags, saved
 /// searches, the Archive and the Trash. Nothing was wrong with any one of those rows; what was wrong
 /// was that all of them were on screen at once, which turned the sidebar into an index of the app
 /// rather than a statement of where you are in it.

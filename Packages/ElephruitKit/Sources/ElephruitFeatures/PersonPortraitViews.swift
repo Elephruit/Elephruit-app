@@ -39,7 +39,7 @@ struct PersonPortraitSection: View {
                 }
                 .buttonStyle(.borderless)
                 .font(Theme.Text.rowSubtitle)
-                .accessibilityIdentifier(AccessibilityID.People.addFact)
+                .accessibilityIdentifier(AccessibilityID.Records.addFact)
             }
 
             if let stale = portrait?.staleFacts, !stale.isEmpty {
@@ -372,7 +372,7 @@ struct StaleFactsBanner: View {
             Theme.Colors.warning.opacity(0.10),
             in: RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
         )
-        .accessibilityIdentifier(AccessibilityID.People.staleFacts)
+        .accessibilityIdentifier(AccessibilityID.Records.staleFacts)
     }
 }
 
@@ -522,7 +522,7 @@ struct PersonRelationshipsSection: View {
             .font(Theme.Text.metadata)
             .help("See these relationships as a family tree, a household, an organization, or a network")
             .accessibilityLabel("Relationship charts")
-            .accessibilityIdentifier(AccessibilityID.People.charts)
+            .accessibilityIdentifier(AccessibilityID.Records.charts)
 
             Menu {
                 // The three shortcuts are pre-filled kinds rather than three different actions, and
@@ -910,7 +910,7 @@ struct PersonTimelineSection: View {
             }
         }
         .padding(.horizontal, Theme.Spacing.large)
-        .accessibilityIdentifier(AccessibilityID.People.timeline)
+        .accessibilityIdentifier(AccessibilityID.Records.timeline)
     }
 
     private var filtered: [PersonTimelineEntry] {

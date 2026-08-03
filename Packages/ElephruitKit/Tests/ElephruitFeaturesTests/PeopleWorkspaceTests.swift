@@ -5,16 +5,16 @@ import ElephruitPersistence
 import Foundation
 import Testing
 
-/// The People module wired together, against the sample library.
+/// The person-record workspace wired together, against the sample library.
 ///
 /// ### Why the fixture is worth testing
 /// Sample data is the demo path, and a demo path that quietly stops producing the state it is meant
 /// to demonstrate is worse than none — somebody opens the app, sees a tidy page, and concludes the
 /// feature does not do what it says. These assert that each awkward case the fixture exists to create
 /// is actually there: an estimated age, a stale fact, an unkept promise, a duplicate to reconcile.
-@Suite("People workspace")
+@Suite("Person record workspace")
 @MainActor
-struct PeopleWorkspaceTests {
+struct PersonRecordWorkspaceTests {
     func makeServices() -> AppServices {
         // A fixed clock 540 days after the coffee conversation, which is where the estimates bite.
         AppServices.inMemory(dateProvider: FixedDateProvider.reference, populated: true)
@@ -348,14 +348,24 @@ struct PeopleWorkspaceTests {
         #expect(!command.isRunnable)
     }
 
-    @Test("The new-person form leaves untouched fields unset rather than empty")
-    func newPersonFormOmitsBlankFields() throws {
-        let draft = NewPersonSheet.draft(
-            name: "  Theo Ramirez  ", organization: "", role: "  ",
-            email: "theo.ramirez@example.com", phone: ""
+    @Test("A new person record leaves untouched fields unset rather than empty")
+    func newPersonRecordOmitsBlankFields() throws {
+        let services = makeServices()
+        let person = try services.records.create(
+            RecordDraft(
+                name: "  Theo Ramirez  ",
+                type: .person,
+                details: [
+                    "organization": "",
+                    "role": "  ",
+                    "email": "theo.ramirez@example.com",
+                    "phone": "",
+                ]
+            )
         )
+        let draft = try #require(person.personProfile)
 
-        #expect(draft.fullName == "Theo Ramirez")
+        #expect(person.displayTitle == "Theo Ramirez")
         #expect(draft.organizationName == nil)
         #expect(draft.roleTitle == nil, "a blank role must not become a role of empty string")
         #expect(draft.emails.map { $0.value } == ["theo.ramirez@example.com"])

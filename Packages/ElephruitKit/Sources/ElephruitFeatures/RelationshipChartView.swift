@@ -71,7 +71,7 @@ struct RelationshipChartSheet: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: 620, height: 480)
-        .accessibilityIdentifier(AccessibilityID.People.chartSheet)
+        .accessibilityIdentifier(AccessibilityID.Records.chartSheet)
         .task(id: kind) { reload() }
     }
 
@@ -252,7 +252,7 @@ struct MeetingBriefSheet: View {
             }
         }
         .frame(width: 520, height: 560)
-        .accessibilityIdentifier(AccessibilityID.People.meetingBrief)
+        .accessibilityIdentifier(AccessibilityID.Records.meetingBrief)
         .task { brief = try? services?.personWorkspace.brief(for: person) }
     }
 }

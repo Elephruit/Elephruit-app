@@ -311,9 +311,8 @@ public final class ContactImportModel {
 
     /// Writes the approved proposals.
     ///
-    /// One contact per transaction, yielding between each, so the window keeps drawing and Cancel is
-    /// answered promptly. Cancelling leaves everything already written intact and consistent — and
-    /// already de-duplicated by its link, so resuming simply carries on.
+    /// Contacts are staged in one context transaction and committed together. Progress is published
+    /// in small groups so the window stays responsive without turning 400 rows into 400 render passes.
     public func runImport() async {
         guard let plan else { return }
 
@@ -326,6 +325,13 @@ public final class ContactImportModel {
         var processed = 0
         phase = .importing(ContactImportProgress(processed: 0, total: approved.count, isRunning: true))
 
+        do {
+            try services.contactImports.beginStagedImport()
+        } catch {
+            phase = .failed(error.failureReason ?? "The import could not be prepared.")
+            return
+        }
+
         for proposal in approved {
             if Task.isCancelled {
                 report.wasCancelled = true
@@ -333,7 +339,7 @@ public final class ContactImportModel {
             }
 
             do {
-                let outcome = try services.contactImports.apply(proposal, sessionID: session?.id)
+                let outcome = try services.contactImports.stage(proposal, sessionID: session?.id)
                 switch outcome {
                 case .createPerson: report.created += 1
                 case .linkToExisting: report.linked += 1
@@ -352,12 +358,20 @@ public final class ContactImportModel {
             }
 
             processed += 1
-            phase = .importing(
-                ContactImportProgress(processed: processed, total: approved.count, isRunning: true)
-            )
+            if processed.isMultiple(of: 20) || processed == approved.count {
+                phase = .importing(
+                    ContactImportProgress(processed: processed, total: approved.count, isRunning: true)
+                )
+                // Lets the run loop draw and lets a cancellation be noticed.
+                await Task.yield()
+            }
+        }
 
-            // Lets the run loop draw and lets a cancellation be noticed.
-            await Task.yield()
+        do {
+            try services.contactImports.commitStagedImport()
+        } catch {
+            phase = .failed(error.failureReason ?? "The imported contacts could not be saved.")
+            return
         }
 
         report.skipped += plan.proposals.count { !$0.isSelected && $0.outcome.changesTheDatabase }

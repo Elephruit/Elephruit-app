@@ -85,7 +85,7 @@ struct ContactWriteBackSheet: View {
         }
         .padding(Theme.Spacing.large)
         .frame(minWidth: 460)
-        .accessibilityIdentifier(AccessibilityID.People.contactWriteBackSheet)
+        .accessibilityIdentifier(AccessibilityID.Records.contactWriteBackSheet)
     }
 
     /// The four writable lists, each shown only when it has something in it.

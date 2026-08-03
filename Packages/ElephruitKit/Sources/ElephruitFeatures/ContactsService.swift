@@ -86,10 +86,6 @@ public final class ContactsService {
 
         provider = makeProvider()
         authorization = await provider.requestAccess()
-
-        if authorization.canRead {
-            await refreshAccounts()
-        }
         return authorization
     }
 
@@ -118,6 +114,11 @@ public final class ContactsService {
     }
 
     // MARK: - Writing
+
+    /// Adds a new structured person to Apple Contacts after an explicit choice in Records.
+    public func create(_ contact: ContactCreate) async -> ContactCreateOutcome {
+        await provider.create(contact)
+    }
 
     /// Passes a confirmed edit to the address book.
     ///

@@ -57,7 +57,7 @@ extension AppModule {
                 )
             )
 
-        case .people:
+        case .records:
             // A document module whose document is the profile, and the *only* one whose profile is
             // unbounded.
             //
@@ -91,13 +91,13 @@ extension AppModule {
                     hidesWhenNothingSelected: false,
                     width: PaneWidth(minimum: 450, ideal: 680),
                     // The app's own minimum window. The profile column appears as soon as there is a
-                    // window that can hold it, because a People module with no profile in it is a
+                    // window that can hold it, because Records with no profile in it is a
                     // list of names.
                     compactWindowWidth: 900
                 ),
                 inspector: DetailPanePolicy(
                     // ### Why selecting somebody no longer opens the inspector
-                    // It did, and that is why the third column read as permanent: `.people` said
+                    // It did, and that is why the third column read as permanent: the old module said
                     // `opensAfterSelection`, so clicking any name reopened a pane the user may have
                     // closed twenty names ago. A pane that reappears whenever you navigate is not a
                     // contextual inspector; it is a fourth column with a dismiss button.

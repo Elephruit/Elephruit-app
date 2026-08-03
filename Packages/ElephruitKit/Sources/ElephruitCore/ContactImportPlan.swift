@@ -182,7 +182,7 @@ public struct ContactImportPlan: Sendable {
     /// Distinct from ``isRunnable``, and the distinction is the difference between two very
     /// different screens. Nothing ticked out of two hundred addable contacts is a review in
     /// progress. Nothing addable at all — every contact already linked — is not a review: there is
-    /// no decision to make, and offering "Cancel" against a greyed-out "Add Contacts to People"
+    /// no decision to make, and offering "Cancel" against a greyed-out import action
     /// asks the user to abandon a task they were never given.
     public var hasPendingAdditions: Bool {
         proposals.contains { $0.outcome.changesTheDatabase }

@@ -472,6 +472,25 @@ struct ContactOnboardingFlowTests {
         #expect(model.visibleProposals.count < 1500)
     }
 
+    @Test("Four hundred contacts import as one fast transaction")
+    func fourHundredContactImport() async throws {
+        let fixture = try await Fixture.ready(contacts: ContactFixtures.largeLibrary(count: 400))
+        let model = self.model(fixture)
+        await model.prepare()
+
+        let started = ContinuousClock.now
+        await model.runImport()
+        let elapsed = started.duration(to: .now)
+
+        guard case .finished(let report) = model.phase else {
+            Issue.record("expected a finished import, got \(model.phase)")
+            return
+        }
+        #expect(report.created == 400)
+        #expect(try fixture.people.allPeople(includingPlaceholders: true).count == 400)
+        #expect(elapsed < .seconds(5), "importing 400 contacts took \(elapsed)")
+    }
+
     @Test("Every phase the interface switches over is reachable")
     func phasesAreReachable() async throws {
         // A `switch` with no default is only safe if each case is actually produced somewhere; this

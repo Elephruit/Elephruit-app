@@ -132,7 +132,7 @@ struct PersonWorkspaceView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .accessibilityIdentifier(AccessibilityID.People.workspace)
+        .accessibilityIdentifier(AccessibilityID.Records.workspace)
         .task(id: person.id) { reload() }
         .onChange(of: person.updatedAt) { _, _ in reload() }
         // Most of this page is *other* items pointing at this person, and writing one of those
@@ -501,7 +501,7 @@ struct PersonHeaderView: View {
         .padding(.horizontal, Theme.Spacing.large)
         .padding(.vertical, Theme.Spacing.medium)
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(AccessibilityID.People.header)
+        .accessibilityIdentifier(AccessibilityID.Records.header)
     }
 
     private var profile: PersonProfile? { person.personProfile }
@@ -662,7 +662,7 @@ struct PersonQuickActions: View {
             actionDock(showsContactTitles: true)
             actionDock(showsContactTitles: false)
         }
-            .accessibilityIdentifier(AccessibilityID.People.quickActions)
+            .accessibilityIdentifier(AccessibilityID.Records.quickActions)
     }
 
     private func actionDock(showsContactTitles: Bool) -> some View {

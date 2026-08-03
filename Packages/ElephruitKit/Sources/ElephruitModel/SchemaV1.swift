@@ -103,7 +103,7 @@ public enum SchemaV3: VersionedSchema {
     }
 }
 
-/// The fourth schema: the People module.
+/// The fourth schema introduced person-record metadata.
 ///
 /// Three new entities — ``PersonObservationRecord``, ``PersonRelationship``, ``PersonCelebration`` —
 /// and thirteen new optional attributes on ``PersonProfile``. **Additive throughout.** Nothing
@@ -434,6 +434,18 @@ public enum SchemaV13: VersionedSchema {
     }
 }
 
+/// The fourteenth schema: reusable records for people and things.
+///
+/// Adds one optional satellite table and one optional relationship from `Item`. Existing People
+/// rows remain valid and are projected into Records until they acquire a profile through editing.
+public enum SchemaV14: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 14) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV13.models + [RecordProfile.self]
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -446,7 +458,7 @@ public enum SchemaV13: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV13.self]
+        [SchemaV14.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -466,9 +478,9 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV13.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV14.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV13.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV14.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {

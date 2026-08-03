@@ -60,11 +60,8 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
     /// A built-in smart list, named by its stable identifier rather than by an index.
     case builtInSmartList(id: String)
 
-    /// A slice of the People module — all, favourites, celebrations, a group.
-    ///
-    /// One case carrying a ``PeopleScope`` rather than seven cases, so adding a scope does not widen
-    /// this enum and a scene restored from a newer version still decodes.
-    case people(PeopleScope)
+    /// One slice of the reusable Records module. Imports are a filing state, not a landing page.
+    case records(RecordsScope)
 
     /// A project's workspace, open on one of its views.
     ///
@@ -164,7 +161,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
             // view use it by mistake. Home and Upcoming are redirected to Today before anything can
             // ask them, and answer the same way if anything ever does.
             ItemQuery()
-        case .people:
+        case .records:
             // People are fetched through `PersonRepository`, which knows about placeholders and
             // profiles. A kind query would return them but would also return the sketches nobody
             // asked to see.
@@ -203,7 +200,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .calendar: .meeting
         case .reminders: .note
         case .time: .note
-        case .people: .person
+        case .records: .reference
         case .taskView, .smartList, .builtInSmartList: .task
         }
     }
@@ -221,7 +218,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .calendar: "Calendar"
         case .reminders: "Reminders"
         case .time: "Time"
-        case .people(let scope): scope.title
+        case .records(let scope): scope.title
         case .taskView(let view): view.title
         case .project: "Project"
         case .projectInbox: "Project Inbox"
@@ -245,7 +242,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .calendar: "calendar.day.timeline.left"
         case .reminders: "bell"
         case .time: "timer"
-        case .people(let scope): scope.symbolName
+        case .records(let scope): scope.symbolName
         case .taskView(let view): view.symbolName
         case .smartList: "line.3.horizontal.decrease.circle"
         case .builtInSmartList(let id): BuiltInSmartList.list(id: id)?.symbolName ?? "line.3.horizontal.decrease.circle"
@@ -267,7 +264,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .calendar: "sidebar.calendar"
         case .reminders: "sidebar.reminders"
         case .time: "sidebar.time"
-        case .people(let scope): "sidebar.people.\(scope.title.lowercased().replacingOccurrences(of: " ", with: "-"))"
+        case .records(let scope): "sidebar.records.\(scope.id)"
         case .taskView(let view): "sidebar.tasks.\(view.rawValue)"
         case .smartList(let id): "sidebar.smartList.\(id.uuidString)"
         case .builtInSmartList(let id): "sidebar.smartList.\(id)"
@@ -285,12 +282,6 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         case .taskView, .smartList, .builtInSmartList: true
         default: false
         }
-    }
-
-    /// Whether the middle column is the contact list, which owns ⌘F while it is.
-    public var isPeopleDestination: Bool {
-        if case .people = self { return true }
-        return false
     }
 
     /// Whether items shown here are in the Trash, which changes what actions are offered.
@@ -457,19 +448,16 @@ public final class NavigationModel {
     public var isTaskEntryVisible = false
     public var isCommandPaletteVisible = false
 
-    /// The People command bar, which is a different surface from the general ⌘K palette.
+    /// The Records command bar, which is a different surface from the general ⌘K palette.
     ///
     /// Two bars rather than one because they answer different questions. The palette runs *commands*
     /// the app defines; this one reads a sentence about a person and shows what it understood before
     /// anything happens. Merging them would mean one field whose behaviour changes depending on what
     /// the first word turned out to be.
-    public var isPeopleCommandBarVisible = false
+    public var isRecordsCommandBarVisible = false
 
-    /// The plain form for adding somebody by hand.
-    ///
-    /// Separate from the bar above, and reached from the plus button, because "add a person" is a
-    /// thing people expect to answer with fields rather than with a sentence. See ``NewPersonSheet``.
-    public var isNewPersonVisible = false
+    /// The plain form for adding any person or thing by hand.
+    public var isNewRecordVisible = false
 
     /// The full tag list, reached from the sidebar's bounded disclosure group.
     public var isTagBrowserVisible = false

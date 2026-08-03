@@ -17,7 +17,7 @@ struct TimeNavigationTests {
     func sidebarIsEarnedByNavigation() {
         #expect(AppModule.calendar.hasOwnSidebar)
         #expect(AppModule.tasks.hasOwnSidebar)
-        #expect(AppModule.people.hasOwnSidebar)
+        #expect(AppModule.records.hasOwnSidebar)
         #expect(AppModule.notes.hasOwnSidebar)
         #expect(AppModule.areas.hasOwnSidebar)
 
