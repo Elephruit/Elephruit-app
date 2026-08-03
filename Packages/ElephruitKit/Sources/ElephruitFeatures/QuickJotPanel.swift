@@ -15,7 +15,7 @@ final class QuickJotPanel: NSPanel {
     init(content: NSView) {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 560, height: 260),
-            styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
+            styleMask: [.titled, .closable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -131,10 +131,6 @@ public final class QuickJotController {
             rootView: QuickJotView(controller: self).appServices(services)
         )
         hosting.sizingOptions = [.preferredContentSize]
-        // The transparent title bar is part of this panel's surface, not a blank strip above it.
-        // Ignoring AppKit's synthetic title-bar safe area lets the crisp window background continue
-        // beneath the traffic lights, matching Quick Log's full-height panel treatment.
-        hosting.safeAreaRegions = []
 
         let panel = QuickJotPanel(content: hosting)
         panel.center()

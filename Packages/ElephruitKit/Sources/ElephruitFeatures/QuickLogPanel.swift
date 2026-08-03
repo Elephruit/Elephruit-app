@@ -1,5 +1,7 @@
 import AppKit
 import ElephruitCore
+import ElephruitModel
+import ElephruitPersistence
 import SwiftUI
 
 /// What Quick Log is asking the user to do.
@@ -24,8 +26,8 @@ public enum QuickLogPresentation: Sendable, Equatable {
 final class QuickLogPanel: NSPanel {
     init(content: NSView) {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 220),
-            styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 260),
+            styleMask: [.titled, .closable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -138,15 +140,6 @@ public final class QuickLogController {
         )
         hosting.sizingOptions = [.preferredContentSize]
 
-        // A `.titled` window has a title bar whether or not one is drawn, and AppKit reports a
-        // 32-point top safe-area inset for it even with the bar hidden, transparent, and the content
-        // told to fill the frame. SwiftUI honours that, so everything in the panel sat a title bar's
-        // height below where this file says it does. Nothing is clipped here — the window is roomier
-        // than its contents — but the panel was hanging low in its own window for no reason anybody
-        // reading the layout could have seen. See ``MiniTimerController``, where the same inset cost
-        // the collapsed timer its bottom edge.
-        hosting.safeAreaRegions = []
-
         let panel = QuickLogPanel(content: hosting)
         panel.center()
         self.panel = panel
@@ -206,7 +199,12 @@ public final class QuickLogController {
 
     /// Writes the name down and closes, leaving the clock running.
     public func hide() {
-        commitDescription()
+        // The confirmation state is read-only. In particular, a `#` that was already part of the
+        // saved description must not suddenly become filing merely because the shortcut was pressed
+        // and Keep Timing was chosen.
+        if presentation == .editing {
+            commitDescription()
+        }
         panel?.orderOut(nil)
         isVisible = false
         restoreFocus()
@@ -240,7 +238,40 @@ public final class QuickLogController {
     /// for one sentence — but an exit that did not write would be a name typed and thrown away.
     public func commitDescription() {
         guard services.timer.running != nil else { return }
-        services.timer.setDescription(description)
+
+        let vocabulary = (try? services.capture.vocabulary()) ?? .empty
+        let parsed = CaptureParser.parse(description, knowing: vocabulary)
+        services.timer.setDescription(parsed.title)
+
+        if !parsed.tagSlugs.isEmpty, let running = services.timer.running {
+            services.timer.setTags(orderedUnion(running.tagSlugs, parsed.tagSlugs))
+        }
+
+        if let projectHint = parsed.projectHint,
+           let project = try? services.capture.resolveContainer(named: projectHint) {
+            services.timer.setProject(project)
+        }
+
+        if !parsed.personHints.isEmpty, let running = services.timer.running {
+            let existing = running.people.compactMap { try? services.items.item(id: $0.id) }
+            let mentioned = parsed.personHints.compactMap {
+                try? services.persons.resolveOrCreatePlaceholder(named: $0)
+            }
+            let people = (existing + mentioned).reduce(into: [Item]()) { result, person in
+                guard !result.contains(where: { $0.id == person.id }) else { return }
+                result.append(person)
+            }
+            services.timer.setPeople(people)
+        }
+
+        description = parsed.title
+    }
+
+    private func orderedUnion(_ existing: [String], _ additions: [String]) -> [String] {
+        additions.reduce(into: existing) { result, value in
+            guard !result.contains(value) else { return }
+            result.append(value)
+        }
     }
 
     /// Hands activation back to whatever had it, without touching that process.

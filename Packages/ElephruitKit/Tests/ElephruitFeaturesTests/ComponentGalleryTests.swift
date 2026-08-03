@@ -87,7 +87,7 @@ struct ComponentGalleryTests {
         controller.startTimerIfIdle()
         services.timer.setElapsed(4 * 60 + 37)
 
-        try write("quick-log-naming", width: 510) {
+        try write("quick-log-naming", width: 610) {
             QuickLogView(controller: controller)
                 .appServices(services)
         }
@@ -106,7 +106,7 @@ struct ComponentGalleryTests {
         let controller = services.quickLog
         controller.startTimerIfIdle()
 
-        try write("quick-log-replacement", width: 510) {
+        try write("quick-log-replacement", width: 610) {
             QuickLogView(controller: controller)
                 .appServices(services)
         }

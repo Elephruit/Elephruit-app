@@ -1,6 +1,7 @@
 import ElephruitCore
 import ElephruitDesign
 import ElephruitModel
+import ElephruitPersistence
 import SwiftUI
 
 /// The contents of the floating timer panel.
@@ -27,32 +28,42 @@ struct QuickLogView: View {
     /// What the entry is filed under, for the chips to draw. Every change writes straight through to
     /// the running entry — this is what is on screen, not a pending edit.
     @State private var draft = TimeEntryComposition()
+    @State private var vocabulary: CaptureVocabulary = .empty
 
     @FocusState private var isDescriptionFocused: Bool
 
     private var running: RunningTimer? { services?.timer.running }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.FloatingCapturePanel.sectionSpacing) {
-            if running == nil {
-                stopped
-            } else if controller.presentation == .confirmReplacement {
-                HStack {
-                    Spacer()
-                    timingBadge
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: Theme.FloatingCapturePanel.sectionSpacing) {
+                if running == nil {
+                    stopped
+                } else if controller.presentation == .confirmReplacement {
+                    HStack {
+                        Spacer()
+                        timingBadge
+                    }
 
-                replacementConfirmation
-            } else {
-                naming
+                    replacementConfirmation
+                } else {
+                    naming
+                }
             }
+            .padding(Theme.FloatingCapturePanel.outerPadding)
+            .background(Theme.FloatingCapturePanel.background)
+
+            Divider()
 
             footer
+                .padding(.horizontal, Theme.FloatingCapturePanel.outerPadding)
+                .padding(.vertical, Theme.Spacing.medium)
+                .background(Theme.FloatingCapturePanel.groupedBackground)
         }
-        .padding(Theme.FloatingCapturePanel.outerPadding)
-        .frame(width: 460)
+        .frame(width: 560)
         .background(Theme.FloatingCapturePanel.background)
         .onAppear {
+            refreshVocabulary()
             syncFromRunning()
             focusDescriptionIfEditing()
         }
@@ -66,6 +77,11 @@ struct QuickLogView: View {
         }
         .onChange(of: controller.presentation) { _, _ in focusDescriptionIfEditing() }
         .onChange(of: running?.id) { _, _ in syncFromRunning() }
+        .onChange(of: controller.description) { _, _ in applyGrammarPreview() }
+        .task(id: services?.changeToken) {
+            refreshVocabulary()
+            applyGrammarPreview()
+        }
         // Escape is the same as Done rather than a cancel, because there is nothing here to cancel:
         // the clock is already going and the name is already written down. A hidden Escape that
         // discarded an hour would be the worst key on this window.
@@ -126,9 +142,15 @@ struct QuickLogView: View {
                 timingBadge
             }
 
-            filingChips
-                .padding(.top, Theme.Spacing.tight)
+            Spacer(minLength: 72)
+
+            CaptureGrammarHints(hints: timerGrammarHints)
         }
+        .frame(minHeight: 150)
+    }
+
+    private var timerGrammarHints: [(sigil: String, meaning: String, example: String)] {
+        Array(CaptureParser.grammarHints.prefix(3))
     }
 
     // MARK: - Replacement confirmation
@@ -272,9 +294,9 @@ struct QuickLogView: View {
     /// The three exits, and the sentence that stops the first of them being frightening.
     private var footer: some View {
         HStack(spacing: Theme.Spacing.small) {
-            Text(footerNote)
-                .font(Theme.FloatingCapturePanel.metadataFont)
-                .foregroundStyle(Theme.FloatingCapturePanel.tertiaryText)
+            if running != nil, controller.presentation == .editing {
+                filingChips
+            }
 
             Spacer()
 
@@ -310,13 +332,6 @@ struct QuickLogView: View {
                     .accessibilityIdentifier(AccessibilityID.Time.quickLogDone)
             }
         }
-        .padding(.top, Theme.Spacing.tight)
-    }
-
-    private var footerNote: String {
-        guard running != nil else { return "" }
-        if controller.presentation == .confirmReplacement { return "" }
-        return "Closing keeps the timer running."
     }
 
     // MARK: - Filling in
@@ -341,6 +356,55 @@ struct QuickLogView: View {
             tagSlugs: running.tagSlugs,
             isBillable: running.isBillable
         )
+        applyGrammarPreview()
+    }
+
+    private func refreshVocabulary() {
+        vocabulary = (try? services?.capture.vocabulary()) ?? .empty
+    }
+
+    /// Shows inline filing immediately, while persistence still waits for an intentional exit.
+    private func applyGrammarPreview() {
+        guard let running else { return }
+        let parsed = CaptureParser.parse(controller.description, knowing: vocabulary)
+
+        var preview = TimeEntryComposition(
+            description: running.entryDescription,
+            subject: running.itemID.map {
+                SubjectReference(id: $0, title: running.itemTitle ?? "Untitled")
+            },
+            project: running.projectID.map {
+                SubjectReference(id: $0, title: running.projectTitle ?? "Untitled")
+            },
+            people: running.people.map { SubjectReference(id: $0.id, title: $0.name) },
+            tagSlugs: running.tagSlugs,
+            isBillable: running.isBillable
+        )
+
+        for slug in parsed.tagSlugs where !preview.tagSlugs.contains(slug) {
+            preview.tagSlugs.append(slug)
+        }
+
+        if let hint = parsed.projectHint,
+           let project = try? services?.capture.resolveContainer(named: hint) {
+            preview.project = SubjectReference(id: project.id, title: project.displayTitle)
+        }
+
+        if !parsed.personHints.isEmpty {
+            var query = ItemQuery()
+            query.kinds = [.person]
+            let people = (try? services?.items.items(matching: query)) ?? []
+            for hint in parsed.personHints {
+                let folded = TextNormalizer.foldedForMatching(hint)
+                guard let person = people.first(where: {
+                    TextNormalizer.foldedForMatching($0.displayTitle) == folded
+                }) else { continue }
+                guard !preview.people.contains(where: { $0.id == person.id }) else { continue }
+                preview.people.append(SubjectReference(id: person.id, title: person.displayTitle))
+            }
+        }
+
+        draft = preview
     }
 
     private func focusDescriptionIfEditing() {

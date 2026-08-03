@@ -1,6 +1,7 @@
 import ElephruitCore
 import ElephruitFeatures
 import ElephruitModel
+import ElephruitPersistence
 import Foundation
 import Testing
 
@@ -52,6 +53,18 @@ struct QuickLogControllerTests {
         #expect(controller.description == "Reviewing the lease")
     }
 
+    @Test("Keeping an existing timer does not reinterpret its description")
+    func keepingExistingTimerIsReadOnly() {
+        let (controller, services) = makeController()
+        services.timer.switchTo(item: nil, description: "Reviewing #section 4")
+        controller.startTimerIfIdle()
+
+        controller.hide()
+
+        #expect(services.timer.running?.entryDescription == "Reviewing #section 4")
+        #expect(services.timer.running?.tagSlugs.isEmpty == true)
+    }
+
     /// Once confirmed, replacement is an explicit switch: the old entry is recorded with its
     /// details and a fresh untitled timer begins.
     @Test("Confirming replacement records the old timer and starts a blank one")
@@ -99,6 +112,24 @@ struct QuickLogControllerTests {
         #expect(services.timer.running != nil)
         #expect(services.timer.running?.entryDescription == "Drafting the quarterly note")
         #expect(controller.isVisible == false)
+    }
+
+    @Test("Inline filing grammar names and files the running timer")
+    func inlineFilingGrammar() throws {
+        let (controller, services) = makeController()
+        let project = try services.items.create(ItemDraft(kind: .project, title: "Website"))
+        let person = try services.items.create(ItemDraft(kind: .person, title: "Maya Chen"))
+        controller.startTimerIfIdle()
+        controller.description = "Review copy #launch >Website @Maya Chen"
+
+        controller.commitDescription()
+
+        let running = try #require(services.timer.running)
+        #expect(running.entryDescription == "Review copy")
+        #expect(running.tagSlugs == ["launch"])
+        #expect(running.projectID == project.id)
+        #expect(running.people.map(\.id) == [person.id])
+        #expect(controller.description == "Review copy")
     }
 
     @Test("Stopping keeps both the time and the name")
