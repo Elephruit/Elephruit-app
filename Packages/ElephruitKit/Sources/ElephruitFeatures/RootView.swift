@@ -391,21 +391,20 @@ public struct RootView: View {
         // The content begins below the unified toolbar, but the sidebar is a window region rather
         // than page content. Paint its surface and boundary through the title bar as well.
         .background(alignment: .leading) {
-            if navigation.layoutMode.showsSidebar {
-                Theme.Colors.windowBackground
-                    .frame(width: sidebarWidth)
-                    .ignoresSafeArea()
-            }
+            Theme.Colors.windowBackground
+                .frame(width: navigation.layoutMode.showsSidebar ? sidebarWidth : 0)
+                .ignoresSafeArea()
         }
         .overlay(alignment: .leading) {
-            if navigation.layoutMode.showsSidebar {
-                Rectangle()
-                    .fill(Theme.Colors.separator)
-                    .frame(width: 1)
-                    .offset(x: sidebarWidth)
-                    .ignoresSafeArea()
-                    .allowsHitTesting(false)
-            }
+            Rectangle()
+                .fill(Theme.Colors.separator)
+                .frame(width: 1)
+                // Follow the collapsing column instead of fading at its old edge while content
+                // moves through it. Opacity finishes the disappearance at the window edge.
+                .offset(x: navigation.layoutMode.showsSidebar ? sidebarWidth : 0)
+                .opacity(navigation.layoutMode.showsSidebar ? 1 : 0)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
         }
         .background {
             WindowFullScreenReader(isFullScreen: $isWindowFullScreen)
