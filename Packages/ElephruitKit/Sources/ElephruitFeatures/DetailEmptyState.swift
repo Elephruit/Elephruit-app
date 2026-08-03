@@ -109,7 +109,7 @@ public struct DetailEmptyState: Sendable, Hashable {
         // The destinations that own their whole pane. Nothing reaches this state in them, and a
         // sentence is better than a crash if something ever does. Today is here rather than beside
         // Inbox for exactly that reason: it stopped being a list the moment it became the day.
-        case .today, .home, .upcoming, .calendar, .time:
+        case .today, .home, .upcoming, .calendar, .reminders, .time:
             .generic
 
         case .item:

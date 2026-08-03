@@ -338,7 +338,7 @@ public struct ItemListView: View {
                 message: "This list is empty."
             )
 
-        case .home, .calendar, .time:
+        case .home, .calendar, .reminders, .time:
             // Unreachable: these destinations are declared but unavailable, so nothing selects them.
             EmptyStateView(
                 symbolName: "questionmark.circle",

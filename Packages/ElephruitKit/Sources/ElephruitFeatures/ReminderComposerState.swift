@@ -1,4 +1,3 @@
-import ElephruitCore
 import Foundation
 
 /// The keyboard stops in the reminder composer, in their deliberate traversal order.
@@ -33,7 +32,7 @@ struct ReminderComposerDraft: Sendable, Hashable {
     var dueAt: Date?
     var isSomeday = false
     var tagSlugs: [String] = []
-    var checklist = TaskChecklist()
+    var checklist: [ReminderChecklistItem] = []
     var pendingStep = ""
 
     var isEmpty: Bool {
@@ -43,7 +42,8 @@ struct ReminderComposerDraft: Sendable, Hashable {
     }
 
     mutating func commitPendingStep() {
-        checklist.append(pendingStep)
+        let title = pendingStep.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !title.isEmpty { checklist.append(ReminderChecklistItem(title: title)) }
         pendingStep = ""
     }
 

@@ -22,6 +22,7 @@ import Foundation
 /// remember to set it.
 public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identifiable {
     case calendar
+    case reminders
     case tasks
     case people
     case notes
@@ -64,13 +65,14 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     public var hasOwnSidebar: Bool {
         switch self {
         case .calendar, .tasks, .people, .notes, .areas: true
-        case .projects, .time, .bookmarks, .archive, .trash: false
+        case .reminders, .projects, .time, .bookmarks, .archive, .trash: false
         }
     }
 
     public var title: String {
         switch self {
         case .calendar: "Calendar"
+        case .reminders: "Reminders"
         case .tasks: "Tasks"
         case .people: "People"
         case .notes: "Notes"
@@ -86,6 +88,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     public var symbolName: String {
         switch self {
         case .calendar: "calendar"
+        case .reminders: "bell"
         case .tasks: "checkmark.circle"
         case .people: "person.2"
         case .notes: "note.text"
@@ -106,6 +109,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     public var hint: String {
         switch self {
         case .calendar: "Your days, laid out, and everything you know about them."
+        case .reminders: "Small things to remember, captured without becoming tasks."
         case .tasks: "What needs doing, when it becomes workable, and what you chose for today."
         case .people: "Who you know, what you owe them, and what is coming up for them."
         case .notes: "Everything written down, with the tags and searches that reach across it."
@@ -122,6 +126,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     public var defaultSelection: SidebarSelection {
         switch self {
         case .calendar: .calendar
+        case .reminders: .reminders
         case .tasks: .taskView(.today)
         case .people: .people(.all)
         case .notes: .kind(.note)
@@ -149,7 +154,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     public var hasNavigationOfItsOwn: Bool {
         switch self {
         case .calendar, .time, .tasks, .people: true
-        case .notes, .projects, .areas, .bookmarks, .archive, .trash: false
+        case .reminders, .notes, .projects, .areas, .bookmarks, .archive, .trash: false
         }
     }
 
@@ -164,6 +169,8 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         switch selection {
         case .calendar:
             .calendar
+        case .reminders:
+            .reminders
         case .taskView, .smartList, .builtInSmartList:
             .tasks
         case .people:

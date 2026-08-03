@@ -109,6 +109,11 @@ public final class AppServices {
     /// What the Tasks band of the sidebar reads. Computed on change, never during a render.
     public let taskSidebar: TaskSidebarModel
 
+    // MARK: The Reminders module
+
+    /// Small reminders kept independently from Items and the Tasks lifecycle.
+    let lightweightReminders: LightweightReminderStore
+
     // MARK: Projects
 
     /// A project's columns, views and custom fields.
@@ -431,6 +436,9 @@ public final class AppServices {
         self.tasks = tasks
         self.taskViews = taskViews
         self.taskSidebar = TaskSidebarModel(items: items, views: taskViews)
+        self.lightweightReminders = LightweightReminderStore(
+            fileURL: stack.location?.lightweightRemindersURL
+        )
 
         // Constructed in dependency order, which is also the order they were designed in: furniture,
         // then work, then the things that read work.

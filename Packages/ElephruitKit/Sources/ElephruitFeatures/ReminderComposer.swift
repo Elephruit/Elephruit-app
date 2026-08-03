@@ -108,7 +108,7 @@ struct ReminderComposer: View {
     private var checklist: some View {
         if showsChecklist || !draft.checklist.isEmpty {
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                ForEach(draft.checklist.items) { step in
+                ForEach(draft.checklist) { step in
                     HStack(spacing: Theme.Spacing.small) {
                         Image(systemName: step.isCompleted ? "checkmark.circle.fill" : "circle")
                             .foregroundStyle(Theme.Colors.secondaryText)
@@ -243,7 +243,7 @@ struct ReminderComposer: View {
 
     private var checklistControl: some View {
         actionButton(
-            title: draft.checklist.isEmpty ? "Checklist" : "\(draft.checklist.total) items",
+            title: draft.checklist.isEmpty ? "Checklist" : "\(draft.checklist.count) items",
             symbol: "checklist",
             isActive: !draft.checklist.isEmpty
         ) {

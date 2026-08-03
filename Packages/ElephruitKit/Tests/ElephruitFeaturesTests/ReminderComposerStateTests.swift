@@ -30,7 +30,7 @@ struct ReminderComposerStateTests {
 
         draft.commitPendingStep()
 
-        #expect(draft.checklist.items.map(\.title) == ["Pack charger"])
+        #expect(draft.checklist.map(\.title) == ["Pack charger"])
         #expect(draft.pendingStep.isEmpty)
     }
 

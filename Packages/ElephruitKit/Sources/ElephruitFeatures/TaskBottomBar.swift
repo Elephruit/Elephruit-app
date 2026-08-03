@@ -64,7 +64,7 @@ struct TaskBottomBar: View {
         // New Task button, placed here rather than left in the window toolbar: a shortcut belongs
         // beside the control it fires, not in the region that control just left.
         .background {
-            Button("New Reminder", action: onNewTask)
+            Button("New Task", action: onNewTask)
                 .keyboardShortcut("n")
                 .disabled(!allowsCreation)
                 .opacity(0)
@@ -140,7 +140,7 @@ struct TaskBottomBar: View {
         [
             ActionItem(
                 id: "task.new",
-                title: "New Reminder",
+                title: "New Task",
                 symbolName: "plus",
                 priority: .essential,
                 unavailabilityReason: allowsCreation

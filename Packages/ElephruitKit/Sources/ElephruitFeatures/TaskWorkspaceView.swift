@@ -15,7 +15,6 @@ import SwiftUI
 /// its rows carry a reason, and dragging one means something different.
 struct TaskWorkspaceView: View {
     @Environment(\.services) private var services
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let navigation: NavigationModel
 
     @State private var sections: [TaskSectionGroup] = []
@@ -26,7 +25,7 @@ struct TaskWorkspaceView: View {
     @State private var tasksByID: [UUID: Item] = [:]
     @State private var agenda: [AgendaGroup] = []
     @State private var isPlanning = false
-    @State private var reminderDraft = ReminderComposerDraft()
+    @State private var draftTitle = ""
     @State private var draftSectionID: String?
     @State private var pendingLinkedDeletion: Item?
 
@@ -37,6 +36,8 @@ struct TaskWorkspaceView: View {
     /// is a thing you do to one task at a time.
     @State private var editingTaskID: UUID?
 
+    @FocusState private var isDraftFocused: Bool
+
     var body: some View {
         content
             .navigationTitle(navigation.windowTitle)
@@ -46,11 +47,7 @@ struct TaskWorkspaceView: View {
             // A card is open *in a list*. Changing which list you are looking at closes it, because
             // the row it was is no longer on screen and an editor with no row under it is a detail
             // pane by another name.
-            .onChange(of: navigation.selection) { _, _ in
-                editingTaskID = nil
-                draftSectionID = nil
-                reminderDraft.reset()
-            }
+            .onChange(of: navigation.selection) { _, _ in editingTaskID = nil }
             // Somebody followed a link to a task from outside the list — see ``TaskRedirect``. The
             // destination has already been selected; this is the half that opens the card, once the
             // rows for that destination have actually loaded.
@@ -91,10 +88,6 @@ struct TaskWorkspaceView: View {
         List(selection: selectionBinding) {
             if isPlanning, navigation.selection == .taskView(.today) {
                 TodayPlanningSection(navigation: navigation, onChange: reload) { isPlanning = false }
-            }
-
-            if sections.isEmpty {
-                inlineDraft(for: nil)
             }
 
             ForEach(sections) { section in
@@ -300,90 +293,90 @@ struct TaskWorkspaceView: View {
 
     // MARK: - Inline creation
 
-    /// A complete reminder assembled without leaving the list.
+    /// A row that asks only for a title.
     ///
-    /// Return from the title preserves the old rapid-entry contract: five reminders are five titles
-    /// and five Returns. Tab takes the longer path through Notes, When, Tags, Checklist and Deadline,
-    /// all still in this row. Nothing is persisted until a non-empty draft is committed.
+    /// Return creates the task and leaves the field open in the same place, so a run of five
+    /// captures is five titles and five Returns. Escape on an empty draft closes it without leaving
+    /// a blank task behind — which is what a modal sheet per task cannot do.
     @ViewBuilder
-    private func inlineDraft(for section: TaskSectionGroup?) -> some View {
-        let sectionID = section?.id ?? "flat"
-        if draftSectionID == sectionID {
-            ReminderComposer(
-                draft: $reminderDraft,
-                onQuickCommit: { commitDraft(in: section, keepsOpen: true) },
-                onCommitAndClose: { commitDraft(in: section, keepsOpen: false) },
-                onCancel: closeDraft
-            )
+    private func inlineDraft(for section: TaskSectionGroup) -> some View {
+        if draftSectionID == section.id {
+            HStack(spacing: Theme.Spacing.small) {
+                Image(systemName: "circle")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+
+                TextField("New task", text: $draftTitle)
+                    .textFieldStyle(.plain)
+                    .font(Theme.Text.rowTitle)
+                    .focused($isDraftFocused)
+                    .onSubmit { commitDraft(in: section) }
+                    .onExitCommand { closeDraft() }
+                    // ### Why losing focus has to close it
+                    // Escape closed the draft and Return committed it, and both need the field to
+                    // still have focus. Clicking anywhere else — another row, another module, the
+                    // desktop — took the focus away and left the row behind: an empty circle and the
+                    // grey word "New task", sitting in a section it does not belong to, with no
+                    // control on it and no way to get rid of it. It looked like a task that could
+                    // not be deleted, because it looked like a task.
+                    //
+                    // Whatever was typed is kept: if the draft has text, losing focus commits it
+                    // rather than discarding it, on the same terms as Return. Only an empty draft
+                    // disappears, and an empty draft is not something anybody can lose.
+                    .onChange(of: isDraftFocused) { _, hasFocus in
+                        guard !hasFocus, draftSectionID == section.id else { return }
+                        commitDraft(in: section)
+                    }
+                    .accessibilityIdentifier("tasks.inlineDraft")
+            }
             .padding(.vertical, Theme.Spacing.tight)
+            .frame(minHeight: Theme.Size.rowHeight)
             .listRowSeparator(.hidden)
-            .transition(
-                .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
-            )
-            .accessibilityIdentifier("tasks.inlineDraft")
         }
     }
 
     private func openDraft(in section: TaskSectionGroup?) {
-        editingTaskID = nil
-        reminderDraft = initialReminderDraft()
-        withAnimation(Theme.Motion.respectingReduceMotion(Theme.Motion.appearance, reduceMotion: reduceMotion)) {
-            draftSectionID = section?.id ?? sections.first?.id ?? "flat"
-        }
+        draftSectionID = section?.id ?? sections.first?.id ?? "flat"
+        draftTitle = ""
+        isDraftFocused = true
     }
 
     private func closeDraft() {
-        withAnimation(Theme.Motion.respectingReduceMotion(Theme.Motion.appearance, reduceMotion: reduceMotion)) {
-            draftSectionID = nil
-        }
-        reminderDraft.reset()
+        draftSectionID = nil
+        draftTitle = ""
     }
 
-    private func commitDraft(in section: TaskSectionGroup?, keepsOpen: Bool) {
-        reminderDraft.commitPendingStep()
-        let trimmed = reminderDraft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func commitDraft(in section: TaskSectionGroup) {
+        let trimmed = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            if !keepsOpen { closeDraft() }
+            closeDraft()
             return
         }
         guard let services else { return }
 
         services.perform {
-            let draft = ItemDraft(
-                kind: .task,
-                title: trimmed,
-                body: reminderDraft.notes.trimmingCharacters(in: .whitespacesAndNewlines),
-                tagSlugs: reminderDraft.tagSlugs,
-                parentID: containerID(for: section),
-                dueAt: reminderDraft.dueAt,
-                startAt: reminderDraft.startAt,
-                checklist: reminderDraft.checklist,
-                todayCommittedOn: navigation.selection == .taskView(.today)
-                    && reminderDraft.startAt == nil
-                    && !reminderDraft.isSomeday
-                    ? services.dateProvider.startOfToday
-                    : nil,
-                isSomeday: reminderDraft.isSomeday
-            )
+            var draft = ItemDraft(kind: .task, title: trimmed)
+            draft.parentID = containerID(for: section)
             let created = try services.items.create(draft)
+
+            // Created *into* the view it was typed in, so a task added while looking at Today is on
+            // today's plan rather than in a pile the user has to find again.
+            if navigation.selection == .taskView(.today) {
+                try services.tasks.commitToToday(created)
+            }
+            if navigation.selection == .taskView(.someday) {
+                try services.tasks.setSomeday(true, on: created)
+            }
             services.noteChange(to: created)
         }
 
-        if keepsOpen {
-            reminderDraft = initialReminderDraft()
-        } else {
-            closeDraft()
-        }
+        draftTitle = ""
+        isDraftFocused = true
+        reload()
     }
 
-    private func initialReminderDraft() -> ReminderComposerDraft {
-        var draft = ReminderComposerDraft()
-        draft.isSomeday = navigation.selection == .taskView(.someday)
-        return draft
-    }
-
-    private func containerID(for section: TaskSectionGroup?) -> UUID? {
-        if let section, case .container(let id, _, _, _) = section.heading { return id }
+    private func containerID(for section: TaskSectionGroup) -> UUID? {
+        if case .container(let id, _, _, _) = section.heading { return id }
         if case .item(let id) = navigation.selection { return id }
         return nil
     }
@@ -465,9 +458,9 @@ struct TaskWorkspaceView: View {
         default:
             EmptyStateView(
                 symbolName: "checkmark.circle",
-                headline: "No reminders",
+                headline: "No tasks",
                 message: "Press ⌘N to add one.",
-                actionTitle: "New Reminder",
+                actionTitle: "New Task",
                 action: { openDraft(in: nil) }
             )
         }

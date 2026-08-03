@@ -40,7 +40,7 @@ struct ModuleSidebar: View {
                 NotesSidebarSection(navigation: navigation)
             case .areas:
                 AreasSidebarSection(navigation: navigation)
-            case .projects, .time, .bookmarks, .archive, .trash:
+            case .reminders, .projects, .time, .bookmarks, .archive, .trash:
                 // Unreachable: these declare `hasOwnSidebar == false`, so `SidebarView` never
                 // swaps levels for them — the primary list stays, with the module's own row
                 // marked current. The arms stay because the switch is exhaustive and the cases
