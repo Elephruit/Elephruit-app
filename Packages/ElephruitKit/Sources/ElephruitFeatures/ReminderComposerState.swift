@@ -1,3 +1,4 @@
+import ElephruitCore
 import Foundation
 
 /// The keyboard stops in the reminder composer, in their deliberate traversal order.
@@ -71,5 +72,93 @@ struct ReminderComposerDraft: Sendable, Hashable {
 
     mutating func reset() {
         self = ReminderComposerDraft()
+    }
+}
+
+/// The three Quick Jot-style instructions a lightweight reminder understands.
+///
+/// Parsing is shared with Quick Jot so multi-word people and projects have exactly the same
+/// boundaries. Only reminder metadata is extracted: this never changes item kind or sends the
+/// reminder through capture, filing, or task services.
+struct ReminderShortcutExtraction: Sendable, Hashable {
+    var text: String
+    var tagSlugs: [String]
+    var personNames: [String]
+    var projectTitle: String?
+}
+
+enum ReminderShortcutParser {
+    static func extract(
+        from text: String,
+        knowing vocabulary: CaptureVocabulary
+    ) -> ReminderShortcutExtraction {
+        var tagSlugs: [String] = []
+        var personNames: [String] = []
+        var projectTitle: String?
+        var cleanedLines: [String] = []
+
+        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(rawLine)
+            let parsed = CaptureParser.parse(line, knowing: vocabulary)
+            let shortcuts = parsed.tokens.filter { token in
+                switch token.kind {
+                case .tag, .kind, .person, .project: true
+                case .dueDate, .followDate, .priority, .unrecognised: false
+                }
+            }
+
+            for token in shortcuts {
+                switch token.kind {
+                case .tag, .kind:
+                    let slug = TextNormalizer.slug(token.text)
+                    if !slug.isEmpty, !tagSlugs.contains(slug) { tagSlugs.append(slug) }
+                case .person:
+                    let folded = TextNormalizer.foldedForMatching(token.text)
+                    if !personNames.contains(where: {
+                        TextNormalizer.foldedForMatching($0) == folded
+                    }) {
+                        personNames.append(token.text)
+                    }
+                case .project:
+                    projectTitle = token.text
+                case .dueDate, .followDate, .priority, .unrecognised:
+                    break
+                }
+            }
+
+            cleanedLines.append(removing(shortcuts.map(\.range), from: line))
+        }
+
+        return ReminderShortcutExtraction(
+            text: cleanedLines.joined(separator: "\n"),
+            tagSlugs: tagSlugs,
+            personNames: personNames,
+            projectTitle: projectTitle
+        )
+    }
+
+    private static func removing(_ ranges: [Range<Int>], from text: String) -> String {
+        guard !ranges.isEmpty else { return text }
+        let characters = Array(text)
+        var removed: Set<Int> = []
+
+        for range in ranges {
+            let expanded: Range<Int>
+            if range.upperBound < characters.count,
+               characters[range.upperBound].isWhitespace {
+                expanded = range.lowerBound..<(range.upperBound + 1)
+            } else if range.lowerBound > 0,
+                      characters[range.lowerBound - 1].isWhitespace {
+                expanded = (range.lowerBound - 1)..<range.upperBound
+            } else {
+                expanded = range
+            }
+            removed.formUnion(expanded)
+        }
+
+        return String(characters.enumerated().compactMap { index, character in
+            removed.contains(index) ? nil : character
+        })
+        .trimmingCharacters(in: .whitespaces)
     }
 }

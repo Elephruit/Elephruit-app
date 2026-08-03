@@ -1,4 +1,5 @@
 import AppKit
+import ElephruitCore
 @testable import ElephruitFeatures
 import Foundation
 import SwiftUI
@@ -40,6 +41,33 @@ struct ReminderComposerStateTests {
         #expect(reopened.personNames == ["Taylor Reed"])
         #expect(reopened.projectTitle == "House move")
         #expect(reopened.tagSlugs == ["calls"])
+    }
+
+    @Test("Reminder shortcuts use Quick Jot names and leave the prose clean")
+    func reminderShortcuts() {
+        let extracted = ReminderShortcutParser.extract(
+            from: "Call Sam #calls >House move @Sam Rivera\nBring forms #paperwork",
+            knowing: CaptureVocabulary(
+                projects: ["House move"],
+                people: ["Sam Rivera"]
+            )
+        )
+
+        #expect(extracted.text == "Call Sam\nBring forms")
+        #expect(extracted.tagSlugs == ["calls", "paperwork"])
+        #expect(extracted.personNames == ["Sam Rivera"])
+        #expect(extracted.projectTitle == "House move")
+    }
+
+    @Test("A Quick Jot kind word remains a reminder tag")
+    func reminderKindShortcutStaysTag() {
+        let extracted = ReminderShortcutParser.extract(
+            from: "Investigate #bug",
+            knowing: .empty
+        )
+
+        #expect(extracted.text == "Investigate")
+        #expect(extracted.tagSlugs == ["bug"])
     }
 
     @Test("A pending checklist line is trimmed, appended, and cleared")
