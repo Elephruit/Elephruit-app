@@ -181,20 +181,13 @@ struct BugTrackerSeveritySection: View {
                 .foregroundStyle(tint)
                 .frame(width: Theme.Size.rowGlyph)
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                HStack(spacing: Theme.Spacing.tight) {
-                    Text(group.title)
-                        .font(Theme.Text.rowTitleEmphasised)
-                    Text("\(group.count)")
-                        .font(Theme.Text.metadata)
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.Colors.tertiaryText)
-                }
-                if let severity {
-                    Text(severity.hint)
-                        .font(Theme.Text.rowSubtitle)
-                        .foregroundStyle(Theme.Colors.secondaryText)
-                }
+            HStack(spacing: Theme.Spacing.tight) {
+                Text(group.title)
+                    .font(Theme.Text.rowTitleEmphasised)
+                Text("\(group.count)")
+                    .font(Theme.Text.metadata)
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.Colors.tertiaryText)
             }
 
             Spacer(minLength: 0)
