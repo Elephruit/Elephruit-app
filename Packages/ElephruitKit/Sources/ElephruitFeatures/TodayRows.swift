@@ -34,7 +34,9 @@ struct TodayEventRow: View {
                 TodayEventInlineDetail(event: event, actions: actions) {
                     withAnimation(.easeInOut(duration: 0.16)) { model.collapseEventDetails() }
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                // The panel belongs beneath this row. Moving it in from `.top` made it cross the
+                // event summary (and sometimes the rows above it) before reaching that position.
+                .transition(.opacity)
             }
         }
         .opacity(event.event.isCancelled ? 0.55 : 1)
