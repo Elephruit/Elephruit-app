@@ -1165,7 +1165,9 @@ struct ReminderComposer: View {
             tagQuery = ""
         case .people:
             togglePerson(suggestion)
-            peopleQuery = ""
+            // Keep the filter and the native editor's visible text in lockstep. Clearing only this
+            // SwiftUI state left the typed name on screen while the results silently jumped back to
+            // the start of the full People list.
         case .project:
             chooseProject(suggestion)
         case .title, .notes, .when, .checklist, .deadline:
@@ -1402,7 +1404,6 @@ struct ReminderComposer: View {
     private func toggleFirstMatchingPerson() {
         guard let first = matchingPeople.first else { return }
         togglePerson(first)
-        peopleQuery = ""
     }
 
     private func togglePerson(_ name: String) {
