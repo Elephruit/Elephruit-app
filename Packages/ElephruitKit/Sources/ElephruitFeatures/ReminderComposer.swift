@@ -63,8 +63,14 @@ struct ReminderComposer: View {
         }
         .shadow(color: Theme.Colors.shadow.opacity(0.14), radius: 8, y: 2)
         .background {
-            ReminderComposerKeyboardMonitor(router: focusRouter)
-            .frame(width: 0, height: 0)
+            // This AppKit view occupies the card's exact bounds. Its event monitor can therefore
+            // distinguish a click in the composer from one elsewhere in the main window without
+            // putting a gesture above the text editors or stealing their clicks.
+            ReminderComposerEventMonitor(
+                router: focusRouter,
+                onClickOutside: commitAndClose
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
             focusRouter.onTab = { reverse in
@@ -1436,6 +1442,10 @@ struct ReminderComposer: View {
     }
 
     private func commitAndClose() {
+        // A local mouse monitor sees the outside click before AppKit resigns the current editor.
+        // Pull its live text into the draft now so clicking elsewhere can never save the previous
+        // keystroke snapshot.
+        focusRouter.flushActiveEditor()
         settleInlineShortcuts()
         onCommitAndClose()
     }
@@ -1972,7 +1982,7 @@ final class ReminderComposerFocusRouter: ObservableObject {
         editor.needsDisplay = true
     }
 
-    private func flushActiveEditor() {
+    func flushActiveEditor() {
         guard let editor = editors[activeField]?.value as? ReminderEditorTextView,
               !editor.hasMarkedText()
         else { return }
@@ -1988,15 +1998,27 @@ private final class WeakReminderEditor {
     }
 }
 
-// MARK: - Window-level keyboard routing
+// MARK: - Window-level composer routing
 
-/// Captures Tab before AppKit decides whether it means text insertion, field-editor traversal, or
-/// an accessibility key-view action. It exists only while one composer exists and only consumes
-/// events belonging to that composer's window.
-struct ReminderComposerKeyboardMonitor: NSViewRepresentable {
+/// Captures keyboard traversal and outside clicks before AppKit changes first responder.
+///
+/// It exists only while one composer exists and only consumes events belonging to that composer's
+/// main window. Native metadata popovers live in another window, so interacting with one remains
+/// an interaction *inside* the composer rather than an accidental save.
+struct ReminderComposerEventMonitor: NSViewRepresentable {
     let router: ReminderComposerFocusRouter
+    let onClickOutside: () -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(router: router) }
+    static func shouldCommitClick(
+        eventWindowIsComposerWindow: Bool,
+        composerContainsLocation: Bool
+    ) -> Bool {
+        eventWindowIsComposerWindow && !composerContainsLocation
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(router: router, onClickOutside: onClickOutside)
+    }
 
     func makeNSView(context: Context) -> ReminderComposerKeyboardMonitorView {
         let view = ReminderComposerKeyboardMonitorView()
@@ -2004,7 +2026,10 @@ struct ReminderComposerKeyboardMonitor: NSViewRepresentable {
         return view
     }
 
-    func updateNSView(_ view: ReminderComposerKeyboardMonitorView, context: Context) {}
+    func updateNSView(_ view: ReminderComposerKeyboardMonitorView, context: Context) {
+        context.coordinator.router = router
+        context.coordinator.onClickOutside = onClickOutside
+    }
 
     static func dismantleNSView(
         _ view: ReminderComposerKeyboardMonitorView,
@@ -2016,15 +2041,18 @@ struct ReminderComposerKeyboardMonitor: NSViewRepresentable {
     @MainActor
     final class Coordinator {
         weak var router: ReminderComposerFocusRouter?
-        private var monitor: Any?
+        var onClickOutside: () -> Void
+        private var keyboardMonitor: Any?
+        private var mouseMonitor: Any?
 
-        init(router: ReminderComposerFocusRouter) {
+        init(router: ReminderComposerFocusRouter, onClickOutside: @escaping () -> Void) {
             self.router = router
+            self.onClickOutside = onClickOutside
         }
 
         func install(for view: ReminderComposerKeyboardMonitorView) {
-            guard monitor == nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak view] event in
+            guard keyboardMonitor == nil, mouseMonitor == nil else { return }
+            keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak view] event in
                 guard let self,
                       let view,
                       let composerWindow = view.window,
@@ -2053,11 +2081,36 @@ struct ReminderComposerKeyboardMonitor: NSViewRepresentable {
                 else { return event }
                 return nil
             }
+
+            mouseMonitor = NSEvent.addLocalMonitorForEvents(
+                matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+            ) { [weak self, weak view] event in
+                guard let self,
+                      let view,
+                      let composerWindow = view.window,
+                      NSApp.isActive,
+                      !view.bounds.isEmpty
+                else { return event }
+
+                let eventWindowIsComposerWindow = event.window === composerWindow
+                let composerContainsLocation = eventWindowIsComposerWindow
+                    ? view.bounds.contains(view.convert(event.locationInWindow, from: nil))
+                    : false
+                guard ReminderComposerEventMonitor.shouldCommitClick(
+                    eventWindowIsComposerWindow: eventWindowIsComposerWindow,
+                    composerContainsLocation: composerContainsLocation
+                ) else { return event }
+
+                self.onClickOutside()
+                return event
+            }
         }
 
         func uninstall() {
-            if let monitor { NSEvent.removeMonitor(monitor) }
-            monitor = nil
+            if let keyboardMonitor { NSEvent.removeMonitor(keyboardMonitor) }
+            if let mouseMonitor { NSEvent.removeMonitor(mouseMonitor) }
+            keyboardMonitor = nil
+            mouseMonitor = nil
         }
 
     }

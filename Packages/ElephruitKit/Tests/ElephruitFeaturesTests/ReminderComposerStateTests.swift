@@ -244,6 +244,23 @@ struct ReminderComposerStateTests {
         #expect(router.pendingRegistrationFocusField == .title)
     }
 
+    @Test("Only a click elsewhere in the composer window commits")
+    @MainActor
+    func outsideClickBoundary() {
+        #expect(ReminderComposerEventMonitor.shouldCommitClick(
+            eventWindowIsComposerWindow: true,
+            composerContainsLocation: false
+        ))
+        #expect(!ReminderComposerEventMonitor.shouldCommitClick(
+            eventWindowIsComposerWindow: true,
+            composerContainsLocation: true
+        ))
+        #expect(!ReminderComposerEventMonitor.shouldCommitClick(
+            eventWindowIsComposerWindow: false,
+            composerContainsLocation: false
+        ))
+    }
+
     @Test("Arrow keys move suggestion selection and Return accepts it")
     @MainActor
     func editorSuggestionKeyboard() {
