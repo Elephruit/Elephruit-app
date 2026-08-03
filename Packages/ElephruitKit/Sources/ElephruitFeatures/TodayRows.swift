@@ -49,8 +49,19 @@ struct TodayEventRow: View {
         .opacity(event.event.isCancelled ? 0.55 : 1)
         .contentShape(.rect)
         .onHover { isHovering = $0 }
-        .hoverHighlight(extending: Theme.Spacing.small)
+        .background {
+            if isFocused {
+                RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                    .fill(Theme.Colors.selectionFill)
+                    .padding(.horizontal, -Theme.Spacing.small)
+            }
+        }
+        .hoverHighlight(isEnabled: !isFocused, extending: Theme.Spacing.small)
         .focusable()
+        // The native macOS focus ring wraps the row's full flexible width, producing a large blue
+        // rectangle around a small calendar entry. The quiet fill above still exposes keyboard
+        // location without making the event look like an oversized text field.
+        .focusEffectDisabled()
         .focused($isFocused)
         .onKeyPress(.return) {
             // Return joins where there is a call to join and opens the notes otherwise, which is
