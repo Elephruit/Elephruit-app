@@ -199,7 +199,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     /// belong to Records even though their kind rows are not the browser entry points.
     private static func module(for kind: ItemKind) -> AppModule? {
         switch kind {
-        case .task: .tasks
+        case .task, .reminder: .reminders
         case .project, .goal: .projects
         // A bug, a feature, a milestone and a release only ever exist inside a project, so the
         // module that owns their list is the one that owns the project — not Tasks, even though a

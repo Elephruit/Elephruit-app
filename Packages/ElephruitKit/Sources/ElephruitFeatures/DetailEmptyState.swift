@@ -126,11 +126,11 @@ public struct DetailEmptyState: Sendable, Hashable {
                 message: "Choose a note to read it, or press ⌘N to write one."
             )
 
-        case .task, .goal, .decision:
+        case .task, .reminder, .goal, .decision:
             DetailEmptyState(
-                symbolName: "checkmark.circle",
-                headline: "No task selected",
-                message: "Choose a task to see its dates and where it belongs, or press ⌘N to add one."
+                symbolName: "bell",
+                headline: "No reminder selected",
+                message: "Choose a reminder to see its dates and where it belongs, or press ⌘N to add one."
             )
 
         case .bug:

@@ -14,7 +14,17 @@ public enum ItemKind: String, Codable, Sendable, Hashable, CaseIterable {
     case note
 
     /// Something to be done. Carries status, dates, priority, and recurrence.
+    ///
+    /// Legacy persisted spelling. New code creates ``reminder`` instead, and
+    /// `TaskToReminderMigration` rewrites existing rows without replacing the item.
     case task
+
+    /// Something worth remembering or doing.
+    ///
+    /// A reminder is a first-class item: it can sit in a project or list, link to people and
+    /// records, carry attachments, and participate in the same scheduling lifecycle that tasks
+    /// used before the Reminders module became the single home for this work.
+    case reminder
 
     /// A finite effort with an outcome. Contains tasks and notes.
     case project
@@ -184,7 +194,7 @@ extension ItemKind {
         case .note, .idea, .reference:
             [.body, .tags]
 
-        case .task:
+        case .task, .reminder:
             [
                 .body, .tags, .status, .dueDate, .startDate, .deferDate, .recurrence, .priority,
                 .children, .reminder, .planning, .checklist, .externalLink,
@@ -261,16 +271,21 @@ extension ItemKind {
     /// A milestone is deliberately excluded even though it has a status. See ``ItemKind/milestone``.
     public var isWorkItem: Bool {
         switch self {
-        case .task, .bug, .feature: true
+        case .task, .reminder, .bug, .feature: true
         default: false
         }
     }
 
     /// The work kinds, in the order pickers and menus should offer them.
-    public static let workItemKinds: [ItemKind] = [.task, .bug, .feature]
+    public static let workItemKinds: [ItemKind] = [.reminder, .bug, .feature]
+
+    /// Every raw kind that must participate while a pre-Reminders store is being upgraded.
+    /// `.task` is intentionally absent from pickers and creation menus but remains queryable until
+    /// the in-place migration has converged the library.
+    public static let readableWorkItemKinds: [ItemKind] = [.reminder, .task, .bug, .feature]
 
     /// The work kinds as a set, for `ItemQuery.kinds` and filter rules.
-    public static let workItemKindSet: Set<ItemKind> = Set(workItemKinds)
+    public static let workItemKindSet: Set<ItemKind> = Set(readableWorkItemKinds)
 
     /// The kinds that mark a point work is aimed at rather than being work themselves.
     public static let planningMarkerKinds: [ItemKind] = [.milestone, .release]
@@ -314,7 +329,7 @@ extension ItemKind {
             return childKind == .heading || childKind.isWorkItem
         case .heading:
             return childKind.isWorkItem
-        case .task, .bug, .feature:
+        case .task, .reminder, .bug, .feature:
             // Subtasks may be any work kind — a feature's breakdown routinely includes the bugs
             // found while building it.
             return childKind.isWorkItem
@@ -329,7 +344,7 @@ extension ItemKind {
     /// contained".
     public var isWorkBreakdownContainer: Bool {
         switch self {
-        case .area, .goal, .project, .list, .heading, .task, .bug, .feature: true
+        case .area, .goal, .project, .list, .heading, .task, .reminder, .bug, .feature: true
         default: false
         }
     }
@@ -337,7 +352,7 @@ extension ItemKind {
     /// The kinds milestone 1 ships dedicated UI for. The rest exist in the schema so
     /// that later phases add views rather than migrations.
     public static let shippingInMilestoneOne: [ItemKind] = [
-        .note, .task, .project, .area, .bookmark, .dailyEntry,
+        .note, .reminder, .project, .area, .bookmark, .dailyEntry,
     ]
 
     /// Whether an unfiled item of this kind belongs in the Inbox.
@@ -401,7 +416,7 @@ extension ItemKind {
         switch self {
         case .note: "note.text"
         case .list: "list.bullet"
-        case .task: "checkmark.circle"
+        case .task, .reminder: "bell"
         case .project: "square.stack.3d.up"
         case .area: "square.grid.2x2"
         case .person: "person"
@@ -428,7 +443,7 @@ extension ItemKind {
         switch self {
         case .note: "Note"
         case .list: "List"
-        case .task: "Task"
+        case .task, .reminder: "Reminder"
         case .project: "Project"
         case .area: "Area"
         case .person: "Person"

@@ -115,7 +115,7 @@ public struct ItemDetailView: View {
         // lives inside a project workspace and is opened there; arriving at one through a link or a
         // search result should take you to where it lives rather than rebuild a lesser copy of it
         // in a column.
-        case .task, .bug, .feature, .milestone, .release:
+        case .task, .reminder, .bug, .feature, .milestone, .release:
             TaskRedirect(task: item, navigation: navigation)
 
         case .bookmark:

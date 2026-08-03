@@ -365,6 +365,41 @@ public final class AppServices {
         self.tags = tags
         self.items = items
 
+        // Promote the former Tasks population into Reminders before any service takes a snapshot of
+        // the library. Only the discriminator changes, so every relationship stays attached to the
+        // same item. A file-backed library is backed up first; if that backup cannot be written the
+        // compatibility read paths keep the legacy rows visible and the rewrite is deferred.
+        do {
+            let pending = try TaskToReminderMigration.plan(in: context)
+            if !pending.isEmpty {
+                let canApply: Bool
+                if let location = stack.location {
+                    let stamp = Int(dateProvider.now.timeIntervalSince1970)
+                    canApply = PersistenceStack.backupStore(
+                        at: location,
+                        label: "pre-reminder-consolidation-\(stamp)"
+                    ) != nil
+                } else {
+                    canApply = true
+                }
+
+                if canApply {
+                    let migrated = try TaskToReminderMigration.apply(in: context)
+                    Diagnostics.persistence.info(
+                        "Promoted \(migrated, privacy: .public) legacy tasks into reminders"
+                    )
+                } else {
+                    Diagnostics.persistence.error(
+                        "Reminder consolidation deferred because its backup could not be written"
+                    )
+                }
+            }
+        } catch {
+            Diagnostics.persistence.error(
+                "Reminder consolidation failed: \(error.localizedDescription, privacy: .public)"
+            )
+        }
+
         // Converge any rows written before the day-relevance projection existed. One real pass on
         // the first launch after the column arrived; an empty fetch on every launch after. Failure
         // is logged and swallowed — the sentinel default means an unconverged row is over-fetched,
