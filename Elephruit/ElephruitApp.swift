@@ -189,8 +189,8 @@ struct ElephruitCommands: Commands {
             Button("New Note") { create(.note) }
                 .shortcut(.newItem, in: shortcuts)
 
-            Button("New Task") { create(.task) }
-                .shortcut(.newTask, in: shortcuts)
+            Button("New Reminder") { navigation?.requestNewReminder() }
+                .shortcut(.newReminder, in: shortcuts)
 
             Button("New Project") { create(.project) }
                 .shortcut(.newProject, in: shortcuts)
@@ -207,8 +207,8 @@ struct ElephruitCommands: Commands {
             .shortcut(.newEvent, in: shortcuts)
             .disabled(navigation == nil)
 
-            Button("Quick Task…") { navigation?.isTaskEntryVisible = true }
-                .shortcut(.quickTaskEntry, in: shortcuts)
+            Button("Quick Reminder…") { navigation?.requestNewReminder() }
+                .shortcut(.quickReminderEntry, in: shortcuts)
 
             // The same panel the global shortcut opens, rather than a second in-window route to the
             // same act. Quick Jot has two doors because a sheet is genuinely better than a floating
@@ -349,16 +349,6 @@ struct ElephruitCommands: Commands {
 
             Divider()
 
-            // Inside Tasks, where these are the module's own destinations rather than global ones.
-            Button("Task Inbox") { navigation?.select(.taskView(.inbox)) }
-            Button("Anytime") { navigation?.select(.taskView(.anytime)) }
-                .shortcut(.goTasks, in: shortcuts)
-            Button("Someday") { navigation?.select(.taskView(.someday)) }
-            Button("Waiting") { navigation?.select(.taskView(.waiting)) }
-            Button("Logbook") { navigation?.select(.taskView(.completed)) }
-
-            Divider()
-
             Button("Toggle Sidebar") { navigation?.toggleSidebar() }
                 .shortcut(.toggleSidebar, in: shortcuts)
                 .disabled(navigation == nil)
@@ -401,6 +391,7 @@ struct ElephruitCommands: Commands {
     private func moduleButton(_ module: AppModule) -> some View {
         let command: ShortcutCommand? = switch module {
         case .calendar: .goCalendar
+        case .reminders: .goReminders
         case .notes: .goNotes
         case .records: .goRecords
         default: nil
@@ -469,11 +460,11 @@ struct SettingsView: View {
                 .accessibilityIdentifier(AccessibilityID.Settings.timeTab)
             }
 
-            Tab("Tasks", systemImage: "checkmark.circle") {
+            Tab("Reminders", systemImage: "bell") {
                 whenReady { services in
                     RemindersSettingsSection().appServices(services)
                 }
-                .accessibilityIdentifier("settings.tasks")
+                .accessibilityIdentifier("settings.reminders")
             }
 
             Tab("Calendar", systemImage: "calendar") {

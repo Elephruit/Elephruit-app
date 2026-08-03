@@ -468,6 +468,9 @@ public final class NavigationModel {
     /// its own surface rather than a scope switch on the general field.
     public var isCalendarSearchVisible = false
 
+    /// Incremented whenever an app-level command asks Reminders to open a fresh composer.
+    public private(set) var reminderComposerRequest = 0
+
     /// The calendar's own state, once the workspace has built it.
     ///
     /// Held here rather than inside `CalendarWorkspaceView` because the Calendar module's sidebar
@@ -788,6 +791,12 @@ public final class NavigationModel {
     /// Selects exactly one item.
     public func selectItem(_ id: UUID?) {
         selectedItemIDs = id.map { [$0] } ?? []
+    }
+
+    /// Opens Reminders and asks its workspace for a fresh composer.
+    public func requestNewReminder() {
+        select(.reminders)
+        reminderComposerRequest &+= 1
     }
 
     /// Selects a new item and puts its title field into the typing path.

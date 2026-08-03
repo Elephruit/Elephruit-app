@@ -26,6 +26,7 @@ struct RemindersWorkspaceView: View {
         .accessibilityIdentifier("reminders.workspace")
         .onAppear(perform: openLinkedReminderIfNeeded)
         .onChange(of: navigation.selectedItemID) { _, _ in openLinkedReminderIfNeeded() }
+        .onChange(of: navigation.reminderComposerRequest) { _, _ in openComposer() }
     }
 
     private var header: some View {

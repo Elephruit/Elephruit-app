@@ -227,7 +227,7 @@ struct CreateFollowUpIntent: AppIntent {
     static let title: LocalizedStringResource = "Create a Follow-up"
 
     static let description = IntentDescription(
-        "Adds a task linked to somebody, so it appears in their history and in your Today list.",
+        "Adds a reminder linked to somebody, so it appears in their history and in your Today list.",
         categoryName: "Records"
     )
 
@@ -251,11 +251,11 @@ struct CreateFollowUpIntent: AppIntent {
         }
 
         // Owed work is tagged explicitly rather than inferred from its wording.
-        let task = try services.items.create(
-            ItemDraft(kind: .task, title: text, tagSlugs: isOwed ? ["owed"] : [])
+        let reminder = try services.items.create(
+            ItemDraft(kind: .reminder, title: text, tagSlugs: isOwed ? ["owed"] : [])
         )
-        try services.items.link(task, to: person, kind: .mentions)
-        services.noteChange(to: task)
+        try services.items.link(reminder, to: person, kind: .mentions)
+        services.noteChange(to: reminder)
 
         return .result(dialog: "Added a follow-up for \(person.displayTitle).")
     }

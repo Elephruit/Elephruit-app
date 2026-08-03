@@ -115,6 +115,18 @@ struct ModuleNavigationTests {
         #expect(navigation.selection == .reminders)
     }
 
+    @Test("A new-reminder request opens Reminders and advances the composer signal")
+    func newReminderRequest() {
+        let navigation = NavigationModel()
+        let before = navigation.reminderComposerRequest
+
+        navigation.requestNewReminder()
+
+        #expect(navigation.selection == .reminders)
+        #expect(navigation.activeModule == .reminders)
+        #expect(navigation.reminderComposerRequest == before + 1)
+    }
+
     @Test("Selecting a module's destination enters that module, from anywhere")
     func selectingDerivesTheModule() {
         let navigation = NavigationModel()
