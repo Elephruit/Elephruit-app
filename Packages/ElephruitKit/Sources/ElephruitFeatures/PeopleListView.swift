@@ -11,6 +11,10 @@ import SwiftUI
 /// compares for equality, and "what does Needs follow-up mean" is answered by a pure function rather
 /// than inside a view.
 public enum PeopleScope: Hashable, Sendable, Codable {
+    /// An additive, in-memory prototype of a shared workspace for people, pets, vehicles, and other
+    /// real-world subjects. It deliberately does not read or write the People store: the point is
+    /// to review the product shape before committing the existing CRM data to a migration.
+    case recordsDemo
     case all
     case recentlyViewed
     case favorites
@@ -27,6 +31,7 @@ public enum PeopleScope: Hashable, Sendable, Codable {
 
     public var title: String {
         switch self {
+        case .recordsDemo: "Records Demo"
         case .all: "All People"
         case .recentlyViewed: "Recently Viewed"
         case .favorites: "Favorites"
@@ -45,6 +50,7 @@ public enum PeopleScope: Hashable, Sendable, Codable {
     /// from the row and the two they ask about first.
     public var hint: String {
         switch self {
+        case .recordsDemo: "Try one workspace for people, pets, vehicles, and anything else you track."
         case .all: "Everybody you have a record for."
         case .recentlyViewed: "People you opened this session. Cleared when you quit."
         case .favorites: "The people you starred."
@@ -58,6 +64,7 @@ public enum PeopleScope: Hashable, Sendable, Codable {
 
     public var symbolName: String {
         switch self {
+        case .recordsDemo: "circle.grid.2x2"
         case .all: "person.2"
         case .recentlyViewed: "clock.arrow.circlepath"
         case .favorites: "star"
@@ -73,6 +80,7 @@ public enum PeopleScope: Hashable, Sendable, Codable {
     /// are entirely different pieces of news.
     public var emptyMessage: String {
         switch self {
+        case .recordsDemo: "The demonstration always includes a person, a pet, and a vehicle."
         case .all: "Add somebody with ⌘⇧K, or link a contact from Settings."
         case .recentlyViewed: "People you open appear here for this session."
         case .favorites: "Star somebody to keep them close."
@@ -471,6 +479,8 @@ struct PeopleListView: View {
 
     private func people(in scope: PeopleScope, services: AppServices) throws(AppError) -> [Item] {
         switch scope {
+        case .recordsDemo:
+            return []
         case .all:
             return try services.persons.allPeople(includingPlaceholders: false)
 

@@ -461,7 +461,11 @@ public struct RootView: View {
     /// without moving or resizing the fixed sibling at the window's leading edge.
     @ViewBuilder
     private var contentPanes: some View {
-        HStack(spacing: 0) {
+        if navigation.selection == .people(.recordsDemo) {
+            RecordsDemoView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            HStack(spacing: 0) {
             if navigation.layoutMode.showsList || shellWidths.detail == nil {
                 primaryPane
                     .frame(width: shellWidths.detail == nil ? nil : shellWidths.primary)
@@ -483,8 +487,9 @@ public struct RootView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -511,6 +516,8 @@ public struct RootView: View {
                 IsolatedPeopleListView()
             } else {
                 switch scope {
+                case .recordsDemo:
+                    RecordsDemoView()
                 case .celebrations:
                     CelebrationsView(navigation: navigation)
                 case .duplicates:

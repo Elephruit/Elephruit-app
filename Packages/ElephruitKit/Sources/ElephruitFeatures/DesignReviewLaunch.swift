@@ -83,6 +83,7 @@ public enum DesignReviewLaunch {
         case "today": return .destination(.today)
         case "upcoming": return .destination(.upcoming)
         case "inbox": return .destination(.inbox)
+        case "records": return .destination(.people(.recordsDemo))
         default:
             guard let module = AppModule(rawValue: raw) else { return nil }
             return .module(module)
