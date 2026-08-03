@@ -368,6 +368,17 @@ public final class ProjectWorkspaceModel {
         }
     }
 
+    /// Opens the general-purpose editor without changing project views.
+    ///
+    /// A board card is a compact representation of work, including bugs. Clicking one should edit
+    /// that card in place rather than navigating to the Bugs view, whose inline expansion is a
+    /// different interaction for triaging a queue.
+    public func presentEditor(_ id: UUID) {
+        guard itemsByID[id] != nil else { return }
+        expandedBugID = nil
+        presentedItemID = id
+    }
+
     public func dismissPresentedItem() {
         presentedItemID = nil
     }

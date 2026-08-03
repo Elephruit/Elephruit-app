@@ -35,6 +35,9 @@ struct KanbanColumnView: View {
     let model: ProjectWorkspaceModel
     let drag: KanbanDragCoordinator
 
+    @State private var quickAddDraft = ""
+    @FocusState private var isQuickAddFocused: Bool
+
     private var displayedItems: [TaskFacts] {
         guard drag.isDragging else { return column.items }
         return drag.itemIDs(in: column.key).compactMap { model.item($0)?.taskFacts() }
@@ -148,9 +151,7 @@ struct KanbanColumnView: View {
                 )
             )
 
-            QuickAddRow(placeholder: "Add to \(column.title)") { title in
-                add(title)
-            }
+            quickAddCard
 
             Spacer(minLength: 0)
         }
@@ -172,7 +173,75 @@ struct KanbanColumnView: View {
                     .foregroundStyle(Theme.Colors.warning)
                     .help("Over its limit of \(column.wipLimit)")
             }
+            Button(action: beginAdding) {
+                Image(systemName: "plus")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 22, height: 22)
+                    .background(Theme.Colors.contentBackground, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.Colors.secondaryText)
+            .help("Add to \(column.title)")
+            .accessibilityLabel("Add to \(column.title)")
+            .accessibilityIdentifier("kanban.add.\(column.key)")
         }
+    }
+
+    private var quickAddCard: some View {
+        HStack(spacing: Theme.Spacing.small) {
+            Image(systemName: "plus.circle.fill")
+                .foregroundStyle(isQuickAddFocused ? Theme.Colors.selection : Theme.Colors.tertiaryText)
+
+            TextField(
+                isQuickAddFocused ? "Type a card title…" : "Click here to add a card",
+                text: $quickAddDraft
+            )
+                .textFieldStyle(.plain)
+                .font(Theme.Text.rowTitle)
+                .frame(maxWidth: .infinity)
+                .focused($isQuickAddFocused)
+                .onSubmit(commitQuickAdd)
+                .onExitCommand(perform: commitQuickAdd)
+        }
+        .padding(Theme.Spacing.small)
+        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                .fill(Theme.Colors.contentBackground.opacity(isQuickAddFocused ? 0.96 : 0.62))
+                .shadow(color: Theme.Colors.shadow.opacity(isQuickAddFocused ? 0.18 : 0.06), radius: 8, y: 3)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                .stroke(
+                    isQuickAddFocused ? Theme.Colors.selection.opacity(0.55) : Theme.Colors.separator,
+                    lineWidth: isQuickAddFocused ? 1 : 0.5
+                )
+        }
+        .contentShape(Rectangle())
+        .simultaneousGesture(TapGesture().onEnded { focusQuickAdd() })
+        .onChange(of: isQuickAddFocused) { _, focused in
+            model.isEditingText = focused
+            if !focused { commitQuickAdd() }
+        }
+        .onDisappear(perform: commitQuickAdd)
+        .accessibilityIdentifier("kanban.quickAdd.\(column.key)")
+    }
+
+    private func beginAdding() {
+        focusQuickAdd()
+    }
+
+    private func focusQuickAdd() {
+        isQuickAddFocused = true
+    }
+
+    private func commitQuickAdd() {
+        guard let title = quickAddDraft.nilIfBlank else { return }
+        // Clear first so losing focus during the model refresh cannot submit the same draft twice.
+        quickAddDraft = ""
+        add(title)
+        isQuickAddFocused = false
+        model.isEditingText = false
     }
 
     private func add(_ title: String) {
@@ -184,7 +253,7 @@ struct KanbanColumnView: View {
             stage: stage
         ) else { return }
         model.refresh()
-        model.beginRenaming(item.id)
+        model.select(item.id)
     }
 
     private func accept(_ placement: KanbanPlacement) -> Bool {
@@ -437,11 +506,8 @@ struct KanbanCardView: View {
         .onTapGesture {
             guard model.rowGesturesAreActive(for: facts.id) else { return }
             model.select(facts.id)
+            model.presentEditor(facts.id)
         }
-        .simultaneousGesture(TapGesture(count: 2).onEnded {
-            guard model.rowGesturesAreActive(for: facts.id) else { return }
-            model.present(facts.id)
-        })
         .contextMenu { WorkItemMenu(facts: facts, model: model, services: services) }
     }
 }
