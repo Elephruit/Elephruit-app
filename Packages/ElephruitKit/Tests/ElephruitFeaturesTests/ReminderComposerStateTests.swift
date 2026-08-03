@@ -46,7 +46,9 @@ struct ReminderComposerStateTests {
             onTab: { traversals.append($0) },
             onReturn: {},
             onCommandReturn: {},
-            onEscape: {}
+            onEscape: {},
+            field: .title,
+            focusRouter: ReminderComposerFocusRouter()
         )
         let coordinator = editor.makeCoordinator()
         let textView = ReminderEditorTextView()
@@ -58,6 +60,37 @@ struct ReminderComposerStateTests {
 
         #expect(traversals == [false, true])
         #expect(textView.string == "unchanged")
+    }
+
+    @Test("The focus router flushes the active editor before advancing")
+    @MainActor
+    func routerFlushesBeforeTraversal() {
+        var text = ""
+        let router = ReminderComposerFocusRouter()
+        let editor = ReminderPlainTextEditor(
+            text: Binding(get: { text }, set: { text = $0 }),
+            placeholder: "Reminder",
+            role: .title,
+            onTab: { _ in },
+            onReturn: {},
+            onCommandReturn: {},
+            onEscape: {},
+            field: .title,
+            focusRouter: router
+        )
+        let textView = ReminderEditorTextView()
+        let coordinator = editor.makeCoordinator()
+        textView.coordinator = coordinator
+        textView.string = "Typed title"
+        router.register(textView, for: .title)
+        router.onTab = { reverse in
+            router.activate(router.activeField.advanced(reverse: reverse))
+        }
+
+        router.handleTab(reverse: false)
+
+        #expect(text == "Typed title")
+        #expect(router.activeField == .notes)
     }
 
     @MainActor

@@ -21,11 +21,11 @@ struct ReminderComposer: View {
     @State private var deadlineQuery = ""
     @State private var tagQuery = ""
     @State private var availableTags: [String] = []
-    @State private var isWhenOpen = false
-    @State private var isTagsOpen = false
-    @State private var isDeadlineOpen = false
+    @State private var popupField: ReminderComposerField?
     @State private var showsChecklist = false
-    @FocusState private var focus: ReminderComposerField?
+    @StateObject private var focusRouter = ReminderComposerFocusRouter()
+
+    private var activeField: ReminderComposerField { focusRouter.activeField }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
@@ -44,15 +44,22 @@ struct ReminderComposer: View {
             RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                 .stroke(Theme.Colors.separator, lineWidth: 1)
         }
+        .background {
+            ReminderComposerKeyboardMonitor(router: focusRouter)
+            .frame(width: 0, height: 0)
+        }
         .onAppear {
+            focusRouter.onTab = { reverse in
+                move(from: focusRouter.activeField, reverse: reverse)
+            }
             availableTags = (try? services?.tags.allTags().map(\.slug).sorted()) ?? []
             Task { @MainActor in
                 await Task.yield()
-                focus = .title
+                activate(.title)
             }
         }
-        .onChange(of: focus) { old, new in
-            fieldChanged(from: old, to: new)
+        .onDisappear {
+            focusRouter.onTab = nil
         }
         .accessibilityIdentifier("tasks.reminderComposer")
     }
@@ -70,20 +77,22 @@ struct ReminderComposer: View {
                 onTab: moveFromTitle,
                 onReturn: {
                     guard !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                        focus = .notes
+                        activate(.notes)
                         return
                     }
                     onQuickCommit()
                     Task { @MainActor in
                         await Task.yield()
-                        focus = .title
+                        activate(.title)
                     }
                 },
                 onCommandReturn: onCommitAndClose,
-                onEscape: onCancel
+                onEscape: onCancel,
+                field: .title,
+                focusRouter: focusRouter,
+                onFocus: { activate(.title) }
             )
             .frame(height: 26)
-            .focused($focus, equals: .title)
             .accessibilityIdentifier("tasks.reminderComposer.title")
         }
     }
@@ -96,11 +105,13 @@ struct ReminderComposer: View {
             onTab: { reverse in move(from: .notes, reverse: reverse) },
             onReturn: {},
             onCommandReturn: onCommitAndClose,
-            onEscape: onCancel
+            onEscape: onCancel,
+            field: .notes,
+            focusRouter: focusRouter,
+            onFocus: { activate(.notes) }
         )
         .frame(minHeight: 42, maxHeight: 88)
         .padding(.leading, 21)
-        .focused($focus, equals: .notes)
         .accessibilityIdentifier("tasks.reminderComposer.notes")
     }
 
@@ -133,13 +144,15 @@ struct ReminderComposer: View {
                         },
                         onReturn: {
                             draft.commitPendingStep()
-                            focus = .checklist
+                            activate(.checklist)
                         },
                         onCommandReturn: onCommitAndClose,
-                        onEscape: onCancel
+                        onEscape: onCancel,
+                        field: .checklist,
+                        focusRouter: focusRouter,
+                        onFocus: { activate(.checklist) }
                     )
                     .frame(height: 24)
-                    .focused($focus, equals: .checklist)
                     .accessibilityIdentifier("tasks.reminderComposer.checklistField")
                 }
                 .frame(minHeight: Theme.Size.rowHeight)
@@ -157,87 +170,76 @@ struct ReminderComposer: View {
             deadlineControl
         }
         .padding(.top, Theme.Spacing.tight)
+        .popover(isPresented: popupPresented, arrowEdge: .bottom) {
+            metadataPopup
+        }
     }
 
     private var whenControl: some View {
-        Group {
-            if focus == .when {
+        HStack(spacing: 0) {
+            if activeField == .when {
                 ReminderPlainTextEditor(
                     text: $whenQuery,
                     placeholder: "When",
                     role: .body,
                     onTab: { reverse in
                         commitWhenQuery()
-                        isWhenOpen = false
                         move(from: .when, reverse: reverse)
                     },
                     onReturn: {
                         commitWhenQuery()
-                        isWhenOpen = false
-                        focus = .tags
+                        activate(.tags)
                     },
                     onCommandReturn: onCommitAndClose,
-                    onEscape: { isWhenOpen = false; focus = .notes }
+                    onEscape: { popupField = nil; activate(.notes) },
+                    field: .when,
+                    focusRouter: focusRouter,
+                    onFocus: { activate(.when) }
                 )
                 .frame(width: 116, height: 24)
                 .padding(.horizontal, Theme.Spacing.small)
                 .background(Theme.Colors.subtleFill, in: Capsule())
-                .focused($focus, equals: .when)
             } else {
                 actionButton(
                     title: draft.isSomeday ? "Someday" : draft.startAt.map(shortDate) ?? "When",
                     symbol: "calendar",
                     isActive: draft.startAt != nil || draft.isSomeday
                 ) {
-                    focus = .when
+                    activate(.when)
                 }
             }
-        }
-        .popover(isPresented: $isWhenOpen, arrowEdge: .bottom) {
-            reminderDatePopover(
-                selected: draft.startAt,
-                allowsSomeday: true,
-                onPick: { date in
-                    draft.startAt = date
-                    draft.isSomeday = false
-                    isWhenOpen = false
-                    focus = .tags
-                }
-            )
         }
     }
 
     private var tagsControl: some View {
-        Group {
-            if focus == .tags {
+        HStack(spacing: 0) {
+            if activeField == .tags {
                 ReminderPlainTextEditor(
                     text: $tagQuery,
                     placeholder: "Tags",
                     role: .body,
                     onTab: { reverse in
-                        isTagsOpen = false
                         move(from: .tags, reverse: reverse)
                     },
                     onReturn: toggleFirstMatchingTag,
                     onCommandReturn: onCommitAndClose,
-                    onEscape: { isTagsOpen = false; focus = .when }
+                    onEscape: { popupField = nil; activate(.when) },
+                    field: .tags,
+                    focusRouter: focusRouter,
+                    onFocus: { activate(.tags) }
                 )
                 .frame(width: 116, height: 24)
                 .padding(.horizontal, Theme.Spacing.small)
                 .background(Theme.Colors.subtleFill, in: Capsule())
-                .focused($focus, equals: .tags)
             } else {
                 actionButton(
                     title: draft.tagSlugs.isEmpty ? "Tags" : draft.tagSlugs.joined(separator: ", "),
                     symbol: "tag",
                     isActive: !draft.tagSlugs.isEmpty
                 ) {
-                    focus = .tags
+                    activate(.tags)
                 }
             }
-        }
-        .popover(isPresented: $isTagsOpen, arrowEdge: .bottom) {
-            reminderTagPopover
         }
     }
 
@@ -248,54 +250,80 @@ struct ReminderComposer: View {
             isActive: !draft.checklist.isEmpty
         ) {
             showsChecklist = true
-            focus = .checklist
+            activate(.checklist)
         }
     }
 
     private var deadlineControl: some View {
-        Group {
-            if focus == .deadline {
+        HStack(spacing: 0) {
+            if activeField == .deadline {
                 ReminderPlainTextEditor(
                     text: $deadlineQuery,
                     placeholder: "Deadline",
                     role: .body,
                     onTab: { reverse in
                         commitDeadlineQuery()
-                        isDeadlineOpen = false
                         move(from: .deadline, reverse: reverse)
                     },
                     onReturn: {
                         commitDeadlineQuery()
-                        isDeadlineOpen = false
-                        focus = .title
+                        activate(.title)
                     },
                     onCommandReturn: onCommitAndClose,
-                    onEscape: { isDeadlineOpen = false; focus = .checklist }
+                    onEscape: { popupField = nil; activate(.checklist) },
+                    field: .deadline,
+                    focusRouter: focusRouter,
+                    onFocus: { activate(.deadline) }
                 )
                 .frame(width: 116, height: 24)
                 .padding(.horizontal, Theme.Spacing.small)
                 .background(Theme.Colors.subtleFill, in: Capsule())
-                .focused($focus, equals: .deadline)
             } else {
                 actionButton(
                     title: draft.dueAt.map(shortDate) ?? "Deadline",
                     symbol: "flag",
                     isActive: draft.dueAt != nil
                 ) {
-                    focus = .deadline
+                    activate(.deadline)
                 }
             }
         }
-        .popover(isPresented: $isDeadlineOpen, arrowEdge: .bottom) {
+    }
+
+    private var popupPresented: Binding<Bool> {
+        Binding(
+            get: { popupField != nil },
+            set: { if !$0 { popupField = nil } }
+        )
+    }
+
+    @ViewBuilder
+    private var metadataPopup: some View {
+        switch popupField {
+        case .when:
+            reminderDatePopover(
+                selected: draft.startAt,
+                allowsSomeday: true,
+                onPick: { date in
+                    draft.startAt = date
+                    draft.isSomeday = false
+                    activate(.tags)
+                }
+            )
+        case .tags:
+            reminderTagPopover
+        case .deadline:
             reminderDatePopover(
                 selected: draft.dueAt,
                 allowsSomeday: false,
                 onPick: { date in
                     draft.dueAt = date
-                    isDeadlineOpen = false
-                    focus = .title
+                    popupField = nil
+                    activate(.title)
                 }
             )
+        case .title, .notes, .checklist, nil:
+            EmptyView()
         }
     }
 
@@ -378,8 +406,7 @@ struct ReminderComposer: View {
                 Button("Someday", systemImage: "archivebox") {
                     draft.startAt = nil
                     draft.isSomeday = true
-                    isWhenOpen = false
-                    focus = .tags
+                    activate(.tags)
                 }
                 .buttonStyle(.plain)
             }
@@ -406,21 +433,33 @@ struct ReminderComposer: View {
 
     private func move(from field: ReminderComposerField, reverse: Bool) {
         let next = field.advanced(reverse: reverse)
-        if next == .checklist { showsChecklist = true }
-        focus = next
+        activate(next)
     }
 
-    private func fieldChanged(from old: ReminderComposerField?, to new: ReminderComposerField?) {
-        if new == .when { isWhenOpen = true }
-        if new == .tags { isTagsOpen = true }
-        if new == .checklist { showsChecklist = true }
-        if new == .deadline { isDeadlineOpen = true }
-
-        // A click outside the card commits a real draft. Clicking inside a popover also clears the
-        // field focus, so an open picker guards that deliberate handoff.
-        if old != nil, new == nil, !isWhenOpen, !isTagsOpen, !isDeadlineOpen {
-            if draft.isEmpty { onCancel() } else { onCommitAndClose() }
+    /// Moves through the product's focus path and switches the single metadata popover.
+    ///
+    /// The action row is a permanent anchor, so popup presentation never waits on a conditional
+    /// view and calendar-to-tags traversal does not perform a dismiss/present race.
+    private func activate(_ field: ReminderComposerField) {
+        if activeField == field {
+            focusRouter.focus(field)
+            presentPopupAfterLayout(for: field)
+            return
         }
+        focusRouter.activate(field)
+        if field == .checklist { showsChecklist = true }
+
+        if field != .when, field != .tags, field != .deadline {
+            popupField = nil
+        }
+
+        presentPopupAfterLayout(for: field)
+    }
+
+    private func presentPopupAfterLayout(for field: ReminderComposerField) {
+        guard field == .when || field == .tags || field == .deadline else { return }
+        if popupField == field { return }
+        popupField = field
     }
 
     private func commitWhenQuery() {
@@ -480,6 +519,9 @@ struct ReminderPlainTextEditor: NSViewRepresentable {
     let onReturn: () -> Void
     let onCommandReturn: () -> Void
     let onEscape: () -> Void
+    let field: ReminderComposerField
+    let focusRouter: ReminderComposerFocusRouter
+    var onFocus: () -> Void = {}
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -493,6 +535,8 @@ struct ReminderPlainTextEditor: NSViewRepresentable {
         let editor = ReminderEditorTextView()
         editor.delegate = context.coordinator
         editor.coordinator = context.coordinator
+        editor.focusField = field
+        editor.focusRouter = focusRouter
         editor.string = text
         editor.placeholder = placeholder
         editor.isRichText = false
@@ -522,24 +566,42 @@ struct ReminderPlainTextEditor: NSViewRepresentable {
         editor.isAutomaticTextReplacementEnabled = false
         editor.isAutomaticSpellingCorrectionEnabled = false
         scroll.documentView = editor
+        focusRouter.register(editor, for: field)
         return scroll
     }
 
     func updateNSView(_ scroll: ReminderEditorScrollView, context: Context) {
         context.coordinator.parent = self
         guard let editor = scroll.documentView as? ReminderEditorTextView else { return }
+        focusRouter.register(editor, for: field)
         editor.placeholder = placeholder
-        guard editor.string != text, text != context.coordinator.lastEditorText, !editor.hasMarkedText()
-        else { return }
-        editor.string = text
-        context.coordinator.lastEditorText = text
-        editor.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
+        context.coordinator.reconciliationGeneration += 1
+        let generation = context.coordinator.reconciliationGeneration
+        guard editor.string != text else { return }
+
+        // A keystroke can queue several SwiftUI updates. Reconcile external resets only after that
+        // queue settles; applying an older snapshot immediately would erase the just-flushed text
+        // as focus moves to the next field.
+        DispatchQueue.main.async { [weak editor, weak coordinator = context.coordinator] in
+            guard let editor,
+                  let coordinator,
+                  coordinator.reconciliationGeneration == generation,
+                  !editor.hasMarkedText(),
+                  editor.window?.firstResponder !== editor
+            else { return }
+            let latestText = coordinator.parent.text
+            guard editor.string != latestText else { return }
+            editor.string = latestText
+            coordinator.lastEditorText = latestText
+            editor.setSelectedRange(NSRange(location: (latestText as NSString).length, length: 0))
+        }
     }
 
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: ReminderPlainTextEditor
         var lastEditorText: String
+        var reconciliationGeneration = 0
 
         init(_ parent: ReminderPlainTextEditor) {
             self.parent = parent
@@ -548,24 +610,74 @@ struct ReminderPlainTextEditor: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let editor = notification.object as? NSTextView, !editor.hasMarkedText() else { return }
+            flushText(editor)
+        }
+
+        func flushText(_ editor: NSTextView) {
             lastEditorText = editor.string
             parent.text = editor.string
+        }
+
+        func textDidBeginEditing(_ notification: Notification) {
+            parent.onFocus()
+        }
+
+        /// AppKit interprets Tab and Return as text commands before a field editor necessarily
+        /// receives a raw key event. Handling the commands here makes the path work for hardware
+        /// keyboards, accessibility-generated events, and the system key-view loop alike.
+        func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            switch commandSelector {
+            case #selector(NSResponder.insertTab(_:)):
+                parent.onTab(false)
+                return true
+            case #selector(NSResponder.insertBacktab(_:)):
+                parent.onTab(true)
+                return true
+            case #selector(NSResponder.insertNewline(_:)):
+                if NSApp.currentEvent?.modifierFlags.contains(.command) == true {
+                    parent.onCommandReturn()
+                    return true
+                }
+                switch parent.role {
+                case .notes:
+                    return false
+                case .title, .body:
+                    parent.onReturn()
+                    return true
+                }
+            case #selector(NSResponder.cancelOperation(_:)):
+                parent.onEscape()
+                return true
+            default:
+                return false
+            }
         }
     }
 }
 
-final class ReminderEditorScrollView: NSScrollView {
-    override var acceptsFirstResponder: Bool { true }
-
-    override func becomeFirstResponder() -> Bool {
-        guard let editor = documentView as? NSTextView, let window else { return false }
-        return window.makeFirstResponder(editor)
-    }
-}
+final class ReminderEditorScrollView: NSScrollView {}
 
 final class ReminderEditorTextView: NSTextView {
     weak var coordinator: ReminderPlainTextEditor.Coordinator?
+    weak var focusRouter: ReminderComposerFocusRouter?
+    var focusField: ReminderComposerField = .title
     var placeholder = "" { didSet { needsDisplay = true } }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else { return }
+        focusRouter?.register(self, for: focusField)
+    }
+
+    /// The text system may dispatch these actions directly, without a raw key event or delegate
+    /// command. Overriding the responder actions closes that final route around the focus machine.
+    override func insertTab(_ sender: Any?) {
+        MainActor.assumeIsolated { coordinator?.parent.onTab(false) }
+    }
+
+    override func insertBacktab(_ sender: Any?) {
+        MainActor.assumeIsolated { coordinator?.parent.onTab(true) }
+    }
 
     override func keyDown(with event: NSEvent) {
         guard let parent = coordinator?.parent else {
@@ -606,3 +718,136 @@ final class ReminderEditorTextView: NSTextView {
         ).draw(at: NSPoint(x: textContainerOrigin.x + padding, y: textContainerOrigin.y))
     }
 }
+
+// MARK: - Authoritative focus routing
+
+/// Owns the composer responder chain for its entire lifetime.
+///
+/// SwiftUI state describes the visuals, but it never decides which editor is first responder.
+/// That decision stays here, beside the concrete AppKit text views, so a Tab cannot race a view
+/// update or be redirected by a popover window.
+@MainActor
+final class ReminderComposerFocusRouter: ObservableObject {
+    @Published private(set) var activeField: ReminderComposerField = .title
+    var onTab: ((Bool) -> Void)?
+
+    private var editors: [ReminderComposerField: WeakReminderEditor] = [:]
+    private var focusGeneration = 0
+
+    func register(_ editor: NSTextView, for field: ReminderComposerField) {
+        editors[field] = WeakReminderEditor(editor)
+        if activeField == field { focus(field) }
+    }
+
+    func activate(_ field: ReminderComposerField) {
+        flushActiveEditor()
+        activeField = field
+        focus(field)
+    }
+
+    func focus(_ field: ReminderComposerField) {
+        focusGeneration += 1
+        let generation = focusGeneration
+        _ = focusNow(field)
+        DispatchQueue.main.async { [weak self] in
+            guard let self,
+                  self.focusGeneration == generation,
+                  self.activeField == field
+            else { return }
+            _ = self.focusNow(field)
+        }
+    }
+
+    @discardableResult
+    private func focusNow(_ field: ReminderComposerField) -> Bool {
+        guard activeField == field,
+              let editor = editors[field]?.value,
+              let window = editor.window
+        else { return false }
+        if window.firstResponder !== editor, !window.makeFirstResponder(editor) { return false }
+        editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
+        return true
+    }
+
+    func handleTab(reverse: Bool) {
+        flushActiveEditor()
+        onTab?(reverse)
+    }
+
+    private func flushActiveEditor() {
+        guard let editor = editors[activeField]?.value as? ReminderEditorTextView,
+              !editor.hasMarkedText()
+        else { return }
+        editor.coordinator?.flushText(editor)
+    }
+}
+
+private final class WeakReminderEditor {
+    weak var value: NSTextView?
+
+    init(_ value: NSTextView) {
+        self.value = value
+    }
+}
+
+// MARK: - Window-level keyboard routing
+
+/// Captures Tab before AppKit decides whether it means text insertion, field-editor traversal, or
+/// an accessibility key-view action. It exists only while one composer exists and only consumes
+/// events belonging to that composer's window.
+struct ReminderComposerKeyboardMonitor: NSViewRepresentable {
+    let router: ReminderComposerFocusRouter
+
+    func makeCoordinator() -> Coordinator { Coordinator(router: router) }
+
+    func makeNSView(context: Context) -> ReminderComposerKeyboardMonitorView {
+        let view = ReminderComposerKeyboardMonitorView()
+        context.coordinator.install(for: view)
+        return view
+    }
+
+    func updateNSView(_ view: ReminderComposerKeyboardMonitorView, context: Context) {}
+
+    static func dismantleNSView(
+        _ view: ReminderComposerKeyboardMonitorView,
+        coordinator: Coordinator
+    ) {
+        coordinator.uninstall()
+    }
+
+    @MainActor
+    final class Coordinator {
+        weak var router: ReminderComposerFocusRouter?
+        private var monitor: Any?
+
+        init(router: ReminderComposerFocusRouter) {
+            self.router = router
+        }
+
+        func install(for view: ReminderComposerKeyboardMonitorView) {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak view] event in
+                guard let self,
+                      let view,
+                      let composerWindow = view.window,
+                      NSApp.isActive,
+                      event.window === composerWindow || NSApp.mainWindow === composerWindow,
+                      event.keyCode == 48,
+                      !event.modifierFlags.contains(.command),
+                      !event.modifierFlags.contains(.control),
+                      !event.modifierFlags.contains(.option)
+                else { return event }
+                self.router?.handleTab(reverse: event.modifierFlags.contains(.shift))
+                return nil
+            }
+        }
+
+        func uninstall() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+        }
+
+    }
+}
+
+final class ReminderComposerKeyboardMonitorView: NSView {}
