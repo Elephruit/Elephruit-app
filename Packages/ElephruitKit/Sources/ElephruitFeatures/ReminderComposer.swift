@@ -30,6 +30,7 @@ struct ReminderComposer: View {
     @State private var inlineSuggestionSelection = 0
     @State private var metadataSuggestionSelection = 0
     @State private var metadataSuggestionWasNavigated = false
+    @State private var dateNavigation = ReminderDateNavigationState()
     @StateObject private var focusRouter = ReminderComposerFocusRouter()
 
     private var activeField: ReminderComposerField { focusRouter.activeField }
@@ -84,6 +85,8 @@ struct ReminderComposer: View {
             refreshLibraryFacts()
         }
         .onChange(of: inlineCompletion) { _, _ in inlineSuggestionSelection = 0 }
+        .onChange(of: whenQuery) { _, _ in dateNavigation.reset() }
+        .onChange(of: deadlineQuery) { _, _ in dateNavigation.reset() }
         .onChange(of: tagQuery) { _, _ in resetMetadataSuggestion() }
         .onChange(of: peopleQuery) { _, _ in resetMetadataSuggestion() }
         .onChange(of: projectQuery) { _, _ in resetMetadataSuggestion() }
@@ -310,6 +313,7 @@ struct ReminderComposer: View {
         }
         .popover(isPresented: popupBinding(for: .when), arrowEdge: .bottom) {
             reminderDatePopover(
+                field: .when,
                 selected: draft.startAt,
                 allowsSomeday: true,
                 onPick: { date in
@@ -460,6 +464,7 @@ struct ReminderComposer: View {
         }
         .popover(isPresented: popupBinding(for: .deadline), arrowEdge: .bottom) {
             reminderDatePopover(
+                field: .deadline,
                 selected: draft.dueAt,
                 allowsSomeday: false,
                 onPick: { date in
@@ -505,6 +510,7 @@ struct ReminderComposer: View {
                 field: field,
                 focusRouter: focusRouter,
                 onMove: { moveMetadataSuggestion($0, for: field) },
+                onHorizontalMove: { moveDateHorizontally($0, for: field) },
                 onAcceptSuggestion: { acceptMetadataSuggestion(for: field) },
                 onFocus: { activate(field) }
             )
@@ -680,29 +686,135 @@ struct ReminderComposer: View {
     }
 
     private func reminderDatePopover(
+        field: ReminderComposerField,
         selected: Date?,
         allowsSomeday: Bool,
         onPick: @escaping (Date?) -> Void
     ) -> some View {
         let clock = services?.dateProvider ?? SystemDateProvider()
-        return VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            Button("Today", systemImage: "star") { onPick(clock.startOfToday) }
-                .buttonStyle(.plain)
-            Button("Tomorrow", systemImage: "sunrise") { onPick(clock.startOfDay(daysFromToday: 1)) }
-                .buttonStyle(.plain)
+        let query = dateQuery(for: field).trimmingCharacters(in: .whitespacesAndNewlines)
+        let suggestions = ReminderDateSearch.suggestions(for: query, using: clock)
+
+        return Group {
+            if query.isEmpty {
+                dateCalendarPopover(
+                    field: field,
+                    selected: selected,
+                    allowsSomeday: allowsSomeday,
+                    clock: clock,
+                    onPick: onPick
+                )
+            } else {
+                dateSearchPopover(field: field, suggestions: suggestions, onPick: onPick)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func dateSearchPopover(
+        field: ReminderComposerField,
+        suggestions: [ReminderDateSuggestion],
+        onPick: @escaping (Date?) -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            if suggestions.isEmpty {
+                Text("No matching date")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+                    .padding(Theme.Spacing.small)
+            } else {
+                ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, suggestion in
+                    dateSearchRow(
+                        suggestion,
+                        index: index,
+                        field: field,
+                        onPick: onPick
+                    )
+                }
+            }
+        }
+        .padding(Theme.Spacing.small)
+        .frame(width: 290)
+    }
+
+    private func dateSearchRow(
+        _ suggestion: ReminderDateSuggestion,
+        index: Int,
+        field: ReminderComposerField,
+        onPick: @escaping (Date?) -> Void
+    ) -> some View {
+        Button {
+            dateNavigation.target = .search(index)
+            pickDate(suggestion.date, for: field, onPick: onPick)
+        } label: {
+            HStack(spacing: Theme.Spacing.small) {
+                Image(systemName: "calendar")
+                    .foregroundStyle(Theme.CaptureToken.accent)
+                Text(suggestion.title)
+                    .foregroundStyle(Theme.Colors.primaryText)
+                Spacer(minLength: Theme.Spacing.medium)
+                Text(suggestion.detail)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+            .font(Theme.Text.rowTitle)
+            .padding(.vertical, 5)
+            .padding(.horizontal, Theme.Spacing.small)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            index == (dateNavigation.searchIndex ?? 0)
+                ? Theme.Colors.selectionFill
+                : Color.clear,
+            in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
+        )
+        .onHover { hovering in
+            if hovering { dateNavigation.target = .search(index) }
+        }
+    }
+
+    private func dateCalendarPopover(
+        field: ReminderComposerField,
+        selected: Date?,
+        allowsSomeday: Bool,
+        clock: any DateProvider,
+        onPick: @escaping (Date?) -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            dateQuickChoice(
+                title: "Today",
+                symbol: "star",
+                index: 0,
+                date: clock.startOfToday,
+                field: field,
+                onPick: onPick
+            )
+            dateQuickChoice(
+                title: "Tomorrow",
+                symbol: "sunrise",
+                index: 1,
+                date: clock.startOfDay(daysFromToday: 1),
+                field: field,
+                onPick: onPick
+            )
 
             Divider()
 
             TaskMonthPicker(
                 calendar: clock.calendar,
                 today: clock.now,
-                selected: selected,
-                onPick: { onPick($0) }
+                selected: dateNavigation.day ?? selected,
+                onPick: { date in
+                    dateNavigation.target = .day(date)
+                    pickDate(date, for: field, onPick: onPick)
+                }
             )
 
             if allowsSomeday {
                 Divider()
                 Button("Someday", systemImage: "archivebox") {
+                    whenQuery = ""
+                    dateNavigation.reset()
                     draft.startAt = nil
                     draft.isSomeday = true
                     activate(.tags)
@@ -710,14 +822,61 @@ struct ReminderComposer: View {
                 .buttonStyle(.plain)
             }
 
-            if selected != nil {
+            if selected != nil || (allowsSomeday && draft.isSomeday) {
                 Divider()
-                Button("Clear", systemImage: "xmark.circle") { onPick(nil) }
-                    .buttonStyle(.plain)
+                Button("Clear", systemImage: "xmark.circle") {
+                    pickDate(nil, for: field, onPick: onPick)
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(Theme.Spacing.medium)
         .frame(width: 250)
+    }
+
+    private func dateQuickChoice(
+        title: String,
+        symbol: String,
+        index: Int,
+        date: Date,
+        field: ReminderComposerField,
+        onPick: @escaping (Date?) -> Void
+    ) -> some View {
+        Button {
+            dateNavigation.target = .quick(index)
+            pickDate(date, for: field, onPick: onPick)
+        } label: {
+            Label(title, systemImage: symbol)
+                .padding(.vertical, 4)
+                .padding(.horizontal, Theme.Spacing.small)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            dateNavigation.quickIndex == index ? Theme.Colors.selectionFill : Color.clear,
+            in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
+        )
+        .onHover { hovering in
+            if hovering { dateNavigation.target = .quick(index) }
+        }
+    }
+
+    private func pickDate(
+        _ date: Date?,
+        for field: ReminderComposerField,
+        onPick: (Date?) -> Void
+    ) {
+        switch field {
+        case .when:
+            whenQuery = ""
+        case .deadline:
+            deadlineQuery = ""
+        case .title, .notes, .tags, .people, .checklist, .project:
+            break
+        }
+        dateNavigation.reset()
+        onPick(date)
     }
 
     private var matchingTags: [String] {
@@ -836,6 +995,9 @@ struct ReminderComposer: View {
         _ direction: Int,
         for field: ReminderComposerField
     ) -> Bool {
+        if field == .when || field == .deadline {
+            return moveDateVertically(direction, for: field)
+        }
         let suggestions = metadataSuggestions(for: field)
         guard !suggestions.isEmpty else { return false }
         metadataSuggestionSelection = max(
@@ -848,6 +1010,9 @@ struct ReminderComposer: View {
 
     @discardableResult
     private func acceptMetadataSuggestion(for field: ReminderComposerField) -> Bool {
+        if field == .when || field == .deadline {
+            return acceptDateSelection(for: field)
+        }
         let suggestions = metadataSuggestions(for: field)
         guard metadataSuggestionWasNavigated || !metadataQuery(for: field).isEmpty,
               suggestions.indices.contains(metadataSuggestionSelection)
@@ -880,11 +1045,110 @@ struct ReminderComposer: View {
 
     private func metadataQuery(for field: ReminderComposerField) -> String {
         switch field {
+        case .when: whenQuery
         case .tags: tagQuery
         case .people: peopleQuery
+        case .deadline: deadlineQuery
         case .project: projectQuery
-        case .title, .notes, .when, .checklist, .deadline: ""
+        case .title, .notes, .checklist: ""
         }
+    }
+
+    private func dateQuery(for field: ReminderComposerField) -> String {
+        switch field {
+        case .when: whenQuery
+        case .deadline: deadlineQuery
+        case .title, .notes, .tags, .people, .checklist, .project: ""
+        }
+    }
+
+    private func selectedDate(for field: ReminderComposerField) -> Date? {
+        switch field {
+        case .when: draft.startAt
+        case .deadline: draft.dueAt
+        case .title, .notes, .tags, .people, .checklist, .project: nil
+        }
+    }
+
+    @discardableResult
+    private func moveDateVertically(
+        _ direction: Int,
+        for field: ReminderComposerField
+    ) -> Bool {
+        guard field == .when || field == .deadline else { return false }
+        let clock = services?.dateProvider ?? SystemDateProvider()
+        let query = dateQuery(for: field).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !query.isEmpty {
+            let suggestions = ReminderDateSearch.suggestions(for: query, using: clock)
+            return dateNavigation.moveSearch(direction, count: suggestions.count)
+        }
+        return dateNavigation.moveVertical(
+            direction,
+            selected: selectedDate(for: field),
+            today: clock.startOfToday,
+            calendar: clock.calendar
+        )
+    }
+
+    @discardableResult
+    private func moveDateHorizontally(
+        _ direction: Int,
+        for field: ReminderComposerField
+    ) -> Bool {
+        guard field == .when || field == .deadline,
+              dateQuery(for: field).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return false }
+        let clock = services?.dateProvider ?? SystemDateProvider()
+        return dateNavigation.moveHorizontal(
+            direction,
+            selected: selectedDate(for: field),
+            today: clock.startOfToday,
+            calendar: clock.calendar
+        )
+    }
+
+    @discardableResult
+    private func acceptDateSelection(for field: ReminderComposerField) -> Bool {
+        guard field == .when || field == .deadline else { return false }
+        let clock = services?.dateProvider ?? SystemDateProvider()
+        let query = dateQuery(for: field).trimmingCharacters(in: .whitespacesAndNewlines)
+        let date: Date?
+
+        if !query.isEmpty {
+            let suggestions = ReminderDateSearch.suggestions(for: query, using: clock)
+            let index = dateNavigation.searchIndex ?? 0
+            guard suggestions.indices.contains(index) else { return false }
+            date = suggestions[index].date
+        } else {
+            switch dateNavigation.target {
+            case .quick(0):
+                date = clock.startOfToday
+            case .quick(1):
+                date = clock.startOfDay(daysFromToday: 1)
+            case .day(let selected):
+                date = selected
+            case .none, .quick, .search:
+                return false
+            }
+        }
+
+        guard let date else { return false }
+        switch field {
+        case .when:
+            draft.startAt = date
+            draft.isSomeday = false
+            whenQuery = ""
+            dateNavigation.reset()
+            activate(.tags)
+        case .deadline:
+            draft.dueAt = date
+            deadlineQuery = ""
+            dateNavigation.reset()
+            activate(.project)
+        case .title, .notes, .tags, .people, .checklist, .project:
+            return false
+        }
+        return true
     }
 
     private func resetMetadataSuggestion() {
@@ -909,6 +1173,7 @@ struct ReminderComposer: View {
             return
         }
         resetMetadataSuggestion()
+        dateNavigation.reset()
         focusRouter.activate(field)
 
         if !fieldHasPopup(field) {
@@ -1097,6 +1362,7 @@ struct ReminderPlainTextEditor: NSViewRepresentable {
     let field: ReminderComposerField
     let focusRouter: ReminderComposerFocusRouter
     var onMove: (Int) -> Bool = { _ in false }
+    var onHorizontalMove: (Int) -> Bool = { _ in false }
     var onAcceptSuggestion: () -> Bool = { false }
     var onSelectionChange: (Int) -> Void = { _ in }
     var onDeleteBackwardWhenEmpty: () -> Bool = { false }
@@ -1237,6 +1503,10 @@ struct ReminderPlainTextEditor: NSViewRepresentable {
                 return parent.onMove(-1)
             case #selector(NSResponder.moveDown(_:)):
                 return parent.onMove(1)
+            case #selector(NSResponder.moveLeft(_:)):
+                return parent.onHorizontalMove(-1)
+            case #selector(NSResponder.moveRight(_:)):
+                return parent.onHorizontalMove(1)
             case #selector(NSResponder.insertTab(_:)):
                 if parent.onAcceptSuggestion() { return true }
                 parent.onTab(false)
@@ -1309,6 +1579,14 @@ final class ReminderEditorTextView: NSTextView {
         }
 
         switch event.keyCode {
+        case 123: // Left Arrow
+            if !MainActor.assumeIsolated({ parent.onHorizontalMove(-1) }) {
+                super.keyDown(with: event)
+            }
+        case 124: // Right Arrow
+            if !MainActor.assumeIsolated({ parent.onHorizontalMove(1) }) {
+                super.keyDown(with: event)
+            }
         case 126: // Up Arrow
             if !MainActor.assumeIsolated({ parent.onMove(-1) }) {
                 super.keyDown(with: event)

@@ -169,6 +169,72 @@ struct ReminderComposerStateTests {
         #expect(acceptances == 1)
     }
 
+    @Test("Partial weekday searches return the next matching days")
+    func weekdayDateSearch() throws {
+        let clock = try augustThirdClock()
+
+        let suggestions = ReminderDateSearch.suggestions(for: "we", using: clock)
+
+        #expect(suggestions.count == 3)
+        #expect(suggestions.allSatisfy { clock.calendar.component(.weekday, from: $0.date) == 4 })
+        #expect(suggestions.map { clock.calendar.component(.day, from: $0.date) } == [5, 12, 19])
+    }
+
+    @Test("A bare number offers both day-of-month and offset meanings")
+    func numericDateSearch() throws {
+        let clock = try augustThirdClock()
+
+        let suggestions = ReminderDateSearch.suggestions(for: "8", using: clock)
+
+        #expect(suggestions.map(\.kind) == [.dayOfMonth, .offset])
+        #expect(suggestions.map { clock.calendar.component(.day, from: $0.date) } == [8, 11])
+        #expect(suggestions[1].title == "in 8 days")
+    }
+
+    @Test("Date arrows traverse quick choices, then the calendar by day or week")
+    func dateArrowNavigation() throws {
+        let clock = try augustThirdClock()
+        var navigation = ReminderDateNavigationState()
+
+        navigation.moveVertical(1, selected: nil, today: clock.now, calendar: clock.calendar)
+        #expect(navigation.target == .quick(0))
+        navigation.moveVertical(1, selected: nil, today: clock.now, calendar: clock.calendar)
+        #expect(navigation.target == .quick(1))
+        navigation.moveVertical(1, selected: nil, today: clock.now, calendar: clock.calendar)
+        #expect(navigation.day.map { clock.calendar.component(.day, from: $0) } == 3)
+
+        navigation.moveHorizontal(1, selected: nil, today: clock.now, calendar: clock.calendar)
+        #expect(navigation.day.map { clock.calendar.component(.day, from: $0) } == 4)
+        navigation.moveVertical(1, selected: nil, today: clock.now, calendar: clock.calendar)
+        #expect(navigation.day.map { clock.calendar.component(.day, from: $0) } == 11)
+        navigation.moveVertical(-1, selected: nil, today: clock.now, calendar: clock.calendar)
+        #expect(navigation.day.map { clock.calendar.component(.day, from: $0) } == 4)
+    }
+
+    @Test("Left and right commands can be claimed by a date editor")
+    @MainActor
+    func editorHorizontalSuggestionKeyboard() {
+        var moves: [Int] = []
+        let editor = ReminderPlainTextEditor(
+            text: .constant(""),
+            placeholder: "When",
+            role: .body,
+            onTab: { _ in },
+            onReturn: {},
+            onCommandReturn: {},
+            onEscape: {},
+            field: .when,
+            focusRouter: ReminderComposerFocusRouter(),
+            onHorizontalMove: { moves.append($0); return true }
+        )
+        let coordinator = editor.makeCoordinator()
+        let textView = ReminderEditorTextView()
+
+        #expect(coordinator.textView(textView, doCommandBy: #selector(NSResponder.moveLeft(_:))))
+        #expect(coordinator.textView(textView, doCommandBy: #selector(NSResponder.moveRight(_:))))
+        #expect(moves == [-1, 1])
+    }
+
     @Test("Compact metadata text is vertically inset")
     @MainActor
     func metadataTextAlignment() {
@@ -243,5 +309,15 @@ struct ReminderComposerStateTests {
             isARepeat: false,
             keyCode: keyCode
         )
+    }
+
+    private func augustThirdClock() throws -> FixedDateProvider {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        calendar.firstWeekday = 1
+        let date = try #require(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 3, hour: 9))
+        )
+        return FixedDateProvider(now: date, calendar: calendar)
     }
 }

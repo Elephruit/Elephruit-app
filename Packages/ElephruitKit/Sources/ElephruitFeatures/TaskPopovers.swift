@@ -153,6 +153,14 @@ struct TaskMonthPicker: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Calendar for \(monthName)")
+        .onChange(of: selected) { _, selection in
+            guard let selection,
+                  !calendar.isDate(selection, equalTo: month, toGranularity: .month)
+            else { return }
+            // Keyboard navigation can cross a month boundary without clicking the page arrows.
+            // Keep the highlighted day visible instead of leaving selection in an offscreen month.
+            visibleMonth = selection
+        }
     }
 
     private func dayCell(_ day: Date) -> some View {

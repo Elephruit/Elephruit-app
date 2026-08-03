@@ -24,6 +24,383 @@ enum ReminderComposerField: Int, CaseIterable, Sendable, Hashable {
     }
 }
 
+/// One row in the Things-style date search shown by When and Deadline.
+///
+/// The row keeps its presentation alongside the resolved day so a keystroke can select the exact
+/// same result the user sees. `kind` deliberately participates in identity: the query `8` can mean
+/// both "August 8" and "in 8 days", even on the rare date where those land on the same day.
+struct ReminderDateSuggestion: Identifiable, Sendable, Hashable {
+    enum Kind: String, Sendable, Hashable {
+        case named
+        case weekday
+        case dayOfMonth
+        case offset
+        case parsed
+    }
+
+    var kind: Kind
+    var date: Date
+    var title: String
+    var detail: String
+
+    var id: String { "\(kind.rawValue):\(date.timeIntervalSinceReferenceDate)" }
+}
+
+/// Fast, deterministic date completion for the compact reminder editor.
+///
+/// This supplements `NaturalDateParser` rather than changing its grammar. Capture still only acts
+/// on complete date phrases; this search surface can additionally show useful partial matches such
+/// as `we`, `su`, or the two meanings of `8` without guessing silently.
+enum ReminderDateSearch {
+    private static let weekdays: [(name: String, aliases: [String], value: Int)] = [
+        ("Sunday", ["sun"], 1),
+        ("Monday", ["mon"], 2),
+        ("Tuesday", ["tue", "tues"], 3),
+        ("Wednesday", ["wed"], 4),
+        ("Thursday", ["thu", "thur", "thurs"], 5),
+        ("Friday", ["fri"], 6),
+        ("Saturday", ["sat"], 7),
+    ]
+
+    private static let months: [(name: String, aliases: [String], value: Int)] = [
+        ("January", ["jan"], 1), ("February", ["feb"], 2),
+        ("March", ["mar"], 3), ("April", ["apr"], 4),
+        ("May", [], 5), ("June", ["jun"], 6), ("July", ["jul"], 7),
+        ("August", ["aug"], 8), ("September", ["sep", "sept"], 9),
+        ("October", ["oct"], 10), ("November", ["nov"], 11),
+        ("December", ["dec"], 12),
+    ]
+
+    static func suggestions(
+        for query: String,
+        using dateProvider: any DateProvider,
+        limit: Int = 8
+    ) -> [ReminderDateSuggestion] {
+        let normalized = query
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+        guard !normalized.isEmpty, limit > 0 else { return [] }
+
+        let calendar = dateProvider.calendar
+        let today = dateProvider.startOfToday
+
+        if let number = Int(normalized), (1...31).contains(number) {
+            var results: [ReminderDateSuggestion] = []
+            if let day = nextDayOfMonth(number, onOrAfter: today, calendar: calendar) {
+                results.append(
+                    ReminderDateSuggestion(
+                        kind: .dayOfMonth,
+                        date: day,
+                        title: format(day, calendar: calendar, month: .wide),
+                        detail: weekday(day, calendar: calendar)
+                    )
+                )
+            }
+            if let offset = calendar.date(byAdding: .day, value: number, to: today) {
+                results.append(
+                    ReminderDateSuggestion(
+                        kind: .offset,
+                        date: offset,
+                        title: number == 1 ? "in 1 day" : "in \(number) days",
+                        detail: format(offset, calendar: calendar, includesWeekday: true)
+                    )
+                )
+            }
+            return Array(results.prefix(limit))
+        }
+
+        if let monthDay = matchingMonthDay(normalized),
+           let date = nextOccurrence(
+               month: monthDay.month,
+               day: monthDay.day,
+               onOrAfter: today,
+               calendar: calendar
+           ) {
+            return [
+                ReminderDateSuggestion(
+                    kind: .dayOfMonth,
+                    date: date,
+                    title: format(date, calendar: calendar, month: .wide),
+                    detail: weekday(date, calendar: calendar)
+                ),
+            ]
+        }
+
+        let matchingWeekdays = weekdays.filter { weekday in
+            weekday.name.lowercased().hasPrefix(normalized)
+                || weekday.aliases.contains(where: { $0.hasPrefix(normalized) })
+        }
+        if !matchingWeekdays.isEmpty {
+            var results: [ReminderDateSuggestion] = []
+            for match in matchingWeekdays {
+                var cursor = today
+                for _ in 0..<3 {
+                    guard let date = nextWeekday(match.value, after: cursor, calendar: calendar) else {
+                        break
+                    }
+                    results.append(
+                        ReminderDateSuggestion(
+                            kind: .weekday,
+                            date: date,
+                            title: format(date, calendar: calendar, includesWeekday: true),
+                            detail: relativeDescription(date, from: today, calendar: calendar)
+                        )
+                    )
+                    cursor = date
+                }
+            }
+            return Array(results.sorted { $0.date < $1.date }.prefix(limit))
+        }
+
+        var named: [ReminderDateSuggestion] = []
+        if "today".hasPrefix(normalized) {
+            named.append(
+                ReminderDateSuggestion(
+                    kind: .named,
+                    date: today,
+                    title: "Today",
+                    detail: format(today, calendar: calendar, includesWeekday: true)
+                )
+            )
+        }
+        if "tomorrow".hasPrefix(normalized),
+           let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) {
+            named.append(
+                ReminderDateSuggestion(
+                    kind: .named,
+                    date: tomorrow,
+                    title: "Tomorrow",
+                    detail: format(tomorrow, calendar: calendar, includesWeekday: true)
+                )
+            )
+        }
+        if !named.isEmpty { return Array(named.prefix(limit)) }
+
+        guard let parsed = TaskDateSuggestion.resolving(normalized, using: dateProvider) else {
+            return []
+        }
+        return [
+            ReminderDateSuggestion(
+                kind: .parsed,
+                date: parsed.date,
+                title: parsed.title,
+                detail: parsed.detail
+            ),
+        ]
+    }
+
+    private static func matchingMonthDay(_ query: String) -> (month: Int, day: Int)? {
+        let words = query
+            .split(whereSeparator: { $0.isWhitespace })
+            .map { String($0).trimmingCharacters(in: CharacterSet(charactersIn: ",")) }
+        guard words.count == 2 else { return nil }
+
+        let candidates: [(monthText: String, dayText: String)] = [
+            (words[0], words[1]),
+            (words[1], words[0]),
+        ]
+        for candidate in candidates {
+            guard let day = Int(candidate.dayText), (1...31).contains(day) else { continue }
+            let matches = months.filter { month in
+                month.name.lowercased().hasPrefix(candidate.monthText)
+                    || month.aliases.contains(where: { $0.hasPrefix(candidate.monthText) })
+            }
+            if matches.count == 1, let match = matches.first { return (match.value, day) }
+        }
+        return nil
+    }
+
+    private static func nextWeekday(
+        _ weekday: Int,
+        after date: Date,
+        calendar: Calendar
+    ) -> Date? {
+        var cursor = date
+        for _ in 1...7 {
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { return nil }
+            cursor = next
+            if calendar.component(.weekday, from: cursor) == weekday { return cursor }
+        }
+        return nil
+    }
+
+    private static func nextDayOfMonth(
+        _ day: Int,
+        onOrAfter today: Date,
+        calendar: Calendar
+    ) -> Date? {
+        let components = calendar.dateComponents([.year, .month], from: today)
+        guard let year = components.year, let month = components.month else { return nil }
+
+        for offset in 0...12 {
+            guard let monthDate = calendar.date(
+                from: DateComponents(year: year, month: month + offset, day: 1)
+            ) else { continue }
+            let candidateComponents = calendar.dateComponents([.year, .month], from: monthDate)
+            guard let candidateYear = candidateComponents.year,
+                  let candidateMonth = candidateComponents.month,
+                  let candidate = calendar.date(
+                      from: DateComponents(year: candidateYear, month: candidateMonth, day: day)
+                  ),
+                  calendar.component(.month, from: candidate) == candidateMonth,
+                  candidate >= today
+            else { continue }
+            return candidate
+        }
+        return nil
+    }
+
+    private static func nextOccurrence(
+        month: Int,
+        day: Int,
+        onOrAfter today: Date,
+        calendar: Calendar
+    ) -> Date? {
+        let year = calendar.component(.year, from: today)
+        for candidateYear in year...(year + 1) {
+            guard let candidate = calendar.date(
+                from: DateComponents(year: candidateYear, month: month, day: day)
+            ),
+                  calendar.component(.month, from: candidate) == month,
+                  calendar.component(.day, from: candidate) == day,
+                  candidate >= today
+            else { continue }
+            return candidate
+        }
+        return nil
+    }
+
+    private static func format(
+        _ date: Date,
+        calendar: Calendar,
+        month: Date.FormatStyle.Symbol.Month = .abbreviated,
+        includesWeekday: Bool = false
+    ) -> String {
+        var style = Date.FormatStyle().month(month).day()
+        if includesWeekday { style = style.weekday(.abbreviated) }
+        style.timeZone = calendar.timeZone
+        return date.formatted(style)
+    }
+
+    private static func weekday(_ date: Date, calendar: Calendar) -> String {
+        var style = Date.FormatStyle().weekday(.abbreviated)
+        style.timeZone = calendar.timeZone
+        return date.formatted(style)
+    }
+
+    private static func relativeDescription(
+        _ date: Date,
+        from today: Date,
+        calendar: Calendar
+    ) -> String {
+        let days = calendar.dateComponents([.day], from: today, to: date).day ?? 0
+        return switch days {
+        case 0: "today"
+        case 1: "tomorrow"
+        case let value where value > 1: "in \(value) days"
+        default: ""
+        }
+    }
+}
+
+/// Keyboard highlight within a reminder date popover.
+enum ReminderDateNavigationTarget: Sendable, Hashable {
+    case quick(Int)
+    case search(Int)
+    case day(Date)
+}
+
+/// Arrow-key movement shared by When and Deadline.
+struct ReminderDateNavigationState: Sendable, Hashable {
+    var target: ReminderDateNavigationTarget?
+
+    mutating func reset() {
+        target = nil
+    }
+
+    @discardableResult
+    mutating func moveSearch(_ direction: Int, count: Int) -> Bool {
+        guard count > 0, direction != 0 else { return false }
+        let current: Int
+        if case .search(let index) = target {
+            current = index
+        } else {
+            // The first row is already the visual/default selection. Down advances to the second;
+            // Up remains on the first, matching a native completion menu.
+            current = 0
+        }
+        target = .search(max(0, min(count - 1, current + direction)))
+        return true
+    }
+
+    @discardableResult
+    mutating func moveVertical(
+        _ direction: Int,
+        selected: Date?,
+        today: Date,
+        calendar: Calendar
+    ) -> Bool {
+        guard direction != 0 else { return false }
+        let anchor = calendar.startOfDay(for: selected ?? today)
+
+        switch target {
+        case .none, .search:
+            target = .quick(direction > 0 ? 0 : 1)
+        case .quick(let index):
+            let next = index + direction
+            if next >= 2 {
+                target = .day(anchor)
+            } else {
+                target = .quick(max(0, next))
+            }
+        case .day(let date):
+            if direction < 0, calendar.isDate(date, inSameDayAs: anchor) {
+                target = .quick(1)
+            } else if let next = calendar.date(byAdding: .day, value: direction * 7, to: date) {
+                target = .day(next)
+            }
+        }
+        return true
+    }
+
+    @discardableResult
+    mutating func moveHorizontal(
+        _ direction: Int,
+        selected: Date?,
+        today: Date,
+        calendar: Calendar
+    ) -> Bool {
+        guard direction != 0 else { return false }
+        let base: Date
+        if case .day(let date) = target {
+            base = date
+        } else {
+            base = selected ?? today
+        }
+        guard let next = calendar.date(byAdding: .day, value: direction, to: base) else {
+            return false
+        }
+        target = .day(calendar.startOfDay(for: next))
+        return true
+    }
+
+    var searchIndex: Int? {
+        guard case .search(let index) = target else { return nil }
+        return index
+    }
+
+    var quickIndex: Int? {
+        guard case .quick(let index) = target else { return nil }
+        return index
+    }
+
+    var day: Date? {
+        guard case .day(let date) = target else { return nil }
+        return date
+    }
+}
+
 /// Everything typed into a new reminder before it becomes a stored item.
 ///
 /// A value type is the performance boundary: keystrokes only mutate this value. Store validation,
