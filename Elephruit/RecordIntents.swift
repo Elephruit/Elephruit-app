@@ -267,7 +267,7 @@ struct MeetingBriefIntent: AppIntent {
     static let title: LocalizedStringResource = "Get a Meeting Brief"
 
     static let description = IntentDescription(
-        "Everything worth knowing before you see somebody. Estimates are labelled as estimates.",
+        "Everything worth knowing before you see somebody. Estimates are labeled as estimates.",
         categoryName: "Records"
     )
 

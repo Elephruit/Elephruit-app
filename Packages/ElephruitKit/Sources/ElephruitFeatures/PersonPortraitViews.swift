@@ -520,7 +520,7 @@ struct PersonRelationshipsSection: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .font(Theme.Text.metadata)
-            .help("See these relationships as a family tree, a household, an organisation, or a network")
+            .help("See these relationships as a family tree, a household, an organization, or a network")
             .accessibilityLabel("Relationship charts")
             .accessibilityIdentifier(AccessibilityID.Records.charts)
 

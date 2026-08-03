@@ -23,7 +23,7 @@ extension ContactAffinity {
 
 /// One hue per way of reaching somebody, shared by every surface that draws contact channels.
 ///
-/// Before this existed, three screens answered "what colour is email?" three ways — cyan in the
+/// Before this existed, three screens answered "what color is email?" three ways — cyan in the
 /// contact editor's page list, blue in its row editor, indigo on the person's action bar. Same
 /// person, three screens, three hues for the one concept. Phone, address and website had already
 /// converged by accident; this makes the agreement a rule instead of a coincidence.

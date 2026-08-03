@@ -58,7 +58,7 @@ public enum WorkflowStageCategory: String, Codable, Sendable, Hashable, CaseIter
         case .backlog: "Backlog"
         case .active: "Active"
         case .done: "Done"
-        case .cancelled: "Cancelled"
+        case .cancelled: "Canceled"
         }
     }
 

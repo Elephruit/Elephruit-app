@@ -127,7 +127,7 @@ public struct TimeView: View {
                 // ### Why the summary disappears rather than reading zero
                 // A period with nothing in it used to say so three times on one screen: "Nothing
                 // tracked" in the window subtitle, a large "0:00" over the words "Nothing tracked
-                // in this period.", and then the centred empty state below saying "No time tracked
+                // in this period.", and then the centered empty state below saying "No time tracked
                 // today" with the instruction and the button.
                 //
                 // Only the last of those is worth the room. It is the one that says what to do

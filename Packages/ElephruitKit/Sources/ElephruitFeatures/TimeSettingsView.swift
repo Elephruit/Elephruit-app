@@ -65,8 +65,8 @@ public struct TimeSettingsSection: View {
                 Text("Rounding changes what a report and an export say. It never changes a recorded entry — an hour that ran for fifty-one minutes stays fifty-one minutes, because that is the only number that could ever settle a dispute.")
 
                 Text(dayTargetHours > 0
-                    ? "A progress bar towards \(TimeFormatting.spelled(dayTargetHours * 3_600)) appears above today's log."
-                    : "Leave this at zero for no progress bar. Nobody should be shown progress towards a number they never set.")
+                    ? "A progress bar toward \(TimeFormatting.spelled(dayTargetHours * 3_600)) appears above today's log."
+                    : "Leave this at zero for no progress bar. Nobody should be shown progress toward a number they never set.")
             }
             .font(Theme.Text.metadata)
             .foregroundStyle(Theme.Colors.secondaryText)

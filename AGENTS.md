@@ -17,3 +17,9 @@ These rules apply to every task in this repository.
 - Run tests or other proportionate verification before committing whenever practical.
 - Do not combine unrelated changes or user-owned edits in a commit.
 - Do not leave completed task work uncommitted unless the user explicitly asks for that.
+
+## Language
+
+- Use US English for all user-facing copy, documentation, comments, test names, and new identifiers.
+- Preserve legacy persisted values and accepted external-input aliases only when changing their
+  spelling would break compatibility; do not surface those spellings in the interface.

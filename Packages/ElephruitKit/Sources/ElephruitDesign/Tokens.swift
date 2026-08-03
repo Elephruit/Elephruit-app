@@ -347,7 +347,7 @@ extension Theme {
 
         /// Resolves a stored name, falling back to the accent colour.
         ///
-        /// The accent fallback suits the places where "uncoloured" should still read as alive — a
+        /// The accent fallback suits the places where "uncolored" should still read as alive — a
         /// calendar with no recorded colour. For a glyph beside content, prefer
         /// ``color(named:neutral:)``: an accent fallback there makes an *unchosen* colour
         /// indistinguishable from a *selected* row.
