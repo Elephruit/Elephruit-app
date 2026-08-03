@@ -43,9 +43,11 @@ struct ReminderComposer: View {
                 if !inlineSuggestions.isEmpty {
                     inlineSuggestionList
                 }
+                metadataSummary
                 checklist
             }
             .padding(Theme.Spacing.medium)
+            .animation(.snappy(duration: 0.18), value: activeField == .checklist)
 
             Divider()
             actionRow
@@ -213,8 +215,88 @@ struct ReminderComposer: View {
     }
 
     @ViewBuilder
+    private var metadataSummary: some View {
+        if !draft.tagSlugs.isEmpty
+            || !draft.personNames.isEmpty
+            || draft.startAt != nil
+            || draft.dueAt != nil
+            || draft.isSomeday {
+            VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                if !draft.tagSlugs.isEmpty {
+                    FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
+                        ForEach(draft.tagSlugs, id: \.self) { slug in
+                            CaptureChip(
+                                symbolName: "number",
+                                label: TextNormalizer.slugComponents(slug).last ?? slug,
+                                removalDescription: "Remove the tag \(slug)"
+                            ) {
+                                draft.tagSlugs.removeAll { $0 == slug }
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("tasks.reminderComposer.tagSummary")
+                }
+
+                if !draft.personNames.isEmpty {
+                    FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
+                        ForEach(draft.personNames, id: \.self) { name in
+                            CaptureChip(
+                                symbolName: "person",
+                                label: name,
+                                removalDescription: "Remove \(name) from this reminder"
+                            ) {
+                                draft.personNames.removeAll { $0 == name }
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("tasks.reminderComposer.peopleSummary")
+                }
+
+                if draft.startAt != nil || draft.dueAt != nil || draft.isSomeday {
+                    FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
+                        if let start = draft.startAt {
+                            CaptureChip(
+                                symbolName: "calendar",
+                                label: "When: \(summaryDate(start))",
+                                removalDescription: "Clear when this reminder starts"
+                            ) {
+                                draft.startAt = nil
+                                draft.isSomeday = false
+                            }
+                        } else if draft.isSomeday {
+                            CaptureChip(
+                                symbolName: "archivebox",
+                                label: "Someday",
+                                removalDescription: "Clear Someday"
+                            ) {
+                                draft.isSomeday = false
+                            }
+                        }
+
+                        if let deadline = draft.dueAt {
+                            CaptureChip(
+                                symbolName: "flag",
+                                label: "Deadline: \(summaryDate(deadline))",
+                                removalDescription: "Clear this reminder's deadline"
+                            ) {
+                                draft.dueAt = nil
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("tasks.reminderComposer.dateSummary")
+                }
+            }
+            .padding(.leading, 21)
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
+        }
+    }
+
+    @ViewBuilder
     private var checklist: some View {
-        if draft.hasChecklistContent {
+        if draft.hasChecklistContent || activeField == .checklist {
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 ForEach(draft.checklist) { step in
                     HStack(spacing: Theme.Spacing.small) {
@@ -236,35 +318,47 @@ struct ReminderComposer: View {
                     .frame(minHeight: Theme.Size.rowHeight)
                 }
 
-                HStack(spacing: Theme.Spacing.small) {
-                    Image(systemName: "circle")
-                        .foregroundStyle(Theme.Colors.tertiaryText)
+                if activeField == .checklist {
+                    HStack(spacing: Theme.Spacing.small) {
+                        Image(systemName: "circle")
+                            .foregroundStyle(Theme.CaptureToken.accent)
 
-                    ReminderPlainTextEditor(
-                        text: $draft.pendingStep,
-                        placeholder: "Add a checklist item",
-                        role: .body,
-                        onTab: { reverse in
-                            if !reverse { draft.commitPendingStep() }
-                            move(from: .checklist, reverse: reverse)
-                        },
-                        onReturn: {
-                            draft.commitPendingStep()
-                            activate(.checklist)
-                        },
-                        onCommandReturn: commitAndClose,
-                        onEscape: onCancel,
-                        field: .checklist,
-                        focusRouter: focusRouter,
-                        onDeleteBackwardWhenEmpty: removeLastChecklistItem,
-                        onFocus: { activate(.checklist) }
+                        ReminderPlainTextEditor(
+                            text: $draft.pendingStep,
+                            placeholder: "Add a checklist item",
+                            role: .body,
+                            onTab: { reverse in
+                                if !reverse { draft.commitPendingStep() }
+                                move(from: .checklist, reverse: reverse)
+                            },
+                            onReturn: {
+                                draft.commitPendingStep()
+                                activate(.checklist)
+                            },
+                            onCommandReturn: commitAndClose,
+                            onEscape: onCancel,
+                            field: .checklist,
+                            focusRouter: focusRouter,
+                            onDeleteBackwardWhenEmpty: removeLastChecklistItem,
+                            onFocus: { activate(.checklist) }
+                        )
+                        .frame(height: 24)
+                        .accessibilityIdentifier("tasks.reminderComposer.checklistField")
+                    }
+                    .padding(.horizontal, Theme.Spacing.small)
+                    .frame(minHeight: Theme.Size.rowHeight)
+                    .background(
+                        Theme.Colors.selectionFill,
+                        in: RoundedRectangle(
+                            cornerRadius: Theme.Radius.small,
+                            style: .continuous
+                        )
                     )
-                    .frame(height: 24)
-                    .accessibilityIdentifier("tasks.reminderComposer.checklistField")
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
-                .frame(minHeight: Theme.Size.rowHeight)
             }
             .padding(.leading, 21)
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
         }
     }
 
@@ -299,7 +393,7 @@ struct ReminderComposer: View {
                         commitWhenQuery()
                         activate(.tags)
                     },
-                    escapeTo: .notes
+                    escapeTo: .project
                 )
             } else {
                 actionButton(
@@ -394,7 +488,7 @@ struct ReminderComposer: View {
                     width: 160,
                     onTab: { reverse in move(from: .project, reverse: reverse) },
                     onReturn: chooseFirstMatchingProject,
-                    escapeTo: .deadline
+                    escapeTo: .notes
                 )
             } else {
                 Button { activate(.project) } label: {
@@ -448,7 +542,7 @@ struct ReminderComposer: View {
                     },
                     onReturn: {
                         commitDeadlineQuery()
-                        activate(.project)
+                        activate(.title)
                     },
                     escapeTo: .checklist
                 )
@@ -469,7 +563,7 @@ struct ReminderComposer: View {
                 allowsSomeday: false,
                 onPick: { date in
                     draft.dueAt = date
-                    activate(.project)
+                    activate(.title)
                 }
             )
         }
@@ -636,7 +730,7 @@ struct ReminderComposer: View {
                 Button {
                     draft.projectTitle = nil
                     projectQuery = ""
-                    activate(.title)
+                    activate(.when)
                 } label: {
                     Label("No Project", systemImage: "xmark.circle")
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1144,7 +1238,7 @@ struct ReminderComposer: View {
             draft.dueAt = date
             deadlineQuery = ""
             dateNavigation.reset()
-            activate(.project)
+            activate(.title)
         case .title, .notes, .tags, .people, .checklist, .project:
             return false
         }
@@ -1172,6 +1266,7 @@ struct ReminderComposer: View {
             presentPopupAfterLayout(for: field)
             return
         }
+        collapseTransientEditor(activeField)
         resetMetadataSuggestion()
         dateNavigation.reset()
         focusRouter.activate(field)
@@ -1181,6 +1276,29 @@ struct ReminderComposer: View {
         }
 
         presentPopupAfterLayout(for: field)
+    }
+
+    /// Query text belongs to an open picker, not to the reminder itself. Leaving a picker without
+    /// choosing anything must therefore restore its icon/value instead of preserving a stranded
+    /// placeholder editor. Checklist text is different: it is user content, so it is committed as
+    /// the input row animates closed.
+    private func collapseTransientEditor(_ field: ReminderComposerField) {
+        switch field {
+        case .when:
+            whenQuery = ""
+        case .tags:
+            tagQuery = ""
+        case .people:
+            peopleQuery = ""
+        case .checklist:
+            draft.commitPendingStep()
+        case .deadline:
+            deadlineQuery = ""
+        case .project:
+            projectQuery = ""
+        case .title, .notes:
+            break
+        }
     }
 
     private func presentPopupAfterLayout(for field: ReminderComposerField) {
@@ -1284,7 +1402,7 @@ struct ReminderComposer: View {
     private func chooseProject(_ title: String) {
         draft.projectTitle = title
         projectQuery = ""
-        activate(.title)
+        activate(.when)
     }
 
     private func refreshLibraryFacts() {
@@ -1338,6 +1456,10 @@ struct ReminderComposer: View {
 
     private func shortDate(_ date: Date) -> String {
         date.formatted(.dateTime.month(.abbreviated).day())
+    }
+
+    private func summaryDate(_ date: Date) -> String {
+        date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
     }
 
     private func removeLastChecklistItem() -> Bool {
@@ -1549,6 +1671,14 @@ final class ReminderEditorTextView: NSTextView {
         super.viewDidMoveToWindow()
         guard window != nil else { return }
         focusRouter?.register(self, for: focusField)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        // An NSTextView can remain in an editing session while another composer field temporarily
+        // owns first responder. In that case AppKit does not send `textDidBeginEditing` again when
+        // the user clicks back into it, so route the click explicitly before normal caret handling.
+        MainActor.assumeIsolated { coordinator?.parent.onFocus() }
+        super.mouseDown(with: event)
     }
 
     /// The text system may dispatch these actions directly, without a raw key event or delegate

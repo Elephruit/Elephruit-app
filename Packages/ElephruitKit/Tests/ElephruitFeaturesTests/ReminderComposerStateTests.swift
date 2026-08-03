@@ -10,20 +10,21 @@ struct ReminderComposerStateTests {
     @Test("Tab follows the promised path and wraps")
     func forwardTraversal() {
         #expect(ReminderComposerField.title.advanced() == .notes)
-        #expect(ReminderComposerField.notes.advanced() == .when)
+        #expect(ReminderComposerField.notes.advanced() == .project)
+        #expect(ReminderComposerField.project.advanced() == .when)
         #expect(ReminderComposerField.when.advanced() == .tags)
         #expect(ReminderComposerField.tags.advanced() == .people)
         #expect(ReminderComposerField.people.advanced() == .checklist)
         #expect(ReminderComposerField.checklist.advanced() == .deadline)
-        #expect(ReminderComposerField.deadline.advanced() == .project)
-        #expect(ReminderComposerField.project.advanced() == .title)
+        #expect(ReminderComposerField.deadline.advanced() == .title)
     }
 
     @Test("Shift-Tab follows the same path backwards")
     func reverseTraversal() {
-        #expect(ReminderComposerField.title.advanced(reverse: true) == .project)
+        #expect(ReminderComposerField.title.advanced(reverse: true) == .deadline)
         #expect(ReminderComposerField.checklist.advanced(reverse: true) == .people)
         #expect(ReminderComposerField.notes.advanced(reverse: true) == .title)
+        #expect(ReminderComposerField.project.advanced(reverse: true) == .notes)
     }
 
     @Test("A saved reminder can repopulate the entire composer")

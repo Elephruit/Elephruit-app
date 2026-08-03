@@ -9,12 +9,12 @@ import Foundation
 enum ReminderComposerField: Int, CaseIterable, Sendable, Hashable {
     case title
     case notes
+    case project
     case when
     case tags
     case people
     case checklist
     case deadline
-    case project
 
     func advanced(reverse: Bool = false) -> Self {
         let fields = Self.allCases
