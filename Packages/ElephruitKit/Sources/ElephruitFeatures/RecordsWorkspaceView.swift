@@ -263,13 +263,13 @@ private struct RecordDetail: View {
                     Text(summary.isEmpty ? "No description yet." : summary)
                         .foregroundStyle(summary.isEmpty ? Theme.Colors.tertiaryText : Theme.Colors.primaryText)
                 }
-                ForEach(details.keys.filter { $0 != "summary" }.sorted(), id: \.self) { key in
-                    LabeledContent(key.replacingOccurrences(of: "_", with: " ").capitalized) {
+                ForEach(visibleDetailKeys, id: \.self) { key in
+                    LabeledContent(detailDisplayName(key)) {
                         if isEditing {
                             TextField(key.capitalized, text: detailBinding(key))
                                 .multilineTextAlignment(.trailing)
                         } else {
-                            Text(details[key] ?? "")
+                            detailValue(key)
                         }
                     }
                 }
@@ -317,15 +317,7 @@ private struct RecordDetail: View {
                     ],
                     emptyMessage: "Add species, breed, or birthday."
                 )
-                petInfoCard(
-                    title: "Care",
-                    symbol: "cross.case",
-                    fields: [
-                        ("Veterinarian", "vet"),
-                        ("Medications", "medications"),
-                    ],
-                    emptyMessage: "Add a veterinarian or medication details."
-                )
+                petCareCard
             }
 
             detailCard(title: "Notes", symbol: "note.text") {
@@ -369,6 +361,80 @@ private struct RecordDetail: View {
         .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
         .background(Theme.Colors.subtleFill)
         .clipShape(.rect(cornerRadius: Theme.Radius.large))
+    }
+
+    private var petCareCard: some View {
+        let vet = details["vet"] ?? ""
+        let medications = details["medications"] ?? ""
+        let hasContactDetails = ["vet_address", "vet_phone", "vet_website", "vet_maps_url"]
+            .contains { !(details[$0] ?? "").isEmpty }
+
+        return VStack(alignment: .leading, spacing: Theme.Spacing.large) {
+            Label("Care", systemImage: "cross.case")
+                .font(Theme.Text.rowTitleEmphasised)
+
+            if vet.isEmpty && medications.isEmpty && !hasContactDetails {
+                Text("Add a veterinarian or medication details.")
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+            } else {
+                if !vet.isEmpty {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                        Text("Veterinarian")
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                        Text(vet)
+                            .font(Theme.Text.rowTitleEmphasised)
+                            .textSelection(.enabled)
+                        placeContactRows(prefix: "vet")
+                    }
+                }
+                if !medications.isEmpty {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+                        Text("Medications")
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                        Text(medications)
+                            .font(Theme.Text.rowTitleEmphasised)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(Theme.Spacing.large)
+        .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
+        .background(Theme.Colors.subtleFill)
+        .clipShape(.rect(cornerRadius: Theme.Radius.large))
+    }
+
+    @ViewBuilder
+    private func placeContactRows(prefix: String) -> some View {
+        let value: (String) -> String = { details["\(prefix)_\($0)"] ?? "" }
+        if !value("address").isEmpty {
+            Label(value("address"), systemImage: "mappin")
+                .font(Theme.Text.rowSubtitle)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .textSelection(.enabled)
+        }
+        if let phoneURL = URL(string: "tel:\(value("phone"))"), !value("phone").isEmpty {
+            Link(destination: phoneURL) {
+                Label(value("phone"), systemImage: "phone")
+            }
+            .font(Theme.Text.rowSubtitle)
+        }
+        if let websiteURL = URL(string: value("website")), !value("website").isEmpty {
+            Link(destination: websiteURL) {
+                Label("Website", systemImage: "safari")
+            }
+            .font(Theme.Text.rowSubtitle)
+        }
+        if let mapsURL = URL(string: value("maps_url")), !value("maps_url").isEmpty {
+            Link(destination: mapsURL) {
+                Label("Open in Maps", systemImage: "map")
+            }
+            .font(Theme.Text.rowSubtitle)
+        }
     }
 
     private var history: some View {
@@ -452,6 +518,34 @@ private struct RecordDetail: View {
 
     private func detailBinding(_ key: String) -> Binding<String> {
         Binding(get: { details[key] ?? "" }, set: { details[key] = $0 })
+    }
+
+    private var visibleDetailKeys: [String] {
+        details.keys.filter { key in
+            key != "summary"
+                && !key.hasSuffix("map_item_id")
+                && !key.hasSuffix("latitude")
+                && !key.hasSuffix("longitude")
+        }.sorted()
+    }
+
+    private func detailDisplayName(_ key: String) -> String {
+        if key.hasSuffix("maps_url") { return "Apple Maps" }
+        return key.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    @ViewBuilder
+    private func detailValue(_ key: String) -> some View {
+        let value = details[key] ?? ""
+        if key.hasSuffix("maps_url"), let url = URL(string: value) {
+            Link("Open in Maps", destination: url)
+        } else if key.hasSuffix("website"), let url = URL(string: value) {
+            Link("Website", destination: url)
+        } else if key.hasSuffix("phone"), let url = URL(string: "tel:\(value)") {
+            Link(value, destination: url)
+        } else {
+            Text(value).textSelection(.enabled)
+        }
     }
 }
 
@@ -575,6 +669,13 @@ struct NewRecordEditor: View {
                 editorField(label: "Suffix", text: binding("name_suffix"), focusID: "name_suffix")
                 Divider()
                 editorField(label: "Nickname", text: binding("nickname"), focusID: "nickname")
+            } else if type == .organization {
+                MapPlaceSearchField(
+                    label: "Organization name",
+                    text: $name,
+                    onSelect: { applyMapListing($0, prefix: nil) },
+                    onClear: { clearMapListing(prefix: nil) }
+                )
             } else {
                 editorField(label: namePrompt, text: $name, focusID: "name")
             }
@@ -589,7 +690,16 @@ struct NewRecordEditor: View {
 
             editorCard {
                 ForEach(Array(detailFields.enumerated()), id: \.element.key) { index, field in
-                    editorField(label: field.label, text: binding(field.key), focusID: field.key)
+                    if let prefix = mapPrefix(for: field.key) {
+                        MapPlaceSearchField(
+                            label: field.label,
+                            text: binding(field.key),
+                            onSelect: { applyMapListing($0, prefix: prefix) },
+                            onClear: { clearMapListing(prefix: prefix) }
+                        )
+                    } else {
+                        editorField(label: field.label, text: binding(field.key), focusID: field.key)
+                    }
                     if index < detailFields.count - 1 { Divider() }
                 }
             }
@@ -732,6 +842,41 @@ struct NewRecordEditor: View {
 
     private func binding(_ key: String) -> Binding<String> {
         Binding(get: { details[key] ?? "" }, set: { details[key] = $0 })
+    }
+
+    private func mapPrefix(for key: String) -> String? {
+        switch (type, key) {
+        case (.pet, "vet"): "vet"
+        case (.person, "organization"): "organization"
+        default: nil
+        }
+    }
+
+    private func applyMapListing(_ listing: MapPlaceListing, prefix: String?) {
+        let key: (String) -> String = { suffix in
+            prefix.map { "\($0)_\(suffix)" } ?? suffix
+        }
+        if let prefix {
+            details[prefix] = listing.name
+        } else {
+            name = listing.name
+        }
+        details[key("address")] = listing.address
+        details[key("phone")] = listing.phone
+        details[key("website")] = listing.website
+        details[key("maps_url")] = listing.mapsURL
+        details[key("map_item_id")] = listing.mapItemIdentifier ?? ""
+        details[key("latitude")] = listing.latitude
+        details[key("longitude")] = listing.longitude
+    }
+
+    private func clearMapListing(prefix: String?) {
+        let key: (String) -> String = { suffix in
+            prefix.map { "\($0)_\(suffix)" } ?? suffix
+        }
+        for suffix in ["address", "phone", "website", "maps_url", "map_item_id", "latitude", "longitude"] {
+            details[key(suffix)] = nil
+        }
     }
 }
 

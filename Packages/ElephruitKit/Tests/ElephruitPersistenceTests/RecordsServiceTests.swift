@@ -34,7 +34,14 @@ struct RecordsServiceTests {
         let pet = try records.create(RecordDraft(
             name: "Juniper",
             type: .pet,
-            details: ["species": "Dog", "vet": "Lakeview Animal Hospital"]
+            details: [
+                "species": "Dog",
+                "vet": "Lakeview Animal Hospital",
+                "vet_address": "10 Lakeview Drive",
+                "vet_phone": "+15125550120",
+                "vet_maps_url": "https://maps.apple.com/?q=Lakeview%20Animal%20Hospital",
+                "vet_map_item_id": "map-item-123",
+            ]
         ))
         let vehicle = try records.create(RecordDraft(
             name: "Family wagon",
@@ -49,6 +56,9 @@ struct RecordsServiceTests {
 
         let persistedPet = try store.requireItem(id: pet.id)
         #expect(persistedPet.recordProfile?.details["vet"] == "Lakeview Animal Hospital")
+        #expect(persistedPet.recordProfile?.details["vet_address"] == "10 Lakeview Drive")
+        #expect(persistedPet.recordProfile?.details["vet_phone"] == "+15125550120")
+        #expect(persistedPet.recordProfile?.details["vet_map_item_id"] == "map-item-123")
     }
 
     @Test("People retain structured Apple Contacts fields")
