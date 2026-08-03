@@ -162,7 +162,6 @@ struct TimeTrackerCard: View {
             Image(systemName: "record.circle")
                 .font(.title3)
                 .foregroundStyle(Theme.Colors.recording)
-                .symbolEffect(.pulse, options: .repeating)
                 .accessibilityHidden(true)
 
             TextField("Add a description", text: $draft.description)
