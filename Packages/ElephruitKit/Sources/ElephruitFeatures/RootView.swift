@@ -113,6 +113,9 @@ public struct RootView: View {
         }
         .environment(navigation)
         .swipeActionCoordinator(swipes)
+        // Event monitors are application-wide even though the coordinator is window-scoped. The
+        // hover tells it which shell may claim a swipe that did not begin over an action row.
+        .onHover { swipes.setWindowHovered($0) }
         // Changing what is selected puts away anything a row was offering. The actions were about
         // the row you were on, and you are no longer on it.
         .onChange(of: navigation.selection) { _, _ in swipes.closeAll() }
@@ -184,6 +187,15 @@ public struct RootView: View {
         .task {
             // The ladder decides that Escape should close a revealed row; this is what does it.
             navigation.onCloseRowActions = { swipes.closeAll() }
+
+            // Horizontal two-finger gestures that do not belong to a row change the leading
+            // sidebar. The weak capture avoids joining the two window-scoped coordinators into a
+            // retain cycle: navigation already owns the callback that closes row actions above.
+            swipes.onSidebarSwipe = { [weak navigation = navigation] direction in
+                withAnimation(.easeOut(duration: 0.2)) {
+                    navigation?.setSidebarVisible(direction == .show)
+                }
+            }
 
             // Before the calendar request, so a link that arrived at launch wins over the place the
             // window was last left rather than being overwritten by it.

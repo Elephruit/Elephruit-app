@@ -217,6 +217,29 @@ struct LayoutAndFocusTests {
         #expect(navigation.layoutMode == .full)
     }
 
+    @Test("Directional sidebar changes are idempotent")
+    func directionalSidebarVisibility() {
+        let navigation = NavigationModel()
+
+        navigation.setSidebarVisible(false)
+        navigation.setSidebarVisible(false)
+        #expect(navigation.layoutMode == .twoPane)
+
+        navigation.setSidebarVisible(true)
+        navigation.setSidebarVisible(true)
+        #expect(navigation.layoutMode == .full)
+    }
+
+    @Test("Showing the sidebar leaves focus mode")
+    func showingSidebarLeavesFocusMode() {
+        let navigation = NavigationModel()
+        navigation.setLayoutMode(.focus)
+
+        navigation.setSidebarVisible(true)
+
+        #expect(navigation.layoutMode == .full)
+    }
+
     @Test("Focus mode is its own toggle and returns to full")
     func focusModeToggle() {
         let navigation = NavigationModel()

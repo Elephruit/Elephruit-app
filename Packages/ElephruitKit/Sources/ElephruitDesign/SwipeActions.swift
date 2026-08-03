@@ -93,6 +93,15 @@ public final class SwipeActionCoordinator {
     @ObservationIgnored private var accumulatedX: CGFloat = 0
     @ObservationIgnored private var accumulatedY: CGFloat = 0
     @ObservationIgnored private var hasGivenUp = false
+    @ObservationIgnored private var isSidebarCandidate = false
+    @ObservationIgnored private var isTrackingSidebar = false
+    @ObservationIgnored private var isWindowHovered = false
+
+    /// Handles a horizontal swipe that did not begin over a row with swipe actions.
+    ///
+    /// The shell supplies this callback. Keeping it optional lets the design layer own one event
+    /// monitor without needing to know anything about the feature layer's navigation model.
+    @ObservationIgnored public var onSidebarSwipe: ((SidebarSwipeDirection) -> Void)?
 
     /// Rows with an action in flight, so a gesture and a click landing together delete once.
     @ObservationIgnored private var performing: Set<AnyHashable> = []
@@ -107,6 +116,14 @@ public final class SwipeActionCoordinator {
 
     public init() {
         install()
+    }
+
+    /// Identifies which window owns an otherwise unclaimed scroll event.
+    ///
+    /// Local event monitors are application-wide. Without this bit, every open window whose pointer
+    /// was not over one of its rows would respond to the same sidebar swipe.
+    public func setWindowHovered(_ isHovered: Bool) {
+        isWindowHovered = isHovered
     }
 
     // MARK: - Row registration
@@ -217,6 +234,8 @@ public final class SwipeActionCoordinator {
         accumulatedX = 0
         accumulatedY = 0
         hasGivenUp = false
+        isSidebarCandidate = false
+        isTrackingSidebar = false
     }
 
     // MARK: - Running an action
@@ -277,7 +296,7 @@ public final class SwipeActionCoordinator {
         // Momentum is the glide after the fingers have left. A row that kept opening through it
         // would open further than anybody asked for, so the gesture ends when the touch does.
         guard event.momentumPhase.isEmpty else {
-            return trackingRow != nil
+            return trackingRow != nil || isTrackingSidebar
         }
 
         switch event.phase {
@@ -285,7 +304,9 @@ public final class SwipeActionCoordinator {
             candidate = hoveredRow
             accumulatedX = 0
             accumulatedY = 0
-            hasGivenUp = candidate == nil
+            isSidebarCandidate = candidate == nil && isWindowHovered && onSidebarSwipe != nil
+            isTrackingSidebar = false
+            hasGivenUp = candidate == nil && !isSidebarCandidate
             return false
 
         case .changed:
@@ -296,8 +317,11 @@ public final class SwipeActionCoordinator {
                 settle()
                 return true
             }
-            candidate = nil
-            hasGivenUp = false
+            if isTrackingSidebar {
+                settleSidebarSwipe()
+                return true
+            }
+            endTracking()
             return false
 
         default:
@@ -319,7 +343,13 @@ public final class SwipeActionCoordinator {
             return true
         }
 
-        guard !hasGivenUp, let candidate else { return false }
+        if isTrackingSidebar {
+            accumulatedX += deltaX
+            accumulatedY += deltaY
+            return true
+        }
+
+        guard !hasGivenUp else { return false }
 
         accumulatedX += deltaX
         accumulatedY += deltaY
@@ -335,6 +365,13 @@ public final class SwipeActionCoordinator {
             return false
         }
 
+        if isSidebarCandidate {
+            isTrackingSidebar = true
+            return true
+        }
+
+        guard let candidate else { return false }
+
         // Only one row is ever open, and beginning a swipe on another is one of the ways of saying
         // so.
         if openRow != candidate { openRow = nil }
@@ -342,6 +379,12 @@ public final class SwipeActionCoordinator {
         trackingRow = candidate
         translation = accumulatedX
         return true
+    }
+
+    private func settleSidebarSwipe() {
+        let direction = SidebarSwipeGesture.direction(forTranslation: accumulatedX)
+        endTracking()
+        if let direction { onSidebarSwipe?(direction) }
     }
 
     private func settle() {
