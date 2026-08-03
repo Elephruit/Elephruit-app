@@ -1165,7 +1165,7 @@ struct ReminderComposer: View {
             tagQuery = ""
         case .people:
             togglePerson(suggestion)
-            peopleQuery = ""
+            prepareForNextPerson()
         case .project:
             chooseProject(suggestion)
         case .title, .notes, .when, .checklist, .deadline:
@@ -1402,7 +1402,19 @@ struct ReminderComposer: View {
     private func toggleFirstMatchingPerson() {
         guard let first = matchingPeople.first else { return }
         togglePerson(first)
+        prepareForNextPerson()
+    }
+
+    /// Clears both halves of the AppKit-backed field without moving first responder.
+    ///
+    /// Updating `peopleQuery` alone resets the results but can leave the editor's previous text on
+    /// screen until its next reconciliation. Writing through the focus router makes the visible
+    /// field and its filter empty together, with the caret ready for the next person's name.
+    private func prepareForNextPerson() {
         peopleQuery = ""
+        focusRouter.replaceText("", caret: 0, for: .people)
+        metadataSuggestionSelection = 0
+        metadataSuggestionWasNavigated = false
     }
 
     private func togglePerson(_ name: String) {

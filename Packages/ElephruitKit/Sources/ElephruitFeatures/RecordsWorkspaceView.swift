@@ -439,21 +439,77 @@ private struct RecordDetail: View {
 
     private var history: some View {
         detailCard(title: "History", symbol: "clock.arrow.circlepath") {
-            if record.activities.isEmpty {
+            if historyEntries.isEmpty {
                 Text("Interactions, appointments, maintenance, medication changes, and other events will build a timeline here.")
                     .foregroundStyle(Theme.Colors.tertiaryText)
             } else {
-                ForEach(record.activities.sorted { $0.at > $1.at }) { activity in
-                    LabeledContent(activity.sentence) { Text(activity.at, style: .date) }
+                ForEach(historyEntries) { entry in
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
+                        Image(systemName: entry.symbolName)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                            .frame(width: Theme.Size.rowGlyph)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(entry.title)
+                            if let detail = entry.detail {
+                                Text(detail)
+                                    .font(Theme.Text.metadata)
+                                    .foregroundStyle(Theme.Colors.tertiaryText)
+                            }
+                        }
+                        Spacer(minLength: Theme.Spacing.small)
+                        Text(entry.date, style: .date)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                    }
                     Divider()
                 }
             }
         }
     }
 
+    /// Calendar tags are participant links to a lazily-created meeting item. Reading those links
+    /// here makes the tag an interaction on the record as well as preparation context on the event.
+    private var historyEntries: [RecordHistoryEntry] {
+        let activities = record.activities.map { activity in
+            RecordHistoryEntry(
+                id: "activity-\(activity.id.uuidString)",
+                date: activity.at,
+                title: activity.sentence,
+                detail: nil,
+                symbolName: "clock.arrow.circlepath"
+            )
+        }
+
+        let meetings = (record.incomingLinks + record.outgoingLinks).compactMap { link -> Item? in
+            guard link.kind == .participant else { return nil }
+            let other = link.source?.id == record.id ? link.target : link.source
+            return other?.kind == .meeting ? other : nil
+        }.map { meeting in
+            RecordHistoryEntry(
+                id: "meeting-\(meeting.id.uuidString)",
+                date: meeting.eventReference?.startAt ?? meeting.startAt ?? meeting.createdAt,
+                title: meeting.displayTitle,
+                detail: "Calendar interaction",
+                symbolName: "calendar"
+            )
+        }
+
+        return (activities + meetings).sorted { $0.date > $1.date }
+    }
+
+    private struct RecordHistoryEntry: Identifiable {
+        let id: String
+        let date: Date
+        let title: String
+        let detail: String?
+        let symbolName: String
+    }
+
     private var relationships: some View {
         detailCard(title: "Relationships", symbol: "point.3.connected.trianglepath.dotted") {
-            let links = record.outgoingLinks + record.incomingLinks
+            let links = (record.outgoingLinks + record.incomingLinks).filter { link in
+                let related = link.source?.id == record.id ? link.target : link.source
+                return link.kind != .participant || related?.kind != .meeting
+            }
             if links.isEmpty {
                 Text("Connect this record to people, households, organizations, vehicles, pets, projects, and notes.")
                     .foregroundStyle(Theme.Colors.tertiaryText)

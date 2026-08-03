@@ -36,8 +36,7 @@ public struct InspectorView: View {
         Group {
             if let event = selectedEvent {
                 EventInspectorView(event: event) { id in
-                    navigation.select(.kind(.note))
-                    navigation.selectItem(id)
+                    openEventLinkedItem(id)
                 }
             } else if let item = currentItem, item.kind == .person {
                 // A person's inspector is the contextual pane Records specifies — upcoming
@@ -81,6 +80,19 @@ public struct InspectorView: View {
               let services
         else { return nil }
         return services.calendar.events.first { $0.id == id }
+    }
+
+    /// A tagged Record belongs in Records; notes and meeting history keep the established library
+    /// route. Without this distinction, clicking a tagged pet or vehicle selected its identifier in
+    /// Notes, where it could never be displayed.
+    private func openEventLinkedItem(_ id: UUID) {
+        if let services, let item = try? services.items.item(id: id),
+           item.recordProfile != nil || item.kind == .person {
+            navigation.select(.records(.all))
+        } else {
+            navigation.select(.kind(.note))
+        }
+        navigation.selectItem(id)
     }
 
     private func content(for item: Item) -> some View {

@@ -24,7 +24,32 @@ struct TodayEventRow: View {
     @State private var isHovering = false
     @FocusState private var isFocused: Bool
 
+    private var isExpanded: Bool { model.expandedEventID == event.id }
+
     var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+            summary
+
+            if isExpanded {
+                TodayEventInlineDetail(event: event, actions: actions) {
+                    withAnimation(.easeInOut(duration: 0.16)) { model.collapseEventDetails() }
+                }
+                // The panel belongs beneath this row. Moving it in from `.top` made it cross the
+                // event summary (and sometimes the rows above it) before reaching that position.
+                .transition(.opacity)
+            }
+        }
+        .opacity(event.event.isCancelled ? 0.55 : 1)
+        .contextMenu {
+            TodayEventMenu(event: event, model: model, actions: actions)
+        }
+        .help(tooltip)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier(AccessibilityID.Today.event(event.id))
+    }
+
+    private var summary: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.small) {
             timeColumn
 
@@ -43,30 +68,27 @@ struct TodayEventRow: View {
 
             Spacer(minLength: Theme.Spacing.small)
 
-            if isHovering || isFocused { hoverActions }
+            if isHovering || isFocused || isExpanded { hoverActions }
         }
         .padding(.vertical, Theme.Spacing.tight)
-        .opacity(event.event.isCancelled ? 0.55 : 1)
         .contentShape(.rect)
+        .onTapGesture { toggleDetails() }
         .onHover { isHovering = $0 }
-        .hoverHighlight(extending: Theme.Spacing.small)
+        .background {
+            if isFocused || isExpanded {
+                RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                    .fill(Theme.Colors.selectionFill)
+                    .padding(.horizontal, -Theme.Spacing.small)
+            }
+        }
+        .hoverHighlight(isEnabled: !isFocused && !isExpanded, extending: Theme.Spacing.small)
         .focusable()
+        .focusEffectDisabled()
         .focused($isFocused)
         .onKeyPress(.return) {
-            // Return joins where there is a call to join and opens the notes otherwise, which is
-            // what the pointer does with the two controls the row reveals.
-            if actions.joinLink(for: event) != nil {
-                actions.join(event)
-            } else {
-                actions.openNotes(for: event)
-            }
+            toggleDetails()
             return .handled
         }
-        .contextMenu { TodayEventMenu(event: event, model: model, actions: actions) }
-        .help(tooltip)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityIdentifier(AccessibilityID.Today.event(event.id))
     }
 
     // MARK: Time
@@ -238,8 +260,20 @@ struct TodayEventRow: View {
             .foregroundStyle(Theme.Colors.secondaryText)
             .help("Notes for this meeting")
             .accessibilityLabel("Notes for \(event.event.displayTitle)")
+
+            Button(action: toggleDetails) {
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(Theme.Colors.secondaryText)
+            .help(isExpanded ? "Hide calendar details" : "Show calendar details and records")
+            .accessibilityLabel(isExpanded ? "Hide details" : "Show details")
         }
         .transition(.opacity)
+    }
+
+    private func toggleDetails() {
+        withAnimation(.easeInOut(duration: 0.16)) { model.toggleEventDetails(event.id) }
     }
 
     // MARK: Descriptions
@@ -273,6 +307,209 @@ struct TodayEventRow: View {
         if event.event.isCancelled { parts.append("canceled") }
         if let preparation = event.preparation.summary { parts.append(preparation) }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// Calendar context and private preparation, revealed only when somebody asks for it.
+///
+/// Keeping this out of the collapsed row is also a performance boundary: resolving annotations and
+/// Records touches the local store, so the ordinary schedule remains as cheap as it was before
+/// Records could be linked to events.
+private struct TodayEventInlineDetail: View {
+    @Environment(\.services) private var services
+
+    let event: DayEvent
+    let actions: TodayActions
+    let collapse: () -> Void
+
+    @State private var linkedRecords: [Item] = []
+    @State private var isShowingRecordPicker = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            HStack(spacing: Theme.Spacing.small) {
+                Label("Calendar details", systemImage: "calendar")
+                    .font(Theme.Text.sectionHeader)
+
+                Spacer(minLength: 0)
+
+                Button("Open in Calendar", systemImage: "arrow.up.forward.app") {
+                    actions.openInCalendar(event)
+                }
+                .buttonStyle(.borderless)
+                .font(Theme.Text.metadata)
+
+                Button("Collapse", systemImage: "chevron.up", action: collapse)
+                    .buttonStyle(.borderless)
+                    .font(Theme.Text.metadata)
+                    .keyboardShortcut(.escape, modifiers: [])
+            }
+
+            details
+
+            Divider()
+
+            records
+
+            Divider()
+
+            HStack(spacing: Theme.Spacing.small) {
+                if actions.joinLink(for: event) != nil {
+                    Button("Join Call", systemImage: "video") { actions.join(event) }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                }
+
+                Button("Meeting Notes", systemImage: "note.text") { actions.openNotes(for: event) }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
+                Button("Add Preparation Task", systemImage: "checklist") {
+                    actions.addPreparationTask(
+                        titled: "Prepare for \(event.event.displayTitle)",
+                        for: event
+                    )
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .padding(Theme.Spacing.large)
+        .background {
+            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
+                .fill(Theme.Colors.subtleFill.opacity(0.55))
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(Theme.Palette.color(named: event.event.calendarColorName))
+                        .frame(width: 3)
+                        .padding(.vertical, Theme.Spacing.large)
+                }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
+                .stroke(Theme.Colors.selection.opacity(0.22), lineWidth: 0.75)
+        }
+        .padding(.leading, TodayMetrics.timeGutterWidth + Theme.Spacing.small)
+        .padding(.horizontal, Theme.Spacing.medium)
+        .padding(.bottom, Theme.Spacing.medium)
+        .task { loadRecords() }
+        .accessibilityIdentifier("today.eventDetails.\(event.id)")
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            detailRow("When", value: whenLine)
+
+            if let calendar = event.event.calendarName, !calendar.isEmpty {
+                detailRow("Calendar", value: accountLine(calendar))
+            }
+            if let location = event.event.locationName, !location.isEmpty {
+                detailRow("Where", value: location)
+            }
+            if let organizer = event.event.organizerName, !organizer.isEmpty {
+                detailRow("Organizer", value: organizer)
+            }
+            if !event.event.attendeeNames.isEmpty {
+                detailRow("With", value: ListPhrase.joined(event.event.attendeeNames))
+            }
+            if let notes = event.event.notes, !notes.isEmpty {
+                detailRow("Calendar notes", value: notes)
+            }
+        }
+    }
+
+    private func detailRow(_ label: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
+            Text(label)
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.tertiaryText)
+                .frame(width: 90, alignment: .trailing)
+            Text(value)
+                .font(Theme.Text.rowSubtitle)
+                .foregroundStyle(Theme.Colors.primaryText)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var records: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            HStack(spacing: Theme.Spacing.small) {
+                Label("Records", systemImage: "circle.grid.2x2")
+                    .font(Theme.Text.sectionHeader)
+                Spacer(minLength: 0)
+                Button("Add Record…", systemImage: "circle.grid.2x2") {
+                    isShowingRecordPicker = true
+                }
+                .buttonStyle(.borderless)
+                .font(Theme.Text.metadata)
+                .popover(isPresented: $isShowingRecordPicker, arrowEdge: .bottom) {
+                    EventRecordPicker(
+                        event: event.event,
+                        linkedRecordIDs: Set(linkedRecords.map(\.id)),
+                        onChanged: loadRecords
+                    )
+                }
+            }
+
+            if linkedRecords.isEmpty {
+                Text("Add a person, pet, vehicle, or other record for preparation and interaction history.")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            } else {
+                ForEach(linkedRecords) { record in
+                    HStack(spacing: Theme.Spacing.small) {
+                        let type = services?.records.type(of: record) ?? .other
+                        Image(systemName: type.symbolName)
+                            .foregroundStyle(Theme.Palette.color(named: record.colorName))
+                            .frame(width: Theme.Size.rowGlyph)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(record.displayTitle).font(Theme.Text.rowSubtitle)
+                            Text(type.displayName)
+                                .font(Theme.Text.keyHint)
+                                .foregroundStyle(Theme.Colors.tertiaryText)
+                        }
+                        Spacer(minLength: 0)
+                        Button {
+                            unlink(record)
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(Theme.Colors.tertiaryText)
+                        .accessibilityLabel("Remove \(record.displayTitle) from this event")
+                    }
+                }
+            }
+        }
+    }
+
+    private var whenLine: String {
+        let calendar = services?.calendar.displayCalendar ?? Calendar.current
+        let zone = services?.calendar.timeZoneDisplay.displayZone ?? .current
+        var dayStyle = Date.FormatStyle().weekday(.wide).day().month(.wide)
+        dayStyle.timeZone = zone
+        if event.event.isAllDay {
+            return "All day · \(event.event.startAt.formatted(dayStyle))"
+        }
+        return "\(event.event.startAt.formatted(dayStyle)) · \(event.event.timeSummary(in: zone, calendar: calendar))"
+    }
+
+    private func accountLine(_ calendar: String) -> String {
+        guard let account = event.event.accountName, !account.isEmpty else { return calendar }
+        return "\(calendar) · \(account)"
+    }
+
+    private func loadRecords() {
+        guard let services else { return }
+        let annotation = try? services.eventLinks.annotation(for: event.event.identity)
+        linkedRecords = annotation?.recordIDs.compactMap { try? services.items.item(id: $0) } ?? []
+    }
+
+    private func unlink(_ record: Item) {
+        guard let services else { return }
+        services.perform { try services.eventLinks.unlink(record: record, from: event.event.identity) }
+        loadRecords()
     }
 }
 
@@ -322,6 +559,12 @@ struct TodayEventMenu: View {
 
         Button("Open in Calendar", systemImage: "calendar") { actions.openInCalendar(event) }
         Button("Meeting Notes", systemImage: "note.text") { actions.openNotes(for: event) }
+        Button(
+            model.expandedEventID == event.id ? "Hide Details" : "Show Details",
+            systemImage: model.expandedEventID == event.id ? "chevron.up" : "chevron.down"
+        ) {
+            model.toggleEventDetails(event.id)
+        }
 
         if !event.participants.isEmpty {
             Divider()

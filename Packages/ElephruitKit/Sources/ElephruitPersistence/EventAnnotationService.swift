@@ -16,6 +16,9 @@ public struct EventAnnotation: Sendable, Hashable {
     /// writes something about one of them.
     public var meetingItemID: UUID?
 
+    /// Every reusable record tagged on the event. People are included here and in ``personIDs``;
+    /// the narrower list remains because attendee matching and meeting briefs are person-specific.
+    public var recordIDs: [UUID]
     public var personIDs: [UUID]
     public var noteIDs: [UUID]
     public var projectIDs: [UUID]
@@ -28,13 +31,14 @@ public struct EventAnnotation: Sendable, Hashable {
     public var debriefNotes: String
 
     public var isEmpty: Bool {
-        personIDs.isEmpty && noteIDs.isEmpty && projectIDs.isEmpty
+        recordIDs.isEmpty && personIDs.isEmpty && noteIDs.isEmpty && projectIDs.isEmpty
             && attachmentCount == 0 && preparationNotes.isEmpty && debriefNotes.isEmpty
     }
 
     public init(
         identity: EventIdentity,
         meetingItemID: UUID? = nil,
+        recordIDs: [UUID] = [],
         personIDs: [UUID] = [],
         noteIDs: [UUID] = [],
         projectIDs: [UUID] = [],
@@ -44,6 +48,7 @@ public struct EventAnnotation: Sendable, Hashable {
     ) {
         self.identity = identity
         self.meetingItemID = meetingItemID
+        self.recordIDs = recordIDs
         self.personIDs = personIDs
         self.noteIDs = noteIDs
         self.projectIDs = projectIDs
@@ -145,14 +150,19 @@ public final class EventAnnotationService {
     }
 
     private func annotation(of meeting: Item, identity: EventIdentity) -> EventAnnotation {
+        var recordIDs: [UUID] = []
         var personIDs: [UUID] = []
         var noteIDs: [UUID] = []
         var projectIDs: [UUID] = []
 
         for link in meeting.outgoingLinks {
             guard let target = link.target, target.deletedAt == nil else { continue }
+            if link.kind == .participant, (target.recordProfile != nil || target.kind == .person) {
+                recordIDs.append(target.id)
+                if target.kind == .person { personIDs.append(target.id) }
+                continue
+            }
             switch target.kind {
-            case .person where link.kind == .participant: personIDs.append(target.id)
             case .project, .area: projectIDs.append(target.id)
             default: noteIDs.append(target.id)
             }
@@ -171,6 +181,7 @@ public final class EventAnnotationService {
         return EventAnnotation(
             identity: identity,
             meetingItemID: meeting.id,
+            recordIDs: recordIDs,
             personIDs: personIDs,
             noteIDs: noteIDs,
             projectIDs: projectIDs,
@@ -317,22 +328,35 @@ public final class EventAnnotationService {
 
     // MARK: - Linking
 
-    /// Links a person to an event, creating the meeting item if this is the first link.
+    /// Tags any reusable record on an event, creating the meeting interaction on first use.
     @discardableResult
-    public func link(person: Item, to event: CalendarEventSummary) throws(AppError) -> Item? {
+    public func link(record: Item, to event: CalendarEventSummary) throws(AppError) -> Item? {
+        guard record.recordProfile != nil || record.kind == .person else {
+            throw .invalidQuery(reason: "Only Records can be tagged on a calendar event.")
+        }
         guard let meeting = try meetingItem(for: event) else { return nil }
-        try items.link(meeting, to: person, kind: .participant)
+        try items.link(meeting, to: record, kind: .participant)
         return meeting
     }
 
-    public func unlink(person: Item, from identity: EventIdentity) throws(AppError) {
+    public func unlink(record: Item, from identity: EventIdentity) throws(AppError) {
         guard let meeting = try meetingItem(for: identity) else { return }
 
         for link in meeting.outgoingLinks
-        where link.kind == .participant && link.target?.id == person.id {
+        where link.kind == .participant && link.target?.id == record.id {
             context.delete(link)
         }
         try save()
+    }
+
+    /// Compatibility spellings for existing person-specific workflows.
+    @discardableResult
+    public func link(person: Item, to event: CalendarEventSummary) throws(AppError) -> Item? {
+        try link(record: person, to: event)
+    }
+
+    public func unlink(person: Item, from identity: EventIdentity) throws(AppError) {
+        try unlink(record: person, from: identity)
     }
 
     /// Files an event under a project or area.
