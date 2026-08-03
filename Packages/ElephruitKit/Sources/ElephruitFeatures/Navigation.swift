@@ -383,6 +383,18 @@ public final class NavigationModel {
     /// The item the detail pane shows.
     public private(set) var selectedItemID: UUID?
 
+    /// A newly created item whose title field should take the keyboard when its detail appears.
+    ///
+    /// This is a one-shot request rather than a general focus preference: opening an existing item
+    /// should not unexpectedly put the insertion point in its title.
+    public var titleEditRequest: UUID?
+
+    /// A direct request to reveal the unsaved project-name field in the primary sidebar.
+    ///
+    /// The Tasks sidebar can make this request while the Projects section is not mounted. Keeping
+    /// the token here lets the section consume it after navigation brings the primary sidebar back.
+    public private(set) var projectCreationRequestID: UUID?
+
     // MARK: Browser-style history
 
     private struct NavigationLocation: Equatable {
@@ -784,6 +796,23 @@ public final class NavigationModel {
     /// Selects exactly one item.
     public func selectItem(_ id: UUID?) {
         selectedItemIDs = id.map { [$0] } ?? []
+    }
+
+    /// Selects a new item and puts its title field into the typing path.
+    public func beginNaming(_ id: UUID) {
+        titleEditRequest = id
+        selectItem(id)
+    }
+
+    /// Opens the Projects section in naming mode without creating or saving anything first.
+    public func beginCreatingProject() {
+        projectCreationRequestID = UUID()
+        select(.kind(.project))
+    }
+
+    public func consumeProjectCreationRequest(_ id: UUID) {
+        guard projectCreationRequestID == id else { return }
+        projectCreationRequestID = nil
     }
 
     /// A task somebody asked to open, from somewhere that is not the task list.
