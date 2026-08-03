@@ -33,25 +33,25 @@ struct QuickLogView: View {
     private var running: RunningTimer? { services?.timer.running }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.large) {
             header
 
             if running == nil {
                 stopped
+            } else if controller.presentation == .confirmReplacement {
+                replacementConfirmation
             } else {
                 naming
             }
 
-            Divider()
-
             footer
         }
-        .padding(Theme.Spacing.large)
-        .frame(width: 480)
-        .background(.regularMaterial)
+        .padding(Theme.Spacing.section)
+        .frame(width: 460)
+        .background(Theme.Colors.windowBackground)
         .onAppear {
             syncFromRunning()
-            isDescriptionFocused = true
+            focusDescriptionIfEditing()
         }
         // The panel is reused rather than rebuilt, so this view outlives any one opening of it. Both
         // the re-sync and the caret have to happen again when it comes back, or the second use of the
@@ -59,8 +59,9 @@ struct QuickLogView: View {
         .onChange(of: controller.isVisible) { _, visible in
             guard visible else { return }
             syncFromRunning()
-            isDescriptionFocused = true
+            focusDescriptionIfEditing()
         }
+        .onChange(of: controller.presentation) { _, _ in focusDescriptionIfEditing() }
         .onChange(of: running?.id) { _, _ in syncFromRunning() }
         // Escape is the same as Done rather than a cancel, because there is nothing here to cancel:
         // the clock is already going and the name is already written down. A hidden Escape that
@@ -72,30 +73,31 @@ struct QuickLogView: View {
 
     // MARK: - Header
 
-    /// What this is, and — the part that matters — the clock proving it is already going.
+    /// The feature name stays quiet; the live clock gets the visual weight.
     private var header: some View {
-        HStack(spacing: Theme.Spacing.small) {
-            Label(headline, systemImage: "record.circle")
-                .font(.system(.headline, design: .default, weight: .medium))
-                .foregroundStyle(running == nil ? Theme.Colors.secondaryText : Theme.Colors.recording)
-                .symbolEffect(.pulse, options: running == nil ? .nonRepeating : .repeating)
+        HStack(spacing: Theme.Spacing.medium) {
+            Label("Quick Log", systemImage: "timer")
+                .font(.system(.headline, design: .default, weight: .semibold))
+                .foregroundStyle(Theme.Colors.primaryText)
 
             Spacer(minLength: Theme.Spacing.small)
 
-            clock
-        }
-    }
+            if running != nil {
+                HStack(spacing: Theme.Spacing.small) {
+                    Circle()
+                        .fill(Theme.Colors.recording)
+                        .frame(width: 7, height: 7)
 
-    /// Which of the three things just happened.
-    ///
-    /// *Already timing* is not a pedantic distinction from *Timing now*. Somebody who pressed the
-    /// shortcut expecting to begin something needs to know that they did not — that this window is
-    /// about work that was already under way, and that typing a name into it renames that work rather
-    /// than describing something new. Saying "Timing now" over an adopted entry would be the window
-    /// taking credit for a clock it did not start.
-    private var headline: String {
-        guard running != nil else { return "Not timing" }
-        return controller.startedTheTimer ? "Timing now" : "Already timing"
+                    clock
+                }
+                .padding(.horizontal, Theme.Spacing.medium)
+                .padding(.vertical, Theme.Spacing.small)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Theme.Colors.subtleFill)
+                )
+            }
+        }
     }
 
     /// A running clock is a pure function of one stored date and the current moment, so it is drawn
@@ -106,7 +108,7 @@ struct QuickLogView: View {
         if let running {
             TimelineView(.periodic(from: running.startedAt, by: 1)) { context in
                 Text(TimeFormatting.stopwatch(running.elapsed(at: context.date)))
-                    .font(.system(size: 24, weight: .medium, design: .rounded))
+                    .font(.system(.body, design: .rounded, weight: .semibold))
                     .monospacedDigit()
                     .contentTransition(.numericText())
             }
@@ -120,26 +122,89 @@ struct QuickLogView: View {
     /// The name, then what it is filed under. In that order because the name is the field typed into
     /// every time and the chips are the ones usually left alone.
     private var naming: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-            TextField("What are you working on?", text: $controller.description)
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            Text("WHAT ARE YOU WORKING ON?")
+                .font(Theme.Text.sectionHeader)
+                .tracking(Theme.Text.Tracking.caps)
+                .foregroundStyle(Theme.Colors.secondaryText)
+
+            TextField("Add a description", text: $controller.description)
                 .textFieldStyle(.plain)
                 .font(.system(.title3, design: .default, weight: .regular))
                 .focused($isDescriptionFocused)
                 .onSubmit { controller.hide() }
-                .padding(.horizontal, Theme.Spacing.small)
-                .padding(.vertical, Theme.Spacing.small)
+                .padding(.horizontal, Theme.Spacing.medium)
+                .padding(.vertical, Theme.Spacing.medium)
                 .background(
-                    RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                    RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                         .fill(Theme.Colors.contentBackground)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                    RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                         .strokeBorder(Theme.Colors.separator)
                 )
                 .accessibilityLabel("What are you working on?")
                 .accessibilityIdentifier(AccessibilityID.Time.quickLogDescription)
 
             filingChips
+                .padding(.top, Theme.Spacing.tight)
+        }
+    }
+
+    // MARK: - Replacement confirmation
+
+    /// An invocation while another timer is running is a question, not an edit.
+    ///
+    /// The current entry is rendered from `RunningTimer` and no field is bound to it. This makes the
+    /// preservation guarantee visible as well as structural: until the prominent action is chosen,
+    /// the name and filing stay exactly as they were.
+    private var replacementConfirmation: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                Text("A timer is already running")
+                    .font(Theme.Text.title)
+                    .tracking(Theme.Text.Tracking.title)
+
+                Text("Stop and save it before starting a new timer?")
+                    .font(Theme.Text.rowSubtitle)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+
+            if let running {
+                VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
+                        Text(running.displayTitle)
+                            .font(.system(.body, design: .default, weight: .semibold))
+                            .lineLimit(2)
+
+                        Spacer(minLength: Theme.Spacing.small)
+
+                        Text("CURRENT")
+                            .font(Theme.Text.keyHint)
+                            .foregroundStyle(Theme.Colors.recording)
+                    }
+
+                    if let secondaryDescription = secondaryDescription(for: running) {
+                        Text(secondaryDescription)
+                            .font(Theme.Text.rowSubtitle)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                            .lineLimit(2)
+                    }
+
+                    if let details = filingSummary(for: running) {
+                        Text(details)
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
+                            .lineLimit(2)
+                    }
+                }
+                .padding(Theme.Spacing.medium)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
+                        .fill(Theme.Colors.subtleFill)
+                )
+            }
         }
     }
 
@@ -232,13 +297,25 @@ struct QuickLogView: View {
     /// The three exits, and the sentence that stops the first of them being frightening.
     private var footer: some View {
         HStack(spacing: Theme.Spacing.small) {
-            Text(running == nil ? "" : "Closing keeps it running.")
+            Text(footerNote)
                 .font(Theme.Text.metadata)
                 .foregroundStyle(Theme.Colors.tertiaryText)
 
             Spacer()
 
-            if running != nil {
+            if running != nil, controller.presentation == .confirmReplacement {
+                Button("Keep Timing") { controller.hide() }
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier(AccessibilityID.Time.quickLogKeep)
+
+                Button("Stop & Start New") {
+                    guard controller.replaceRunningTimer() else { return }
+                    syncFromRunning()
+                    isDescriptionFocused = true
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier(AccessibilityID.Time.quickLogReplace)
+            } else if running != nil {
                 // Quiet, and a long way from Done. It ends the same work Stop does and keeps none of
                 // it, so it must not be the button the eye lands on.
                 Button("Discard") { controller.discardTimer() }
@@ -250,12 +327,21 @@ struct QuickLogView: View {
                     .accessibilityIdentifier(AccessibilityID.Time.quickLogStop)
             }
 
-            Button("Done") { controller.hide() }
-                .keyboardShortcut(.return, modifiers: .command)
-                .buttonStyle(.borderedProminent)
-                .help("Put the panel away. The timer keeps running.")
-                .accessibilityIdentifier(AccessibilityID.Time.quickLogDone)
+            if controller.presentation != .confirmReplacement || running == nil {
+                Button("Done") { controller.hide() }
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .buttonStyle(.borderedProminent)
+                    .help("Put the panel away. The timer keeps running.")
+                    .accessibilityIdentifier(AccessibilityID.Time.quickLogDone)
+            }
         }
+        .padding(.top, Theme.Spacing.tight)
+    }
+
+    private var footerNote: String {
+        guard running != nil else { return "" }
+        if controller.presentation == .confirmReplacement { return "" }
+        return "Closing keeps the timer running."
     }
 
     // MARK: - Filling in
@@ -280,6 +366,33 @@ struct QuickLogView: View {
             tagSlugs: running.tagSlugs,
             isBillable: running.isBillable
         )
+    }
+
+    private func focusDescriptionIfEditing() {
+        isDescriptionFocused = controller.presentation == .editing && running != nil
+    }
+
+    private func secondaryDescription(for running: RunningTimer) -> String? {
+        guard running.itemTitle != nil,
+              !running.entryDescription.isEmpty,
+              running.entryDescription != running.displayTitle
+        else { return nil }
+        return running.entryDescription
+    }
+
+    private func filingSummary(for running: RunningTimer) -> String? {
+        var details: [String] = []
+        if let projectTitle = running.projectTitle, !projectTitle.isEmpty {
+            details.append(projectTitle)
+        }
+        if !running.people.isEmpty {
+            details.append(running.people.map(\.name).joined(separator: ", "))
+        }
+        if !running.tagSlugs.isEmpty {
+            details.append(running.tagSlugs.map { "#\($0)" }.joined(separator: " "))
+        }
+        if running.isBillable { details.append("Billable") }
+        return details.isEmpty ? nil : details.joined(separator: "  ·  ")
     }
 
     /// A picked reference as an `Item`, or `nil`.

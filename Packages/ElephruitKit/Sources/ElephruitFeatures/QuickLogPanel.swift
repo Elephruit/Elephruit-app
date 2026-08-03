@@ -24,7 +24,7 @@ public enum QuickLogPresentation: Sendable, Equatable {
 final class QuickLogPanel: NSPanel {
     init(content: NSView) {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 220),
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 220),
             styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
             backing: .buffered,
             defer: false

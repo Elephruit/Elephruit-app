@@ -78,6 +78,40 @@ struct ComponentGalleryTests {
         try png.write(to: outputDirectory.appending(path: "\(name).png"))
     }
 
+    // MARK: - Quick Log
+
+    @Test("Quick Log naming panel")
+    func quickLogNamingPanel() throws {
+        let services = AppServices.inMemory(dateProvider: SystemDateProvider(), populated: false)
+        let controller = services.quickLog
+        controller.startTimerIfIdle()
+        services.timer.setElapsed(4 * 60 + 37)
+
+        try write("quick-log-naming", width: 510) {
+            QuickLogView(controller: controller)
+                .appServices(services)
+        }
+    }
+
+    @Test("Quick Log replacement confirmation")
+    func quickLogReplacementConfirmation() throws {
+        let services = AppServices.inMemory(dateProvider: SystemDateProvider(), populated: false)
+        services.timer.switchTo(
+            item: nil,
+            description: "Reviewing the lease renewal",
+            tagSlugs: ["legal", "client-work"],
+            isBillable: true
+        )
+        services.timer.setElapsed(4 * 60 + 37)
+        let controller = services.quickLog
+        controller.startTimerIfIdle()
+
+        try write("quick-log-replacement", width: 510) {
+            QuickLogView(controller: controller)
+                .appServices(services)
+        }
+    }
+
     // MARK: - The person action row
 
     /// The row that was three saturated pills, then a row of identical grey buttons, and is now
