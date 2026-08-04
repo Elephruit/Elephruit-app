@@ -2,6 +2,7 @@ const title = document.getElementById("title");
 const detail = document.getElementById("detail");
 const spinner = document.getElementById("spinner");
 const retry = document.getElementById("retry");
+let accessRequest = null;
 
 function readableError(error) {
   return error?.message || error?.localizedDescription || error?.description || String(error || "Safari denied access to this page.");
@@ -23,7 +24,7 @@ async function activeTab() {
 async function messagePanel(tabID) {
   return withTimeout(
     browser.tabs.sendMessage(tabID, { type: "elephruit.panel.toggle.v5" }),
-    3_000,
+    700,
     "Safari did not answer the clipper."
   );
 }
@@ -42,8 +43,69 @@ async function waitForInjectedPanel(tabID, milliseconds) {
   return null;
 }
 
+function siteAccess(tab) {
+  const url = new URL(tab.url);
+  return {
+    hostname: url.hostname.replace(/^www\./i, ""),
+    pattern: `${url.protocol}//${url.host}/*`
+  };
+}
+
+function showAccessRequest(tab, site) {
+  accessRequest = { tab, site };
+  spinner.hidden = true;
+  retry.hidden = false;
+  retry.textContent = `Allow ${site.hostname}`;
+  title.textContent = "Allow access to this website";
+  detail.textContent = `Elephruit needs permission to read ${site.hostname} for this clip.`;
+}
+
+function showFailure(error) {
+  accessRequest = null;
+  spinner.hidden = true;
+  retry.hidden = false;
+  retry.textContent = "Try again";
+  title.textContent = "Couldn’t open the clipper";
+  const message = readableError(error);
+  detail.textContent = /denied|permission|access/i.test(message)
+    ? "Allow Elephruit on this website, then click Try again."
+    : message;
+}
+
+async function openOnTab(tab) {
+  let response = await messagePanel(tab.id).catch(() => null);
+  if (typeof response?.open === "boolean") {
+    window.close();
+    return;
+  }
+
+  const site = siteAccess(tab);
+  const allowed = await browser.permissions.contains({ origins: [site.pattern] });
+  if (!allowed) {
+    showAccessRequest(tab, site);
+    return;
+  }
+
+  // Safari can leave the returned injection promise pending on continuously loading pages even
+  // after executing the scripts. Poll the listener that proves the page is ready instead.
+  let injectionError = null;
+  browser.scripting.executeScript({
+    target: { tabId: tab.id },
+    files: ["panel.js", "content.js"]
+  }).catch((error) => { injectionError = error; });
+  response = await waitForInjectedPanel(tab.id, 8_000);
+
+  if (typeof response?.open !== "boolean") {
+    if (injectionError) throw injectionError;
+    throw new Error("Safari took too long to prepare this page. Reload it once, then try again.");
+  }
+  window.close();
+}
+
 async function togglePanel() {
+  accessRequest = null;
   retry.hidden = true;
+  retry.textContent = "Try again";
   spinner.hidden = false;
   title.textContent = "Opening Elephruit…";
   detail.textContent = "Preparing the clipper on this page.";
@@ -54,35 +116,35 @@ async function togglePanel() {
       throw new Error("Open a regular website and try again.");
     }
 
-    // Allowed pages normally already have the dormant content script. Messaging it is much faster
-    // and more reliable on large pages than asking Safari to start a new script transaction.
-    let response = await messagePanel(tab.id).catch(() => null);
-    if (typeof response?.open !== "boolean") {
-      // A tab opened before the extension was enabled or updated has no current isolated-world API.
-      // Safari can leave the returned injection promise pending on continuously loading pages even
-      // after it has executed the scripts. Start the guarded injection, then poll the listener that
-      // proves the page is actually ready instead of trusting that completion promise.
-      browser.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ["panel.js", "content.js"]
-      }).catch(() => {});
-      response = await waitForInjectedPanel(tab.id, 8_000);
-    }
-
-    if (typeof response?.open !== "boolean") {
-      throw new Error("Safari took too long to prepare this page. Reload it once, then try again.");
-    }
-    window.close();
+    await openOnTab(tab);
   } catch (error) {
-    spinner.hidden = true;
-    retry.hidden = false;
-    title.textContent = "Couldn’t open the clipper";
-    const message = readableError(error);
-    detail.textContent = /denied|permission|access/i.test(message)
-      ? "Allow Elephruit on this website, then click Try again."
-      : message;
+    showFailure(error);
   }
 }
 
-retry.addEventListener("click", togglePanel);
+async function handleButton() {
+  if (!accessRequest) {
+    await togglePanel();
+    return;
+  }
+
+  const request = accessRequest;
+  spinner.hidden = false;
+  retry.hidden = true;
+  title.textContent = "Requesting website access…";
+  detail.textContent = `Safari will ask whether Elephruit may read ${request.site.hostname}.`;
+
+  try {
+    const granted = await browser.permissions.request({ origins: [request.site.pattern] });
+    if (!granted) throw new Error("Website access was not granted.");
+    accessRequest = null;
+    title.textContent = "Opening Elephruit…";
+    detail.textContent = "Preparing the clipper on this page.";
+    await openOnTab(request.tab);
+  } catch (error) {
+    showFailure(error);
+  }
+}
+
+retry.addEventListener("click", handleButton);
 togglePanel();

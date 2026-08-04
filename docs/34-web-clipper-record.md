@@ -41,16 +41,16 @@ panel belongs to the page instead of Safari's transient toolbar popover, clicks 
 reach their target and several adjustments can be made in one pass. Changing to a non-article mode
 removes the page overlay, as does closing the panel or completing the clip.
 
-The toolbar action opens a tiny launcher popup that injects or invokes the newest page API, closes
-itself immediately, and hands the interaction to the right-side panel. Keeping this handshake in the
-toolbar popup gives Safari a durable user gesture for per-site “Ask” access and avoids depending on a
-nonpersistent Manifest V3 background worker waking in time for the click. The popup never extracts
-the page and never becomes the clipper UI. The dormant content script registers at document start,
-before long-lived news and application pages can postpone Safari's idle phase. The launcher messages
-that listener first and only injects when a tab predates the current extension. Because Safari can
-leave an injection promise pending after the script has executed, the fallback polls for the working
-listener instead of trusting that promise. Short deadlines ensure Safari can never leave an endless
-launcher spinner. The right-side panel is ordinary isolated-world content
+The toolbar action opens a tiny launcher popup that invokes an existing page API or asks Safari for
+optional access to the current website before injecting it. After access is granted, the launcher
+closes itself and hands the interaction to the right-side panel. Keeping this handshake in the
+toolbar popup gives Safari the direct user gesture required for a runtime permission request and
+avoids depending on a nonpersistent Manifest V3 background worker waking in time for the click. The
+popup never extracts the page and never becomes the clipper UI. No script is registered on every
+page at document start; the guarded page scripts are installed only when the user opens the clipper
+on an allowed site. Because Safari can leave an injection promise pending after the script has
+executed, the launcher polls for the working listener instead of trusting that promise. Short
+deadlines ensure Safari can never leave an endless launcher spinner. The right-side panel is ordinary isolated-world content
 rendered into a closed Shadow DOM; it is not an extension iframe embedded in the website. Screenshot,
 image-download, and native-messaging operations are proxied through the background worker, so
 privileged extension APIs never run from Safari's website WebContent process. This avoids WebKit
@@ -88,10 +88,10 @@ Safari page
 
 ## Privacy and safety boundary
 
-- The extension has scripting, storage, native-messaging, and HTTP/HTTPS website-access permissions.
-  Safari exposes that access in its Extensions settings. A dormant content script registers the
-  extraction message handler on allowed pages; it does not inspect or copy the DOM until the user
-  opens the clipper.
+- The extension has scripting, storage, and native-messaging permissions, plus optional HTTP/HTTPS
+  website access. The launcher requests access only for the website the user is clipping, and Safari
+  exposes those choices in its Extensions settings. Page scripts are installed after that grant and
+  do not inspect or copy the DOM until the user opens the clipper.
 - It does not upload, synchronize, or call a remote API.
 - Only HTTP and HTTPS source URLs are accepted.
 - Text, screenshot, and downloaded-image payloads have explicit size limits before persistence.
