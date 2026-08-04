@@ -1,15 +1,41 @@
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function invokePanel(tabID) {
+  const results = await browser.scripting.executeScript({
+    target: { tabId: tabID },
+    func: () => globalThis.__elephruitClipperAPI?.openPanel?.() || null
+  });
+  return results.find((result) => result.frameId === 0)?.result || results[0]?.result || null;
+}
+
 async function toggleClipperPanel(tab) {
   if (!tab?.id || !/^https?:/i.test(tab.url || "")) return;
 
-  try {
-    const response = await browser.tabs.sendMessage(tab.id, { type: "elephruit.panel.open.v1" }, { frameId: 0 });
-    if (typeof response?.open === "boolean") return;
-  } catch {
-    // A tab open during an extension update may not have the newest content script yet.
-  }
+  const existing = await invokePanel(tab.id).catch(() => null);
+  if (typeof existing?.open === "boolean") return;
 
-  await browser.scripting.executeScript({ target: { tabId: tab.id }, files: ["panel.js", "content.js"] });
-  await browser.tabs.sendMessage(tab.id, { type: "elephruit.panel.open.v1" }, { frameId: 0 });
+  // With no action popup, Safari grants activeTab directly to this toolbar click. Inject into the
+  // top frame and retry briefly across provisional navigations without placing a redundant loading
+  // dialog over a panel that normally appears immediately.
+  const deadline = Date.now() + 8_000;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    try {
+      await browser.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["panel.js", "content.js"]
+      });
+      const response = await invokePanel(tab.id);
+      if (typeof response?.open === "boolean") return;
+      lastError = new Error("The clipper page API was unavailable.");
+    } catch (error) {
+      lastError = error;
+    }
+    await delay(250);
+  }
+  throw lastError || new Error("Safari could not attach the clipper to this page.");
 }
 
 function dataURL(buffer, mimeType) {

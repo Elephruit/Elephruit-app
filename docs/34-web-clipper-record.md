@@ -120,6 +120,12 @@ while retaining the high-fidelity saved result.
 Panel opening invokes the top-frame API directly rather than leaving a timed-out Safari message
 promise pending. Boundary choices preserve the heading's structural ancestor ladder without
 performing text or computed-style analysis for each level.
+The Safari action has no popup: a toolbar click receives `activeTab` and injects the page-side panel
+directly, so a redundant preparation dialog cannot remain over an already-open clipper. Saved rich
+clips render as static, script-disabled HTML with local images inlined. The browser engine retains
+floats, tables, typography, and selectable text; the view reports its final height once after images
+settle instead of repeatedly resizing while it loads. Wikipedia editing and appearance chrome is
+removed from article captures while its title, infobox, and article layout remain intact.
 
 The main app still has no network entitlement. Safari itself naturally has network access to display
 the page being clipped; the extension operates on that active page.

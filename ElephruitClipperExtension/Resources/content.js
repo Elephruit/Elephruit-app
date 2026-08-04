@@ -1,6 +1,6 @@
 (() => {
-  if ((globalThis.__elephruitClipperVersion || 0) >= 14) return;
-  globalThis.__elephruitClipperVersion = 14;
+  if ((globalThis.__elephruitClipperVersion || 0) >= 15) return;
+  globalThis.__elephruitClipperVersion = 15;
 
   // An already-open tab can retain the previous isolated-world script after an extension update.
   // Remove its detached UI before installing the new API so the next toolbar click cannot produce
@@ -18,6 +18,11 @@
   const REMOVE_SIMPLIFIED = [
     "nav", ".advertisement", ".advert", ".ads", ".cookie-banner", ".newsletter", ".paywall",
     ".social-share", ".related", ".comments"
+  ].join(",");
+  const REMOVE_WIKIPEDIA_CHROME = [
+    ".vector-page-toolbar", ".vector-column-end", ".mw-indicators", ".mw-editsection",
+    ".mw-jump-link", ".printfooter", ".catlinks", ".navbox", ".vertical-navbox",
+    "[role='navigation']"
   ].join(",");
 
   const POSITIVE = /article|body|content|entry|main|page|post|story|text/i;
@@ -74,6 +79,7 @@
 
   function clean(root, simplified = false) {
     const clone = root.cloneNode(true);
+    const capturedWidth = root.getBoundingClientRect().width;
     const sourceElements = [root, ...root.querySelectorAll("*")];
     const clonedElements = [clone, ...clone.querySelectorAll("*")];
     const fidelityStyles = new Map();
@@ -98,6 +104,9 @@
     });
     clone.querySelectorAll(REMOVE_UNSAFE).forEach((node) => node.remove());
     if (simplified) clone.querySelectorAll(REMOVE_SIMPLIFIED).forEach((node) => node.remove());
+    if (/(^|\.)wikipedia\.org$/i.test(location.hostname)) {
+      clone.querySelectorAll(REMOVE_WIKIPEDIA_CHROME).forEach((node) => node.remove());
+    }
     [clone, ...clone.querySelectorAll("*")].forEach((element) => {
       for (const attribute of [...element.attributes]) {
         const name = attribute.name.toLowerCase();
@@ -117,6 +126,7 @@
       const generatedStyle = fidelityStyles.get(element);
       if (generatedStyle) element.setAttribute("style", generatedStyle);
     });
+    if (capturedWidth > 0) clone.dataset.elephruitCapturedWidth = String(Math.round(capturedWidth * 100) / 100);
     return clone;
   }
 
@@ -153,6 +163,11 @@
   }
 
   function articleRoot() {
+    if (/(^|\.)wikipedia\.org$/i.test(location.hostname)) {
+      const wikipediaArticle = document.querySelector("main#content, main.mw-body, #content.mw-body");
+      if (wikipediaArticle) return wikipediaArticle;
+    }
+
     const viewportArticles = [...document.querySelectorAll("article")]
       .filter((element) => {
         const text = element.textContent?.trim() || "";
@@ -625,7 +640,7 @@
   // that listener's empty response before the new listener answers. `scripting.executeScript` calls
   // this newest API explicitly, so upgrading never requires the user to reload their page.
   globalThis.__elephruitClipperAPI = {
-    version: 14,
+    version: 15,
     extract,
     captureContent,
     showArticleSelection,
