@@ -170,6 +170,21 @@ public enum DesignReviewLaunch {
         }
     }
 
+    /// The name of the temporary store to open, so a review gets a library of its own.
+    ///
+    /// The temporary store is otherwise one fixed path per machine, shared by every development
+    /// launch — including ones running *concurrently* from other checkouts, whose writes land in
+    /// the library mid-photograph. A named store makes the review's library private to the review:
+    /// planted once by `-ElephruitLoadSampleData` into emptiness, touched by nobody else.
+    public static var storeName: String? {
+        guard isDevelopmentMode else { return nil }
+        return storeName(in: ProcessInfo.processInfo.arguments)
+    }
+
+    static func storeName(in arguments: [String]) -> String? {
+        value(for: "-ElephruitStoreName", in: arguments)
+    }
+
     /// The size to force the main window to, as `WIDTHxHEIGHT` in points.
     ///
     /// Responsive behaviour is a stated requirement of this interface and the hardest thing to
