@@ -40,8 +40,10 @@ Safari page
 
 ## Privacy and safety boundary
 
-- The extension has `activeTab`, scripting, storage, and native-messaging permissions. It does not
-  request permission to read every website in the background.
+- The extension has scripting, storage, native-messaging, and HTTP/HTTPS website-access permissions.
+  Safari exposes that access in its Extensions settings. A dormant content script registers the
+  extraction message handler on allowed pages; it does not inspect or copy the DOM until the user
+  opens the clipper.
 - It does not upload, synchronize, or call a remote API.
 - Only HTTP and HTTPS source URLs are accepted.
 - Text and screenshot payloads have explicit size limits before persistence.

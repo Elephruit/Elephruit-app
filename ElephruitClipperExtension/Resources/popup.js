@@ -6,13 +6,28 @@ async function activeTab() {
   return tabs[0];
 }
 
+async function extractPage(tabID) {
+  try {
+    return await browser.tabs.sendMessage(tabID, { type: "elephruit.extract" });
+  } catch {
+    // The tab may have been open before the extension was enabled or updated. Inject once so the
+    // user does not have to reload; the guard in content.js makes this safe on already-prepared tabs.
+    await browser.scripting.executeScript({ target: { tabId: tabID }, files: ["content.js"] });
+    return browser.tabs.sendMessage(tabID, { type: "elephruit.extract" });
+  }
+}
+
+function readableError(error) {
+  if (typeof error === "string") return error;
+  return error?.message || error?.localizedDescription || error?.description || "Safari denied access to this page.";
+}
+
 async function loadPage() {
   try {
     state.tab = await activeTab();
     if (!state.tab?.id || !/^https?:/i.test(state.tab.url || "")) throw new Error("Open an HTTP or HTTPS page and try again.");
 
-    await browser.scripting.executeScript({ target: { tabId: state.tab.id }, files: ["content.js"] });
-    state.page = await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.extract" });
+    state.page = await extractPage(state.tab.id);
     if (!state.page) throw new Error("Safari couldn’t read this page.");
 
     byID("title").value = state.page.title;
@@ -28,7 +43,8 @@ async function loadPage() {
     byID("title").focus();
     byID("title").setSelectionRange(byID("title").value.length, byID("title").value.length);
   } catch (error) {
-    showFatal(error.message || "Open a regular web page and try again.");
+    const detail = readableError(error);
+    showFatal(`${detail} In Safari Settings → Extensions → Elephruit Web Clipper, allow website access, then reload the page.`);
   }
 }
 
