@@ -27,7 +27,12 @@ public enum SyncStatus: Sendable, Hashable {
     /// One quiet line for the sidebar. Never a spinner in the toolbar, never a modal.
     public var summary: String {
         switch self {
-        case .disabled: "Stored on this Mac"
+        case .disabled:
+            #if os(macOS)
+                "Stored on this Mac"
+            #else
+                "Stored on this iPhone"
+            #endif
         case .idle(let date):
             if let date { "Synced \(date.formatted(.relative(presentation: .named)))" } else { "Synced" }
         case .syncing: "Syncing…"
@@ -53,37 +58,53 @@ public struct PersistenceStack: Sendable {
     public let container: ModelContainer
     public let mode: StoreMode
 
+    /// Whether this store actually opened against the iCloud database — the setting, the
+    /// location's ephemerality, and the open all agreed. What the status line trusts.
+    public let isSyncEnabled: Bool
+
     /// Where files live, when the store is on disk.
     public var location: StoreLocation? {
         if case .onDisk(let location) = mode { return location }
         return nil
     }
 
-    private init(container: ModelContainer, mode: StoreMode) {
+    private init(container: ModelContainer, mode: StoreMode, isSyncEnabled: Bool = false) {
         self.container = container
         self.mode = mode
+        self.isSyncEnabled = isSyncEnabled
     }
+
+    /// The one CloudKit container this app ever names. Registered to the owner's team;
+    /// the value docs/05 assumed from the start.
+    public static let cloudContainerIdentifier = "iCloud.com.elephruit.Elephruit"
 
     /// Opens the store.
     ///
     /// - Throws: ``AppError/storeUnavailable(underlying:)`` or
     ///   ``AppError/migrationFailed(fromVersion:toVersion:backupPath:)``. Both are
     ///   recoverable states the shell can render; neither is fatal.
-    public static func open(mode: StoreMode) throws(AppError) -> PersistenceStack {
+    public static func open(
+        mode: StoreMode,
+        syncEnabled: Bool = false
+    ) throws(AppError) -> PersistenceStack {
         let configuration: ModelConfiguration
+        var syncs = false
 
         switch mode {
         case .onDisk(let location):
             try location.createDirectories()
+            // The refusal is structural, not advisory: a temporary store — a design
+            // review, a UI test — can never reach iCloud no matter what the caller says,
+            // because fixtures mirrored into a real library would be unrecoverable.
+            syncs = syncEnabled && !location.isEphemeral
             configuration = ModelConfiguration(
                 schema: CurrentSchema.schema,
                 url: location.storeURL,
-                // Phase 4 flips this to `.private(containerIdentifier)`. Everything the
-                // schema needs to make that a one-line change is already in place.
-                cloudKitDatabase: .none
+                cloudKitDatabase: syncs ? .private(Self.cloudContainerIdentifier) : .none
             )
 
         case .inMemory:
+            // In-memory stores are previews and tests; they sync nowhere by construction.
             configuration = ModelConfiguration(
                 schema: CurrentSchema.schema,
                 isStoredInMemoryOnly: true
@@ -124,7 +145,7 @@ public struct PersistenceStack: Sendable {
                 "Opened store, schema \(CurrentSchema.versionString, privacy: .public), mode \(String(describing: mode), privacy: .public)"
             )
 
-            return PersistenceStack(container: container, mode: mode)
+            return PersistenceStack(container: container, mode: mode, isSyncEnabled: syncs)
         } catch {
             Diagnostics.persistence.error("Store open failed: \(error.localizedDescription, privacy: .public)")
 
