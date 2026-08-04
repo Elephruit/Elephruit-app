@@ -1,5 +1,6 @@
 import AppKit
 import ElephruitCore
+import ElephruitModel
 import SwiftUI
 
 /// The floating capture window.
@@ -86,6 +87,16 @@ public final class QuickJotController {
 
     /// The most recent failure, kept so the panel can stay open and explain itself.
     public var lastError: AppError?
+
+    /// What the last save did, shown briefly before the panel excuses itself.
+    ///
+    /// The panel used to close in silence — the product's headline flow ended with no
+    /// confirmation, no destination, and no way to notice a mistyped project had filed the
+    /// thought to the Inbox. The error path was better instrumented than the success path.
+    public private(set) var confirmation: CaptureConfirmation?
+
+    /// The scheduled hide, cancellable so rapid-fire capture keeps the panel open.
+    private var confirmationDismiss: Task<Void, Never>?
 
     public private(set) var isVisible = false
 
@@ -195,14 +206,54 @@ public final class QuickJotController {
         composition.flush(knowing: vocabulary)
 
         do {
-            guard try services.captureDraft(composition.captured(knowing: vocabulary)) != nil else {
-                return false
+            guard let item = try services.captureDraft(composition.captured(knowing: vocabulary))
+            else { return false }
+
+            // The composition resets *now*, so a second thought can be typed straight over the
+            // confirmation — capture must never make somebody wait to capture again.
+            composition = QuickJotComposition()
+            lastError = nil
+            confirmation = CaptureConfirmation(item: item)
+
+            confirmationDismiss?.cancel()
+            confirmationDismiss = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(1200))
+                guard !Task.isCancelled, let self else { return }
+                // Hide only if nothing new is being typed — a panel that vanishes mid-sentence
+                // is worse than the silence this replaces.
+                if self.composition.isEmpty {
+                    self.hide()
+                }
+                self.confirmation = nil
             }
-            hideAfterSaving()
             return true
         } catch {
             lastError = error
             return false
         }
+    }
+}
+
+/// Where a capture landed, for the one-line receipt the panel shows before closing.
+public struct CaptureConfirmation: Equatable, Sendable {
+    /// "Inbox", or the container's own name.
+    public let destination: String
+
+    /// The container's palette colour, so the receipt matches the sidebar.
+    public let colorName: String?
+
+    /// Whether what was created can turn overdue — a reminder rather than a note.
+    public let isReminder: Bool
+
+    @MainActor
+    init(item: Item) {
+        if let parent = item.parent {
+            destination = parent.displayTitle
+            colorName = parent.colorName
+        } else {
+            destination = "Inbox"
+            colorName = nil
+        }
+        isReminder = item.kind == .reminder || item.kind == .task
     }
 }

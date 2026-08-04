@@ -140,6 +140,7 @@ struct QuickJotView: View {
             composition: $controller.composition,
             presentationStyle: .panel,
             error: controller.lastError,
+            confirmation: controller.confirmation,
             onSave: { controller.save() },
             onCancel: { controller.hide() }
         )

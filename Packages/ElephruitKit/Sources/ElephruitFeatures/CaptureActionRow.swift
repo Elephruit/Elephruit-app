@@ -258,6 +258,44 @@ struct CaptureDestinationButton: View {
     private var isUnresolved: Bool { shown.projectHint != nil && resolved == nil }
 
     var body: some View {
+        HStack(spacing: Theme.Spacing.small) {
+            destinationButton
+
+            // The way out of the silent Inbox fallback: a name that resolves to nothing is
+            // either a typo — the amber state says so while it is still fixable — or a project
+            // that does not exist yet, and this is the one-click answer to the second case.
+            // Filing the thought under a project the user just named is almost always what
+            // typing `>Name` meant.
+            if isUnresolved, let hint = shown.projectHint {
+                Button {
+                    onBeforeChoosing()
+                    createProject(named: hint)
+                } label: {
+                    Label("Create “\(hint)”", systemImage: "plus.circle")
+                        .font(Theme.Text.metadata)
+                        .lineLimit(1)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.Colors.link)
+                .help("Create the project and file this under it")
+                .accessibilityIdentifier(AccessibilityID.QuickCapture.createProjectButton)
+            }
+        }
+    }
+
+    private func createProject(named title: String) {
+        guard let services = source.services else { return }
+        services.perform {
+            let project = try services.items.create(ItemDraft(kind: .project, title: title))
+            services.noteChange(to: project)
+        }
+        // The exact stored title, which is what the resolver matches — the amber state clears
+        // the moment the project exists.
+        draft.setProject(title)
+    }
+
+    private var destinationButton: some View {
         Button {
             onBeforeChoosing()
             isPresented = true

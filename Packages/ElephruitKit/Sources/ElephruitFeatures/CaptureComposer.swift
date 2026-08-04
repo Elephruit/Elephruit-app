@@ -44,6 +44,10 @@ struct CaptureComposer: View {
     /// nowhere to show a failure and passes `nil`; the panel stays open and shows it.
     var error: AppError?
 
+    /// The receipt for the last save, if the caller keeps one. The panel shows it for a moment
+    /// before excusing itself; the in-app sheet selects the item instead and passes `nil`.
+    var confirmation: CaptureConfirmation?
+
     var isSaving: Bool = false
 
     var onSave: () -> Void
@@ -168,8 +172,30 @@ struct CaptureComposer: View {
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.unresolvedLink)
                     .lineLimit(2)
+            } else if let confirmation {
+                // The receipt. Says *where* it went, because "saved" alone would leave a mistyped
+                // project silently filing to the Inbox — the destination is the part worth reading.
+                HStack(spacing: Theme.Spacing.tight) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Theme.Colors.completed)
+                    Text("Saved to")
+                    if confirmation.colorName != nil {
+                        Image(systemName: "square.stack.3d.up")
+                            .foregroundStyle(Theme.Palette.color(
+                                named: confirmation.colorName,
+                                neutral: Theme.Colors.secondaryText
+                            ))
+                    }
+                    Text(confirmation.destination)
+                        .fontWeight(.medium)
+                }
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Saved to \(confirmation.destination)")
             }
         }
+        .calmAnimation(Theme.Motion.appearance, value: confirmation)
     }
 
     private var captureFields: some View {
