@@ -1,0 +1,28 @@
+// Build settings for the Safari Web Extension target.
+
+PRODUCT_NAME = Elephruit Web Clipper
+PRODUCT_BUNDLE_IDENTIFIER = com.elephruit.Elephruit.Clipper
+PRODUCT_MODULE_NAME = ElephruitClipperExtension
+ELEPHRUIT_APP_GROUP = $(DEVELOPMENT_TEAM).com.elephruit.Elephruit
+
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 11
+
+SDKROOT = macosx
+MACOSX_DEPLOYMENT_TARGET = 26.0
+SUPPORTED_PLATFORMS = macosx
+ARCHS = $(ARCHS_STANDARD)
+
+SWIFT_VERSION = 6.0
+SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+GCC_TREAT_WARNINGS_AS_ERRORS = YES
+APPLICATION_EXTENSION_API_ONLY = YES
+
+INFOPLIST_FILE = ElephruitClipperExtension/Info.plist
+CODE_SIGN_ENTITLEMENTS = ElephruitClipperExtension/ElephruitClipper.entitlements
+SKIP_INSTALL = YES
+ENABLE_HARDENED_RUNTIME = YES
+LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks
+
+CODE_SIGN_STYLE = Automatic
+DEVELOPMENT_TEAM =

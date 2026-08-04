@@ -44,7 +44,8 @@ in the app at all.
 
 <div align="center">
 
-**[Capture](#capture-in-under-four-seconds)** · **[Search](#search-that-actually-narrows)** ·
+**[Capture](#capture-in-under-four-seconds)** · **[Web Clipper](#save-the-web-without-sending-it-away)** ·
+**[Search](#search-that-actually-narrows)** ·
 **[Today](#a-today-that-has-seen-your-whole-day)** · **[Reminders](#reminders-with-the-parts-real-work-needs)** ·
 **[People](#people-who-remember-themselves)** · **[Calendar](#a-calendar-that-knows-the-rest-of-your-life)** ·
 **[Time](#time-tracking-that-survives-an-audit)** · **[Export](#your-data-leaves-whenever-you-want)**
@@ -101,6 +102,40 @@ start date instead
 
 The field shows you what it understood **before** you commit, so nothing is ever filed somewhere you
 didn't intend. Then it lands in the Inbox and you get back to what you were doing.
+
+<br>
+
+## Save the web without sending it away
+
+> *A Safari web clipper with a local destination.*
+
+The bundled Safari extension can save a cleaned article, the current selection, the full page, a
+bookmark, or a visible screenshot. Before saving, you can edit the title, add a note and tags, and
+file the result under an existing project. Article clips become searchable Markdown notes. Full-page
+clips keep the continuous visual capture in the editor while indexing the extracted DOM and
+on-device OCR behind it, so searches find text in the page without appending a transcription below
+the image. Cleaned HTML is retained as a managed attachment for fidelity. Screenshots are copied
+into the same attachment store as your other files and OCR-indexed locally.
+
+Opening the toolbar item places the clipper in a fixed panel at the page's right edge, away from the
+primary reading column. Choosing **Article** or **Simplified** outlines the detected article directly
+on the Safari page and dims everything outside it. Use − and + in the panel—or on the floating page
+control—to narrow or expand the meaningful page boundary before saving. The preview and saved
+content update together.
+
+Nothing is uploaded. The extension reads only the page on which you invoke it, places an atomic clip
+envelope in the app-group inbox, and wakes Elephruit to import it. If importing is interrupted, the
+same clip resumes without duplicating the item or its attachments.
+
+To turn it on, run Elephruit, open **Settings → Web Clipper**, choose **Open Safari Extension
+Settings**, and enable Elephruit Web Clipper. Pin it to Safari's toolbar if you use it often. A signed
+development or
+distribution build must sign both targets with the same team. On macOS the build derives a
+team-prefixed App Group identifier, allowing the app and extension to share the clip inbox without a
+repeated “access data from other apps” prompt during development.
+
+See [the implementation record](docs/34-web-clipper-record.md) for the capture contract, privacy
+boundary, signing requirement, and verification commands.
 
 <br>
 

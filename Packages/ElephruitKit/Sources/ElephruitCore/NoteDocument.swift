@@ -267,6 +267,8 @@ public struct NoteTable: Codable, Sendable, Hashable {
 public enum NoteObject: Codable, Sendable, Hashable {
     case image(attachmentID: UUID, caption: NoteRichText)
     case file(attachmentID: UUID)
+    /// A sanitized, self-contained HTML snapshot whose text remains selectable.
+    case webClip(attachmentID: UUID)
     case table(NoteTable)
 
     /// A task, person, project or event — linked, never copied.
@@ -303,7 +305,7 @@ public struct NoteDocument: Codable, Sendable, Hashable {
     /// Separate on purpose, per ADR 0006: a run list with its own version number can change without
     /// a store migration, and a store migration can happen without touching this. Bumping it is for
     /// a change this decoder could not otherwise survive.
-    public static let currentVersion = 1
+    public static let currentVersion = 2
 
     public var version: Int
     public var pieces: [NotePiece]
@@ -427,7 +429,7 @@ public struct NoteDocument: Codable, Sendable, Hashable {
             // Attachments are their own entity with their own place in the archive.
             let text = markdown(for: caption)
             return text.isEmpty ? [] : [text]
-        case .file, .reference, .page, .table:
+        case .file, .webClip, .reference, .page, .table:
             return []
         }
     }

@@ -5,6 +5,7 @@ import ElephruitFeatures
 import ElephruitModel
 import ElephruitPersistence
 import ElephruitSearch
+import SafariServices
 import SwiftUI
 
 /// The application.
@@ -554,7 +555,7 @@ struct SettingsView: View {
     @AppStorage("people.followUpThresholdDays") private var followUpThresholdDays = 0
 
     @State private var indexStatistics: (items: Int, terms: Int, isWarm: Bool)?
-
+    @State private var clipperSettingsError: String?
     var body: some View {
         TabView {
             Tab("General", systemImage: "gearshape") {
@@ -600,6 +601,10 @@ struct SettingsView: View {
                     )
                 }
                 .accessibilityIdentifier(AccessibilityID.Settings.shortcutsTab)
+            }
+
+            Tab("Web Clipper", systemImage: "safari") {
+                webClipper
             }
 
             Tab("Privacy", systemImage: "lock.shield") {
@@ -728,9 +733,82 @@ struct SettingsView: View {
                     title: "Reminders",
                     detail: "Reads and writes the lists you tick. Areas, projects, Today, waiting-for, linked people, and provenance never cross."
                 )
+                PrivacyRow(
+                    symbolName: "safari",
+                    title: "Web Clipper",
+                    detail: "Reads only the Safari tab where you open the clipper. The page travels through a private on-device inbox and is never uploaded."
+                )
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var webClipper: some View {
+        Form {
+            Section {
+                LabeledContent("Safari extension") {
+                    HStack(spacing: Theme.Spacing.tight) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 7, height: 7)
+                        Text("Included")
+                    }
+                }
+
+                Button("Open Safari Extension Settings") {
+                    openSafariExtensionSettings()
+                }
+            } header: {
+                Text("Elephruit Web Clipper")
+            } footer: {
+                Text("In Safari, pin Elephruit to the toolbar. Open it on any page to keep an article, selection, full page, bookmark, or visible-page screenshot.")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section("What gets saved") {
+                Label("Readable Markdown for search and editing", systemImage: "text.document")
+                Label("Cleaned HTML for a faithful source snapshot", systemImage: "doc.richtext")
+                Label("Original URL, author, site, tags, and your note", systemImage: "link")
+                Label("Screenshots as managed local attachments", systemImage: "camera.viewfinder")
+            }
+
+            Section {
+                Label("Nothing is uploaded", systemImage: "lock.shield")
+                Text("Safari hands the clip directly to Elephruit through a private app-group container on this Mac. No account or web service is involved.")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .formStyle(.grouped)
+        .alert(
+            "Couldn’t Open Safari Extension Settings",
+            isPresented: Binding(
+                get: { clipperSettingsError != nil },
+                set: { if !$0 { clipperSettingsError = nil } }
+            )
+        ) {
+            Button("OK") { clipperSettingsError = nil }
+        } message: {
+            Text(clipperSettingsError ?? "")
+        }
+    }
+
+    private func openSafariExtensionSettings() {
+        // Do not probe `SFSafariExtensionManager` here. SafariServices marks its state callback as
+        // UI-actor isolated but currently invokes it on an ExtensionHelper XPC queue, which trips
+        // Swift 6's executor check. Opening Safari's settings is reliable and remains authoritative.
+        Task {
+            do {
+                try await SFSafariApplication.showPreferencesForExtension(
+                    withIdentifier: "com.elephruit.Elephruit.Clipper"
+                )
+            } catch {
+                clipperSettingsError = "Safari could not find the Elephruit extension. The app and extension must be signed by the same development team before Safari can enable it.\n\n\(error.localizedDescription)"
+            }
+        }
     }
 
     private var advanced: some View {

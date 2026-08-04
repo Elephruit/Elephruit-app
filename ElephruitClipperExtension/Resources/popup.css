@@ -1,0 +1,10 @@
+:root { color-scheme: light dark; font: 13px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+* { box-sizing: border-box; }
+body { min-width: 300px; margin: 0; background: Canvas; color: CanvasText; }
+main { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 11px; min-height: 72px; padding: 13px 14px; }
+img { width: 34px; height: 34px; border-radius: 8px; }
+strong { display: block; font-size: 13px; font-weight: 650; }
+p { margin: 2px 0 0; color: GrayText; font-size: 11px; }
+.spinner { width: 18px; height: 18px; border: 2px solid color-mix(in srgb, CanvasText 15%, transparent); border-top-color: #3d6f4b; border-radius: 50%; animation: spin .75s linear infinite; }
+button { grid-column: 2 / 4; height: 30px; border: 0; border-radius: 7px; background: #3d6f4b; color: white; font: inherit; font-weight: 650; cursor: pointer; }
+@keyframes spin { to { transform: rotate(360deg); } }

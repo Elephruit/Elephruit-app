@@ -77,6 +77,7 @@ struct NoteDocumentTests {
             prose(.bulleted, "nested", indent: 2),
             .object(.divider),
             .object(.image(attachmentID: UUID(), caption: NoteRichText("A picture"))),
+            .object(.webClip(attachmentID: UUID())),
             .object(.reference(itemID: UUID())),
             .object(.table(NoteTable(rows: [[NoteRichText("a"), NoteRichText("b")]]))),
         ])

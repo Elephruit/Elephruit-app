@@ -116,13 +116,16 @@ public struct NotePageView: View {
                         object: object,
                         onOpenItem: { navigation.selectItem($0) }
                     )
-                    .padding(.vertical, Theme.Spacing.tight)
+                    .padding(.vertical, usesEdgeToEdgeLayout(object) ? 0 : Theme.Spacing.tight)
                 }
             }
         }
         .padding(.horizontal, Theme.Spacing.section)
         .padding(.vertical, Theme.Spacing.large)
-        .frame(maxWidth: Theme.Size.editorMaxWidth, alignment: .leading)
+        .frame(
+            maxWidth: containsWebClip ? Theme.Size.todayContentWidth : Theme.Size.editorMaxWidth,
+            alignment: .leading
+        )
         .frame(maxWidth: .infinity)
         .coordinateSpace(name: "noteContent")
         .overlay(alignment: .topLeading) {
@@ -169,6 +172,20 @@ public struct NotePageView: View {
         }
 
         return rows
+    }
+
+    private var containsWebClip: Bool {
+        model.document.pieces.contains { piece in
+            if case .object(.webClip) = piece { return true }
+            return false
+        }
+    }
+
+    private func usesEdgeToEdgeLayout(_ object: NoteObject) -> Bool {
+        if case .webClip = object { return true }
+        guard case .image(let attachmentID, _) = object else { return false }
+        return item.attachments.first(where: { $0.id == attachmentID })?
+            .filename.hasPrefix("full-page-") == true
     }
 
     // MARK: - The / menu overlay

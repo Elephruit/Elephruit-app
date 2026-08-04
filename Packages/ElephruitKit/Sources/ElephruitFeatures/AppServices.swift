@@ -35,6 +35,9 @@ public final class AppServices {
     /// Capture, callable without a view — see ``CaptureService``.
     public let capture: CaptureService
 
+    /// Browser captures, after the app-group inbox hands them to the app.
+    public let webClips: WebClipService
+
     /// Tracked time.
     public let timeEntries: any TimeEntryRepository
 
@@ -326,6 +329,8 @@ public final class AppServices {
     ///   - remindersProvider: How to build the Reminders adapter, on the same terms. A test passes
     ///     a ``ElephruitIntegrations/FixtureRemindersProvider``, which is what lets the whole sync
     ///     flow be exercised without `EKEventStore` ever being constructed.
+    ///   - textRecognizer: On-device image text recognition. Tests can provide a deterministic
+    ///     recognizer; the app uses Vision by default.
     ///   - defaults: Where per-device preferences live. A test passes a scratch suite so that
     ///     enabling Contacts in one does not leave the flag set for the user or for the next test.
     ///   - audit: Counts store access, so "this page does not traverse the library once per day it
@@ -338,6 +343,7 @@ public final class AppServices {
         contactsProvider: (@Sendable () -> any ContactsProviding)? = nil,
         calendarProvider: (@Sendable () -> any CalendarProviding)? = nil,
         remindersProvider: (@Sendable () -> any RemindersProviding)? = nil,
+        textRecognizer: (any TextRecognizing)? = nil,
         defaults: UserDefaults = .standard,
         audit: FetchAudit? = nil
     ) {
@@ -628,7 +634,7 @@ public final class AppServices {
             defaults: defaults,
             makeProvider: contactsProvider ?? { SystemContactsProvider() }
         )
-        self.textRecognizer = VisionTextRecognizer()
+        self.textRecognizer = textRecognizer ?? VisionTextRecognizer()
 
         let contactImports = ContactImportService(
             context: context,
@@ -643,11 +649,13 @@ public final class AppServices {
             context: context, people: persons, imports: contactImports, dateProvider: dateProvider
         )
 
-        self.attachments = AttachmentStore(
+        let attachments = AttachmentStore(
             context: context,
             location: stack.location,
             dateProvider: dateProvider
         )
+        self.attachments = attachments
+        self.webClips = WebClipService(items: items, attachments: attachments)
 
         let undoManager = UndoManager()
         // Off, so one operation is one undo step regardless of run-loop timing. Every coordinator
@@ -880,6 +888,55 @@ public final class AppServices {
         let item = try capture.capture(draft)
         noteChange(to: item)
         return item
+    }
+
+    /// Saves one durable browser handoff and refreshes every derived view that needs to see it.
+    @discardableResult
+    public func saveWebClip(_ clip: WebClip) async throws(AppError) -> Item {
+        let item = try webClips.save(clip)
+        try await indexWebClipImages(in: item)
+        noteChange(to: item)
+        return item
+    }
+
+    /// Runs every image saved by the clipper through Vision and folds the recognized text into the
+    /// owning item's normal search projection. OCR stays in attachment metadata: it makes the image
+    /// findable without dumping another transcription into the note editor.
+    private func indexWebClipImages(in item: Item) async throws(AppError) {
+        var changed = false
+        for attachment in item.attachments where attachment.typeIdentifier == "public.png"
+            || attachment.typeIdentifier == "public.jpeg" {
+            guard attachment.extractedText == nil,
+                  let url = attachments.resolve(attachment),
+                  let data = try? Data(contentsOf: url) else { continue }
+
+            do {
+                let lines = try await textRecognizer.recognizeText(in: data)
+                let text = lines
+                    .sorted(by: Self.isEarlierOCRLine)
+                    .map(\.text)
+                    .joined(separator: "\n")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                attachment.extractedText = text.isEmpty ? nil : text
+                changed = changed || !text.isEmpty
+            } catch {
+                Diagnostics.persistence.error(
+                    "Could not OCR web clip image \(attachment.filename, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
+
+        if changed {
+            try items.update(item) { $0.refreshSearchText() }
+        }
+    }
+
+    private static func isEarlierOCRLine(_ lhs: RecognizedLine, _ rhs: RecognizedLine) -> Bool {
+        let rowTolerance: CGFloat = 0.01
+        if abs(lhs.boundingBox.midY - rhs.boundingBox.midY) > rowTolerance {
+            return lhs.boundingBox.midY > rhs.boundingBox.midY
+        }
+        return lhs.boundingBox.minX < rhs.boundingBox.minX
     }
 
     public func noteRemoval(of id: UUID) {

@@ -206,6 +206,9 @@ public enum SourceKind: String, Codable, Sendable, Hashable, CaseIterable {
     /// Created through Quick Capture.
     case quickCapture
 
+    /// Captured from a web page by the Safari extension.
+    case webClip
+
     /// Created by importing a Markdown file.
     case markdownImport
 
@@ -226,6 +229,7 @@ public enum SourceKind: String, Codable, Sendable, Hashable, CaseIterable {
         switch self {
         case .manual: "Created here"
         case .quickCapture: "Quick Capture"
+        case .webClip: "Web clip"
         case .markdownImport: "Markdown import"
         case .archiveImport: "Archive import"
         case .otherImport: "Import"

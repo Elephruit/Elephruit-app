@@ -17,6 +17,12 @@
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
 
+	<!-- Atomic handoff files shared only with the bundled Safari Web Extension. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>$(ELEPHRUIT_APP_GROUP)</string>
+	</array>
+
 	<!-- Open and save panels: import, export, and attaching files. -->
 	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
