@@ -3,18 +3,20 @@
 ## Outcome
 
 Elephruit ships a Safari Web Extension that captures the useful part of a page and saves it directly
-into the local Elephruit library. It supports five modes:
+into the local Elephruit library. It supports six modes:
 
 - **Article** finds the page's primary readable region and removes navigation, advertising, forms,
   scripts, and other page chrome.
+- **Simplified article** keeps the readable region while also stripping site-specific presentation.
 - **Selection** saves the current DOM selection with its source metadata.
-- **Full page** saves the cleaned body as Markdown and HTML.
-- **Bookmark** stores the canonical URL and page excerpt without copying the page.
+- **Full page** saves the cleaned body and a stitched visual capture of the page.
+- **Bookmark** stores the canonical URL, page excerpt, and a local visual thumbnail.
 - **Screenshot** captures the visible Safari tab and stores a PNG attachment.
 
-The popup lets the user revise the title, preview the extracted text, add a note and tags, and name an
-existing project for filing. Article, selection, full-page, and screenshot clips become notes;
-bookmark clips remain bookmarks.
+The popup lets the user revise the title, preview the extracted text and a representative image, add
+a note and tags, and name an existing project for filing. Article images are downloaded into the
+local library and placed inline in the resulting note. Article, simplified-article, selection,
+full-page, and screenshot clips become notes; bookmark clips remain bookmarks with a visual preview.
 
 ## Architecture
 
@@ -30,7 +32,7 @@ is idempotent: a retry reuses the stable clip identifier and completes any missi
 
 ```text
 Safari page
-  → content extractor (Markdown, cleaned HTML, metadata)
+  → content extractor (Markdown, cleaned HTML, metadata, image candidates)
   → extension popup (review and filing)
   → native extension handler
   → App Group inbox (atomic JSON)
@@ -46,7 +48,7 @@ Safari page
   opens the clipper.
 - It does not upload, synchronize, or call a remote API.
 - Only HTTP and HTTPS source URLs are accepted.
-- Text and screenshot payloads have explicit size limits before persistence.
+- Text, screenshot, and downloaded-image payloads have explicit size limits before persistence.
 - Extracted HTML removes executable and distracting elements before it enters the app.
 - The queue uses an App Group rather than exposing the main data store to the extension.
 
@@ -82,13 +84,13 @@ xcodebuild -project Elephruit.xcodeproj -scheme Elephruit \
   -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
-The popup was rendered at its shipping width in a real browser to check hierarchy, clipping, and
-scroll behavior. The content extractor was also exercised against a representative article DOM to
-verify canonical metadata, absolute links, readable Markdown, and removal of navigation and ads.
+The popup uses a three-by-two mode picker at its shipping width so all capture types remain legible.
+The content extractor was also exercised against a representative article DOM to verify canonical
+metadata, absolute links, readable Markdown, and removal of navigation and ads.
 
 ## Deliberate current boundary
 
-The screenshot mode captures the visible viewport. The **Full page** mode preserves the complete
-cleaned document as searchable Markdown plus an HTML fidelity attachment; it does not yet stitch a
-full-page bitmap. Annotation tools and a Chromium package are logical follow-on slices, but are not
-part of this Safari implementation.
+The screenshot mode captures the visible viewport. **Full page** scrolls and stitches as many as 32
+viewports into a JPEG, scales very tall pages to Safari's safe canvas limit, and keeps the cleaned
+document as searchable Markdown plus an HTML fidelity attachment. Screenshot annotation, direct PDF
+capture, multi-select, site-specific recipes, and a Chromium package remain follow-on slices.

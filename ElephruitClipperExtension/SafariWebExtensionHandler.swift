@@ -22,16 +22,19 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             // The payload is already durable. Opening Elephruit makes a cold-start capture appear
             // immediately; if macOS declines, the app imports it on its next ordinary launch.
             if let url = URL(string: "elephruit://clip/import") {
-                context.open(url, completionHandler: nil)
-                reply(
-                    to: context,
-                    message: [
-                        "success": true,
-                        "queued": true,
-                        "openedApp": true,
-                        "clipID": clip.id.uuidString,
-                    ]
-                )
+                let handler = SendableReference(self)
+                let requestContext = SendableReference(context)
+                context.open(url) { opened in
+                    handler.value.reply(
+                        to: requestContext.value,
+                        message: [
+                            "success": true,
+                            "queued": true,
+                            "openedApp": opened,
+                            "clipID": clip.id.uuidString,
+                        ]
+                    )
+                }
             } else {
                 reply(to: context, message: ["success": true, "queued": true, "openedApp": false])
             }
@@ -50,6 +53,17 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         let response = NSExtensionItem()
         response.userInfo = [SFExtensionMessageKey: message]
         context.completeRequest(returningItems: [response])
+    }
+}
+
+/// Foundation predates Swift concurrency, but `NSExtensionContext` explicitly keeps itself alive
+/// until `completeRequest`. This narrow wrapper carries that documented lifetime through the
+/// completion handler without declaring every Foundation reference sendable.
+private struct SendableReference<Value>: @unchecked Sendable {
+    let value: Value
+
+    init(_ value: Value) {
+        self.value = value
     }
 }
 
@@ -88,6 +102,10 @@ private enum ClipMessageDecoder {
         guard (screenshot?.count ?? 0) <= 24_000_000 else {
             throw ClipMessageError.invalid("This screenshot is too large to save.")
         }
+        let images = try images(from: value["images"] as? [[String: Any]] ?? [])
+        guard images.reduce(0, { $0 + $1.data.count }) <= 24_000_000 else {
+            throw ClipMessageError.invalid("The page images are too large to save.")
+        }
 
         let canonical = optionalString("canonicalURL", in: value).flatMap(URL.init(string:))
         let clippedAt = optionalString("clippedAt", in: value)
@@ -107,6 +125,7 @@ private enum ClipMessageDecoder {
             comment: string("comment", in: value),
             tagSlugs: value["tagSlugs"] as? [String] ?? [],
             projectHint: optionalString("projectHint", in: value),
+            images: images,
             screenshotData: screenshot,
             clippedAt: clippedAt
         )
@@ -125,5 +144,29 @@ private enum ClipMessageDecoder {
         guard let encoded else { return nil }
         let base64 = encoded.split(separator: ",", maxSplits: 1).last.map(String.init) ?? encoded
         return Data(base64Encoded: base64)
+    }
+
+    private static func images(from values: [[String: Any]]) throws -> [WebClipImage] {
+        let allowedTypes: Set<String> = [
+            "public.png", "public.jpeg", "com.compuserve.gif", "org.webmproject.webp",
+        ]
+        return try values.prefix(24).map { value in
+            let typeIdentifier = string("typeIdentifier", in: value)
+            guard allowedTypes.contains(typeIdentifier),
+                  let data = screenshotData(from: optionalString("data", in: value)),
+                  !data.isEmpty,
+                  data.count <= 6_000_000 else {
+                throw ClipMessageError.invalid("A captured page image was invalid or too large.")
+            }
+            let proposedSource = optionalString("sourceURL", in: value).flatMap(URL.init(string:))
+            return WebClipImage(
+                id: UUID(uuidString: string("id", in: value)) ?? UUID(),
+                sourceURL: proposedSource?.isWebURL == true ? proposedSource : nil,
+                altText: String(string("altText", in: value).prefix(500)),
+                filename: String(string("filename", in: value).prefix(200)),
+                typeIdentifier: typeIdentifier,
+                data: data
+            )
+        }
     }
 }

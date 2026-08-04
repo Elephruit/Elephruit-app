@@ -1,3 +1,4 @@
+import AppKit
 import ElephruitCore
 import ElephruitDesign
 import ElephruitModel
@@ -163,16 +164,57 @@ struct BookmarkDetailView: View {
             Divider()
 
             ScrollView {
-                NotesField(
-                    text: $bodyText,
-                    title: "Notes",
-                    placeholder: "What is this link for?",
-                    isEditable: !item.isInTrash
-                )
+                VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+                    BookmarkPreviewImage(item: item)
+
+                    NotesField(
+                        text: $bodyText,
+                        title: "Notes",
+                        placeholder: "What is this link for?",
+                        isEditable: !item.isInTrash
+                    )
+
+                    AttachmentSection(item: item)
+                }
                 .padding(Theme.Spacing.large)
             }
         }
         .accessibilityIdentifier(AccessibilityID.Detail.root)
+    }
+}
+
+private struct BookmarkPreviewImage: View {
+    @Environment(\.services) private var services
+
+    let item: Item
+
+    @State private var image: NSImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: 360, alignment: .leading)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
+            }
+        }
+        .task(id: previewAttachment?.id) {
+            guard let services, let attachment = previewAttachment,
+                  let url = services.attachments.resolve(attachment) else {
+                image = nil
+                return
+            }
+            image = NSImage(contentsOf: url)
+        }
+    }
+
+    private var previewAttachment: Attachment? {
+        item.attachments.first { attachment in
+            ["public.png", "public.jpeg", "com.compuserve.gif", "org.webmproject.webp"]
+                .contains(attachment.typeIdentifier)
+        }
     }
 }
 

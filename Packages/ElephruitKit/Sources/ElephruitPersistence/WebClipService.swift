@@ -96,15 +96,16 @@ public struct WebClipService {
 
         if let screenshot = clip.screenshotData,
            !screenshot.isEmpty,
-           !item.attachments.contains(where: { $0.typeIdentifier == "public.png" }) {
+           !item.attachments.contains(where: { $0.filename.contains("-screenshot.") }) {
+            let format = screenshotFormat(screenshot)
             let attachment = try attachments.attach(
                 data: screenshot,
-                filename: "\(filenameStem(for: item.title))-screenshot.png",
-                typeIdentifier: "public.png",
+                filename: "\(filenameStem(for: item.title))-screenshot.\(format.fileExtension)",
+                typeIdentifier: format.typeIdentifier,
                 to: item
             )
             inlineImages.append((attachment, clip.mode == .fullPage ? "Full-page capture" : "Page capture"))
-        } else if let screenshot = item.attachments.first(where: { $0.filename.hasSuffix("-screenshot.png") }) {
+        } else if let screenshot = item.attachments.first(where: { $0.filename.contains("-screenshot.") }) {
             inlineImages.append((screenshot, clip.mode == .fullPage ? "Full-page capture" : "Page capture"))
         }
 
@@ -185,5 +186,10 @@ public struct WebClipService {
         let pieces = title.components(separatedBy: illegal).filter { !$0.isEmpty }
         let joined = pieces.joined(separator: "-").trimmingCharacters(in: .whitespacesAndNewlines)
         return String((joined.isEmpty ? "Web clip" : joined).prefix(100))
+    }
+
+    private func screenshotFormat(_ data: Data) -> (typeIdentifier: String, fileExtension: String) {
+        if data.starts(with: [0xFF, 0xD8, 0xFF]) { return ("public.jpeg", "jpg") }
+        return ("public.png", "png")
     }
 }

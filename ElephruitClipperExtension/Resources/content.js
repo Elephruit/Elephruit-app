@@ -30,7 +30,7 @@
     }
   }
 
-  function clean(root) {
+  function clean(root, simplified = false) {
     const clone = root.cloneNode(true);
     clone.querySelectorAll(REMOVE).forEach((node) => node.remove());
     clone.querySelectorAll("*").forEach((element) => {
@@ -39,6 +39,7 @@
         if (name.startsWith("on") || ["style", "srcset", "formaction", "ping", "nonce"].includes(name)) {
           element.removeAttribute(attribute.name);
         }
+        if (simplified && ["class", "id", "role"].includes(name)) element.removeAttribute(attribute.name);
       }
       if (element.hasAttribute("href")) {
         const href = absoluteURL(element.getAttribute("href"));
@@ -50,6 +51,24 @@
       }
     });
     return clone;
+  }
+
+  function imageCandidates(root) {
+    const seen = new Set();
+    return [...root.querySelectorAll("img")].flatMap((image) => {
+      const url = absoluteURL(image.currentSrc || image.src || image.getAttribute("src"));
+      if (!url || seen.has(url)) return [];
+      const width = Number(image.naturalWidth || image.width || 0);
+      const height = Number(image.naturalHeight || image.height || 0);
+      if (width < 120 || height < 80) return [];
+      seen.add(url);
+      return [{
+        url,
+        alt: (image.alt || image.getAttribute("aria-label") || "").trim().slice(0, 500),
+        width,
+        height
+      }];
+    }).sort((left, right) => (right.width * right.height) - (left.width * left.height)).slice(0, 24);
   }
 
   function linkDensity(element) {
@@ -140,17 +159,21 @@
       .trim();
   }
 
-  function snapshot(root) {
-    const cleaned = clean(root);
+  function snapshot(root, simplified = false) {
+    const images = imageCandidates(root);
+    const cleaned = clean(root, simplified);
     return {
       markdown: normalizedMarkdown(cleaned),
       html: cleaned.outerHTML,
-      text: cleaned.textContent.replace(/\s+/g, " ").trim()
+      text: cleaned.textContent.replace(/\s+/g, " ").trim(),
+      images
     };
   }
 
   function extract() {
-    const article = snapshot(articleRoot());
+    const root = articleRoot();
+    const article = snapshot(root);
+    const simplifiedArticle = snapshot(root, true);
     const fullPage = snapshot(document.body);
     const selected = selectedRoot();
     const selection = selected ? snapshot(selected) : null;
@@ -165,13 +188,79 @@
       author: meta("meta[name='author']", "meta[property='article:author']"),
       excerpt: description || article.text.slice(0, 320),
       article,
+      simplifiedArticle,
       fullPage,
       selection
     };
   }
 
+  let captureSession = null;
+
+  function pageSize() {
+    const body = document.body;
+    const root = document.documentElement;
+    return {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      pageWidth: Math.max(root.scrollWidth, body?.scrollWidth || 0, window.innerWidth),
+      pageHeight: Math.max(root.scrollHeight, body?.scrollHeight || 0, window.innerHeight),
+      devicePixelRatio: window.devicePixelRatio || 1
+    };
+  }
+
+  function beginCapture() {
+    if (captureSession) return pageSize();
+    const fixed = [...document.querySelectorAll("body *")].filter((element) => {
+      const position = getComputedStyle(element).position;
+      return position === "fixed" || position === "sticky";
+    });
+    captureSession = {
+      x: window.scrollX,
+      y: window.scrollY,
+      scrollBehavior: document.documentElement.style.scrollBehavior,
+      fixed: fixed.map((element) => ({
+        element,
+        visibility: element.style.getPropertyValue("visibility"),
+        priority: element.style.getPropertyPriority("visibility")
+      }))
+    };
+    document.documentElement.style.setProperty("scroll-behavior", "auto", "important");
+    return pageSize();
+  }
+
+  function afterPaint(value) {
+    return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(value))));
+  }
+
+  function scrollCapture(y) {
+    if (!captureSession) beginCapture();
+    captureSession.fixed.forEach(({ element, visibility, priority }) => {
+      if (y > 0) element.style.setProperty("visibility", "hidden", "important");
+      else if (visibility) element.style.setProperty("visibility", visibility, priority);
+      else element.style.removeProperty("visibility");
+    });
+    window.scrollTo(0, y);
+    return afterPaint({ scrollY: window.scrollY, ...pageSize() });
+  }
+
+  function finishCapture() {
+    if (!captureSession) return Promise.resolve(true);
+    const session = captureSession;
+    captureSession = null;
+    document.documentElement.style.scrollBehavior = session.scrollBehavior;
+    session.fixed.forEach(({ element, visibility, priority }) => {
+      if (visibility) element.style.setProperty("visibility", visibility, priority);
+      else element.style.removeProperty("visibility");
+    });
+    window.scrollTo(session.x, session.y);
+    return afterPaint(true);
+  }
+
   browser.runtime.onMessage.addListener((message) => {
     if (message?.type === "elephruit.extract") return Promise.resolve(extract());
+    if (message?.type === "elephruit.capture.start") return Promise.resolve(beginCapture());
+    if (message?.type === "elephruit.capture.scroll") return scrollCapture(Number(message.y) || 0);
+    if (message?.type === "elephruit.capture.finish") return finishCapture();
     return undefined;
   });
 })();

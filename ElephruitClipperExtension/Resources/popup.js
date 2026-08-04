@@ -53,6 +53,7 @@ function contentFor(mode) {
   if (mode === "selection") return state.page.selection || { markdown: "", html: null, text: "" };
   if (mode === "fullPage") return state.page.fullPage;
   if (mode === "article") return state.page.article;
+  if (mode === "simplifiedArticle") return state.page.simplifiedArticle || state.page.article;
   if (mode === "screenshot") return { markdown: state.page.excerpt || "Visible page screenshot", html: null, text: "A screenshot of the visible page will be attached." };
   return { markdown: "", html: null, text: state.page.excerpt || state.page.article.text.slice(0, 500) };
 }
@@ -64,16 +65,135 @@ function selectMode(mode) {
   document.querySelectorAll(".mode").forEach((item) => item.classList.toggle("active", item === button));
   const content = contentFor(mode);
   byID("preview").textContent = content.text || "This clip will keep the page title and original link.";
+  const image = content.images?.[0] || state.page.article?.images?.[0];
+  const previewImage = byID("preview-image");
+  if (image?.url && mode !== "screenshot") {
+    previewImage.src = image.url;
+    previewImage.hidden = false;
+  } else {
+    previewImage.removeAttribute("src");
+    previewImage.hidden = true;
+  }
   const count = content.text?.length || 0;
-  byID("preview-count").textContent = mode === "screenshot" ? "Visible area" : count ? `${count.toLocaleString()} characters` : "Link only";
+  byID("preview-count").textContent = mode === "screenshot" ? "Visible area" : mode === "fullPage" ? "Page + searchable text" : count ? `${count.toLocaleString()} characters` : "Link + preview";
 }
 
 function tagSlugs() {
   return byID("tags").value.split(/[,#]+/).map((value) => value.trim()).filter(Boolean);
 }
 
+function dataURLFor(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error("An image could not be read."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function imageType(mime) {
+  return {
+    "image/png": { typeIdentifier: "public.png", extension: "png" },
+    "image/jpeg": { typeIdentifier: "public.jpeg", extension: "jpg" },
+    "image/gif": { typeIdentifier: "com.compuserve.gif", extension: "gif" },
+    "image/webp": { typeIdentifier: "org.webmproject.webp", extension: "webp" }
+  }[mime.toLowerCase()];
+}
+
+function inferredImageType(blob, url) {
+  const declared = imageType(blob.type || "");
+  if (declared) return declared;
+  const extension = new URL(url).pathname.split(".").pop()?.toLowerCase();
+  return {
+    png: imageType("image/png"),
+    jpg: imageType("image/jpeg"),
+    jpeg: imageType("image/jpeg"),
+    gif: imageType("image/gif"),
+    webp: imageType("image/webp")
+  }[extension];
+}
+
+async function capturedImages(content) {
+  if (!["article", "simplifiedArticle", "selection"].includes(state.mode)) return [];
+  const images = [];
+  let total = 0;
+  for (const candidate of (content.images || []).slice(0, 12)) {
+    try {
+      const response = await fetch(candidate.url, { credentials: "include", cache: "force-cache" });
+      if (!response.ok) continue;
+      const blob = await response.blob();
+      const format = inferredImageType(blob, candidate.url);
+      if (!format || blob.size > 6_000_000 || total + blob.size > 18_000_000) continue;
+      total += blob.size;
+      images.push({
+        id: crypto.randomUUID(),
+        sourceURL: candidate.url,
+        altText: candidate.alt || "",
+        filename: `web-image-${String(images.length + 1).padStart(2, "0")}.${format.extension}`,
+        typeIdentifier: format.typeIdentifier,
+        data: await dataURLFor(blob)
+      });
+    } catch {
+      // A page may deny hotlinking one image. Keep the rest of the clip instead of failing it all.
+    }
+  }
+  return images;
+}
+
+function loadedImage(source) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Safari could not compose the page capture."));
+    image.src = source;
+  });
+}
+
+async function fullPageScreenshot() {
+  const metrics = await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.capture.start" });
+  const maximumCaptures = 32;
+  const pageHeight = Math.min(metrics.pageHeight, metrics.viewportHeight * maximumCaptures);
+  const positions = [];
+  for (let y = 0; y < pageHeight; y += metrics.viewportHeight) positions.push(y);
+  const last = Math.max(0, pageHeight - metrics.viewportHeight);
+  if (positions.at(-1) !== last) positions.push(last);
+
+  const captures = [];
+  try {
+    for (const y of positions) {
+      const settled = await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.capture.scroll", y });
+      const data = await browser.tabs.captureVisibleTab(state.tab.windowId, { format: "jpeg", quality: 90 });
+      captures.push({ y: settled.scrollY, image: await loadedImage(data) });
+    }
+  } finally {
+    await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.capture.finish" }).catch(() => {});
+  }
+
+  const pixelRatio = captures[0].image.width / metrics.viewportWidth;
+  const maximumCanvas = 16_000;
+  const scale = Math.min(1, maximumCanvas / (metrics.viewportWidth * pixelRatio), maximumCanvas / (pageHeight * pixelRatio));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(metrics.viewportWidth * pixelRatio * scale));
+  canvas.height = Math.max(1, Math.round(pageHeight * pixelRatio * scale));
+  const context = canvas.getContext("2d");
+
+  for (const capture of captures) {
+    const destinationY = Math.round(capture.y * pixelRatio * scale);
+    const remaining = canvas.height - destinationY;
+    if (remaining <= 0) continue;
+    const destinationHeight = Math.min(Math.round(capture.image.height * scale), remaining);
+    const sourceHeight = Math.round(destinationHeight / scale);
+    context.drawImage(capture.image, 0, 0, capture.image.width, sourceHeight, 0, destinationY, canvas.width, destinationHeight);
+  }
+  let result = canvas.toDataURL("image/jpeg", 0.88);
+  if (result.length > 30_000_000) result = canvas.toDataURL("image/jpeg", 0.68);
+  if (result.length > 30_000_000) result = canvas.toDataURL("image/jpeg", 0.5);
+  return result;
+}
+
 async function screenshotData() {
-  if (state.mode !== "screenshot") return null;
+  if (state.mode === "fullPage") return fullPageScreenshot();
+  if (!["screenshot", "bookmark"].includes(state.mode)) return null;
   return browser.tabs.captureVisibleTab(state.tab.windowId, { format: "png" });
 }
 
@@ -88,6 +208,7 @@ async function save(event) {
   try {
     const content = contentFor(state.mode);
     const tags = tagSlugs();
+    setStatus(state.mode === "fullPage" ? "Capturing the full page…" : "Preserving the page…");
     const clip = {
       version: 1,
       id: crypto.randomUUID(),
@@ -99,10 +220,11 @@ async function save(event) {
       author: state.page.author || null,
       excerpt: state.page.excerpt || null,
       contentMarkdown: content.markdown || "",
-      contentHTML: ["article", "selection", "fullPage"].includes(state.mode) ? content.html : null,
+      contentHTML: ["article", "simplifiedArticle", "selection", "fullPage"].includes(state.mode) ? content.html : null,
       comment: byID("comment").value.trim(),
       tagSlugs: tags,
       projectHint: byID("project").value.trim() || null,
+      images: await capturedImages(content),
       screenshotData: await screenshotData(),
       clippedAt: new Date().toISOString()
     };

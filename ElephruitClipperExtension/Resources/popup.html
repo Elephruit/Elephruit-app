@@ -34,6 +34,7 @@
         <legend>Clip format</legend>
         <div class="mode-grid">
           <button type="button" class="mode active" data-mode="article"><span>▤</span>Article</button>
+          <button type="button" class="mode" data-mode="simplifiedArticle"><span>☰</span>Simplified</button>
           <button type="button" class="mode" data-mode="selection"><span>◩</span>Selection</button>
           <button type="button" class="mode" data-mode="fullPage"><span>▥</span>Full page</button>
           <button type="button" class="mode" data-mode="bookmark"><span>↗</span>Bookmark</button>
@@ -43,7 +44,10 @@
 
       <section class="preview-card" aria-live="polite">
         <div class="preview-label"><span>Preview</span><span id="preview-count"></span></div>
-        <div id="preview" class="preview-copy"></div>
+        <div class="preview-content">
+          <img id="preview-image" class="preview-image" alt="" hidden>
+          <div id="preview" class="preview-copy"></div>
+        </div>
       </section>
 
       <label class="field">
