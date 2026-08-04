@@ -165,10 +165,6 @@ struct TimeScreen: View {
     var body: some View { PlaceholderScreen(title: "Time", symbolName: "clock") }
 }
 
-struct SettingsScreen: View {
-    var body: some View { PlaceholderScreen(title: "Settings", symbolName: "gearshape") }
-}
-
 // MARK: - Shell furniture stubs
 
 /// The quick-capture sheet. The real draft-preserving composer with grammar chips is the
