@@ -103,6 +103,10 @@ Safari page
   network resources, and resolves images only through an identifier-checked local attachment scheme.
 - The queue uses an App Group rather than exposing the main data store to the extension.
 
+The containing app and extension advance their native bundle build number with extension updates.
+Safari caches packaged web extensions by native bundle identity and version, so changing only the
+web manifest version is insufficient to guarantee that a rebuilt local test extension is reloaded.
+
 The main app still has no network entitlement. Safari itself naturally has network access to display
 the page being clipped; the extension operates on that active page.
 
