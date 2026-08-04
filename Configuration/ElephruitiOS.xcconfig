@@ -1,0 +1,56 @@
+// The iPhone app's build settings — the whole file, so the `pbxproj` stays small and
+// rarely touched, on the same argument as the macOS `Elephruit.xcconfig` beside it.
+//
+// Deliberately a sibling rather than an `#include` of the macOS file: that file states
+// `SDKROOT = macosx` and `SUPPORTED_PLATFORMS = macosx`, and a platform inherited and then
+// overridden is a platform someone will one day forget to override. The few identity values
+// the two share are worth duplicating for the two files each being readable top to bottom.
+
+// MARK: - Identity
+
+PRODUCT_NAME = Elephruit
+// A distinct identifier, because these are two applications that happen to share a brain.
+// Installing both on one Mac (Designed for iPad, Catalyst, or a future shared App Group)
+// must never make the system confuse their containers.
+PRODUCT_BUNDLE_IDENTIFIER = com.elephruit.Elephruit.iOS
+PRODUCT_MODULE_NAME = ElephruitMobileApp
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+
+// MARK: - Platform
+
+SDKROOT = iphoneos
+IPHONEOS_DEPLOYMENT_TARGET = 26.0
+SUPPORTED_PLATFORMS = iphoneos iphonesimulator
+// iPhone only. The iPad experience deserves its own layout pass, not a scaled-up phone —
+// shipping `2` here before that pass exists would be claiming work that has not been done.
+TARGETED_DEVICE_FAMILY = 1
+ARCHS = $(ARCHS_STANDARD)
+
+// MARK: - Swift
+
+SWIFT_VERSION = 6.0
+SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+GCC_TREAT_WARNINGS_AS_ERRORS = YES
+SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES
+CLANG_ENABLE_MODULES = YES
+SWIFT_EMIT_LOC_STRINGS = YES
+
+// MARK: - Bundle
+
+INFOPLIST_FILE = Configuration/ElephruitiOS-Info.plist
+GENERATE_INFOPLIST_FILE = YES
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
+ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor
+ENABLE_PREVIEWS = YES
+
+// MARK: - Linking
+
+LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks
+
+// MARK: - Signing
+
+// Automatic style; the team itself lives in Signing.xcconfig so the per-machine fact is one
+// line shared by every target.
+#include "Signing.xcconfig"
+CODE_SIGN_STYLE = Automatic

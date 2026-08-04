@@ -1057,6 +1057,33 @@ public final class AppServices {
         projectSidebar.refresh()
     }
 
+    // MARK: - Pending edits at suspension
+
+    /// The editors that still owe a write, by the item they owe it about.
+    ///
+    /// On macOS this registry lives on each window's `NavigationModel`, because the moments
+    /// that endanger a pending edit there are navigational. On iOS the dangerous moment is
+    /// the scene leaving the foreground — a suspended app can be killed with no further
+    /// notice — and the scene is something only the application object sees. So the shared
+    /// service graph carries the registry, both shells' editors register here, and each
+    /// shell flushes on the hazard its platform actually has.
+    @ObservationIgnored private var suspensionFlushes: [UUID: () -> Void] = [:]
+
+    /// Registers work that must not be lost if the process is about to stop being trusted
+    /// with it. One editor per item; a second registration replaces the first.
+    public func registerSuspensionFlush(_ id: UUID, _ flush: @escaping () -> Void) {
+        suspensionFlushes[id] = flush
+    }
+
+    public func unregisterSuspensionFlush(_ id: UUID) {
+        suspensionFlushes[id] = nil
+    }
+
+    /// Runs every registered flush now. Safe to call from a scene-phase change.
+    public func flushForSuspension() {
+        for flush in suspensionFlushes.values { flush() }
+    }
+
     // MARK: - Sample data
 
     /// Populates a store with a realistic library.

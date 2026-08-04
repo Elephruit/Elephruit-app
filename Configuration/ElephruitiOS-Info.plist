@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Elephruit</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Your data, on your phone.</string>
+
+	<!-- The default system launch screen: a plain background that adopts the app's
+	     appearance. Deliberately empty — a branded splash is a delay wearing a logo. -->
+	<key>UILaunchScreen</key>
+	<dict/>
+
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+
+	<!-- The same read-only URL scheme the Mac registers: every URL it accepts navigates,
+	     and none creates, changes, or deletes anything. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>com.elephruit.Elephruit.iOS</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>elephruit</string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- Each usage string ships in the same commit as the feature that needs it, and each is
+	     the whole truth about what the feature does — same rule, and same wording, as the Mac,
+	     because the code behind them is the same code. -->
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Elephruit shows your calendar and lets you create and change events. Your own notes about a meeting stay in Elephruit and are never added to a calendar event.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Elephruit can show your Reminders lists alongside your own tasks, and keep linked reminders up to date in both directions. It only touches reminders you link, and only when you ask. Areas, projects, people, notes, and everything else private to Elephruit are never written into a reminder.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Elephruit can link the people you keep notes about to your existing contacts, so you do not type their details twice. It changes a contact only when you edit that person in Elephruit and confirm the change, and only their name, nickname, birthday, email addresses, phone numbers, websites, job title, department, and company. It never touches their photo, postal address, or notes, and it never creates or deletes contacts. Your own notes, reflections, and relationship history stay in Elephruit and are never written back.</string>
+</dict>
+</plist>
