@@ -8,12 +8,14 @@ async function activeTab() {
 
 async function extractPage(tabID) {
   try {
-    return await browser.tabs.sendMessage(tabID, { type: "elephruit.extract" });
+    const page = await browser.tabs.sendMessage(tabID, { type: "elephruit.extract.v2" });
+    if (page?.schemaVersion === 2) return page;
+    throw new Error("This tab has an older page extractor.");
   } catch {
     // The tab may have been open before the extension was enabled or updated. Inject once so the
     // user does not have to reload; the guard in content.js makes this safe on already-prepared tabs.
     await browser.scripting.executeScript({ target: { tabId: tabID }, files: ["content.js"] });
-    return browser.tabs.sendMessage(tabID, { type: "elephruit.extract" });
+    return browser.tabs.sendMessage(tabID, { type: "elephruit.extract.v2" });
   }
 }
 

@@ -1,6 +1,6 @@
 (() => {
-  if (globalThis.__elephruitClipperInstalled) return;
-  globalThis.__elephruitClipperInstalled = true;
+  if ((globalThis.__elephruitClipperVersion || 0) >= 2) return;
+  globalThis.__elephruitClipperVersion = 2;
 
   const REMOVE = [
     "script", "style", "noscript", "template", "nav", "form", "button", "input", "select",
@@ -181,6 +181,7 @@
     const description = meta("meta[name='description']", "meta[property='og:description']", "meta[name='twitter:description']");
 
     return {
+      schemaVersion: 2,
       title: meta("meta[property='og:title']", "meta[name='twitter:title']") || document.title || location.hostname,
       sourceURL: location.href,
       canonicalURL: canonical,
@@ -257,7 +258,7 @@
   }
 
   browser.runtime.onMessage.addListener((message) => {
-    if (message?.type === "elephruit.extract") return Promise.resolve(extract());
+    if (message?.type === "elephruit.extract.v2") return Promise.resolve(extract());
     if (message?.type === "elephruit.capture.start") return Promise.resolve(beginCapture());
     if (message?.type === "elephruit.capture.scroll") return scrollCapture(Number(message.y) || 0);
     if (message?.type === "elephruit.capture.finish") return finishCapture();
