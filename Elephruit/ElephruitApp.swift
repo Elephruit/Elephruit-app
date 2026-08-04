@@ -682,7 +682,15 @@ struct SettingsView: View {
     }
 
     private func refreshClipperState() async {
-        clipperEnabled = await withCheckedContinuation { continuation in
+        clipperEnabled = await Self.safariExtensionEnabled()
+    }
+
+    /// SafariServices currently invokes this completion handler on its private XPC queue even
+    /// though the SDK annotates it for the UI actor. Keep the callback outside the view's main-actor
+    /// isolation; awaiting the result naturally returns `refreshClipperState()` to the main actor
+    /// before it mutates SwiftUI state.
+    private nonisolated static func safariExtensionEnabled() async -> Bool {
+        await withCheckedContinuation { continuation in
             SFSafariExtensionManager.getStateOfSafariExtension(
                 withIdentifier: "com.elephruit.Elephruit.Clipper"
             ) { state, error in
