@@ -38,6 +38,10 @@ final class AppEnvironment {
     /// and re-register rather than leaving a stale binding behind.
     private let hotKeys = GlobalHotKeyCenter()
 
+    /// Polls the tiny app-group inbox while Elephruit is open. The extension also launches the app
+    /// after enqueueing, so this same path handles a cold start and a clip made beside an open app.
+    private var webClipMonitor: Task<Void, Never>?
+
     /// What the system said about each global shortcut, for Settings to report.
     private(set) var hotKeyResults: [ShortcutCommand: HotKeyRegistration] = [:]
 
@@ -189,6 +193,7 @@ final class AppEnvironment {
             }
 
             state = .ready(services)
+            beginWebClipMonitoring()
 
             Diagnostics.shell.info(
                 "Environment ready, development mode \(self.isDevelopmentMode, privacy: .public)"
@@ -202,6 +207,48 @@ final class AppEnvironment {
     var services: AppServices? {
         if case .ready(let services) = state { return services }
         return nil
+    }
+
+    // MARK: - Safari web clips
+
+    private func beginWebClipMonitoring() {
+        webClipMonitor?.cancel()
+        webClipMonitor = Task { [weak self] in
+            while !Task.isCancelled {
+                self?.importPendingWebClips()
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    /// Imports only complete envelopes and acknowledges each only after the item is committed.
+    /// Duplicate identifiers mean an earlier import committed but exited before deleting the queue
+    /// file; those are safe to acknowledge rather than turning one clip into two.
+    func importPendingWebClips() {
+        guard case .ready(let services) = state else { return }
+
+        do {
+            let inbox = try WebClipInbox.applicationGroup()
+            for pending in try inbox.pending() {
+                if try services.items.item(id: pending.id) != nil {
+                    try inbox.acknowledge(pending)
+                    continue
+                }
+
+                do {
+                    _ = try services.saveWebClip(pending.clip)
+                    try inbox.acknowledge(pending)
+                    Diagnostics.shell.info("Imported Safari web clip \(pending.id, privacy: .public)")
+                } catch {
+                    services.perform { throw error }
+                    return
+                }
+            }
+        } catch {
+            // A missing app-group container is expected in unsigned package tests and previews. A
+            // real malformed or unreadable envelope is retained and reported through diagnostics.
+            Diagnostics.shell.debug("Safari clip inbox unavailable: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     // MARK: - Reaching the calendar from outside a window

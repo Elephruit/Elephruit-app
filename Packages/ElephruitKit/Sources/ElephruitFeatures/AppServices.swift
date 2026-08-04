@@ -35,6 +35,9 @@ public final class AppServices {
     /// Capture, callable without a view — see ``CaptureService``.
     public let capture: CaptureService
 
+    /// Browser captures, after the app-group inbox hands them to the app.
+    public let webClips: WebClipService
+
     /// Tracked time.
     public let timeEntries: any TimeEntryRepository
 
@@ -639,11 +642,13 @@ public final class AppServices {
             context: context, people: persons, imports: contactImports, dateProvider: dateProvider
         )
 
-        self.attachments = AttachmentStore(
+        let attachments = AttachmentStore(
             context: context,
             location: stack.location,
             dateProvider: dateProvider
         )
+        self.attachments = attachments
+        self.webClips = WebClipService(items: items, attachments: attachments)
 
         let undoManager = UndoManager()
         // Off, so one operation is one undo step regardless of run-loop timing. Every coordinator
@@ -874,6 +879,14 @@ public final class AppServices {
     public func captureDraft(_ draft: CaptureDraft) throws(AppError) -> Item? {
         guard !draft.isEmpty else { return nil }
         let item = try capture.capture(draft)
+        noteChange(to: item)
+        return item
+    }
+
+    /// Saves one durable browser handoff and refreshes every derived view that needs to see it.
+    @discardableResult
+    public func saveWebClip(_ clip: WebClip) throws(AppError) -> Item {
+        let item = try webClips.save(clip)
         noteChange(to: item)
         return item
     }
