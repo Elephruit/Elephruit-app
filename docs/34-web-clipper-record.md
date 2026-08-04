@@ -45,7 +45,9 @@ The toolbar action opens a tiny launcher popup that injects or invokes the newes
 itself immediately, and hands the interaction to the right-side panel. Keeping this handshake in the
 toolbar popup gives Safari a durable user gesture for per-site “Ask” access and avoids depending on a
 nonpersistent Manifest V3 background worker waking in time for the click. The popup never extracts
-the page and never becomes the clipper UI. The right-side panel is ordinary isolated-world content
+the page and never becomes the clipper UI. It messages an already-installed content script first,
+only injects when a tab predates the current extension, and places short deadlines around both paths
+so Safari can never leave an endless launcher spinner. The right-side panel is ordinary isolated-world content
 rendered into a closed Shadow DOM; it is not an extension iframe embedded in the website. Screenshot,
 image-download, and native-messaging operations are proxied through the background worker, so
 privileged extension APIs never run from Safari's website WebContent process. This avoids WebKit
