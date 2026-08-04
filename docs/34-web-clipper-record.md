@@ -99,8 +99,9 @@ Safari page
 - Only HTTP and HTTPS source URLs are accepted.
 - Text, screenshot, and downloaded-image payloads have explicit size limits before persistence.
 - Extracted HTML removes executable and distracting elements before it enters the app. The saved
-  document adds a restrictive Content Security Policy, disables page JavaScript in WebKit, blocks
-  network resources, and resolves images only through an identifier-checked local attachment scheme.
+  document adds a restrictive Content Security Policy, blocks network resources, and resolves
+  images only through identifier-checked managed attachments. The app imports that inert HTML into
+  a native selectable document instead of executing it in a browser process.
 - The queue uses an App Group rather than exposing the main data store to the extension.
 
 The containing app and extension advance their native bundle build number with extension updates.
@@ -122,14 +123,14 @@ promise pending. Boundary choices preserve the heading's structural ancestor lad
 performing text or computed-style analysis for each level.
 The Safari action has no popup: a toolbar click receives `activeTab` and injects the page-side panel
 directly, so a redundant preparation dialog cannot remain over an already-open clipper. Saved rich
-clips render as static HTML with page-authored scripts removed and local images inlined. The browser engine retains
-floats, tables, typography, and selectable text; the view reports its final height once after images
-settle instead of repeatedly resizing while it loads. Wikipedia editing and appearance chrome is
-removed from article captures while its title, infobox, and article layout remain intact.
-Wikipedia's outer Vector grid is normalized to document flow while its article tables and floats
-remain intact, preventing named grid areas from replaying as a blank implicit track. WebKit permits
-only Elephruit's post-load size measurement; saved scripts are removed and the document CSP
-continues to block page-authored JavaScript.
+clips render through the native AppKit HTML compatibility importer with page-authored scripts
+removed and local images inlined. This renderer displays both existing and newly saved clips without
+relying on a separate WebContent process, retains selectable text, honors captured desktop width and
+content insets, and scales oversized local images into that measure. Wikipedia editing and
+appearance chrome is removed from article captures while its title, infobox, and article layout
+remain recognizable. Wikipedia's outer Vector grid is normalized to document flow while its article
+tables and floats remain intact, preventing named grid areas from replaying as a blank implicit
+track. Saved scripts are removed and never executed by the native document view.
 
 The main app still has no network entitlement. Safari itself naturally has network access to display
 the page being clipped; the extension operates on that active page.

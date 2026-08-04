@@ -5,7 +5,6 @@ import ElephruitModel
 import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
-import WebKit
 
 /// One object piece on the page: the thing a prose run flows around.
 ///
@@ -133,7 +132,7 @@ private struct NoteWebClipFace: View {
 
     @State private var html: String?
     @State private var capturedWidth: CGFloat = 720
-    @State private var height: CGFloat = 240
+    @State private var capturedInset: CGFloat = 0
     @State private var resolved = false
 
     var body: some View {
@@ -153,9 +152,9 @@ private struct NoteWebClipFace: View {
                 SelectableWebClipView(
                     html: html,
                     capturedWidth: capturedWidth,
-                    height: $height
+                    capturedInset: capturedInset
                 )
-                    .frame(width: capturedWidth, height: height)
+                    .frame(width: capturedWidth)
                     .frame(maxWidth: .infinity)
             } else if resolved {
                 HStack(spacing: Theme.Spacing.small) {
@@ -212,153 +211,258 @@ private struct NoteWebClipFace: View {
             options: .regularExpression
         )
         capturedWidth = Self.capturedWidth(in: loadedHTML)
+        capturedInset = Self.capturedInset(in: loadedHTML)
         html = displayHTML
     }
 
     private static func capturedWidth(in html: String) -> CGFloat {
+        let range = NSRange(html.startIndex..., in: html)
+        let patterns = [
+            #"data-elephruit-captured-width="([0-9.]+)""#,
+            #"<article\b[^>]*style="[^"]*?\bwidth:\s*([0-9.]+)px"#,
+        ]
+        for pattern in patterns {
+            let expression = try? NSRegularExpression(
+                pattern: pattern,
+                options: .caseInsensitive
+            )
+            guard let match = expression?.firstMatch(in: html, range: range),
+                  let valueRange = Range(match.range(at: 1), in: html),
+                  let width = Double(html[valueRange])
+            else { continue }
+            return min(max(CGFloat(width), 320), 1_200)
+        }
+        return 720
+    }
+
+    private static func capturedInset(in html: String) -> CGFloat {
+        // AppKit's HTML importer drops CSS box padding. Preserve the first symmetric content
+        // inset so older clips retain their saved desktop measure in the compatibility renderer.
         let expression = try? NSRegularExpression(
-            pattern: #"data-elephruit-captured-width="([0-9.]+)""#,
+            pattern: #"padding-right:\s*([0-9.]+)px;[^\"]*padding-left:\s*([0-9.]+)px"#,
             options: .caseInsensitive
         )
         let range = NSRange(html.startIndex..., in: html)
-        guard let match = expression?.firstMatch(in: html, range: range),
-              let valueRange = Range(match.range(at: 1), in: html),
-              let width = Double(html[valueRange])
-        else { return 720 }
-        return min(max(CGFloat(width), 320), 1_200)
+        for match in expression?.matches(in: html, range: range) ?? [] {
+            guard let rightRange = Range(match.range(at: 1), in: html),
+                  let leftRange = Range(match.range(at: 2), in: html),
+                  let right = Double(html[rightRange]),
+                  let left = Double(html[leftRange]),
+                  right > 0,
+                  abs(right - left) < 0.5
+            else { continue }
+            return min(CGFloat(left), 64)
+        }
+        return 0
     }
 }
 
 private struct SelectableWebClipView: NSViewRepresentable {
     let html: String
     let capturedWidth: CGFloat
-    @Binding var height: CGFloat
+    let capturedInset: CGFloat
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(height: $height)
+        Coordinator()
     }
 
-    func makeNSView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
-        // Capture removes every script before persistence and CSP blocks page-authored script.
-        // Keep WebKit execution available solely for the one post-load size measurement below.
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
-        configuration.userContentController.add(context.coordinator, name: "elephruitSize")
-
-        let webView = WKWebView(
-            frame: NSRect(x: 0, y: 0, width: capturedWidth, height: height),
-            configuration: configuration
+    func makeNSView(context: Context) -> NSTextView {
+        let textView = NSTextView(
+            frame: NSRect(x: 0, y: 0, width: capturedWidth, height: 120)
         )
-        webView.navigationDelegate = context.coordinator
-        webView.underPageBackgroundColor = .textBackgroundColor
-        return webView
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isRichText = true
+        textView.importsGraphics = true
+        textView.drawsBackground = true
+        textView.backgroundColor = .textBackgroundColor
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = false
+        textView.textContainer?.heightTracksTextView = false
+        textView.textContainer?.containerSize = NSSize(
+            width: capturedWidth,
+            height: .greatestFiniteMagnitude
+        )
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        // Keep the page's captured foreground colors instead of forcing every link blue.
+        textView.linkTextAttributes = [.cursor: NSCursor.pointingHand]
+        return textView
     }
 
-    func updateNSView(_ webView: WKWebView, context: Context) {
-        context.coordinator.height = $height
+    func updateNSView(_ textView: NSTextView, context: Context) {
         guard context.coordinator.loadedHTML != html else { return }
         context.coordinator.loadedHTML = html
-        context.coordinator.didMeasure = false
-        webView.loadHTMLString(html, baseURL: nil)
+
+        let options: [NSAttributedString.DocumentReadingOptionKey: Any] = [
+            .documentType: NSAttributedString.DocumentType.html,
+            .characterEncoding: String.Encoding.utf8.rawValue,
+        ]
+        guard let rendered = try? NSMutableAttributedString(
+            data: Data(html.utf8),
+            options: options,
+            documentAttributes: nil
+        ) else { return }
+        prepareForDisplay(rendered)
+        textView.textContainer?.containerSize = NSSize(
+            width: capturedWidth,
+            height: .greatestFiniteMagnitude
+        )
+        textView.textStorage?.setAttributedString(rendered)
+        textView.invalidateIntrinsicContentSize()
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: WKWebView, context: Context) -> CGSize? {
-        CGSize(width: capturedWidth, height: height)
+    private func prepareForDisplay(_ rendered: NSMutableAttributedString) {
+        let mediaWidth = max(capturedWidth - capturedInset * 2, 1)
+        var mediaReplacements: [(range: NSRange, content: NSAttributedString)] = []
+        rendered.enumerateAttribute(
+            .attachment,
+            in: NSRange(location: 0, length: rendered.length)
+        ) { value, range, _ in
+            guard let attachment = value as? NSTextAttachment,
+                  let image = attachment.image
+                    ?? attachment.contents.flatMap(NSImage.init(data:))
+                    ?? attachment.fileWrapper?.regularFileContents.flatMap(NSImage.init(data:)),
+                  image.size.width > mediaWidth
+            else { return }
+            let scale = mediaWidth / image.size.width
+            let displaySize = NSSize(width: mediaWidth, height: image.size.height * scale)
+            let displayImage = NSImage(size: displaySize, flipped: false) { destination in
+                NSGraphicsContext.current?.imageInterpolation = .high
+                image.draw(
+                    in: destination,
+                    from: NSRect(origin: .zero, size: image.size),
+                    operation: .copy,
+                    fraction: 1
+                )
+                return true
+            }
+            let replacement = NSTextAttachment()
+            replacement.image = displayImage
+            replacement.bounds = NSRect(origin: .zero, size: displaySize)
+            mediaReplacements.append((range, NSAttributedString(attachment: replacement)))
+        }
+        for replacement in mediaReplacements.reversed() {
+            rendered.replaceCharacters(in: replacement.range, with: replacement.content)
+        }
+
+        restoreCapturedBlockLayout(rendered)
+
+        rendered.enumerateAttributes(
+            in: NSRange(location: 0, length: rendered.length)
+        ) { attributes, range, _ in
+            guard attributes[.link] != nil,
+                  let background = attributes[.backgroundColor] as? NSColor,
+                  background.isDark
+            else { return }
+            rendered.addAttribute(.foregroundColor, value: NSColor.white, range: range)
+            rendered.removeAttribute(.underlineStyle, range: range)
+        }
+    }
+
+    private func restoreCapturedBlockLayout(_ rendered: NSMutableAttributedString) {
+        guard capturedInset > 0 else { return }
+        let plainText = rendered.string as NSString
+        var location = 0
+
+        while location < rendered.length {
+            let paragraphRange = plainText.paragraphRange(
+                for: NSRange(location: location, length: 0)
+            )
+            let attributes = rendered.attributes(
+                at: paragraphRange.location,
+                effectiveRange: nil
+            )
+            let style = ((attributes[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy()
+                as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+
+            style.firstLineHeadIndent = capturedInset
+            style.headIndent = capturedInset
+            style.tailIndent = -capturedInset
+
+            if let background = attributes[.backgroundColor] as? NSColor,
+               background.isVisibleBlockBackground {
+                let block = NSTextBlock()
+                block.backgroundColor = background
+                block.setContentWidth(
+                    capturedWidth - capturedInset * 2,
+                    type: .absoluteValueType
+                )
+                let verticalInset = min(max(capturedInset * 2 / 3, 4), 12)
+                block.setWidth(verticalInset, type: .absoluteValueType, for: .padding)
+                block.setWidth(
+                    capturedInset,
+                    type: .absoluteValueType,
+                    for: .padding,
+                    edge: .minX
+                )
+                block.setWidth(
+                    capturedInset,
+                    type: .absoluteValueType,
+                    for: .padding,
+                    edge: .maxX
+                )
+                style.firstLineHeadIndent = 0
+                style.headIndent = 0
+                style.tailIndent = 0
+                style.textBlocks = [block]
+            }
+
+            rendered.addAttribute(.paragraphStyle, value: style, range: paragraphRange)
+            location = NSMaxRange(paragraphRange)
+        }
+    }
+
+    func sizeThatFits(
+        _ proposal: ProposedViewSize,
+        nsView: NSTextView,
+        context: Context
+    ) -> CGSize? {
+        let width = capturedWidth
+        if abs(nsView.frame.width - width) > 0.5 {
+            nsView.setFrameSize(NSSize(width: width, height: nsView.frame.height))
+        }
+        nsView.textContainer?.containerSize = NSSize(
+            width: width,
+            height: .greatestFiniteMagnitude
+        )
+        let measuredHeight = context.coordinator.measuredHeight(for: nsView, width: width)
+        return CGSize(width: width, height: measuredHeight)
     }
 
     @MainActor
-    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
-        var height: Binding<CGFloat>
+    final class Coordinator {
         var loadedHTML: String?
-        var didMeasure = false
 
-        init(height: Binding<CGFloat>) {
-            self.height = height
-        }
+        func measuredHeight(for textView: NSTextView, width: CGFloat) -> CGFloat {
+            guard let textContainer = textView.textContainer,
+                  let layoutManager = textView.layoutManager
+            else { return 120 }
 
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
-            webView.evaluateJavaScript(
-                """
-                Promise.all(Array.from(document.images).map((image) => {
-                  if (image.complete) return Promise.resolve();
-                  return new Promise((resolve) => {
-                    image.addEventListener('load', resolve, { once: true });
-                    image.addEventListener('error', resolve, { once: true });
-                  });
-                })).then(() => requestAnimationFrame(() => requestAnimationFrame(() => {
-                  window.webkit.messageHandlers.elephruitSize.postMessage(
-                    Math.ceil(Math.max(document.body.scrollHeight, document.documentElement.scrollHeight))
-                  );
-                })));
-                """
-            ) { [weak self] _, error in
-                // A failed measurement must never leave a permanently blank, short viewport.
-                // The document itself is still static and scrollable, so expose a useful height
-                // while retaining the saved HTML rather than replacing it with an error page.
-                guard error != nil, self?.didMeasure == false else { return }
-                self?.didMeasure = true
-                self?.height.wrappedValue = 1_200
-            }
+            textContainer.containerSize.height = .greatestFiniteMagnitude
+            layoutManager.ensureLayout(for: textContainer)
+            let content = layoutManager.usedRect(for: textContainer)
+            return min(max(ceil(content.height + textView.textContainerInset.height * 2), 120), 30_000)
         }
+    }
+}
 
-        func webView(
-            _ webView: WKWebView,
-            didFail navigation: WKNavigation?,
-            withError error: any Error
-        ) {
-            didFailToRender(in: webView)
-        }
+private extension NSColor {
+    var isDark: Bool {
+        guard let color = usingColorSpace(.deviceRGB) else { return false }
+        let luminance = 0.2126 * color.redComponent
+            + 0.7152 * color.greenComponent
+            + 0.0722 * color.blueComponent
+        return color.alphaComponent > 0.5 && luminance < 0.45
+    }
 
-        func webView(
-            _ webView: WKWebView,
-            didFailProvisionalNavigation navigation: WKNavigation?,
-            withError error: any Error
-        ) {
-            didFailToRender(in: webView)
-        }
-
-        func userContentController(
-            _ userContentController: WKUserContentController,
-            didReceive message: WKScriptMessage
-        ) {
-            guard !didMeasure, message.name == "elephruitSize",
-                  let number = message.body as? NSNumber
-            else { return }
-            didMeasure = true
-            height.wrappedValue = min(max(CGFloat(truncating: number), 120), 30_000)
-        }
-
-        private func didFailToRender(in webView: WKWebView) {
-            guard !didMeasure else { return }
-            didMeasure = true
-            height.wrappedValue = 1_200
-            webView.loadHTMLString(
-                """
-                <!doctype html><meta charset="utf-8">
-                <style>body{font:15px -apple-system;margin:24px;color:#555}</style>
-                <p>This saved page could not be displayed. Its original HTML and searchable attachments are still preserved.</p>
-                """,
-                baseURL: nil
-            )
-        }
-
-        func webView(
-            _ webView: WKWebView,
-            decidePolicyFor navigationAction: WKNavigationAction,
-            decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
-        ) {
-            guard navigationAction.navigationType == .linkActivated,
-                  let url = navigationAction.request.url,
-                  ["http", "https"].contains(url.scheme?.lowercased() ?? "")
-            else {
-                decisionHandler(navigationAction.navigationType == .linkActivated ? .cancel : .allow)
-                return
-            }
-            NSWorkspace.shared.open(url)
-            decisionHandler(.cancel)
-        }
+    var isVisibleBlockBackground: Bool {
+        guard let color = usingColorSpace(.deviceRGB) else { return false }
+        return color.alphaComponent > 0.5
+            && (color.redComponent < 0.95
+                || color.greenComponent < 0.95
+                || color.blueComponent < 0.95)
     }
 }
 
