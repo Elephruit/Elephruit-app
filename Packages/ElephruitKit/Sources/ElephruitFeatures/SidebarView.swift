@@ -6,18 +6,12 @@ import SwiftUI
 
 /// The first column.
 ///
-/// ### Two levels, not one list
-/// The previous sidebar showed every destination of every feature at the same time: the day's work,
-/// the task system's nine views, the Records module's scopes, the library's kinds, tags, saved
-/// searches, the Archive and the Trash. Nothing was wrong with any one of those rows; what was wrong
-/// was that all of them were on screen at once, which turned the sidebar into an index of the app
-/// rather than a statement of where you are in it.
-///
-/// So there are two levels. The first holds the four destinations that belong to no module — Home,
-/// Today, Upcoming, Inbox — and then the modules themselves. Entering one replaces the list with
-/// *that module's* navigation, and a compact header names where you are and offers the way back.
-/// Nothing about a destination changes on the way in: a module is an ordered slice of the same
-/// ``SidebarSelection`` values the app already had. See ``AppModule``.
+/// ### One level, in bands
+/// Today and the Inbox first, then the projects tree, then the Library — the six modules work
+/// happens in — then, while a module with real navigation of its own is active, that module's
+/// sources as sections beneath it. Tags and saved searches keep their place, and the Archive and
+/// the Trash sit at the bottom the way Notes keeps Recently Deleted. The earlier design swapped
+/// this whole column for a module's own list on entry; see `primaryList` for why that lost.
 ///
 /// ### On native selection
 /// This uses `.listStyle(.sidebar)` and the system's own selection rather than a bespoke treatment.
@@ -43,25 +37,8 @@ public struct SidebarView: View {
         self.navigation = navigation
     }
 
-    /// Whether the sidebar swaps to a module's own level for this active module.
-    ///
-    /// One answer, asked by the header and the levels alike. The regression this guards against was
-    /// precisely the two drifting apart: the header checked ``AppModule/hasOwnSidebar`` and the
-    /// levels did not, so entering a project suppressed the header *and* swapped the list for a
-    /// module sidebar that draws nothing — a blank column with no way back.
-    static func showsModuleLevel(for module: AppModule?) -> Bool {
-        module?.hasOwnSidebar == true
-    }
-
     public var body: some View {
-        VStack(spacing: 0) {
-            if let module = navigation.activeModule, Self.showsModuleLevel(for: module) {
-                ModuleHeader(module: module, navigation: navigation)
-                Divider()
-            }
-
-            levels
-        }
+        primaryList
         .accessibilityIdentifier(AccessibilityID.Sidebar.root)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             statusLine
@@ -95,33 +72,29 @@ public struct SidebarView: View {
         if navigation.selection == row.selection { navigation.select(.today) }
     }
 
-    /// The two levels, and the move between them.
+    // MARK: - The one level
+
+    /// One scrolling source list, in the pattern of Notes, Mail and Reminders.
     ///
-    /// A push rather than a cross-fade, because the two levels are a hierarchy and a push is how
-    /// macOS says so. `calmAnimation` is what makes it honour Reduce Motion, where the same change
-    /// happens with no movement at all.
-    private var levels: some View {
-        ZStack {
-            if let module = navigation.activeModule, Self.showsModuleLevel(for: module) {
-                ModuleSidebar(module: module, navigation: navigation)
-                    .transition(.push(from: .trailing))
-            } else {
-                primaryList
-                    .transition(.push(from: .leading))
-            }
-        }
-        .calmAnimation(Theme.Motion.appearance, value: navigation.activeModule)
-    }
-
-    // MARK: - The primary level
-
+    /// ### Why the second level is gone
+    /// The sidebar used to swap wholesale when a module with its own navigation was entered — a
+    /// push, a compact header, a back chevron. The argument was short lists; the price was that
+    /// entering Calendar erased the projects tree, the tags, the pinned items, and every other
+    /// place the user could go. The flows this app is actually used through pivot constantly
+    /// between Today, a project, Reminders and a person, and the swap taxed exactly those pivots.
+    /// No first-party app replaces its whole source list on selection; sections do the same work
+    /// without amnesia. A module's own sources — Calendar's views and calendars, Notes' kinds —
+    /// now appear as sections *below* the Library while that module is active: where you are never
+    /// erases where you can go.
     private var primaryList: some View {
         List(selection: selectionBinding) {
             globalBand
             projectsBand
-            moduleBand
+            libraryBand
+            contextBand
             pinnedBand
             crossModuleBand
+            libraryEdgesBand
         }
         .listStyle(.sidebar)
         // The fixed root container supplies the sidebar surface. Let it show through instead of
@@ -151,17 +124,69 @@ public struct SidebarView: View {
         ProjectsSidebarSection(navigation: navigation, rowHeight: rowHeight)
     }
 
-    /// The modules.
+    /// The modules the library is made of.
     ///
-    /// Buttons rather than selectable rows, and deliberately. Arrow keys in a `List` change the
-    /// selection as they move, so tagging these would mean arrowing past Calendar *entered*
-    /// Calendar and replaced the list under the cursor — the sidebar would rearrange itself while
-    /// somebody was still reading it. A module is entered by activating it: click, Return, Tab and
-    /// Space under Full Keyboard Access, `⌘1`–`⌘9`, the View menu, or the command palette.
-    private var moduleBand: some View {
-        Section("Modules") {
-            ForEach(AppModule.displayOrder) { module in
+    /// Six, not ten: Areas live in the projects tree where they already render as containers, and
+    /// Archive and Trash move to the bottom rail — a wastebasket listed as a peer of Calendar was
+    /// most of what made the old band read as an index rather than a map.
+    ///
+    /// Still buttons rather than selectable rows: entering a module restores where you last were
+    /// in it, which is a side effect arrowing through a `List` must not trigger row by row.
+    static let libraryModules: [AppModule] = [
+        .notes, .reminders, .calendar, .records, .time, .bookmarks,
+    ]
+
+    private var libraryBand: some View {
+        Section("Library") {
+            ForEach(Self.libraryModules) { module in
                 ModuleRow(module: module, navigation: navigation, rowHeight: rowHeight)
+            }
+        }
+    }
+
+    /// The active module's own sources, as sections below the Library.
+    ///
+    /// What the second level used to hold, without the amnesia: Calendar's views, calendars and
+    /// sets; Notes' kinds. Only the modules with real navigation get one — the rule the old
+    /// design stated and paid a column swap for.
+    @ViewBuilder
+    private var contextBand: some View {
+        switch navigation.activeModule {
+        case .calendar:
+            CalendarSidebarSection(navigation: navigation)
+
+        case .notes:
+            Section("Notes") {
+                ForEach(notesContextRows) { destination in
+                    SidebarDestinationRow(
+                        destination: destination,
+                        isSelected: navigation.selection == destination.selection,
+                        rowHeight: rowHeight
+                    )
+                }
+            }
+
+        default:
+            EmptyView()
+        }
+    }
+
+    /// Notes' sub-destinations — the front door is the Library row itself.
+    private var notesContextRows: [SidebarDestination] {
+        SidebarRegistry.sidebarRows(in: .notes)
+            .filter { $0.selection != AppModule.notes.defaultSelection }
+    }
+
+    /// Archive and Trash, at the bottom where Notes keeps Recently Deleted — reachable, and no
+    /// longer peers of the places work actually happens.
+    private var libraryEdgesBand: some View {
+        Section {
+            ForEach(SidebarRegistry.sidebarRows(in: .archive) + SidebarRegistry.sidebarRows(in: .trash)) { destination in
+                SidebarDestinationRow(
+                    destination: destination,
+                    isSelected: navigation.selection == destination.selection,
+                    rowHeight: rowHeight
+                )
             }
         }
     }
@@ -333,79 +358,6 @@ public struct SidebarView: View {
     }
 }
 
-// MARK: - Module header
-
-/// Where you are, and the two ways out of it.
-///
-/// One row: a back control that returns to the primary navigation, and the module's name as a menu
-/// that switches straight to another one. Two affordances in the space of one, because a sidebar
-/// header that takes three rows to repeat a module name has spent the room the navigation needed.
-struct ModuleHeader: View {
-    let module: AppModule
-    let navigation: NavigationModel
-
-    @ScaledMetric(relativeTo: .body) private var rowHeight = SidebarMetrics.baseRowHeight
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.tight) {
-            Button {
-                navigation.leaveModule()
-            } label: {
-                Image(systemName: "chevron.backward")
-                    .font(Theme.Text.metadata.weight(.semibold))
-                    .frame(width: SidebarMetrics.iconColumn, height: rowHeight)
-                    .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .help("Back to the main navigation")
-            .accessibilityLabel("Back to all modules")
-            .accessibilityIdentifier("sidebar.module.back")
-
-            Menu {
-                ForEach(AppModule.displayOrder) { candidate in
-                    Button {
-                        navigation.enterModule(candidate)
-                    } label: {
-                        Label(
-                            candidate.title,
-                            systemImage: candidate == module ? "checkmark" : candidate.symbolName
-                        )
-                    }
-                }
-
-                Divider()
-
-                Button("All Modules", systemImage: "square.grid.2x2") {
-                    navigation.leaveModule()
-                }
-            } label: {
-                HStack(spacing: Theme.Spacing.tight) {
-                    Image(systemName: module.symbolName)
-                        .accessibilityHidden(true)
-                    Text(module.title)
-                        .font(Theme.Text.rowTitleEmphasised)
-                        .lineLimit(1)
-                }
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help(module.hint)
-            .accessibilityLabel("\(module.title) module. Switch module")
-            .accessibilityIdentifier("sidebar.module.switcher")
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, SidebarMetrics.leadingInset)
-        .padding(.vertical, Theme.Spacing.tight)
-        .accessibilityElement(children: .contain)
-        // Announced rather than merely redrawn: the sidebar's whole contents have just been
-        // replaced, and a VoiceOver user who is not looking at it needs to be told which.
-        .onChange(of: module) { _, newValue in
-            AccessibilityNotification.Announcement("\(newValue.title) module").post()
-        }
-    }
-}
-
 // MARK: - Rows
 
 /// A declared destination. Never truncated — see ``SidebarMetrics``.
@@ -451,12 +403,8 @@ struct ModuleRow: View {
     var rowHeight: CGFloat
 
     /// Whether this row is where the window currently is.
-    ///
-    /// Only answered for modules that keep the primary sidebar on screen: their row is the one
-    /// place "you are here" can show. A module with its own sidebar never needs this — entering it
-    /// replaces the list, and the module header names it.
     private var isCurrent: Bool {
-        navigation.activeModule == module && !module.hasOwnSidebar
+        navigation.activeModule == module
     }
 
     var body: some View {
@@ -472,14 +420,6 @@ struct ModuleRow: View {
                     .lineLimit(1)
 
                 Spacer(minLength: 0)
-
-                // The chevron promises a level to descend into. Only drawn where that is true.
-                if module.hasOwnSidebar {
-                    Image(systemName: "chevron.forward")
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.tertiaryText)
-                        .accessibilityHidden(true)
-                }
             }
             .frame(minHeight: rowHeight)
             .contentShape(.rect)

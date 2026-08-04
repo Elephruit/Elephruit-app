@@ -34,7 +34,6 @@ struct TimeNavigationTests {
 
         #expect(navigation.activeModule == .time)
         #expect(navigation.selection == .time)
-        #expect(!SidebarView.showsModuleLevel(for: navigation.activeModule))
     }
 
     @Test("The open surface survives a relaunch")
