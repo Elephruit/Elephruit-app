@@ -282,6 +282,11 @@ extension NavigationModel {
     /// window that reads the module alone gives the day a 340-point column. The module still decides
     /// wherever there is one; this is the one destination that has an opinion of its own.
     public var shellLayout: ModuleShellLayout {
+        // Search replaces whatever the module was showing with a results list and a reading pane,
+        // so it wears the primary-navigation layout wherever it was invoked. Without this, ⌘F on a
+        // canvas module ran the search in a full-width column with no detail pane, and a result
+        // could be selected but never seen — the ⌘K dead end, recreated inside search.
+        guard !isSearchActive else { return PrimaryNavigationLayout.shell }
         guard activeModule == nil else { return activeModule.shellLayout }
         return selection.canonical == .today ? TodayLayout.shell : PrimaryNavigationLayout.shell
     }

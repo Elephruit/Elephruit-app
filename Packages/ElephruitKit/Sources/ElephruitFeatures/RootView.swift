@@ -470,7 +470,7 @@ public struct RootView: View {
     /// without moving or resizing the fixed sibling at the window's leading edge.
     @ViewBuilder
     private var contentPanes: some View {
-        if case .records(let scope) = navigation.selection {
+        if case .records(let scope) = navigation.selection, !navigation.isSearchActive {
             RecordsWorkspaceView(navigation: navigation, scope: scope)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -503,7 +503,14 @@ public struct RootView: View {
 
     @ViewBuilder
     private var primaryPane: some View {
-        if case .project(let id, let viewID) = navigation.selection {
+        // Search wins over every module surface: ⌘F means "search from here", and five of the
+        // seven primary surfaces had no search UI at all — `beginSearch()` set state nothing
+        // rendered, and the window sat in an invisible mode whose Escape consumed a keypress to
+        // leave. `ItemListView` owns the one search field and the results; while search is
+        // active it renders nothing else.
+        if navigation.isSearchActive {
+            ItemListView(navigation: navigation)
+        } else if case .project(let id, let viewID) = navigation.selection {
             ProjectWorkspaceView(navigation: navigation, projectID: id, viewID: viewID)
         } else if navigation.selection.isTaskDestination || navigation.selection == .reminders {
             RemindersWorkspaceView(navigation: navigation)

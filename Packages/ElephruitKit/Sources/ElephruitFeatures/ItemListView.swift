@@ -73,7 +73,15 @@ public struct ItemListView: View {
                 open(result)
             }
             .toolbar { toolbarContent }
-            .task { makeSessionIfNeeded() }
+            .task {
+                makeSessionIfNeeded()
+                // Mounted *into* an already-active search — ⌘F on a module surface swaps this
+                // view in with the mode already set, so the `onChange` below never fires and the
+                // session and field focus have to be caught up here.
+                if navigation.isSearchActive {
+                    searchModeDidChange(isActive: true)
+                }
+            }
             .task(id: reloadToken) { await reload() }
             .onChange(of: navigation.isSearchActive) { _, isActive in
                 searchModeDidChange(isActive: isActive)

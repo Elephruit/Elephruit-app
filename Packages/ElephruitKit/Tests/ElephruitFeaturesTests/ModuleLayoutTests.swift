@@ -780,6 +780,33 @@ struct ShellFitTests {
         #expect(navigation.shellLayout == AppModule.notes.shellLayout)
     }
 
+    /// ⌘F replaces whatever the module shows with a results list and a reading pane, so the shell
+    /// must wear a layout that *has* a reading pane — a canvas module's own layout would let a
+    /// result be selected and never seen.
+    @Test("Search wears the list-and-detail layout wherever it was invoked")
+    func searchWearsThePrimaryLayout() {
+        let navigation = NavigationModel()
+
+        navigation.enterModule(.calendar)
+        #expect(navigation.shellLayout == AppModule.calendar.shellLayout)
+
+        navigation.beginSearch()
+        #expect(navigation.shellLayout == PrimaryNavigationLayout.shell)
+
+        navigation.endSearch()
+        #expect(
+            navigation.shellLayout == AppModule.calendar.shellLayout,
+            "leaving search hands the module its own shape back"
+        )
+
+        // The override holds outside modules too — searching from Today must not keep the
+        // day's canvas.
+        navigation.leaveModule()
+        navigation.select(.today)
+        navigation.beginSearch()
+        #expect(navigation.shellLayout == PrimaryNavigationLayout.shell)
+    }
+
     /// The inspector goes first and the editor second, rather than everything narrowing at once.
     @Test("A narrowing window gives up the inspector before the editor")
     func dropOrder() {
