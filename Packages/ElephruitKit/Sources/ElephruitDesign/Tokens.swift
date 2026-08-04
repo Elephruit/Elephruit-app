@@ -134,6 +134,11 @@ extension Theme {
         /// characters at the default size while leaving the window free to be any width.
         public static let editorMaxWidth: CGFloat = 720
 
+        /// The measure of a project's Home page: a document, wider than prose because its plan
+        /// rows carry controls and dates, but still a page you read rather than a surface that
+        /// stretches to whatever the window happens to be.
+        public static let projectHomeMaxWidth: CGFloat = 800
+
         /// The measure of a page built from columns of rows rather than from prose.
         ///
         /// Wider than ``editorMaxWidth`` because the constraint is different: a paragraph is capped

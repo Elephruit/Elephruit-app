@@ -27,3 +27,22 @@ struct WorkItemRedirect: View {
         navigation.open(item)
     }
 }
+
+/// Sends a project selected as an item to its workspace Home.
+///
+/// The old path rendered a second project page here — a hidden landing surface that drifted from
+/// the real one. Every door now leads to the same room.
+struct ProjectHomeRedirect: View {
+    let project: Item
+    let navigation: NavigationModel
+
+    var body: some View {
+        EmptyStateView(
+            symbolName: "arrow.forward",
+            headline: "Opening in Projects",
+            message: "Opening “\(project.displayTitle)” on its Home page."
+        )
+        .task(id: project.id) { navigation.open(project) }
+        .accessibilityIdentifier("project.redirect")
+    }
+}

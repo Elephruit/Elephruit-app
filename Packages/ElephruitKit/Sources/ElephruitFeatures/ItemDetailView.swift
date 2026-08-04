@@ -91,10 +91,16 @@ public struct ItemDetailView: View {
     @ViewBuilder
     private func surface(for item: Item) -> some View {
         switch item.kind {
+        // A project selected as an item — from search, a backlink, a stale route — goes where
+        // every other door already leads: its workspace Home. Keeping the old detail surface
+        // reachable from here made it a second, hidden landing page that drifted from the first.
+        case .project:
+            ProjectHomeRedirect(project: item, navigation: navigation)
+
         // A list is a container of tasks with headings, which is the same surface a project needs.
         // What differs is what the header says about it — a list has no outcome and no progress —
         // and that difference lives inside `ProjectDetailView` rather than in a second view.
-        case .project, .area, .goal, .list:
+        case .area, .goal, .list:
             ProjectDetailView(
                 project: item,
                 navigation: navigation,

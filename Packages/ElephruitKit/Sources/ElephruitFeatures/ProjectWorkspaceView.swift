@@ -92,7 +92,9 @@ struct ProjectWorkspaceView: View {
             // Putting this optional row above the tabs let populated projects insert data into the
             // unified toolbar's transition area, while new projects looked correct because they
             // skipped the row. Concerns belong below the stable tabs, ahead of the project body.
-            if !model.health.concerns.isEmpty {
+            // Home carries the full Needs Attention section inside its Status summary; a bar
+            // above the tabs repeating the first three concerns would say everything twice.
+            if !model.health.concerns.isEmpty, !model.isHome {
                 ProjectWorkspaceHeader(model: model)
                 Divider()
             }
@@ -135,10 +137,15 @@ struct ProjectWorkspaceView: View {
 
     @ViewBuilder
     private func body(for model: ProjectWorkspaceModel) -> some View {
+        // Home is never an empty state: an empty project's Home is the brief and the controls
+        // that create its first work, which is exactly what a landing page owes a new project.
+        if model.isHome {
+            ProjectHomeView(model: model, navigation: navigation)
+        }
         // A board's empty columns are useful structure, not an empty state. They show a new
         // project's workflow and provide the click-to-add targets that create its first work.
         // Other views still get the explanatory empty state until there is something to display.
-        if model.isEmpty, model.activeView?.kind != .board {
+        else if model.isEmpty, model.activeView?.kind != .board {
             ProjectEmptyState(model: model)
         } else if model.hasNoMatches {
             ProjectNoMatchesState(model: model)
@@ -153,7 +160,9 @@ struct ProjectWorkspaceView: View {
             case .timeline:
                 ProjectTimelineView(model: model)
             case .overview:
-                ProjectOverviewView(model: model)
+                // Unreachable in practice — the model resolves saved Overviews to Home — but the
+                // kind still decodes, and its content's home is Home.
+                ProjectHomeView(model: model, navigation: navigation)
             case .bugs:
                 BugTrackerView(model: model)
             case .list:
@@ -285,7 +294,11 @@ struct ProjectViewTabBar: View {
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Theme.Spacing.tight) {
-                ForEach(model.views) { view in
+                homeTab
+
+                // Overview's tab is gone — its content is Home's Status section. The saved
+                // records stay in the store for older routes to resolve through.
+                ForEach(model.views.filter { $0.kind != .overview }) { view in
                     tab(view)
                 }
             }
@@ -308,6 +321,31 @@ struct ProjectViewTabBar: View {
             // looking, and none of the work in the project goes with it.
             Text("The view's configuration is lost. The work it shows stays in the project.")
         }
+    }
+
+    /// The first, permanent tab: the page a project opens to, and the way back to it.
+    private var homeTab: some View {
+        Button {
+            model.selectHome()
+            navigation.select(.project(id: projectID, viewID: nil))
+        } label: {
+            HStack(spacing: Theme.Spacing.tight) {
+                Image(systemName: "house")
+                    .foregroundStyle(model.isHome ? Theme.Colors.selection : Theme.Colors.secondaryText)
+                Text("Home")
+            }
+            .font(Theme.Text.rowTitle)
+            .padding(.horizontal, Theme.Spacing.small)
+            .padding(.vertical, Theme.Spacing.tight)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                    .fill(model.isHome ? Theme.Colors.selection.opacity(0.14) : .clear)
+            )
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(model.isHome ? .isSelected : [])
+        .accessibilityIdentifier("project.view.home")
     }
 
     private func tab(_ view: ProjectViewRecord) -> some View {

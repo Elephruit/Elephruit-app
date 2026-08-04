@@ -81,8 +81,28 @@ public final class ProjectWorkspaceModel {
         _ = try? services.projectWorkspace.ensureWorkspace(for: project)
         views = services.projectWorkspace.views(in: project)
         stages = services.projectWorkspace.stages(in: project)
-        activeView = viewID.flatMap { id in views.first { $0.id == id } } ?? views.first
+        // No view named means Home, and so does a saved Overview: the Overview tab's content
+        // lives on Home now, and a route recorded before that change should land where its
+        // content went rather than resurrect a tab that no longer exists. The records stay in
+        // the store untouched — this is resolution, not migration.
+        let resolved = viewID.flatMap { id in views.first { $0.id == id } }
+        activeView = resolved?.kind == .overview ? nil : resolved
         refresh()
+    }
+
+    /// Whether the workspace is on Home — the canonical landing page, which is not a saved view.
+    public var isHome: Bool {
+        activeView == nil
+    }
+
+    /// Returns to Home from any saved view.
+    public func selectHome() {
+        guard activeView != nil else { return }
+        activeView = nil
+        expandedBugID = nil
+        isReviewingFixesAwaitingVerification = false
+        searchText = ""
+        rearrange()
     }
 
     /// Recomputes everything from the store. Cheap enough to call on any change token bump.
@@ -90,8 +110,9 @@ public final class ProjectWorkspaceModel {
         guard let project else { return }
         views = services.projectWorkspace.views(in: project)
         stages = services.projectWorkspace.stages(in: project)
+        // A removed view sends its visitor to Home, the one destination every project has.
         if let activeView, !views.contains(where: { $0.id == activeView.id }) {
-            self.activeView = views.first
+            self.activeView = nil
         }
 
         let work = project.descendantWork()
@@ -107,6 +128,11 @@ public final class ProjectWorkspaceModel {
     /// Switches to another of the project's views.
     public func selectView(_ id: UUID) {
         guard let match = views.first(where: { $0.id == id }), match.id != activeView?.id else {
+            return
+        }
+        // A restored or linked route may still name a saved Overview; its content lives on Home.
+        if match.kind == .overview {
+            selectHome()
             return
         }
         activeView = match
@@ -203,7 +229,22 @@ public final class ProjectWorkspaceModel {
     // MARK: Derived
 
     public var visibleOrder: [UUID] {
-        groups.flatMap { $0.items.map(\.id) }
+        // Home is not an arrangement, but it is still a list the keyboard walks and deletion
+        // lands on: its order is the plan's — ungrouped work first, then each heading's.
+        if isHome { return homePlanOrder }
+        return groups.flatMap { $0.items.map(\.id) }
+    }
+
+    private var homePlanOrder: [UUID] {
+        guard let project else { return [] }
+        var ids = project.ungroupedTasks().map(\.id)
+        for heading in project.orderedHeadings() {
+            ids += heading.children
+                .filter { $0.kind.isWorkItem }
+                .sorted { $0.sortOrder < $1.sortOrder }
+                .map(\.id)
+        }
+        return ids.filter { itemsByID[$0] != nil }
     }
 
     public var visibleCount: Int {

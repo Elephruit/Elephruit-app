@@ -900,6 +900,12 @@ public final class NavigationModel {
             select(.reminders)
             selectItem(item.id)
 
+        // A project opens on its workspace — Home — never on the item-detail surface. This is
+        // the rule that makes the palette, a note's wiki link, and the sidebar agree about what
+        // "open the project" means.
+        case .project:
+            select(.project(id: item.id, viewID: nil))
+
         case .bug, .feature, .milestone, .release:
             var cursor = item.parent
             while let candidate = cursor {
