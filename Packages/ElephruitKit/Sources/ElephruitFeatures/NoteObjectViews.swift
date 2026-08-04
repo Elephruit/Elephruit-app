@@ -158,7 +158,7 @@ private struct NoteWebClipFace: View {
                     .frame(maxWidth: .infinity)
             } else if resolved {
                 HStack(spacing: Theme.Spacing.small) {
-                    Image(systemName: "doc.badge.exclamationmark")
+                    Image(systemName: "exclamationmark.triangle")
                     Text("This web clip's saved page is missing.")
                 }
                 .font(Theme.Text.rowSubtitle)
