@@ -38,7 +38,7 @@ async function waitForInjectedPanel(tabID, milliseconds) {
   while (Date.now() < deadline) {
     const response = await messagePanel(tabID).catch(() => null);
     if (typeof response?.open === "boolean") return response;
-    await delay(250);
+    await delay(500);
   }
   return null;
 }
@@ -86,18 +86,17 @@ async function openOnTab(tab) {
     return;
   }
 
-  // Safari can leave the returned injection promise pending on continuously loading pages even
-  // after executing the scripts. Poll the listener that proves the page is ready instead.
-  let injectionError = null;
-  browser.scripting.executeScript({
-    target: { tabId: tab.id },
-    files: ["panel.js", "content.js"]
-  }).catch((error) => { injectionError = error; });
-  response = await waitForInjectedPanel(tab.id, 8_000);
+  // Dynamic injection is unreliable while a site is redirecting or its main document is still
+  // provisional. Reload once after access is confirmed so Safari installs the declared content
+  // scripts at document_start, then wait for their listener instead of racing the navigation.
+  title.textContent = "Preparing the clipper…";
+  detail.textContent = "Reloading this page once to finish website access.";
+  await browser.tabs.reload(tab.id);
+  await delay(500);
+  response = await waitForInjectedPanel(tab.id, 15_000);
 
   if (typeof response?.open !== "boolean") {
-    if (injectionError) throw injectionError;
-    throw new Error("Safari took too long to prepare this page. Reload it once, then try again.");
+    throw new Error("Safari did not load the clipper after reloading this page. Check website access, then try again.");
   }
   window.close();
 }
