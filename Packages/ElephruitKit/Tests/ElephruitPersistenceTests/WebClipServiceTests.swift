@@ -61,12 +61,19 @@ struct WebClipServiceTests {
         #expect(item.tagSlugs.sorted() == ["local-first", "research"])
         #expect(item.body.contains("Use this in the architecture review."))
         #expect(item.body.contains("[Open original](https://example.com/story)"))
-        #expect(item.body.contains("Keep the useful part"))
+        #expect(!item.body.contains("Keep the useful part"))
+        #expect(item.searchText.contains("keep the useful part"))
 
         let attachment = try #require(item.attachments.first)
         #expect(attachment.typeIdentifier == "public.html")
         let htmlURL = try #require(fixture.attachments.resolve(attachment))
-        #expect(try String(contentsOf: htmlURL, encoding: .utf8).contains("<article>"))
+        let html = try String(contentsOf: htmlURL, encoding: .utf8)
+        #expect(html.contains("Content-Security-Policy"))
+        #expect(html.contains("<article>"))
+        #expect(item.noteDocument.pieces.contains { piece in
+            if case .object(.webClip(let attachmentID)) = piece { return attachmentID == attachment.id }
+            return false
+        })
     }
 
     @Test("A bookmark stays lightweight")
@@ -181,15 +188,25 @@ struct WebClipServiceTests {
             typeIdentifier: "public.png",
             data: bytes
         )]
+        let imageID = try #require(clip.images.first?.id)
+        clip.contentHTML = "<article><img src=\"elephruit-attachment://\(imageID.uuidString)\"><p>Local text.</p></article>"
 
         let item = try fixture.service.save(clip)
         let attachment = try #require(item.attachments.first(where: { $0.filename == "hero.png" }))
         let imageURL = try #require(fixture.attachments.resolve(attachment))
+        let htmlAttachment = try #require(item.attachments.first(where: { $0.typeIdentifier == "public.html" }))
+        let htmlURL = try #require(fixture.attachments.resolve(htmlAttachment))
 
         #expect(try Data(contentsOf: imageURL) == bytes)
+        #expect(attachment.id == imageID)
+        #expect(try String(contentsOf: htmlURL, encoding: .utf8).contains("elephruit-attachment://\(imageID.uuidString)"))
         #expect(item.noteDocument.pieces.contains { piece in
-            guard case .object(.image(let attachmentID, let caption)) = piece else { return false }
-            return attachmentID == attachment.id && caption.plainText == "A durable local-first diagram"
+            guard case .object(.webClip(let attachmentID)) = piece else { return false }
+            return attachmentID == htmlAttachment.id
+        })
+        #expect(!item.noteDocument.pieces.contains { piece in
+            if case .object(.image) = piece { return true }
+            return false
         })
     }
 
@@ -208,21 +225,19 @@ struct WebClipServiceTests {
             typeIdentifier: "public.png",
             data: Data([0x89, 0x50, 0x4E, 0x47, 0x01])
         )]
+        let imageID = try #require(clip.images.first?.id)
+        clip.contentHTML = "<article><p>Before the diagram.</p><img src=\"elephruit-attachment://\(imageID.uuidString)\"><p>After the diagram.</p></article>"
 
         let item = try fixture.service.save(clip)
-        let beforeIndex = try #require(item.noteDocument.pieces.firstIndex {
-            $0.paragraph?.plainText.contains("Before the diagram") == true
-        })
-        let imageIndex = try #require(item.noteDocument.pieces.firstIndex {
-            if case .object(.image) = $0 { return true }
-            return false
-        })
-        let afterIndex = try #require(item.noteDocument.pieces.firstIndex {
-            $0.paragraph?.plainText.contains("After the diagram") == true
-        })
+        let htmlAttachment = try #require(item.attachments.first(where: { $0.typeIdentifier == "public.html" }))
+        let htmlURL = try #require(fixture.attachments.resolve(htmlAttachment))
+        let html = try String(contentsOf: htmlURL, encoding: .utf8)
+        let beforeRange = try #require(html.range(of: "Before the diagram."))
+        let imageRange = try #require(html.range(of: "elephruit-attachment://\(imageID.uuidString)"))
+        let afterRange = try #require(html.range(of: "After the diagram."))
 
-        #expect(beforeIndex < imageIndex)
-        #expect(imageIndex < afterIndex)
+        #expect(beforeRange.lowerBound < imageRange.lowerBound)
+        #expect(imageRange.lowerBound < afterRange.lowerBound)
         #expect(!item.body.contains("![System diagram]"))
     }
 

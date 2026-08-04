@@ -1,7 +1,11 @@
+import AppKit
 import ElephruitCore
 import ElephruitDesign
 import ElephruitModel
+import Foundation
 import SwiftUI
+import UniformTypeIdentifiers
+import WebKit
 
 /// One object piece on the page: the thing a prose run flows around.
 ///
@@ -20,7 +24,8 @@ struct NoteObjectPieceView: View {
     @FocusState private var isFocused: Bool
 
     private var isSelected: Bool { model.selectedObjectPiece == pieceIndex }
-    private var isFullPageCapture: Bool {
+    private var usesEdgeToEdgeFace: Bool {
+        if case .webClip = object { return true }
         guard case .image(let attachmentID, _) = object else { return false }
         return item.attachments.first(where: { $0.id == attachmentID })?
             .filename.hasPrefix("full-page-") == true
@@ -28,13 +33,13 @@ struct NoteObjectPieceView: View {
 
     var body: some View {
         face
-            .padding(isFullPageCapture ? 0 : Theme.Spacing.tight)
+            .padding(usesEdgeToEdgeFace ? 0 : Theme.Spacing.tight)
             .background(
-                RoundedRectangle(cornerRadius: isFullPageCapture ? 0 : Theme.Radius.medium)
+                RoundedRectangle(cornerRadius: usesEdgeToEdgeFace ? 0 : Theme.Radius.medium)
                     .fill(isSelected ? Theme.Colors.selectionFill : Color.clear)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: isFullPageCapture ? 0 : Theme.Radius.medium)
+                RoundedRectangle(cornerRadius: usesEdgeToEdgeFace ? 0 : Theme.Radius.medium)
                     .strokeBorder(isSelected ? Theme.Colors.selection : Color.clear, lineWidth: 1.5)
             )
             .contentShape(Rectangle())
@@ -85,13 +90,15 @@ struct NoteObjectPieceView: View {
                 item: item,
                 attachmentID: attachmentID,
                 caption: caption,
-                isFullPageCapture: isFullPageCapture,
+                isFullPageCapture: usesEdgeToEdgeFace,
                 onCaptionChange: { newCaption in
                     model.updateObject(.image(attachmentID: attachmentID, caption: newCaption), atPiece: pieceIndex)
                 }
             )
         case .file(let attachmentID):
             NoteFileFace(item: item, attachmentID: attachmentID)
+        case .webClip(let attachmentID):
+            NoteWebClipFace(item: item, attachmentID: attachmentID)
         case .table(let table):
             NoteTableFace(table: table) { updated in
                 model.updateObject(.table(updated), atPiece: pieceIndex)
@@ -108,11 +115,208 @@ struct NoteObjectPieceView: View {
         case .divider: String(localized: "Divider")
         case .image: String(localized: "Image")
         case .file: String(localized: "Attached file")
+        case .webClip: String(localized: "Web clip")
         case .table: String(localized: "Table")
         case .reference: String(localized: "Linked item")
         case .page: String(localized: "Nested page")
         }
     }
+}
+
+// MARK: - Web clip
+
+private struct NoteWebClipFace: View {
+    @Environment(\.services) private var services
+
+    let item: Item
+    let attachmentID: UUID
+
+    @State private var html: String?
+    @State private var resources: [UUID: WebClipResource] = [:]
+    @State private var height: CGFloat = 240
+    @State private var resolved = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: Theme.Spacing.small) {
+                Image(systemName: "globe")
+                Text("Web clip")
+                    .font(Theme.Text.rowTitleEmphasised)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(Theme.Colors.secondaryText)
+            .padding(.horizontal, Theme.Spacing.small)
+            .padding(.vertical, Theme.Spacing.tight)
+            .background(Theme.Colors.subtleFill)
+
+            if let html {
+                SelectableWebClipView(html: html, resources: resources, height: $height)
+                    .frame(height: height)
+            } else if resolved {
+                HStack(spacing: Theme.Spacing.small) {
+                    Image(systemName: "doc.badge.exclamationmark")
+                    Text("This web clip's saved page is missing.")
+                }
+                .font(Theme.Text.rowSubtitle)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .padding(Theme.Spacing.large)
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+                    .padding(Theme.Spacing.large)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .background(Color(nsColor: .textBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                .strokeBorder(Theme.Colors.separator, lineWidth: 1)
+        )
+        .task(id: attachmentID) { load() }
+    }
+
+    private func load() {
+        defer { resolved = true }
+        guard let services,
+              let attachment = item.attachments.first(where: { $0.id == attachmentID }),
+              let htmlURL = services.attachments.resolve(attachment),
+              let loadedHTML = try? String(contentsOf: htmlURL, encoding: .utf8)
+        else { return }
+
+        var loadedResources: [UUID: WebClipResource] = [:]
+        for candidate in item.attachments where candidate.id != attachmentID {
+            guard let url = services.attachments.resolve(candidate) else { continue }
+            loadedResources[candidate.id] = WebClipResource(
+                url: url,
+                mimeType: UTType(candidate.typeIdentifier)?.preferredMIMEType ?? "application/octet-stream"
+            )
+        }
+        resources = loadedResources
+        html = loadedHTML
+    }
+}
+
+private struct WebClipResource {
+    var url: URL
+    var mimeType: String
+}
+
+private struct SelectableWebClipView: NSViewRepresentable {
+    let html: String
+    let resources: [UUID: WebClipResource]
+    @Binding var height: CGFloat
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(height: $height)
+    }
+
+    func makeNSView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+
+        let schemeHandler = LocalAttachmentSchemeHandler(resources: resources)
+        context.coordinator.schemeHandler = schemeHandler
+        configuration.setURLSchemeHandler(schemeHandler, forURLScheme: "elephruit-attachment")
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = context.coordinator
+        webView.setValue(false, forKey: "drawsBackground")
+        return webView
+    }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        context.coordinator.height = $height
+        context.coordinator.schemeHandler?.resources = resources
+        guard context.coordinator.loadedHTML != html else { return }
+        context.coordinator.loadedHTML = html
+        webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        var height: Binding<CGFloat>
+        var loadedHTML: String?
+        var schemeHandler: LocalAttachmentSchemeHandler?
+
+        init(height: Binding<CGFloat>) {
+            self.height = height
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
+            measure(webView)
+            for delay in [0.15, 0.6] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak webView] in
+                    guard let self, let webView else { return }
+                    self.measure(webView)
+                }
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
+        ) {
+            guard navigationAction.navigationType == .linkActivated,
+                  let url = navigationAction.request.url,
+                  ["http", "https"].contains(url.scheme?.lowercased() ?? "")
+            else {
+                decisionHandler(navigationAction.navigationType == .linkActivated ? .cancel : .allow)
+                return
+            }
+            NSWorkspace.shared.open(url)
+            decisionHandler(.cancel)
+        }
+
+        private func measure(_ webView: WKWebView) {
+            webView.evaluateJavaScript(
+                "Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)"
+            ) { [weak self] result, _ in
+                guard let self, let number = result as? NSNumber else { return }
+                self.height.wrappedValue = min(max(CGFloat(truncating: number), 120), 30_000)
+            }
+        }
+    }
+}
+
+@MainActor
+private final class LocalAttachmentSchemeHandler: NSObject, WKURLSchemeHandler {
+    var resources: [UUID: WebClipResource]
+
+    init(resources: [UUID: WebClipResource]) {
+        self.resources = resources
+    }
+
+    func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
+        guard let source = urlSchemeTask.request.url,
+              let host = source.host,
+              let id = UUID(uuidString: host),
+              let resource = resources[id]
+        else {
+            urlSchemeTask.didFailWithError(URLError(.fileDoesNotExist))
+            return
+        }
+
+        do {
+            let data = try Data(contentsOf: resource.url)
+            let response = URLResponse(
+                url: source,
+                mimeType: resource.mimeType,
+                expectedContentLength: data.count,
+                textEncodingName: nil
+            )
+            urlSchemeTask.didReceive(response)
+            urlSchemeTask.didReceive(data)
+            urlSchemeTask.didFinish()
+        } catch {
+            urlSchemeTask.didFailWithError(error)
+        }
+    }
+
+    func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {}
 }
 
 // MARK: - Divider

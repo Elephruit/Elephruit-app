@@ -73,25 +73,25 @@ public struct WebClipService {
         }
 
         var attachmentSearchChanged = false
+        var htmlAttachment: Attachment?
         if let html = clip.contentHTML?.trimmingCharacters(in: .whitespacesAndNewlines), !html.isEmpty {
             let attachment: Attachment
             if let existing = item.attachments.first(where: { $0.typeIdentifier == "public.html" }) {
                 attachment = existing
             } else {
                 attachment = try attachments.attach(
-                    data: Data(html.utf8),
+                    data: Data(webClipDocument(fragment: html).utf8),
                     filename: "\(filenameStem(for: item.title)).html",
                     typeIdentifier: "public.html",
                     to: item
                 )
             }
+            htmlAttachment = attachment
 
-            if clip.mode == .fullPage {
-                let searchableText = String(clip.contentMarkdown.prefix(1_000_000))
-                if attachment.extractedText != searchableText {
-                    attachment.extractedText = searchableText
-                    attachmentSearchChanged = true
-                }
+            let searchableText = String(clip.contentMarkdown.prefix(1_000_000))
+            if attachment.extractedText != searchableText {
+                attachment.extractedText = searchableText
+                attachmentSearchChanged = true
             }
         }
 
@@ -105,6 +105,7 @@ public struct WebClipService {
             } else {
                 attachment = try attachments.attach(
                     data: image.data,
+                    id: image.id,
                     filename: stableName,
                     typeIdentifier: image.typeIdentifier,
                     to: item
@@ -146,8 +147,15 @@ public struct WebClipService {
             ))
         }
 
-        if item.kind == .note, item.noteDocumentData == nil, !inlineImages.isEmpty {
-            let document = noteDocument(for: clip, sourceURL: sourceURL, inlineImages: inlineImages)
+        if item.kind == .note,
+           item.noteDocumentData == nil,
+           htmlAttachment != nil || !inlineImages.isEmpty {
+            let document = noteDocument(
+                for: clip,
+                sourceURL: sourceURL,
+                htmlAttachment: htmlAttachment,
+                inlineImages: inlineImages
+            )
             try items.update(item) { $0.setNoteDocument(document) }
         } else if attachmentSearchChanged {
             try items.update(item) { $0.refreshSearchText() }
@@ -161,6 +169,25 @@ public struct WebClipService {
     }
 
     private func noteSections(for clip: WebClip, sourceURL: URL) -> [String] {
+        var sections = metadataSections(for: clip, sourceURL: sourceURL)
+
+        // A full-page clip is the visual capture. Its DOM text belongs in attachment search
+        // metadata, not in the editor beneath the image. Page-provided excerpts are especially
+        // unreliable here: some sites expose their entire flattened home page as an "excerpt".
+        guard clip.mode != .fullPage else { return sections }
+
+        let markdown = clip.contentMarkdown.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = clip.excerpt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !markdown.isEmpty {
+            sections.append(markdown)
+        } else if !summary.isEmpty {
+            sections.append(summary)
+        }
+
+        return sections
+    }
+
+    private func metadataSections(for clip: WebClip, sourceURL: URL) -> [String] {
         var sections: [String] = []
         let comment = clip.comment.trimmingCharacters(in: .whitespacesAndNewlines)
         if !comment.isEmpty { sections.append(comment) }
@@ -172,21 +199,6 @@ public struct WebClipService {
             .joined(separator: " · ")
         if !byline.isEmpty { source += "  \n\(byline)" }
         sections.append(source)
-
-        // A full-page clip is the visual capture. Its DOM text belongs in attachment search
-        // metadata, not in the editor beneath the image. Page-provided excerpts are especially
-        // unreliable here: some sites expose their entire flattened home page as an "excerpt".
-        guard clip.mode != .fullPage else { return sections }
-
-        let markdown = clip.contentMarkdown.trimmingCharacters(in: .whitespacesAndNewlines)
-        let summary = clip.excerpt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let content = markdown
-        if !content.isEmpty {
-            sections.append(content)
-        } else if !summary.isEmpty {
-            sections.append(summary)
-        }
-
         return sections
     }
 
@@ -197,8 +209,20 @@ public struct WebClipService {
     private func noteDocument(
         for clip: WebClip,
         sourceURL: URL,
+        htmlAttachment: Attachment?,
         inlineImages: [InlineImage]
     ) -> NoteDocument {
+        if usesLiveHTML(clip.mode), let htmlAttachment {
+            var pieces: [NotePiece] = []
+            for section in metadataSections(for: clip, sourceURL: sourceURL) {
+                if !pieces.isEmpty { pieces.append(.object(.divider)) }
+                pieces.append(contentsOf: documentPieces(from: section))
+            }
+            if !pieces.isEmpty { pieces.append(.object(.divider)) }
+            pieces.append(.object(.webClip(attachmentID: htmlAttachment.id)))
+            return NoteDocument(pieces: pieces)
+        }
+
         let sections = noteSections(for: clip, sourceURL: sourceURL)
         let content = clip.mode == .fullPage ? "" : sections.last ?? ""
         let prefix = clip.mode == .fullPage ? sections[...] : sections.dropLast()
@@ -216,6 +240,33 @@ public struct WebClipService {
         let pageImages = inlineImages.filter { !$0.isPageCapture }
         pieces.append(contentsOf: contentPieces(from: content, images: pageImages))
         return NoteDocument(pieces: pieces.isEmpty ? NoteDocument.empty.pieces : pieces)
+    }
+
+    private func usesLiveHTML(_ mode: WebClipMode) -> Bool {
+        switch mode {
+        case .article, .simplifiedArticle, .selection: true
+        case .fullPage, .bookmark, .screenshot: false
+        }
+    }
+
+    private func webClipDocument(fragment: String) -> String {
+        """
+        <!doctype html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src elephruit-attachment: data:; style-src 'unsafe-inline'; font-src 'none'; media-src 'none'; frame-src 'none';">
+          <style>
+            :root { color-scheme: light dark; }
+            html, body { margin: 0; max-width: 100%; overflow-x: auto; }
+            body { width: max-content; min-width: 100%; }
+            img { max-width: 100%; height: auto; }
+          </style>
+        </head>
+        <body>\(fragment)</body>
+        </html>
+        """
     }
 
     private func contentPieces(from content: String, images: [InlineImage]) -> [NotePiece] {

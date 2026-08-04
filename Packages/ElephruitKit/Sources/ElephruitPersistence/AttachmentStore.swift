@@ -69,6 +69,7 @@ public final class AttachmentStore {
     @discardableResult
     public func attach(
         data: Data,
+        id: UUID = UUID(),
         filename: String,
         typeIdentifier: String,
         to item: Item
@@ -79,6 +80,7 @@ public final class AttachmentStore {
 
         let safeFilename = Self.safeFilename(filename)
         let attachment = Attachment(
+            id: id,
             filename: safeFilename,
             typeIdentifier: typeIdentifier,
             byteCount: data.count
