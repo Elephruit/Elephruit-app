@@ -87,7 +87,7 @@ struct SchemaComplianceTests {
     /// whether a migrating launch takes a backup.
     @Test("Schema version is reported for archives and diagnostics")
     func schemaVersionIsReadable() {
-        #expect(CurrentSchema.versionString == "0.0.15")
+        #expect(CurrentSchema.versionString == "0.0.16")
     }
 
     /// The constraint table from `docs/05-cloudkit-and-migrations.md`, scanned rather than
@@ -115,6 +115,12 @@ struct SchemaComplianceTests {
                 #expect(
                     relationship.inverseName != nil,
                     "\(entity.name).\(relationship.name): CloudKit requires an inverse"
+                )
+                // The rule the first real container open taught: *every* relationship must
+                // be optional — to-many included, and a default does not substitute.
+                #expect(
+                    relationship.isOptional,
+                    "\(entity.name).\(relationship.name): CloudKit requires optional relationships"
                 )
                 #expect(
                     relationship.deleteRule != .deny,

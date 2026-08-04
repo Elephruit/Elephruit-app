@@ -472,6 +472,29 @@ public enum SchemaV15: VersionedSchema {
     }
 }
 
+/// The sixteenth schema: every relationship is optional, because the mirroring
+/// validator — not the documentation — is the authority on what CloudKit requires.
+///
+/// v15 closed the missing inverses and the constraint table called the model compliant;
+/// the first real container open said otherwise, naming all twenty-nine to-many
+/// relationships: *CloudKit integration requires that all relationships be optional*, and
+/// a `[Tag]` with a default is still a non-optional relationship however defaulted its
+/// value. The table had treated "optional **or** defaulted" — the attribute rule — as if
+/// it covered relationships too. It does not, and docs/05 now says so.
+///
+/// The declarations changed in place — `[Tag]` to `[Tag]?` — precisely so that nothing
+/// else did: names are what Core Data derives join tables and foreign keys from, and a
+/// rename here would have silently emptied every many-to-many on migration. Relaxing
+/// optionality changes metadata only; the rows, the join tables, and the values are
+/// untouched, which is what keeps this lightweight.
+public enum SchemaV16: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 16) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV15.models
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -484,7 +507,7 @@ public enum SchemaV15: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV15.self]
+        [SchemaV16.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -504,9 +527,9 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV15.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV16.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV15.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV16.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {

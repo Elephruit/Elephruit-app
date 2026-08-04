@@ -81,10 +81,10 @@ struct OnDiskStoreTests {
         #expect(reopened.priority == .high)
         #expect(reopened.dueAt == clock.startOfDay(daysFromToday: 2))
         #expect(reopened.parent?.title == "Persisted Project")
-        #expect(reopened.tags.map(\.slug) == ["work/clients"])
+        #expect((reopened.tags ?? []).map(\.slug) == ["work/clients"])
 
         // The link graph survived too, including its resolution.
-        let link = try #require(reopened.outgoingLinks.first)
+        let link = try #require((reopened.outgoingLinks ?? []).first)
         #expect(link.kind == .wiki)
         #expect(link.target?.title == "Persisted Project")
 

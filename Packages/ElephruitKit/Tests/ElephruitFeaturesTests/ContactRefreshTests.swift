@@ -78,7 +78,7 @@ struct ContactRefreshTests {
 
         try fixture.sync.apply(Self.maya(phones: [("mobile", "512-555-9999")]), to: link)
 
-        let allPhones = link.values.filter { $0.fieldKey == ContactField.phone }
+        let allPhones = (link.values ?? []).filter { $0.fieldKey == ContactField.phone }
         #expect(allPhones.count == 2, "the old number is a row that was superseded, not one that was deleted")
 
         let superseded = try #require(allPhones.first { !$0.isCurrent })
@@ -168,7 +168,7 @@ struct ContactRefreshTests {
 
         #expect(try fixture.sync.conflicts().isEmpty)
         #expect(person.personProfile?.phones.contains { $0.value == "512-555-9999" } == true)
-        #expect(link.values.contains { $0.value == "512-555-0000" && !$0.isCurrent },
+        #expect((link.values ?? []).contains { $0.value == "512-555-0000" && !$0.isCurrent },
                 "and the value they had chosen is still on record")
     }
 

@@ -147,7 +147,7 @@ public final class BugService {
     }
 
     public func duplicates(of item: Item) -> [Item] {
-        item.incomingLinks
+        (item.incomingLinks ?? [])
             .filter { $0.kind == .duplicateOf }
             .compactMap(\.source)
     }
@@ -158,7 +158,7 @@ public final class BugService {
     /// defects are somebody else's problem next month is a decision, and it should look like one.
     @discardableResult
     public func rolloverUnresolvedBugs(from release: Item, to next: Item) throws(AppError) -> [Item] {
-        let carried = release.incomingLinks
+        let carried = (release.incomingLinks ?? [])
             .filter { $0.kind == .relatesToRelease }
             .compactMap(\.source)
             .filter { $0.kind == .bug && !isClosed($0) }

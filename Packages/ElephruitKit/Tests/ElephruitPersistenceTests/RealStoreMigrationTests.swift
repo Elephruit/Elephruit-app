@@ -67,9 +67,9 @@ struct RealStoreMigrationTests {
         // Every relationship the migration could have disturbed, read rather than assumed.
         for item in items {
             _ = item.tagSlugs
-            _ = item.outgoingLinks.count
-            _ = item.incomingLinks.count
-            _ = item.timeEntries.count
+            _ = (item.outgoingLinks ?? []).count
+            _ = (item.incomingLinks ?? []).count
+            _ = (item.timeEntries ?? []).count
         }
 
         #expect(try context.fetchCount(FetchDescriptor<TimeEntry>()) == 0,

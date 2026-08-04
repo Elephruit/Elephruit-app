@@ -144,7 +144,7 @@ private struct ProjectBriefSection: View {
     /// to a bare readable name.
     private var resolvedMarkdown: String {
         var targets: [String: UUID] = [:]
-        for link in project.outgoingLinks where link.kind == .wiki {
+        for link in (project.outgoingLinks ?? []) where link.kind == .wiki {
             if let target = link.target {
                 targets[TextNormalizer.foldedForMatching(target.title)] = target.id
             }
@@ -497,7 +497,7 @@ private struct ProjectPlanSection: View {
 
     private func headingSection(_ heading: Item) -> some View {
         let tasks = filtered(
-            heading.children.filter { $0.kind.isWorkItem }.sorted { $0.sortOrder < $1.sortOrder }
+            (heading.children ?? []).filter { $0.kind.isWorkItem }.sorted { $0.sortOrder < $1.sortOrder }
         )
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
@@ -511,7 +511,7 @@ private struct ProjectPlanSection: View {
 
                 Menu {
                     Button("Move Work Items Out") { perform { try $0.moveTasksOut(of: heading) } }
-                        .disabled(heading.children.isEmpty)
+                        .disabled((heading.children ?? []).isEmpty)
                     Divider()
                     Button("Archive…") { confirm(.archive, for: heading) }
                     Button("Move to Trash…", role: .destructive) { confirm(.trash, for: heading) }
@@ -688,7 +688,7 @@ private struct ProjectReferenceSections: View {
 
     private var relatedPeople: [Item] {
         (project.visibleBacklinks().compactMap(\.source)
-            + project.outgoingLinks.compactMap(\.target))
+            + (project.outgoingLinks ?? []).compactMap(\.target))
             .filter { $0.kind == .person && $0.deletedAt == nil }
             .uniqued()
     }

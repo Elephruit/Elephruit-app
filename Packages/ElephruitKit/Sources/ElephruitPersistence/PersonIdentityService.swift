@@ -94,7 +94,7 @@ public final class PersonIdentityService {
             addedPhones: addedPhones,
             conflicts: conflicts,
             movedObservations: try people.observations(for: secondary).count,
-            movedLinks: secondary.incomingLinks.count + secondary.outgoingLinks.count,
+            movedLinks: (secondary.incomingLinks ?? []).count + (secondary.outgoingLinks ?? []).count,
             movedRelationships: try people.relationships(of: secondary).count
         )
     }
@@ -172,10 +172,10 @@ public final class PersonIdentityService {
             celebration.person = primary
         }
 
-        for link in secondary.incomingLinks {
+        for link in (secondary.incomingLinks ?? []) {
             link.target = primary
         }
-        for link in secondary.outgoingLinks {
+        for link in (secondary.outgoingLinks ?? []) {
             link.source = primary
         }
 

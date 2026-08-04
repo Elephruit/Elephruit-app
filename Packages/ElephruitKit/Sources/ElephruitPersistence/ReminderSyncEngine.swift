@@ -468,7 +468,7 @@ public final class ReminderSyncEngine {
                 kind: .reminder,
                 title: task.title,
                 body: task.body,
-                tagSlugs: task.tags.map(\.slug),
+                tagSlugs: (task.tags ?? []).map(\.slug),
                 parentID: task.parent?.id,
                 dueAt: task.dueAt,
                 startAt: task.availableFrom,

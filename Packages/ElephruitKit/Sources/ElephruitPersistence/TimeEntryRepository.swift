@@ -343,7 +343,7 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
         try switchTo(
             item: entry.item,
             project: entry.project,
-            people: entry.people,
+            people: (entry.people ?? []),
             description: entry.entryDescription,
             tagSlugs: entry.tagSlugs,
             isBillable: entry.isBillable
@@ -363,7 +363,7 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
         return try insertEntry(
             item: entry.item,
             project: entry.project,
-            people: entry.people,
+            people: (entry.people ?? []),
             description: entry.entryDescription,
             startedAt: entry.startedAt,
             endedAt: endedAt,
@@ -748,7 +748,7 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
             try insertEntry(
                 item: entry.item,
                 project: entry.project,
-                people: entry.people,
+                people: (entry.people ?? []),
                 description: entry.entryDescription,
                 startedAt: now,
                 endedAt: nil,
@@ -781,7 +781,7 @@ public final class SwiftDataTimeEntryRepository: TimeEntryRepository {
             try insertEntry(
                 item: entry.item,
                 project: entry.project,
-                people: entry.people,
+                people: (entry.people ?? []),
                 description: entry.entryDescription,
                 startedAt: max(awayEnd, now),
                 endedAt: nil,

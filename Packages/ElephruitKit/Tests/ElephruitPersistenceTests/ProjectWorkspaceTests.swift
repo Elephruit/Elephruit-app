@@ -428,7 +428,7 @@ struct DependencyTests {
         try fixture.workItems.assign(task, to: sam)
         try fixture.workItems.assign(task, to: rowan)
 
-        #expect(task.outgoingLinks.filter { $0.kind == .assignee }.count == 1)
+        #expect((task.outgoingLinks ?? []).filter { $0.kind == .assignee }.count == 1)
         #expect(task.assignee()?.id == rowan.id)
     }
 }

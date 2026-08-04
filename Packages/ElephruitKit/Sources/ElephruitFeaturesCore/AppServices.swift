@@ -935,7 +935,7 @@ public final class AppServices {
     /// findable without dumping another transcription into the note editor.
     private func indexWebClipImages(in item: Item) async throws(AppError) {
         var changed = false
-        for attachment in item.attachments where attachment.typeIdentifier == "public.png"
+        for attachment in (item.attachments ?? []) where attachment.typeIdentifier == "public.png"
             || attachment.typeIdentifier == "public.jpeg" {
             guard attachment.extractedText == nil,
                   let url = attachments.resolve(attachment),

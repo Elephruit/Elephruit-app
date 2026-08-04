@@ -45,7 +45,7 @@ public final class ProjectWorkspaceService {
     // MARK: - Stages
 
     public func stages(in project: Item) -> [WorkflowStage] {
-        project.workflowStages.sorted { $0.sortOrder < $1.sortOrder }
+        (project.workflowStages ?? []).sorted { $0.sortOrder < $1.sortOrder }
     }
 
     @discardableResult
@@ -195,7 +195,7 @@ public final class ProjectWorkspaceService {
     // MARK: - Views
 
     public func views(in project: Item) -> [ProjectViewRecord] {
-        project.projectViews.sorted { $0.sortOrder < $1.sortOrder }
+        (project.projectViews ?? []).sorted { $0.sortOrder < $1.sortOrder }
     }
 
     @discardableResult
@@ -257,7 +257,7 @@ public final class ProjectWorkspaceService {
     /// disabled, and the caller disables it with the same question.
     @discardableResult
     public func removeView(_ view: ProjectViewRecord) throws(AppError) -> Bool {
-        guard let project = view.project, project.projectViews.count > 1 else { return false }
+        guard let project = view.project, (project.projectViews ?? []).count > 1 else { return false }
         context.delete(view)
         try save()
         return true
@@ -266,7 +266,7 @@ public final class ProjectWorkspaceService {
     // MARK: - Custom fields
 
     public func customFields(in project: Item) -> [CustomFieldDefinition] {
-        project.customFieldDefinitions.sorted { $0.sortOrder < $1.sortOrder }
+        (project.customFieldDefinitions ?? []).sorted { $0.sortOrder < $1.sortOrder }
     }
 
     @discardableResult
@@ -412,7 +412,7 @@ public final class ProjectWorkspaceService {
             changed = true
         }
 
-        if project.workflowStages.isEmpty {
+        if (project.workflowStages ?? []).isEmpty {
             for (index, specification) in template.stages.enumerated() {
                 let stage = WorkflowStage(
                     name: specification.name,
@@ -427,7 +427,7 @@ public final class ProjectWorkspaceService {
             changed = true
         }
 
-        if project.projectViews.isEmpty {
+        if (project.projectViews ?? []).isEmpty {
             for (index, specification) in template.views.enumerated() {
                 let record = ProjectViewRecord(
                     name: specification.name ?? specification.kind.displayName,

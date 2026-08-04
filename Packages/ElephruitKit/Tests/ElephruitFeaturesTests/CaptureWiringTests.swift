@@ -51,7 +51,7 @@ struct CaptureWiringTests {
 
         #expect(item.kind == .reminder)
         #expect(item.dueAt != nil)
-        #expect(item.tags.contains { $0.slug == "errand" })
+        #expect((item.tags ?? []).contains { $0.slug == "errand" })
     }
 
     @Test("Empty text captures nothing and indexes nothing")
@@ -67,6 +67,6 @@ struct CaptureWiringTests {
         let item = try #require(try services.captureText("Coffee with @Priya"))
 
         #expect(services.context.hasChanges == false)
-        #expect(item.outgoingLinks.contains { $0.kind == .mentions })
+        #expect((item.outgoingLinks ?? []).contains { $0.kind == .mentions })
     }
 }

@@ -480,7 +480,7 @@ private struct RecordDetail: View {
     /// Calendar tags are participant links to a lazily-created meeting item. Reading those links
     /// here makes the tag an interaction on the record as well as preparation context on the event.
     private var historyEntries: [RecordHistoryEntry] {
-        let activities = record.activities.map { activity in
+        let activities = (record.activities ?? []).map { activity in
             RecordHistoryEntry(
                 id: "activity-\(activity.id.uuidString)",
                 date: activity.at,
@@ -490,7 +490,7 @@ private struct RecordDetail: View {
             )
         }
 
-        let meetings = (record.incomingLinks + record.outgoingLinks).compactMap { link -> Item? in
+        let meetings = ((record.incomingLinks ?? []) + (record.outgoingLinks ?? [])).compactMap { link -> Item? in
             guard link.kind == .participant else { return nil }
             let other = link.source?.id == record.id ? link.target : link.source
             return other?.kind == .meeting ? other : nil
@@ -517,7 +517,7 @@ private struct RecordDetail: View {
 
     private var relationships: some View {
         detailCard(title: "Relationships", symbol: "point.3.connected.trianglepath.dotted") {
-            let links = (record.outgoingLinks + record.incomingLinks).filter { link in
+            let links = ((record.outgoingLinks ?? []) + (record.incomingLinks ?? [])).filter { link in
                 let related = link.source?.id == record.id ? link.target : link.source
                 return link.kind != .participant || related?.kind != .meeting
             }
@@ -535,7 +535,7 @@ private struct RecordDetail: View {
 
     private var sharedWork: some View {
         detailCard(title: "Assigned and owed", symbol: "checklist") {
-            let tasks = (record.outgoingLinks + record.incomingLinks).compactMap { link in
+            let tasks = ((record.outgoingLinks ?? []) + (record.incomingLinks ?? [])).compactMap { link in
                 let other = link.source?.id == record.id ? link.target : link.source
                 return other?.kind == .reminder ? other : nil
             }

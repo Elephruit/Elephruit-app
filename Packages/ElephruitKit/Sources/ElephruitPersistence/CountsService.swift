@@ -119,7 +119,7 @@ actor CountsWorker {
             item.isKeptInStepWithAnExternalList
                 && item.inboxedAt == nil
                 && item.kind.appearsInInbox
-                && item.tags.isEmpty
+                && (item.tags ?? []).isEmpty
                 && item.filedUnderContainers().isEmpty
         }
 

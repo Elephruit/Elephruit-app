@@ -259,7 +259,7 @@ struct ItemQueryTests {
 
         let results = try fixture.items.items(matching: query)
         #expect(results.count == 5)
-        #expect(results.allSatisfy { $0.tags.contains { $0.slug == "work" } })
+        #expect(results.allSatisfy { ($0.tags ?? []).contains { $0.slug == "work" } })
     }
 
     @Test("Manual reordering places an item between its neighbours")
@@ -323,8 +323,8 @@ struct TagTests {
         let fixture = try StoreFixture()
 
         let note = try fixture.makeNote(title: "Note", tags: ["work/clients"])
-        #expect(note.tags.count == 1)
-        #expect(note.tags.first?.slug == "work/clients")
+        #expect((note.tags ?? []).count == 1)
+        #expect((note.tags ?? []).first?.slug == "work/clients")
     }
 
     @Test("Renaming a tag moves its descendants and refreshes search text")
@@ -359,7 +359,7 @@ struct TagTests {
         let fixture = try StoreFixture()
 
         let note = try fixture.makeNote(title: "Note", tags: ["!!!", "---"])
-        #expect(note.tags.isEmpty, "Punctuation-only names are not usable tags")
+        #expect((note.tags ?? []).isEmpty, "Punctuation-only names are not usable tags")
 
         let real = try #require(try fixture.tags.ensureTags(named: ["ok"]).first)
         #expect(throws: AppError.self) {

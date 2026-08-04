@@ -37,17 +37,17 @@ public final class Tag {
     /// Nullify rather than cascade: deleting `work` should orphan `work/clients`, not
     /// destroy it along with every item's tagging.
     @Relationship(deleteRule: .nullify, inverse: \Tag.parent)
-    public var children: [Tag] = []
+    public var children: [Tag]? = []
 
     /// Many-to-many. The inverse is declared on ``Item/tags``.
-    public var items: [Item] = []
+    public var items: [Item]? = []
 
     /// Many-to-many with tracked time. The inverse is declared on ``TimeEntry/tags``.
     ///
     /// Every relationship carries an inverse because CloudKit mirroring requires one, and
     /// the decision of record is that deferring sync must not make adopting it harder later.
     /// This pair was the one omission — same file, three lines from the rule.
-    public var timeEntries: [TimeEntry] = []
+    public var timeEntries: [TimeEntry]? = []
 
     public init(
         id: UUID = UUID(),
@@ -89,7 +89,7 @@ extension Tag {
 
     /// How many non-trashed items carry this tag.
     public var activeItemCount: Int {
-        items.count { $0.deletedAt == nil }
+        (items ?? []).count { $0.deletedAt == nil }
     }
 
     /// Display name for the sidebar, which shows hierarchy through indentation rather

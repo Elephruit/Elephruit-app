@@ -179,7 +179,7 @@ struct TaskDateMigrationTests {
 
         #expect(migrated.title == "Book the van")
         #expect(migrated.body == "Ask about insurance")
-        #expect(migrated.tags.map(\.slug) == ["home"])
+        #expect((migrated.tags ?? []).map(\.slug) == ["home"])
         #expect(migrated.parent?.id == project.id)
         #expect(migrated.priority == .high)
         #expect(migrated.source.kind == .quickCapture)

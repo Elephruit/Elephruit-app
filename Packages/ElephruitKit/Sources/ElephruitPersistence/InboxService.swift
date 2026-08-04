@@ -36,7 +36,7 @@ public final class InboxService {
         actorID: UUID? = nil,
         automationRuleID: UUID? = nil
     ) throws(AppError) -> InboxNotification {
-        if let existing = item.notifications.first(where: { !$0.isRead && $0.kind == kind }) {
+        if let existing = (item.notifications ?? []).first(where: { !$0.isRead && $0.kind == kind }) {
             existing.at = dateProvider.now
             existing.summary = summary
             existing.actorID = actorID

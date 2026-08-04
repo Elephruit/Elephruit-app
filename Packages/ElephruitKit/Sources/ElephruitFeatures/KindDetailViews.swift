@@ -211,7 +211,7 @@ private struct BookmarkPreviewImage: View {
     }
 
     private var previewAttachment: Attachment? {
-        item.attachments.first { attachment in
+        (item.attachments ?? []).first { attachment in
             ["public.png", "public.jpeg", "com.compuserve.gif", "org.webmproject.webp"]
                 .contains(attachment.typeIdentifier)
         }

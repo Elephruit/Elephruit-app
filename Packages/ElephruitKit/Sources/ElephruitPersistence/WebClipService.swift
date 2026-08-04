@@ -95,7 +95,7 @@ public struct WebClipService {
         var htmlAttachment: Attachment?
         if let html = clip.contentHTML?.trimmingCharacters(in: .whitespacesAndNewlines), !html.isEmpty {
             let attachment: Attachment
-            if let existing = item.attachments.first(where: { $0.typeIdentifier == "public.html" }) {
+            if let existing = (item.attachments ?? []).first(where: { $0.typeIdentifier == "public.html" }) {
                 attachment = existing
             } else {
                 attachment = try attachments.attach(
@@ -121,7 +121,7 @@ public struct WebClipService {
         // transit, openable with anything that reads text. Search rides the HTML attachment's
         // extraction when there is one, and this file's own when there is not.
         if clip.contentMarkdown.count > Self.maximumInlineBodyLength,
-           item.attachments.first(where: { $0.typeIdentifier == "net.daringfireball.markdown" }) == nil {
+           (item.attachments ?? []).first(where: { $0.typeIdentifier == "net.daringfireball.markdown" }) == nil {
             let article = try attachments.attach(
                 data: Data(clip.contentMarkdown.utf8),
                 filename: "\(filenameStem(for: item.title)).md",
@@ -139,7 +139,7 @@ public struct WebClipService {
             let filename = image.filename.trimmingCharacters(in: .whitespacesAndNewlines)
             let stableName = filename.isEmpty ? "web-image-\(index + 1).png" : filename
             let attachment: Attachment
-            if let existing = item.attachments.first(where: { $0.filename == stableName }) {
+            if let existing = (item.attachments ?? []).first(where: { $0.filename == stableName }) {
                 attachment = existing
             } else {
                 attachment = try attachments.attach(
@@ -163,7 +163,7 @@ public struct WebClipService {
 
         if let screenshot = clip.screenshotData,
            !screenshot.isEmpty,
-           !item.attachments.contains(where: { $0.filename.contains("-screenshot.") }) {
+           !(item.attachments ?? []).contains(where: { $0.filename.contains("-screenshot.") }) {
             let format = screenshotFormat(screenshot)
             let attachment = try attachments.attach(
                 data: screenshot,
@@ -177,7 +177,7 @@ public struct WebClipService {
                 sourceURL: nil,
                 isPageCapture: true
             ))
-        } else if let screenshot = item.attachments.first(where: { $0.filename.contains("-screenshot.") }) {
+        } else if let screenshot = (item.attachments ?? []).first(where: { $0.filename.contains("-screenshot.") }) {
             inlineImages.append(InlineImage(
                 attachment: screenshot,
                 caption: clip.mode == .fullPage ? "Full-page capture" : "Page capture",

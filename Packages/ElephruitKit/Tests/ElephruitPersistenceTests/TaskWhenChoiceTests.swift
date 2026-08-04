@@ -171,7 +171,7 @@ struct ConvertToProjectTests {
         #expect(task.id == id)
         #expect(task.linkedPeople(kinds: [.mentions]).map(\.id) == [ana.id])
         #expect(packing.parent?.id == id)
-        #expect(task.children.contains { $0.id == packing.id })
+        #expect((task.children ?? []).contains { $0.id == packing.id })
     }
 
     @Test("Steps become tasks rather than being dropped on the floor")
@@ -186,9 +186,9 @@ struct ConvertToProjectTests {
         // A project has no checklist, so conforming to the kind would have thrown both away. A
         // conversion that silently discards two steps is not one anybody would have agreed to.
         #expect(task.checklist.isEmpty)
-        let titles = task.children.map(\.title).sorted()
+        let titles = (task.children ?? []).map(\.title).sorted()
         #expect(titles == ["Book the van", "Change the address"])
-        #expect(task.children.allSatisfy { $0.kind == .reminder })
+        #expect((task.children ?? []).allSatisfy { $0.kind == .reminder })
     }
 
     @Test("A task inside a heading becomes a project somewhere a project may live")

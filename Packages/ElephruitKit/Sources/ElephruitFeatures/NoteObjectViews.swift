@@ -26,7 +26,7 @@ struct NoteObjectPieceView: View {
     private var usesEdgeToEdgeFace: Bool {
         if case .webClip = object { return true }
         guard case .image(let attachmentID, _) = object else { return false }
-        return item.attachments.first(where: { $0.id == attachmentID })?
+        return (item.attachments ?? []).first(where: { $0.id == attachmentID })?
             .filename.hasPrefix("full-page-") == true
     }
 
@@ -183,13 +183,13 @@ private struct NoteWebClipFace: View {
     private func load() {
         defer { resolved = true }
         guard let services,
-              let attachment = item.attachments.first(where: { $0.id == attachmentID }),
+              let attachment = (item.attachments ?? []).first(where: { $0.id == attachmentID }),
               let htmlURL = services.attachments.resolve(attachment),
               let loadedHTML = try? String(contentsOf: htmlURL, encoding: .utf8)
         else { return }
 
         var displayHTML = loadedHTML
-        for candidate in item.attachments where candidate.id != attachmentID {
+        for candidate in (item.attachments ?? []) where candidate.id != attachmentID {
             guard let url = services.attachments.resolve(candidate) else { continue }
             let mimeType = UTType(candidate.typeIdentifier)?.preferredMIMEType
                 ?? "application/octet-stream"
@@ -542,7 +542,7 @@ private struct NoteImageFace: View {
     private func load() {
         defer { resolved = true }
         guard let services,
-              let attachment = item.attachments.first(where: { $0.id == attachmentID }),
+              let attachment = (item.attachments ?? []).first(where: { $0.id == attachmentID }),
               let url = services.attachments.resolve(attachment)
         else { return }
         image = NSImage(contentsOf: url)
@@ -604,7 +604,7 @@ private struct NoteFileFace: View {
     }
 
     private var attachment: Attachment? {
-        item.attachments.first { $0.id == attachmentID }
+        (item.attachments ?? []).first { $0.id == attachmentID }
     }
 }
 

@@ -429,7 +429,7 @@ public struct ReminderComposerDraft: Sendable, Hashable {
         dueAt = reminder.dueAt
         isSomeday = reminder.isSomeday
         tagSlugs = reminder.tagSlugs
-        personNames = reminder.outgoingLinks.compactMap { link in
+        personNames = (reminder.outgoingLinks ?? []).compactMap { link in
             guard link.kind == .mentions,
                   let target = link.target,
                   target.kind == .person || target.kind == .organization

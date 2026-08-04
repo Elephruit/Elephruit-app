@@ -165,7 +165,7 @@ public enum ContainmentRepair {
 
             // Only add the link if an equivalent one is not already there, so running twice is a
             // no-op rather than a duplicate — requirement A2-6.
-            let alreadyFiled = item.outgoingLinks.contains {
+            let alreadyFiled = (item.outgoingLinks ?? []).contains {
                 $0.kind == .filedUnder && $0.target?.id == parent.id
             }
             if !alreadyFiled {

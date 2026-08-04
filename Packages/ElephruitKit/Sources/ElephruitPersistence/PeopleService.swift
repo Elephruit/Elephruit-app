@@ -24,7 +24,7 @@ public final class PeopleService {
         var openItemIDs: [UUID] = []
         var seen = Set<UUID>()
 
-        for link in person.incomingLinks {
+        for link in (person.incomingLinks ?? []) {
             guard let source = link.source, source.deletedAt == nil, seen.insert(source.id).inserted else {
                 continue
             }
@@ -42,7 +42,7 @@ public final class PeopleService {
         }
 
         // Outgoing too: a meeting links *to* its attendees, so a person's meetings arrive this way.
-        for link in person.outgoingLinks {
+        for link in (person.outgoingLinks ?? []) {
             guard let target = link.target, target.deletedAt == nil, seen.insert(target.id).inserted else {
                 continue
             }

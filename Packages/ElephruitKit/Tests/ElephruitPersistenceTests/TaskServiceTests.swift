@@ -308,7 +308,7 @@ struct WaitingTests {
         try fixture.tasks.markWaiting(task, on: jordan)
 
         let stored = try fixture.store.sameContextItem(id: task.id)
-        #expect(stored.outgoingLinks.count { $0.kind == .waitingOn } == 1)
+        #expect((stored.outgoingLinks ?? []).count { $0.kind == .waitingOn } == 1)
         #expect(stored.waitingOnPerson()?.id == jordan.id)
     }
 

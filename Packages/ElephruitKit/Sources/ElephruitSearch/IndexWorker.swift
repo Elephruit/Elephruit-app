@@ -118,7 +118,7 @@ enum IndexDocumentBuilder {
             containerText: containerText(for: item),
             peopleText: peopleText(for: item),
             isFiled: item.parent != nil || !item.filedUnderContainers().isEmpty,
-            hasLinks: !item.outgoingLinks.isEmpty || !item.incomingLinks.isEmpty
+            hasLinks: !(item.outgoingLinks ?? []).isEmpty || !(item.incomingLinks ?? []).isEmpty
         )
     }
 
@@ -153,7 +153,7 @@ enum IndexDocumentBuilder {
         var names: [String] = []
         var seen = Set<UUID>()
 
-        for link in item.outgoingLinks {
+        for link in (item.outgoingLinks ?? []) {
             guard let target = link.target,
                   target.kind == .person || target.kind == .organization,
                   target.deletedAt == nil,
@@ -162,7 +162,7 @@ enum IndexDocumentBuilder {
             names.append(target.title)
         }
 
-        for link in item.incomingLinks {
+        for link in (item.incomingLinks ?? []) {
             guard let source = link.source,
                   source.kind == .person || source.kind == .organization,
                   source.deletedAt == nil,

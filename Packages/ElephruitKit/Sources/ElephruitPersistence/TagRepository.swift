@@ -129,7 +129,7 @@ public final class SwiftDataTagRepository: TagRepository {
     }
 
     private func reslugDescendants(of tag: Tag, oldPrefix: String, newPrefix: String) throws(AppError) {
-        for child in tag.children {
+        for child in (tag.children ?? []) {
             let suffix = child.slug.dropFirst(oldPrefix.count)
             child.slug = newPrefix + suffix
             try reslugDescendants(of: child, oldPrefix: oldPrefix + suffix, newPrefix: child.slug)
@@ -138,7 +138,7 @@ public final class SwiftDataTagRepository: TagRepository {
     }
 
     private func refreshSearchText(forItemsTaggedBy tag: Tag) throws(AppError) {
-        for item in tag.items {
+        for item in (tag.items ?? []) {
             item.refreshSearchText()
         }
     }
@@ -152,13 +152,13 @@ public final class SwiftDataTagRepository: TagRepository {
     public func delete(_ tag: Tag) throws(AppError) {
         let affectedItems = tag.items
 
-        for child in tag.children {
+        for child in (tag.children ?? []) {
             child.parent = tag.parent
         }
 
         context.delete(tag)
 
-        for item in affectedItems {
+        for item in (affectedItems ?? []) {
             item.refreshSearchText()
         }
 
@@ -170,7 +170,7 @@ public final class SwiftDataTagRepository: TagRepository {
         let candidates = try allTags().filter(\.isImplicit)
         var removed = 0
 
-        for tag in candidates where tag.children.isEmpty && tag.items.isEmpty {
+        for tag in candidates where (tag.children ?? []).isEmpty && (tag.items ?? []).isEmpty {
             context.delete(tag)
             removed += 1
         }

@@ -223,10 +223,13 @@ enum ItemPredicateBuilder {
         _ statusRaws: [String],
         _ tagSlug: String
     ) -> Predicate<Item> {
+        // `?.contains … == true` is the optional-relationship form the macro translates to
+        // SQL — a `?? []` here is an array literal the store cannot express, and six clauses
+        // with one already blows the type-checker's budget.
         #Predicate<Item> { item in
             item.deletedAt == nil
                 && item.archivedAt == nil
-                && item.tags.contains { $0.slug == tagSlug }
+                && item.tags?.contains { $0.slug == tagSlug } == true
                 && (!filterByKind || kindRaws.contains(item.kindRaw))
                 && (!filterByStatus || statusRaws.contains(item.statusRaw))
         }

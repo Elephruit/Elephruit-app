@@ -184,7 +184,7 @@ public struct NotePageView: View {
     private func usesEdgeToEdgeLayout(_ object: NoteObject) -> Bool {
         if case .webClip = object { return true }
         guard case .image(let attachmentID, _) = object else { return false }
-        return item.attachments.first(where: { $0.id == attachmentID })?
+        return (item.attachments ?? []).first(where: { $0.id == attachmentID })?
             .filename.hasPrefix("full-page-") == true
     }
 

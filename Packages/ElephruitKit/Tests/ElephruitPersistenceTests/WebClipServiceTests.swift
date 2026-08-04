@@ -68,7 +68,7 @@ struct WebClipServiceTests {
         #expect(item.body.contains("the whole text is attached"))
 
         // The whole article rides as a managed Markdown file, searchable by its extraction.
-        let markdown = item.attachments.first { $0.typeIdentifier == "net.daringfireball.markdown" }
+        let markdown = (item.attachments ?? []).first { $0.typeIdentifier == "net.daringfireball.markdown" }
         let attached = try #require(markdown)
         #expect(attached.byteCount == article.utf8.count)
         #expect(attached.extractedText?.isEmpty == false)
@@ -79,7 +79,7 @@ struct WebClipServiceTests {
 
         // Saving the same clip again does not stack a second copy.
         _ = try fixture.service.save(clip)
-        let copies = item.attachments.filter { $0.typeIdentifier == "net.daringfireball.markdown" }
+        let copies = (item.attachments ?? []).filter { $0.typeIdentifier == "net.daringfireball.markdown" }
         #expect(copies.count == 1)
     }
 
@@ -112,7 +112,7 @@ struct WebClipServiceTests {
         #expect(!item.body.contains("Keep the useful part"))
         #expect(item.searchText.contains("keep the useful part"))
 
-        let attachment = try #require(item.attachments.first)
+        let attachment = try #require((item.attachments ?? []).first)
         #expect(attachment.typeIdentifier == "public.html")
         let htmlURL = try #require(fixture.attachments.resolve(attachment))
         let html = try String(contentsOf: htmlURL, encoding: .utf8)
@@ -137,7 +137,7 @@ struct WebClipServiceTests {
 
         #expect(item.kind == .bookmark)
         #expect(item.body.contains("A fallback excerpt."))
-        #expect(item.attachments.isEmpty)
+        #expect((item.attachments ?? []).isEmpty)
     }
 
     @Test("A screenshot is stored as managed bytes")
@@ -150,7 +150,7 @@ struct WebClipServiceTests {
         clip.screenshotData = Data([0x89, 0x50, 0x4E, 0x47, 0x00, 0x01])
         let item = try fixture.service.save(clip)
 
-        let attachment = try #require(item.attachments.first)
+        let attachment = try #require((item.attachments ?? []).first)
         #expect(attachment.typeIdentifier == "public.png")
         let url = try #require(fixture.attachments.resolve(attachment))
         #expect(try Data(contentsOf: url) == clip.screenshotData)
@@ -240,9 +240,9 @@ struct WebClipServiceTests {
         clip.contentHTML = "<article><img src=\"elephruit-attachment://\(imageID.uuidString)\"><p>Local text.</p></article>"
 
         let item = try fixture.service.save(clip)
-        let attachment = try #require(item.attachments.first(where: { $0.filename == "hero.png" }))
+        let attachment = try #require((item.attachments ?? []).first(where: { $0.filename == "hero.png" }))
         let imageURL = try #require(fixture.attachments.resolve(attachment))
-        let htmlAttachment = try #require(item.attachments.first(where: { $0.typeIdentifier == "public.html" }))
+        let htmlAttachment = try #require((item.attachments ?? []).first(where: { $0.typeIdentifier == "public.html" }))
         let htmlURL = try #require(fixture.attachments.resolve(htmlAttachment))
 
         #expect(try Data(contentsOf: imageURL) == bytes)
@@ -277,7 +277,7 @@ struct WebClipServiceTests {
         clip.contentHTML = "<article><p>Before the diagram.</p><img src=\"elephruit-attachment://\(imageID.uuidString)\"><p>After the diagram.</p></article>"
 
         let item = try fixture.service.save(clip)
-        let htmlAttachment = try #require(item.attachments.first(where: { $0.typeIdentifier == "public.html" }))
+        let htmlAttachment = try #require((item.attachments ?? []).first(where: { $0.typeIdentifier == "public.html" }))
         let htmlURL = try #require(fixture.attachments.resolve(htmlAttachment))
         let html = try String(contentsOf: htmlURL, encoding: .utf8)
         let beforeRange = try #require(html.range(of: "Before the diagram."))
@@ -309,7 +309,7 @@ struct WebClipServiceTests {
 
         #expect(completed === partial)
         #expect(retried === partial)
-        #expect(partial.attachments.count == 1)
+        #expect((partial.attachments ?? []).count == 1)
         #expect(try fixture.items.items(matching: .everything()).count == 1)
     }
 
@@ -325,7 +325,7 @@ struct WebClipServiceTests {
         let item = try fixture.service.save(clip)
 
         #expect(item.parent == nil)
-        #expect(item.outgoingLinks.contains { $0.kind == .filedUnder && $0.target?.id == project.id })
+        #expect((item.outgoingLinks ?? []).contains { $0.kind == .filedUnder && $0.target?.id == project.id })
     }
 
     @Test("Non-web sources are refused before writing")

@@ -155,7 +155,7 @@ public final class EventAnnotationService {
         var noteIDs: [UUID] = []
         var projectIDs: [UUID] = []
 
-        for link in meeting.outgoingLinks {
+        for link in (meeting.outgoingLinks ?? []) {
             guard let target = link.target, target.deletedAt == nil else { continue }
             if link.kind == .participant, (target.recordProfile != nil || target.kind == .person) {
                 recordIDs.append(target.id)
@@ -170,7 +170,7 @@ public final class EventAnnotationService {
 
         // Notes written *about* the meeting point at it rather than the other way round, which is
         // the direction a wiki link naturally runs.
-        for link in meeting.incomingLinks {
+        for link in (meeting.incomingLinks ?? []) {
             guard let source = link.source, source.deletedAt == nil else { continue }
             guard source.kind != .person, !noteIDs.contains(source.id) else { continue }
             noteIDs.append(source.id)
@@ -185,7 +185,7 @@ public final class EventAnnotationService {
             personIDs: personIDs,
             noteIDs: noteIDs,
             projectIDs: projectIDs,
-            attachmentCount: meeting.attachments.count,
+            attachmentCount: (meeting.attachments ?? []).count,
             preparationNotes: sections.preparation,
             debriefNotes: sections.debrief
         )
@@ -221,12 +221,12 @@ public final class EventAnnotationService {
             var hasNote = false
             var noteID: UUID?
 
-            for link in meeting.outgoingLinks {
+            for link in (meeting.outgoingLinks ?? []) {
                 guard let target = link.target, target.deletedAt == nil else { continue }
                 if target.kind == .person, link.kind == .participant { personIDs.append(target.id) }
             }
 
-            for link in meeting.incomingLinks {
+            for link in (meeting.incomingLinks ?? []) {
                 guard let source = link.source, source.deletedAt == nil else { continue }
                 switch source.kind {
                 case .task, .reminder:
@@ -342,7 +342,7 @@ public final class EventAnnotationService {
     public func unlink(record: Item, from identity: EventIdentity) throws(AppError) {
         guard let meeting = try meetingItem(for: identity) else { return }
 
-        for link in meeting.outgoingLinks
+        for link in (meeting.outgoingLinks ?? [])
         where link.kind == .participant && link.target?.id == record.id {
             context.delete(link)
         }
@@ -496,7 +496,7 @@ public final class EventAnnotationService {
 
         let meetings = try allMeetingItems().filter { meeting in
             guard let start = meeting.eventReference?.startAt, start < instant else { return false }
-            let participants = meeting.outgoingLinks
+            let participants = (meeting.outgoingLinks ?? [])
                 .filter { $0.kind == .participant }
                 .compactMap { $0.target?.id }
             return !wanted.isDisjoint(with: participants)

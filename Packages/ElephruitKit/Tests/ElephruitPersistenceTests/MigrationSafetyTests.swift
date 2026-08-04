@@ -132,7 +132,7 @@ struct MigrationSafetyTests {
             sortOrders = Set(items.map(\.sortOrder))
             favourites = items.count { $0.isFavorite }
             // Every link that is not the migration's own output.
-            otherLinkCount = items.flatMap(\.outgoingLinks).count { $0.kind != .filedUnder }
+            otherLinkCount = items.flatMap({ $0.outgoingLinks ?? [] }).count { $0.kind != .filedUnder }
         }
     }
 

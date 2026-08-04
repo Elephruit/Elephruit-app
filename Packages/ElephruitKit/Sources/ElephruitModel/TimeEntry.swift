@@ -125,12 +125,12 @@ public final class TimeEntry {
     /// belongs here. Whether a non-person can be added is a question for the repository rather than
     /// the type, on the same terms as every other kind rule in this model.
     @Relationship(deleteRule: .nullify, inverse: \Item.attendedTimeEntries)
-    public var people: [Item] = []
+    public var people: [Item]? = []
 
     // The inverse CloudKit mirroring requires, named here to match ``Item/tags``'s side
     // of the same convention. Nullify preserves what deletion already meant.
     @Relationship(deleteRule: .nullify, inverse: \Tag.timeEntries)
-    public var tags: [Tag] = []
+    public var tags: [Tag]? = []
 
     public init(
         id: UUID = UUID(),
@@ -172,7 +172,7 @@ extension TimeEntry {
     }
 
     public var tagSlugs: [String] {
-        tags.map(\.slug).sorted()
+        (tags ?? []).map(\.slug).sorted()
     }
 
     /// Who was there, as values a view can hold.
@@ -180,7 +180,7 @@ extension TimeEntry {
     /// Sorted by name so two entries with the same people in a different order group together in the
     /// log rather than reading as two different afternoons.
     public var participants: [TimeParticipant] {
-        people
+        (people ?? [])
             .map { TimeParticipant(id: $0.id, name: $0.displayTitle) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }

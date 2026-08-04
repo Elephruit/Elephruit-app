@@ -361,7 +361,7 @@ struct EventAnnotationTests {
         #expect(annotation.personIDs.isEmpty, "A vehicle is a Record, not a calendar attendee")
         #expect(annotation.noteIDs.isEmpty, "A tagged Record must not be presented as a note")
         #expect(meeting.kind == .meeting)
-        #expect(vehicle.incomingLinks.contains {
+        #expect((vehicle.incomingLinks ?? []).contains {
             $0.kind == .participant && $0.source?.id == meeting.id
         }, "The meeting link is the vehicle's durable calendar interaction")
     }
@@ -443,8 +443,8 @@ struct EventAnnotationTests {
 
         // Linked to the meeting, so opening either shows the other.
         let meeting = try #require(try service.meetingItem(for: event().identity))
-        #expect(task.outgoingLinks.contains { $0.target?.id == meeting.id })
-        #expect(task.outgoingLinks.contains { $0.target?.id == person.id })
+        #expect((task.outgoingLinks ?? []).contains { $0.target?.id == meeting.id })
+        #expect((task.outgoingLinks ?? []).contains { $0.target?.id == person.id })
     }
 
     @Test("Annotations for a whole window come back in one pass")

@@ -34,7 +34,7 @@ struct ReminderStoreTests {
         #expect(reminder.body == "Ask about Thursday")
         #expect(reminder.parent?.id == project.id)
         #expect(reminder.tagSlugs == ["personal"])
-        #expect(reminder.outgoingLinks.first { $0.kind == .mentions }?.target?.id == person.id)
+        #expect((reminder.outgoingLinks ?? []).first { $0.kind == .mentions }?.target?.id == person.id)
         #expect(reminder.checklist.items.map(\.title) == ["Find insurance card"])
     }
 
