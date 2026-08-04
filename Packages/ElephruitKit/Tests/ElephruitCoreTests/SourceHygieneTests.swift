@@ -579,7 +579,7 @@ struct SourceHygieneTests {
     func shadowsComeFromElevation() {
         let allowlisted: Set<String> = [
             "FloatingTimerView.swift", "KanbanBoardView.swift", "KindDetailViews.swift",
-            "NoteWorkspacePanels.swift", "PersonContactEditor.swift", "PersonPortraitViews.swift",
+            "NoteWorkspacePanels.swift", "PersonPortraitViews.swift",
             "ReminderComposer.swift", "SectionIndexBar.swift",
         ]
 
@@ -604,7 +604,7 @@ struct SourceHygieneTests {
             "CalendarOverviewViews.swift", "CalendarTimeGrid.swift", "CaptureActionRow.swift",
             "CaptureChipRow.swift", "Components.swift", "ContactOnboardingView.swift",
             "EventQuickEntry.swift", "KanbanBoardView.swift", "LinkedContactViews.swift",
-            "MonthGrid.swift", "PersonCaptureSheets.swift", "PersonContactEditor.swift",
+            "MonthGrid.swift", "PersonCaptureSheets.swift",
             "PersonPortraitViews.swift", "PersonSheets.swift", "PersonTimelineDetailSheet.swift",
             "PersonWorkspaceView.swift", "ProjectsSidebarSection.swift", "ReminderComposer.swift",
             "ReminderMonthPicker.swift", "SectionIndexBar.swift", "SwipeActionsRow.swift",
@@ -637,7 +637,7 @@ struct SourceHygieneTests {
         let allowlisted: Set<String> = [
             "CalendarAgendaView.swift", "CalendarMonthView.swift", "CalendarOverviewViews.swift",
             "CalendarSearchView.swift", "Components.swift", "EventInspectorView.swift",
-            "PersonCaptureSheets.swift", "PersonContactEditor.swift", "PersonPortraitViews.swift",
+            "PersonCaptureSheets.swift", "PersonPortraitViews.swift",
             "PersonSheets.swift", "PersonTimelineDetailSheet.swift", "TodayRows.swift",
         ]
 
@@ -669,7 +669,7 @@ struct SourceHygieneTests {
             "BugTrackerView.swift", "CalendarAgendaView.swift", "CalendarMonthView.swift",
             "CalendarSearchView.swift", "CalendarTimeGrid.swift", "CaptureSuggestionSource.swift",
             "Components.swift", "ContactImportReviewView.swift", "MapPlaceSearchField.swift",
-            "PersonContactEditor.swift", "PersonPortraitViews.swift", "PersonWorkspaceView.swift",
+            "PersonPortraitViews.swift", "PersonWorkspaceView.swift",
             "ProjectCalendarView.swift", "ReminderComposer.swift", "TimeEntryEditing.swift",
             "TimePickers.swift", "TodayRows.swift", "TodayToolbar.swift", "WorkItemDetailView.swift",
         ]
@@ -704,26 +704,43 @@ struct SourceHygieneTests {
         let allowlisted: Set<String> = [
             "BugTrackerView.swift", "EventEditorView.swift", "EventInspectorView.swift",
             "FloatingTimerView.swift", "KanbanBoardView.swift", "PersonCaptureSheets.swift",
-            "PersonContactEditor.swift", "PersonSheets.swift", "ReminderComposer.swift",
+            "PersonSheets.swift", "ReminderComposer.swift",
             "RootView.swift", "TodayComponents.swift",
             "TodayDayView.swift", "TodayPeopleViews.swift", "TodayRows.swift", "TodayView.swift",
             "WorkItemDetailView.swift",
         ]
 
-        let (offenders, stale) = metricScan(
-            exempt: ["Tokens.swift"],
-            allowlisted: allowlisted
-        ) { line in
-            // `.calmAnimation` reads Reduce Motion itself, and an imperative `withAnimation`
-            // wrapped in `respectingReduceMotion` has made the same promise by hand. Anything
-            // else animates for the people who asked it not to.
-            guard !line.contains("respectingReduceMotion"), !line.contains("calmAnimation") else {
-                return nil
+        // `.calmAnimation` reads Reduce Motion itself, and an imperative `withAnimation` wrapped
+        // in `respectingReduceMotion` has made the same promise by hand. The wrap legitimately
+        // spans lines, so the check looks a two-line window around the call rather than at the
+        // call's line alone — anything else animates for the people who asked it not to.
+        var offenders: [String] = []
+        var offendersInAllowlistedFiles: Set<String> = []
+
+        for file in Self.swiftFiles() {
+            let name = file.lastPathComponent
+            guard name != "Tokens.swift" else { continue }
+            guard let contents = try? String(contentsOf: file, encoding: .utf8) else { continue }
+            let lines = contents.components(separatedBy: .newlines)
+
+            for (index, line) in lines.enumerated() {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.hasPrefix("//"), !trimmed.hasPrefix("///") else { continue }
+                guard !line.contains("calmAnimation") else { continue }
+                guard line.contains("withAnimation(") || line.contains(".animation(") else { continue }
+
+                let window = lines[max(0, index - 2)...min(lines.count - 1, index + 2)]
+                guard !window.contains(where: { $0.contains("respectingReduceMotion") }) else { continue }
+
+                if allowlisted.contains(name) {
+                    offendersInAllowlistedFiles.insert(name)
+                } else {
+                    offenders.append("\(name):\(index + 1)")
+                }
             }
-            if line.contains("withAnimation(") { return "withAnimation(" }
-            if line.contains(".animation(") { return ".animation(" }
-            return nil
         }
+
+        let stale = allowlisted.subtracting(offendersInAllowlistedFiles).sorted()
 
         #expect(
             offenders.isEmpty,
