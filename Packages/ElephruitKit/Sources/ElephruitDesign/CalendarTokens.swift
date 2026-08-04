@@ -184,8 +184,17 @@ extension Theme {
     /// background it can be read against in both appearances.
     public enum EventStyle {
         /// The block's background.
+        ///
+        /// Stronger than the 18% it shipped at, which photographed as fog — a week of meetings
+        /// read as faint washes the grid showed through. Twenty-six percent keeps titles legible
+        /// on top in both appearances while the block finally reads as a thing with presence, and
+        /// the strength answers Increase Contrast like every other tinted surface.
         public static func fill(colorName: String?, isCancelled: Bool = false) -> Color {
-            Theme.Palette.color(named: colorName).opacity(isCancelled ? 0.08 : 0.18)
+            Theme.Colors.adaptiveAlpha(
+                of: Theme.Palette.color(named: colorName),
+                standard: isCancelled ? 0.08 : 0.26,
+                increasedContrast: isCancelled ? 0.16 : 0.45
+            )
         }
 
         /// The saturated edge and the dot in a list row.
@@ -195,7 +204,11 @@ extension Theme {
 
         /// The border, which is what separates two adjacent blocks of the same calendar.
         public static func border(colorName: String?) -> Color {
-            Theme.Palette.color(named: colorName).opacity(0.35)
+            Theme.Colors.adaptiveAlpha(
+                of: Theme.Palette.color(named: colorName),
+                standard: 0.5,
+                increasedContrast: 0.8
+            )
         }
     }
 }

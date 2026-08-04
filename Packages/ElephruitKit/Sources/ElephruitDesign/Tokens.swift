@@ -384,7 +384,10 @@ extension Theme {
         /// app lays over a tint do not, so before this every hand-tinted fill stayed a 12% wash
         /// for exactly the people who asked for more. A dynamic provider rather than an
         /// environment read, so a static token can stay a static token.
-        private static func adaptiveAlpha(
+        ///
+        /// Public for the few places — the calendar's event blocks — whose strengths are their
+        /// own design decision but whose contrast behaviour must be this one.
+        public static func adaptiveAlpha(
             of tint: Color,
             standard: CGFloat,
             increasedContrast: CGFloat
