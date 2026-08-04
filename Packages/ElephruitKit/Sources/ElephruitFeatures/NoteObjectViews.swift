@@ -131,6 +131,7 @@ private struct NoteWebClipFace: View {
     let attachmentID: UUID
 
     @State private var html: String?
+    @State private var capturedWidth: CGFloat = 720
     @State private var resolved = false
 
     var body: some View {
@@ -147,7 +148,8 @@ private struct NoteWebClipFace: View {
             .background(Theme.Colors.subtleFill)
 
             if let html {
-                SelectableWebClipView(html: html)
+                SelectableWebClipView(html: html, capturedWidth: capturedWidth)
+                    .frame(maxWidth: capturedWidth)
                     .frame(maxWidth: .infinity)
             } else if resolved {
                 HStack(spacing: Theme.Spacing.small) {
@@ -203,12 +205,27 @@ private struct NoteWebClipFace: View {
             with: "data:,",
             options: .regularExpression
         )
+        capturedWidth = Self.capturedWidth(in: loadedHTML)
         html = displayHTML
+    }
+
+    private static func capturedWidth(in html: String) -> CGFloat {
+        let expression = try? NSRegularExpression(
+            pattern: #"<article\b[^>]*style="[^"]*\bwidth:\s*([0-9.]+)px"#,
+            options: .caseInsensitive
+        )
+        let range = NSRange(html.startIndex..., in: html)
+        guard let match = expression?.firstMatch(in: html, range: range),
+              let valueRange = Range(match.range(at: 1), in: html),
+              let width = Double(html[valueRange])
+        else { return 720 }
+        return min(max(CGFloat(width), 320), 1_200)
     }
 }
 
 private struct SelectableWebClipView: NSViewRepresentable {
     let html: String
+    let capturedWidth: CGFloat
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -239,13 +256,47 @@ private struct SelectableWebClipView: NSViewRepresentable {
             .documentType: NSAttributedString.DocumentType.html,
             .characterEncoding: String.Encoding.utf8.rawValue,
         ]
-        guard let rendered = try? NSAttributedString(
+        guard let rendered = try? NSMutableAttributedString(
             data: Data(html.utf8),
             options: options,
             documentAttributes: nil
         ) else { return }
+        prepareForDisplay(rendered)
         textView.textStorage?.setAttributedString(rendered)
         textView.invalidateIntrinsicContentSize()
+    }
+
+    private func prepareForDisplay(_ rendered: NSMutableAttributedString) {
+        let mediaWidth = max(capturedWidth - 30, 1)
+        rendered.enumerateAttribute(
+            .attachment,
+            in: NSRange(location: 0, length: rendered.length)
+        ) { value, _, _ in
+            guard let attachment = value as? NSTextAttachment,
+                  let image = attachment.image,
+                  image.size.width > mediaWidth
+            else { return }
+            let scale = mediaWidth / image.size.width
+            attachment.bounds = NSRect(
+                x: 0,
+                y: 0,
+                width: mediaWidth,
+                height: image.size.height * scale
+            )
+        }
+
+        // AppKit applies its standard blue link color even when the captured page explicitly
+        // placed a link on a dark background. Restore contrast for linked headings and buttons.
+        rendered.enumerateAttributes(
+            in: NSRange(location: 0, length: rendered.length)
+        ) { attributes, range, _ in
+            guard attributes[.link] != nil,
+                  let background = attributes[.backgroundColor] as? NSColor,
+                  background.isDark
+            else { return }
+            rendered.addAttribute(.foregroundColor, value: NSColor.white, range: range)
+            rendered.removeAttribute(.underlineStyle, range: range)
+        }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextView, context: Context) -> CGSize? {
@@ -271,6 +322,16 @@ private struct SelectableWebClipView: NSViewRepresentable {
             let content = layoutManager.usedRect(for: textContainer)
             return min(max(ceil(content.height + textView.textContainerInset.height * 2), 120), 30_000)
         }
+    }
+}
+
+private extension NSColor {
+    var isDark: Bool {
+        guard let color = usingColorSpace(.deviceRGB) else { return false }
+        let luminance = 0.2126 * color.redComponent
+            + 0.7152 * color.greenComponent
+            + 0.0722 * color.blueComponent
+        return color.alphaComponent > 0.5 && luminance < 0.45
     }
 }
 
