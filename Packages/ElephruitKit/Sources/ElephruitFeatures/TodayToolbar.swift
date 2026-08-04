@@ -4,15 +4,14 @@ import ElephruitModel
 import ElephruitPersistence
 import SwiftUI
 
-/// Moving between days, and choosing what a day shows.
+/// Moving between days, and choosing what a day shows — as the window toolbar's own items.
 ///
-/// ### Why this is a bar and not a toolbar
-/// The window's toolbar belongs to the window and is shared with search, the module switcher and
-/// everything else. These controls are about *this page* and change what is directly beneath them —
-/// the date they move, the sections they hide — so they sit against the content they act on. It also
-/// means they survive the page being narrow, where a window toolbar starts collapsing controls into
-/// an overflow the user cannot predict.
-struct TodayToolbar: View {
+/// This was an in-content bar on the argument that these controls are about the page. So they
+/// are — and so are every native calendar's, which still puts them in the one toolbar, because
+/// two stacked rows of chrome above a day is chrome spending the day's room. The filter chips
+/// that used to appear at width live in the options menu permanently: the bar already folded
+/// them there below 620 points, so the menu was always their other home.
+struct TodayToolbarItems: ToolbarContent {
     @Environment(\.services) private var services
 
     let model: TodayModel
@@ -21,41 +20,11 @@ struct TodayToolbar: View {
 
     @Binding var isDatePickerPresented: Bool
 
-    /// Below this the named filter chips fold into the overflow menu.
-    ///
-    /// A measured width rather than a size class: the page is a column inside a resizable window,
-    /// and the thing that decides whether three chips fit is how wide the column is, not how wide
-    /// the display is.
-    @State private var availableWidth: CGFloat = 0
-
-    private var showsChips: Bool { availableWidth >= 620 }
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.small) {
-            dateControls
-
-            Spacer(minLength: Theme.Spacing.medium)
-
-            if showsChips {
-                filterChips
-            }
-
-            overflowMenu
-        }
-        .padding(.horizontal, Theme.Spacing.large)
-        .padding(.vertical, Theme.Spacing.small)
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
-        .accessibilityIdentifier(AccessibilityID.Today.filters)
-    }
-
-    // MARK: - Where you are
-
-    private var dateControls: some View {
-        HStack(spacing: Theme.Spacing.tight) {
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .navigation) {
             Button { model.step(days: -1) } label: {
                 Image(systemName: "chevron.left")
             }
-            .buttonStyle(.borderless)
             .help("The day before")
             .accessibilityLabel("Previous day")
             .accessibilityIdentifier(AccessibilityID.Today.previousDay)
@@ -63,7 +32,6 @@ struct TodayToolbar: View {
             Button { model.step(days: 1) } label: {
                 Image(systemName: "chevron.right")
             }
-            .buttonStyle(.borderless)
             .help("The day after")
             .accessibilityLabel("Next day")
             .accessibilityIdentifier(AccessibilityID.Today.nextDay)
@@ -71,32 +39,26 @@ struct TodayToolbar: View {
             Button {
                 isDatePickerPresented = true
             } label: {
-                HStack(spacing: Theme.Spacing.tight) {
-                    Text(dateLabel)
-                        .font(Theme.Text.rowTitleEmphasised)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9))
-                        .foregroundStyle(Theme.Colors.tertiaryText)
-                }
+                Text(dateLabel)
+                    .font(Theme.Text.rowTitleEmphasised)
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(Theme.Colors.primaryText)
             .help("Go to a date")
             .accessibilityIdentifier(AccessibilityID.Today.datePicker)
             .popover(isPresented: $isDatePickerPresented, arrowEdge: .bottom) {
                 datePicker
             }
 
-            // Only when it would do something. A "Today" button while standing on today is a control
-            // that looks pressable and is not.
+            // Only when it would do something. A "Today" button while standing on today is a
+            // control that looks pressable and is not. ⌘0 is the keyboard way back.
             if !model.isOnToday {
                 Button("Today") { model.returnToToday() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .keyboardShortcut("t", modifiers: [.command, .shift])
                     .help("Back to today")
                     .accessibilityIdentifier(AccessibilityID.Today.returnToToday)
             }
+        }
+
+        ToolbarItem {
+            overflowMenu
         }
     }
 
@@ -125,68 +87,14 @@ struct TodayToolbar: View {
 
     // MARK: - What it shows
 
-    private var filterChips: some View {
-        HStack(spacing: Theme.Spacing.tight) {
-            chip("Reminders", systemImage: "bell", isOn: filters.showsTasks) {
-                preferences?.toggleTasks()
-            }
-            chip("Meetings", systemImage: "person.2", isOn: filters.showsMeetings) {
-                preferences?.toggleMeetings()
-            }
-            chip("People", systemImage: "person.crop.circle", isOn: filters.showsPeople) {
-                preferences?.togglePeople()
-            }
-        }
-    }
-
     private var filters: TodayFilters { preferences?.filters ?? .standard }
-
-    /// A switch that reads as a switch whether or not colour is available.
-    ///
-    /// On is a filled background and a filled glyph; off is neither and a dimmed label. Two channels
-    /// rather than one, so the state survives greyscale, and the label is always the noun rather
-    /// than "Show tasks" — the chip says what it is and its appearance says whether it is on.
-    private func chip(_ title: String, systemImage: String, isOn: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: Theme.Spacing.tight) {
-                Image(systemName: isOn ? "\(systemImage).fill" : systemImage)
-                    .font(.system(size: 10))
-                Text(title)
-                    .font(Theme.Text.chip)
-            }
-            .padding(.horizontal, Theme.Spacing.small)
-            .padding(.vertical, 3)
-            .background {
-                Capsule(style: .continuous)
-                    .fill(isOn ? Theme.Colors.subtleFill : .clear)
-            }
-            .overlay {
-                Capsule(style: .continuous)
-                    .strokeBorder(Theme.Colors.separator, lineWidth: isOn ? 0 : 1)
-            }
-            .foregroundStyle(isOn ? Theme.Colors.primaryText : Theme.Colors.secondaryText)
-            .contentShape(Capsule(style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .help(isOn ? "Hide \(title.lowercased())" : "Show \(title.lowercased())")
-        .accessibilityLabel(title)
-        .accessibilityValue(isOn ? "Shown" : "Hidden")
-        .accessibilityAddTraits(isOn ? [.isSelected] : [])
-    }
-
-    // MARK: - Everything else
 
     private var overflowMenu: some View {
         Menu {
-            if !showsChips {
-                Section("Show") {
-                    toggle("Reminders", isOn: filters.showsTasks) { preferences?.toggleTasks() }
-                    toggle("Meetings", isOn: filters.showsMeetings) { preferences?.toggleMeetings() }
-                    toggle("People", isOn: filters.showsPeople) { preferences?.togglePeople() }
-                }
-            }
-
-            Section {
+            Section("Show") {
+                toggle("Reminders", isOn: filters.showsTasks) { preferences?.toggleTasks() }
+                toggle("Meetings", isOn: filters.showsMeetings) { preferences?.toggleMeetings() }
+                toggle("People", isOn: filters.showsPeople) { preferences?.togglePeople() }
                 toggle("Daily Note", isOn: filters.showsDailyNote) { preferences?.toggleDailyNote() }
                 toggle("Completed Work", isOn: filters.showsCompleted) { preferences?.toggleCompleted() }
             }
@@ -210,12 +118,11 @@ struct TodayToolbar: View {
         } label: {
             Image(systemName: filters.isFiltering ? "line.3.horizontal.decrease.circle.fill" : "ellipsis.circle")
         }
-        .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        .fixedSize()
         .help(filters.summary ?? "What this page shows")
         .accessibilityLabel("Page options")
         .accessibilityValue(filters.summary ?? "Showing everything")
+        .accessibilityIdentifier(AccessibilityID.Today.filters)
     }
 
     private var agendaBinding: Binding<Bool> {

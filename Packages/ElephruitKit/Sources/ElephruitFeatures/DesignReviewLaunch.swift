@@ -158,10 +158,31 @@ public enum DesignReviewLaunch {
         switch raw {
         case "dark": return .darkAqua
         case "light": return .aqua
+        // The Increase Contrast variants. The adaptive colours in `Theme` resolve against the
+        // appearance's high-contrast names, so forcing one photographs what a person with the
+        // setting on actually gets — without touching the reviewer's system-wide setting, for
+        // the same reason "dark" does not.
+        case "light-contrast": return .accessibilityHighContrastAqua
+        case "dark-contrast": return .accessibilityHighContrastDarkAqua
         default:
             Diagnostics.shell.error("Unknown -ElephruitAppearance \(raw, privacy: .public)")
             return nil
         }
+    }
+
+    /// The name of the temporary store to open, so a review gets a library of its own.
+    ///
+    /// The temporary store is otherwise one fixed path per machine, shared by every development
+    /// launch — including ones running *concurrently* from other checkouts, whose writes land in
+    /// the library mid-photograph. A named store makes the review's library private to the review:
+    /// planted once by `-ElephruitLoadSampleData` into emptiness, touched by nobody else.
+    public static var storeName: String? {
+        guard isDevelopmentMode else { return nil }
+        return storeName(in: ProcessInfo.processInfo.arguments)
+    }
+
+    static func storeName(in arguments: [String]) -> String? {
+        value(for: "-ElephruitStoreName", in: arguments)
     }
 
     /// The size to force the main window to, as `WIDTHxHEIGHT` in points.

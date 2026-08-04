@@ -12,12 +12,15 @@ public enum Theme {}
 // MARK: - Spacing
 
 extension Theme {
-    /// A four-point scale.
+    /// An eight-point grid with a four-point half-step.
     ///
-    /// Four, not eight, because this app is dense: an eight-point grid forces either wasted
-    /// space in list rows or off-grid exceptions, and exceptions defeat the purpose.
+    /// Eight is the default gap; four is the sanctioned half-step for the inside of a row, where
+    /// this app's density genuinely needs it; two exists only as the gap between a glyph and its
+    /// own label. Nothing below two, and nothing off the scale: the 1- and 3-point micro-paddings
+    /// that accumulated in the feature views were not density, they were drift, and
+    /// `SourceHygieneTests` now refuses them.
     public enum Spacing {
-        /// 2 pt — between a glyph and its label.
+        /// 2 pt — between a glyph and its label, and nowhere else.
         public static let hairline: CGFloat = 2
         /// 4 pt — within a tightly-coupled pair.
         public static let tight: CGFloat = 4
@@ -29,6 +32,8 @@ extension Theme {
         public static let large: CGFloat = 16
         /// 24 pt — between sections.
         public static let section: CGFloat = 24
+        /// 32 pt — page-level insets on roomy surfaces.
+        public static let extraLarge: CGFloat = 32
         /// 40 pt — around empty states, which need room to feel calm rather than broken.
         public static let generous: CGFloat = 40
     }
@@ -40,6 +45,54 @@ extension Theme {
         public static let medium: CGFloat = 6
         /// 10 pt — cards and popovers.
         public static let large: CGFloat = 10
+        /// 16 pt — sheets and floating panels.
+        ///
+        /// The fourth and final step. The 12s, 15s and 18s that grew in the Person views were
+        /// four spellings of "bigger than a card", and this is the one answer.
+        public static let sheet: CGFloat = 16
+    }
+
+    /// Depth, in four steps, each a named claim about what a surface is.
+    ///
+    /// Before this there were nine hand-built shadows using five radii and six opacities — no two
+    /// alike, and none of them a decision anybody could point to. A shadow is now a statement of
+    /// *what kind of thing this is*, and the same kind always sits at the same height.
+    public enum Elevation: Sendable, Hashable {
+        /// Rows, chips, inline cards: no shadow at all. Fills and borders do the separating.
+        case flat
+        /// A card resting on the content — kanban at rest, a stat tile.
+        case raised
+        /// Something floating over the content — a popover, the floating timer, a dragged card.
+        case floating
+        /// A panel floating over the whole desktop — Quick Jot, Quick Log.
+        case panel
+
+        var shadowOpacity: Double {
+            switch self {
+            case .flat: 0
+            case .raised: 0.08
+            case .floating: 0.16
+            case .panel: 0.22
+            }
+        }
+
+        var shadowRadius: CGFloat {
+            switch self {
+            case .flat: 0
+            case .raised: 3
+            case .floating: 10
+            case .panel: 20
+            }
+        }
+
+        var shadowY: CGFloat {
+            switch self {
+            case .flat: 0
+            case .raised: 1
+            case .floating: 4
+            case .panel: 8
+            }
+        }
     }
 
     public enum Size {
@@ -76,11 +129,15 @@ extension Theme {
         public static let listIdealWidth: CGFloat = 340
 
         public static let detailMinWidth: CGFloat = 420
-        public static let inspectorWidth: CGFloat = 280
 
         /// The editor's measure. Long lines are hard to read; this caps them at roughly 80
         /// characters at the default size while leaving the window free to be any width.
         public static let editorMaxWidth: CGFloat = 720
+
+        /// The measure of a project's Home page: a document, wider than prose because its plan
+        /// rows carry controls and dates, but still a page you read rather than a surface that
+        /// stretches to whatever the window happens to be.
+        public static let projectHomeMaxWidth: CGFloat = 800
 
         /// The measure of a page built from columns of rows rather than from prose.
         ///
@@ -109,6 +166,29 @@ extension Theme {
         /// that a meeting title and its context sit on one line, and the side column above — below
         /// that, two columns means two cramped ones.
         public static let todayTwoColumnMinimum: CGFloat = 860
+
+        /// The three sizes a glyph-in-a-tinted-square comes in — see `IconTile`.
+        ///
+        /// Fifteen distinct squares existed for this one idea; these are the three that survive.
+        /// Small sits inside a row, medium anchors a card or a picker, large is an identity.
+        public static let iconTileSmall: CGFloat = 24
+        public static let iconTileMedium: CGFloat = 32
+        public static let iconTileLarge: CGFloat = 44
+    }
+}
+
+extension View {
+    /// Applies one of the four depths — the only way a shadow is drawn.
+    ///
+    /// A modifier rather than four call-site recipes, so that "how high is this" is a decision
+    /// with a name, `SourceHygieneTests` can refuse a raw `.shadow(` anywhere else, and retuning
+    /// a level is an edit rather than a search.
+    public func elevation(_ level: Theme.Elevation) -> some View {
+        shadow(
+            color: Theme.Colors.shadow.opacity(level.shadowOpacity),
+            radius: level.shadowRadius,
+            y: level.shadowY
+        )
     }
 }
 
@@ -167,6 +247,22 @@ extension Theme {
 
         /// A keyboard shortcut hint.
         public static let keyHint: Font = .system(.caption2, design: .rounded, weight: .medium)
+
+        /// The floor: the smallest text the app is allowed to set, for the dense surfaces —
+        /// calendar grids, month cells, hour rulers.
+        ///
+        /// `.caption2` is 10 points at the default size and still a `Font.TextStyle`, so it
+        /// scales. The 7-, 8- and 9-point literals this replaces did not — text below ten points
+        /// is not density, it is writing the interface off for anybody over forty, and a fixed
+        /// size on top of that wrote it off for Dynamic Type too.
+        public static let denseLabel: Font = .system(.caption2)
+
+        /// The glyph over an empty state or an onboarding page.
+        ///
+        /// A text style rather than a fixed size, so the one image on the page grows with the
+        /// user's text like everything under it. Light, because at this scale a regular stroke
+        /// reads as a poster rather than an accent.
+        public static let heroGlyph: Font = .system(.largeTitle, weight: .light)
 
         /// The note body editor.
         ///
@@ -272,7 +368,54 @@ extension Theme {
         /// drawn at eight different opacities between 0.06 and 0.18, one per screen that needed
         /// it, which is how the selection read stronger in some lists than others for no reason
         /// anybody chose.
-        public static var selectionFill: Color { selection.opacity(0.15) }
+        public static var selectionFill: Color {
+            adaptiveAlpha(of: selection, standard: 0.15, increasedContrast: 0.3)
+        }
+
+        /// A surface tinted by something's own colour — a chip's body, a callout, a selected pill.
+        ///
+        /// One alpha for every tinted fill in the app. The feature views had grown thirty
+        /// distinct opacities between 0.025 and 0.8 for what was always the same two ideas: a
+        /// wash of the thing's colour behind it, and a firmer line of the same colour around it.
+        /// The hue adapts with the appearance because the *tint* does; only the strength is
+        /// decided here — and it doubles under Increase Contrast, because a 12% wash is exactly
+        /// the kind of distinction that setting exists to strengthen.
+        public static func tintedFill(_ tint: Color) -> Color {
+            adaptiveAlpha(of: tint, standard: 0.12, increasedContrast: 0.24)
+        }
+
+        /// The boundary that goes with ``tintedFill(_:)`` — strong enough to hold a chip's edge
+        /// on the dark list background, where the fills alone were dissolving.
+        public static func tintedStroke(_ tint: Color) -> Color {
+            adaptiveAlpha(of: tint, standard: 0.25, increasedContrast: 0.55)
+        }
+
+        /// A translucent wash whose strength answers to Increase Contrast.
+        ///
+        /// The system's own semantic colours respond to the setting by themselves; the alphas this
+        /// app lays over a tint do not, so before this every hand-tinted fill stayed a 12% wash
+        /// for exactly the people who asked for more. A dynamic provider rather than an
+        /// environment read, so a static token can stay a static token.
+        ///
+        /// Public for the few places — the calendar's event blocks — whose strengths are their
+        /// own design decision but whose contrast behaviour must be this one.
+        public static func adaptiveAlpha(
+            of tint: Color,
+            standard: CGFloat,
+            increasedContrast: CGFloat
+        ) -> Color {
+            let base = NSColor(tint)
+            return Color(nsColor: NSColor(name: nil) { appearance in
+                let highContrastNames: [NSAppearance.Name] = [
+                    .accessibilityHighContrastAqua,
+                    .accessibilityHighContrastDarkAqua,
+                    .accessibilityHighContrastVibrantLight,
+                    .accessibilityHighContrastVibrantDark,
+                ]
+                let isHighContrast = highContrastNames.contains(appearance.name)
+                return base.withAlphaComponent(isHighContrast ? increasedContrast : standard)
+            })
+        }
 
         /// Something the app could not interpret and has told the user about.
         ///

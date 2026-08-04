@@ -206,12 +206,21 @@ public enum SidebarRegistry {
             hint: "Standing responsibilities, which never finish."
         ),
         SidebarDestination(
+            id: "reminders",
+            selection: .reminders,
+            band: .module,
+            module: .reminders,
+            title: "All Reminders",
+            symbolName: "bell",
+            hint: "Things to remember, when they matter, and what you chose for today."
+        ),
+        SidebarDestination(
             id: "records",
             selection: .records(.all),
             band: .module,
             module: .records,
             title: "All Records",
-            symbolName: "circle.grid.2x2",
+            symbolName: "person.text.rectangle",
             hint: "Every person and thing you keep track of."
         ),
         SidebarDestination(
@@ -223,12 +232,14 @@ public enum SidebarRegistry {
             symbolName: "bookmark",
             hint: "Links kept for later."
         ),
+        // Short names: these live on the sidebar's bottom rail now, where "Everything Archived"
+        // was a sentence doing a label's job.
         SidebarDestination(
             id: "archive",
             selection: .archive,
             band: .module,
             module: .archive,
-            title: "Everything Archived",
+            title: "Archive",
             symbolName: "archivebox",
             hint: "Finished, kept, and out of the way of today."
         ),
@@ -237,7 +248,7 @@ public enum SidebarRegistry {
             selection: .trash,
             band: .module,
             module: .trash,
-            title: "Deleted Items",
+            title: "Trash",
             symbolName: "trash",
             hint: "Deleted, and recoverable until you empty it."
         ),

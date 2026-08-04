@@ -81,7 +81,7 @@ struct CalendarQuarterView: View {
 
                 ForEach(milestoneEvents) { event in
                     HStack(spacing: Theme.Spacing.small) {
-                        RoundedRectangle(cornerRadius: 1, style: .continuous)
+                        Capsule()
                             .fill(Theme.EventStyle.accent(colorName: event.calendarColorName))
                             .frame(width: 3, height: 16)
 
@@ -248,7 +248,7 @@ struct CalendarYearView: View {
                 .foregroundStyle(Theme.Colors.tertiaryText)
 
             ForEach([0.0, 0.25, 0.5, 0.75, 1.0], id: \.self) { level in
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
                     .fill(Theme.Colors.selection.opacity(0.1 + level * 0.7))
                     .frame(width: 12, height: 12)
             }
@@ -326,22 +326,22 @@ private struct DensitySquare: View {
     let size: CGFloat
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 2, style: .continuous)
+        RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
             .fill(fill)
             .frame(width: size, height: size)
             .overlay {
                 if isToday {
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
                         .strokeBorder(Theme.Colors.currentTime, lineWidth: 1.5)
                 }
             }
             .overlay {
                 Text(dayNumber)
-                    .font(.system(size: 8))
+                    .font(Theme.Text.denseLabel)
                     .foregroundStyle(entry.intensity > 0.55 ? Theme.Colors.onAccent : Theme.Colors.tertiaryText)
             }
             .contentShape(.rect)
-            .hoverHighlight(cornerRadius: 2)
+            .hoverHighlight(cornerRadius: Theme.Radius.small)
             .help(tooltip)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(tooltip)

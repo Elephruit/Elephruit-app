@@ -178,7 +178,7 @@ struct TodayBriefingView: View {
                 ForEach(figures) { figure in
                     HStack(spacing: Theme.Spacing.tight) {
                         Image(systemName: figure.symbolName)
-                            .font(.system(size: 11))
+                            .font(Theme.Text.rowSubtitle)
                             .foregroundStyle(color(for: figure.tone))
                             .accessibilityHidden(true)
 
@@ -213,7 +213,7 @@ struct TodayBriefingView: View {
         if let next = plan.briefing.next, let clock = services?.dateProvider {
             HStack(spacing: Theme.Spacing.tight) {
                 Image(systemName: next.isInProgress ? "record.circle" : "arrow.right.circle")
-                    .font(.system(size: 11))
+                    .font(Theme.Text.rowSubtitle)
                     .foregroundStyle(next.isInProgress ? Theme.Colors.dueToday : Theme.Colors.tertiaryText)
                     .accessibilityHidden(true)
 
@@ -251,7 +251,7 @@ struct TodayBriefingView: View {
         if !today.isEmpty {
             HStack(spacing: Theme.Spacing.tight) {
                 Image(systemName: today[0].celebration.kind.symbolName)
-                    .font(.system(size: 11))
+                    .font(Theme.Text.rowSubtitle)
                     .foregroundStyle(Theme.Colors.secondaryText)
                     .accessibilityHidden(true)
 
@@ -316,7 +316,7 @@ struct TodayQuickAddField: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.small) {
             Image(systemName: "circle")
-                .font(.system(size: 13))
+                .font(Theme.Text.rowTitle)
                 .foregroundStyle(Theme.Colors.tertiaryText)
 
             TextField("New reminder", text: $title)
@@ -376,7 +376,7 @@ struct TodayNoteView: View {
             } else if !plan.isPast {
                 HStack(spacing: Theme.Spacing.small) {
                     Image(systemName: "note.text")
-                        .font(.system(size: 11))
+                        .font(Theme.Text.rowSubtitle)
                         .foregroundStyle(Theme.Colors.tertiaryText)
                         .accessibilityHidden(true)
 
@@ -421,6 +421,8 @@ struct TodayNoteView: View {
 /// are left means the day looks fullest at the point it is emptiest, and the reward for finishing
 /// something is that it takes up more of the screen than the thing you have not started.
 struct TodayCompletedView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let tasks: [Item]
     let actions: TodayActions?
 
@@ -429,11 +431,11 @@ struct TodayCompletedView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
             Button {
-                withAnimation(Theme.Motion.standard) { isExpanded.toggle() }
+                withAnimation(Theme.Motion.respectingReduceMotion(Theme.Motion.standard, reduceMotion: reduceMotion)) { isExpanded.toggle() }
             } label: {
                 HStack(spacing: Theme.Spacing.tight) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 11))
+                        .font(Theme.Text.rowSubtitle)
                         .foregroundStyle(Theme.Colors.completed)
 
                     Text(summary)
@@ -441,7 +443,7 @@ struct TodayCompletedView: View {
                         .foregroundStyle(Theme.Colors.secondaryText)
 
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 9))
+                        .font(Theme.Text.denseLabel)
                         .foregroundStyle(Theme.Colors.tertiaryText)
 
                     Spacer(minLength: 0)
@@ -483,7 +485,7 @@ struct TodayCompletedRow: View {
         HStack(spacing: Theme.Spacing.small) {
             Button { actions?.toggleCompletion(task) } label: {
                 Image(systemName: task.status == .completed ? "checkmark.circle.fill" : "xmark.circle")
-                    .font(.system(size: 13))
+                    .font(Theme.Text.rowTitle)
                     .foregroundStyle(task.status == .completed
                         ? Theme.Colors.completed
                         : Theme.Colors.tertiaryText)

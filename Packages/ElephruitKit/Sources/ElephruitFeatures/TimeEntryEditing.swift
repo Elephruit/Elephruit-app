@@ -335,7 +335,7 @@ struct TimeEntryGroupRow: View {
                     .font(Theme.Text.chip)
                     .monospacedDigit()
                     .padding(.horizontal, Theme.Spacing.tight)
-                    .padding(.vertical, 1)
+                    .padding(.vertical, Theme.Spacing.hairline)
                     .background(
                         RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
                             .fill(Theme.Colors.subtleFill)

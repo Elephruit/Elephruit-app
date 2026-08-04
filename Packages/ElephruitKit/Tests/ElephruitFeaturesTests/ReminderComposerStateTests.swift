@@ -38,6 +38,9 @@ struct ReminderComposerStateTests {
             backing: .buffered,
             defer: false
         )
+        // ARC owns this window; `close()` on a window that also releases itself is the
+        // over-release that was killing the test host at autorelease-pool pop.
+        window.isReleasedWhenClosed = false
         let anchor = ReminderPopoverAnchorView(
             frame: NSRect(x: 80, y: 40, width: 80, height: 24)
         )

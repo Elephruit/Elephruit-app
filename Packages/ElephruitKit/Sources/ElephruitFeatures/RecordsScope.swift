@@ -65,7 +65,7 @@ public enum RecordsScope: Hashable, Sendable, Codable, Identifiable {
 
     public var symbolName: String {
         switch self {
-        case .all: "circle.grid.2x2"
+        case .all: "person.text.rectangle"
         case .unsorted: "tray"
         case .people: RecordType.person.symbolName
         case .pets: RecordType.pet.symbolName

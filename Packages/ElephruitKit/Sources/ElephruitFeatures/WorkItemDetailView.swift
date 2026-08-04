@@ -79,7 +79,7 @@ struct WorkItemDetailView: View {
         .frame(minWidth: 720, idealWidth: 800, minHeight: 560, idealHeight: 660)
         .onAppear {
             load()
-            withAnimation(reduceMotion ? nil : .smooth(duration: 0.24)) {
+            withAnimation(Theme.Motion.respectingReduceMotion(Theme.Motion.appearance, reduceMotion: reduceMotion)) {
                 hasAppeared = true
             }
         }
@@ -131,7 +131,7 @@ struct WorkItemDetailView: View {
 
             Button(action: dismiss.callAsFunction) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(Theme.Text.rowSubtitle.weight(.semibold))
                     .frame(width: 26, height: 26)
                     .background(Theme.Colors.subtleFill, in: Circle())
             }
@@ -330,8 +330,7 @@ struct WorkItemDetailView: View {
                 .foregroundStyle(Theme.Colors.tertiaryText)
             content()
         }
-        .padding(.horizontal, Theme.Spacing.small)
-        .padding(.vertical, 6)
+        .padding(Theme.Spacing.small)
         .background(Theme.Colors.subtleFill.opacity(0.72), in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
     }
 
@@ -502,7 +501,7 @@ struct WorkItemDetailView: View {
             // Named for what it does. It said "Delete" while the dialog said "Move to Trash", and
             // the two disagreeing about whether the action is recoverable is worse than either.
             Button("Move to Trash", role: .destructive) { showsDeleteConfirmation = true }
-                .keyboardShortcut(.delete, modifiers: .command)
+                .shortcut(.moveToTrash, in: services?.shortcuts ?? ShortcutRegistry())
             Spacer()
             Label("Changes save automatically", systemImage: "checkmark.circle")
                 .font(Theme.Text.metadata)

@@ -345,17 +345,30 @@ public struct RowDateLabel: View {
 
 /// A single tag.
 public struct TagChip: View {
+    /// How much presence the chip has.
+    ///
+    /// Two sizes rather than a free parameter, because "a bit bigger" is how a scale erodes.
+    public enum Size {
+        /// The dense default: list rows, inspectors, anywhere chips ride along beside text.
+        case compact
+        /// A chip that is itself a control — the Reminders filter rail — set at the
+        /// subheadline size so a target meant for clicking reads like one.
+        case prominent
+    }
+
     /// `.increased` inside a selected, focused list row. See ``Theme/Emphasis``.
     @Environment(\.backgroundProminence) private var prominence
 
     private let slug: String
     private let colorName: String?
     private let isSelected: Bool
+    private let size: Size
 
-    public init(slug: String, colorName: String? = nil, isSelected: Bool = false) {
+    public init(slug: String, colorName: String? = nil, isSelected: Bool = false, size: Size = .compact) {
         self.slug = slug
         self.colorName = colorName
         self.isSelected = isSelected
+        self.size = size
     }
 
     public var body: some View {
@@ -365,10 +378,10 @@ public struct TagChip: View {
             // of one letter — which is what a list row looked like below about 200 points.
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
-            .font(Theme.Text.chip)
+            .font(size == .compact ? Theme.Text.chip : Theme.Text.rowSubtitle.weight(.medium))
             .foregroundStyle(foreground)
             .padding(.horizontal, Theme.Spacing.small)
-            .padding(.vertical, 1)
+            .padding(.vertical, size == .compact ? Theme.Spacing.hairline : Theme.Spacing.tight)
             .background(
                 RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
                     .fill(background)
@@ -478,6 +491,11 @@ private struct HoverHighlightModifier: ViewModifier {
 
     @State private var isHovering = false
 
+    /// Keyboard focus, from the nearest focusable ancestor. The highlight answers "what would I
+    /// hit if I acted here", and Tab asks that question as legitimately as the pointer does —
+    /// without this, keyboard users got no fill where mouse users got one.
+    @Environment(\.isFocused) private var isFocused
+
     func body(content: Content) -> some View {
         content
             .background {
@@ -495,7 +513,7 @@ private struct HoverHighlightModifier: ViewModifier {
 
     /// Selection wins. A row cannot usefully be both the thing you are looking at and the thing
     /// you might click next.
-    private var isVisible: Bool { isEnabled && isHovering }
+    private var isVisible: Bool { isEnabled && (isHovering || isFocused) }
 }
 
 // MARK: - Empty state
@@ -541,7 +559,7 @@ public struct EmptyStateView: View {
     public var body: some View {
         VStack(spacing: Theme.Spacing.medium) {
             Image(systemName: symbolName)
-                .font(.system(size: 34, weight: .light))
+                .font(Theme.Text.heroGlyph)
                 .foregroundStyle(symbolColor)
                 .accessibilityHidden(true)
 
@@ -646,9 +664,9 @@ public struct KeyHint: View {
                     .foregroundStyle(Theme.Colors.secondaryText)
                     .frame(minWidth: 14)
                     .padding(.horizontal, Theme.Spacing.tight)
-                    .padding(.vertical, 1)
+                    .padding(.vertical, Theme.Spacing.hairline)
                     .background(
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
                             .fill(Theme.Colors.subtleFill)
                     )
             }
@@ -751,7 +769,7 @@ public struct FailureStateView: View {
     public var body: some View {
         VStack(spacing: Theme.Spacing.large) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 38, weight: .light))
+                .font(Theme.Text.heroGlyph)
                 .foregroundStyle(Theme.Colors.dueToday)
                 .accessibilityHidden(true)
 

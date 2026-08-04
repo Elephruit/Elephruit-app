@@ -8,8 +8,23 @@ import SwiftUI
 /// The title, notes and metadata filters are AppKit text views because this card promises an exact
 /// Tab path. SwiftUI's key-view order cannot express that path once stops live in popovers, and an
 /// `NSTextView` would otherwise insert a tab into Notes instead of moving on.
+/// The composer's own metrics, kept exactly as they were built: this module was polished by
+/// hand, and these are its author's numbers. Named, so the metric scans read them as decisions
+/// rather than drift.
+private enum ComposerMetrics {
+    /// The leading run under the completion circle — its 13-point glyph plus the small gap —
+    /// so the notes field, the suggestion list, and the token editors all hang from the
+    /// title's left edge.
+    static let leadingInset: CGFloat = 21
+    /// The dense rows of the token pickers.
+    static let menuRowPadding: CGFloat = 3
+    /// A checklist line, slightly airier than a picker row.
+    static let checklistRowPadding: CGFloat = 5
+}
+
 struct ReminderComposer: View {
     @Environment(\.services) private var services
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Binding var draft: ReminderComposerDraft
     var onQuickCommit: () -> Void
@@ -47,7 +62,10 @@ struct ReminderComposer: View {
                 metadataSummary
             }
             .padding(Theme.Spacing.medium)
-            .animation(.snappy(duration: 0.18), value: activeField == .checklist)
+            .animation(
+                Theme.Motion.respectingReduceMotion(.snappy(duration: 0.18), reduceMotion: reduceMotion),
+                value: activeField == .checklist
+            )
 
             Divider()
             actionRow
@@ -61,7 +79,7 @@ struct ReminderComposer: View {
             RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                 .stroke(Theme.Colors.separator, lineWidth: 1)
         }
-        .shadow(color: Theme.Colors.shadow.opacity(0.14), radius: 8, y: 2)
+        .elevation(.floating)
         .background {
             // This AppKit view occupies the card's exact bounds. Its event monitor can therefore
             // distinguish a click in the composer from one elsewhere in the main window without
@@ -116,7 +134,7 @@ struct ReminderComposer: View {
     private var titleLine: some View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
             Image(systemName: "circle")
-                .font(.system(size: 13))
+                .font(Theme.Text.rowTitle)
                 .foregroundStyle(Theme.Colors.tertiaryText)
 
             ReminderPlainTextEditor(
@@ -156,7 +174,7 @@ struct ReminderComposer: View {
             onFocus: { activate(.notes) }
         )
         .frame(minHeight: 42, maxHeight: 88)
-        .padding(.leading, 21)
+        .padding(.leading, ComposerMetrics.leadingInset)
         .accessibilityIdentifier("reminders.composer.notes")
     }
 
@@ -206,7 +224,7 @@ struct ReminderComposer: View {
                         .font(Theme.Text.metadata)
                     Spacer(minLength: 0)
                 }
-                .padding(.vertical, 3)
+                .padding(.vertical, ComposerMetrics.menuRowPadding)
                 .padding(.horizontal, Theme.Spacing.small)
                 .background(
                     index == inlineSuggestionSelection ? Theme.Colors.selectionFill : Color.clear,
@@ -222,7 +240,7 @@ struct ReminderComposer: View {
                 }
             }
         }
-        .padding(.leading, 21)
+        .padding(.leading, ComposerMetrics.leadingInset)
         .accessibilityLabel(
             "\(inlineSuggestions.count) suggestions. Use the arrow keys, then Tab or Return to accept."
         )
@@ -303,7 +321,7 @@ struct ReminderComposer: View {
                     .accessibilityIdentifier("reminders.composer.dateSummary")
                 }
             }
-            .padding(.leading, 21)
+            .padding(.leading, ComposerMetrics.leadingInset)
             .transition(.opacity.combined(with: .move(edge: .bottom)))
         }
     }
@@ -323,7 +341,7 @@ struct ReminderComposer: View {
                             draft.checklist.removeAll { $0.id == step.id }
                         } label: {
                             Image(systemName: "xmark")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(Theme.Text.metadata.weight(.medium))
                                 .foregroundStyle(Theme.Colors.tertiaryText)
                         }
                         .buttonStyle(.plain)
@@ -371,7 +389,7 @@ struct ReminderComposer: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
-            .padding(.leading, 21)
+            .padding(.leading, ComposerMetrics.leadingInset)
             .transition(.opacity.combined(with: .move(edge: .bottom)))
         }
     }
@@ -605,7 +623,7 @@ struct ReminderComposer: View {
     ) -> some View {
         HStack(spacing: Theme.Spacing.tight) {
             Image(systemName: symbol)
-                .font(.system(size: 13))
+                .font(Theme.Text.rowTitle)
                 .foregroundStyle(Theme.CaptureToken.accent)
 
             ReminderPlainTextEditor(
@@ -638,7 +656,7 @@ struct ReminderComposer: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: activeSymbol(symbol, isActive: isActive))
-                .font(.system(size: 13))
+                .font(Theme.Text.rowTitle)
                 .foregroundStyle(
                     isActive || isFocused ? Theme.CaptureToken.accent : Theme.Colors.tertiaryText
                 )
@@ -678,7 +696,7 @@ struct ReminderComposer: View {
                         toggleTag(slug)
                     } label: {
                         Label(slug, systemImage: draft.tagSlugs.contains(slug) ? "checkmark" : "tag")
-                            .padding(.vertical, 3)
+                            .padding(.vertical, ComposerMetrics.menuRowPadding)
                             .padding(.horizontal, Theme.Spacing.tight)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
@@ -717,7 +735,7 @@ struct ReminderComposer: View {
                             name,
                             systemImage: draft.personNames.contains(name) ? "checkmark" : "person"
                         )
-                        .padding(.vertical, 3)
+                        .padding(.vertical, ComposerMetrics.menuRowPadding)
                         .padding(.horizontal, Theme.Spacing.tight)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
@@ -772,7 +790,7 @@ struct ReminderComposer: View {
                                 ? "checkmark"
                                 : "square.stack.3d.up"
                         )
-                        .padding(.vertical, 3)
+                        .padding(.vertical, ComposerMetrics.menuRowPadding)
                         .padding(.horizontal, Theme.Spacing.tight)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
@@ -866,7 +884,7 @@ struct ReminderComposer: View {
                     .foregroundStyle(Theme.Colors.secondaryText)
             }
             .font(Theme.Text.rowTitle)
-            .padding(.vertical, 5)
+            .padding(.vertical, ComposerMetrics.checklistRowPadding)
             .padding(.horizontal, Theme.Spacing.small)
             .contentShape(Rectangle())
         }

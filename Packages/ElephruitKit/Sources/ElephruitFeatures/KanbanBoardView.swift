@@ -92,8 +92,8 @@ struct KanbanColumnView: View {
                     .accessibilityIdentifier("kanban.dropTarget.\(column.key)")
             }
         }
-        .animation(.easeOut(duration: 0.16), value: isDropTargeted)
-        .animation(.snappy(duration: 0.12), value: displayedItems.map(\.id))
+        .calmAnimation(Theme.Motion.appearance, value: isDropTargeted)
+        .calmAnimation(Theme.Motion.standard, value: displayedItems.map(\.id))
     }
 
     private var columnContents: some View {
@@ -106,7 +106,7 @@ struct KanbanColumnView: View {
                     .draggable(WorkItemTransfer(id: facts.id)) {
                         KanbanCardView(facts: facts, model: model)
                             .frame(width: 248)
-                            .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
+                            .elevation(.floating)
                     }
                     .onDragSessionUpdated { session in
                         switch session.phase {
@@ -175,7 +175,7 @@ struct KanbanColumnView: View {
             }
             Button(action: beginAdding) {
                 Image(systemName: "plus")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(Theme.Text.rowSubtitle.weight(.semibold))
                     .frame(width: 22, height: 22)
                     .background(Theme.Colors.contentBackground, in: Circle())
             }
@@ -208,7 +208,7 @@ struct KanbanColumnView: View {
         .background(
             RoundedRectangle(cornerRadius: Theme.Radius.medium)
                 .fill(Theme.Colors.contentBackground.opacity(isQuickAddFocused ? 0.96 : 0.62))
-                .shadow(color: Theme.Colors.shadow.opacity(isQuickAddFocused ? 0.18 : 0.06), radius: 8, y: 3)
+                .elevation(isQuickAddFocused ? .floating : .raised)
         )
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.medium)
@@ -509,6 +509,95 @@ struct KanbanCardView: View {
             model.presentEditor(facts.id)
         }
         .contextMenu { WorkItemMenu(facts: facts, model: model, services: services) }
+        // The keyboard the board never had: a card was a VStack with a tap gesture — unreachable
+        // by Tab, unmovable without a drag, and silent to VoiceOver. It takes focus in its own
+        // right now; ⌥-arrows move it the way a drag does, through the same store call a drop
+        // commits with; Return opens it; Space selects it.
+        .focusable()
+        .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow], phases: .down) { press in
+            guard press.modifiers.contains(.option) else { return .ignored }
+            let direction: MoveCommandDirection = switch press.key {
+            case .upArrow: .up
+            case .downArrow: .down
+            case .leftArrow: .left
+            default: .right
+            }
+            return keyboardMove(direction) ? .handled : .ignored
+        }
+        .onKeyPress(.return) {
+            model.select(facts.id)
+            model.presentEditor(facts.id)
+            return .handled
+        }
+        .onKeyPress(.space) {
+            model.select(facts.id)
+            return .handled
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityDescription)
+        .accessibilityAddTraits(
+            model.selectedItemIDs.contains(facts.id) ? [.isButton, .isSelected] : .isButton
+        )
+        .accessibilityAction(named: "Open") {
+            model.select(facts.id)
+            model.presentEditor(facts.id)
+        }
+        .accessibilityAction(named: "Move to next column") { _ = keyboardMove(.right) }
+        .accessibilityAction(named: "Move to previous column") { _ = keyboardMove(.left) }
+    }
+
+    private var accessibilityDescription: String {
+        var parts = [facts.title.isEmpty ? "Untitled" : facts.title]
+        if let column = model.groups.first(where: { $0.items.contains { $0.id == facts.id } }) {
+            parts.append("in \(column.title)")
+        }
+        if facts.isBlocked { parts.append("blocked") }
+        return parts.joined(separator: ", ")
+    }
+
+    /// Moves the card the way a drag does, through the same store call a drop commits with.
+    private func keyboardMove(_ direction: MoveCommandDirection) -> Bool {
+        guard let services, let item = model.item(facts.id) else { return false }
+        let groups = model.groups
+        guard let columnIndex = groups.firstIndex(where: { $0.items.contains { $0.id == facts.id } })
+        else { return false }
+
+        let column = groups[columnIndex]
+        func stage(of group: WorkItemArrangement.Group) -> WorkflowStage? {
+            group.stageID.flatMap { id in model.stages.first { $0.id == id } }
+        }
+
+        switch direction {
+        case .left, .right:
+            let targetIndex = columnIndex + (direction == .right ? 1 : -1)
+            guard groups.indices.contains(targetIndex) else { return false }
+            let target = groups[targetIndex]
+            let predecessor = target.items.last.flatMap { model.item($0.id) }
+            guard (try? services.projectWorkspace.move(
+                item, to: stage(of: target), after: predecessor, before: nil
+            )) != nil else { return false }
+
+        case .up, .down:
+            guard let position = column.items.firstIndex(where: { $0.id == facts.id }) else { return false }
+            let neighbourPosition = position + (direction == .down ? 1 : -1)
+            guard column.items.indices.contains(neighbourPosition) else { return false }
+            let neighbour = model.item(column.items[neighbourPosition].id)
+            if direction == .up {
+                guard (try? services.projectWorkspace.move(
+                    item, to: stage(of: column), after: nil, before: neighbour
+                )) != nil else { return false }
+            } else {
+                guard (try? services.projectWorkspace.move(
+                    item, to: stage(of: column), after: neighbour, before: nil
+                )) != nil else { return false }
+            }
+
+        @unknown default:
+            return false
+        }
+
+        model.refresh()
+        return true
     }
 }
 

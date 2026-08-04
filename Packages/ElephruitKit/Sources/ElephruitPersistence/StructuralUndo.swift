@@ -51,11 +51,51 @@ public enum StructuralChange: Sendable {
 @MainActor
 public final class StructuralUndoCoordinator {
     private let items: any ItemRepository
-    private let undoManager: UndoManager
+
+    /// The manager construction supplied — the fallback, and the one tests drive directly.
+    private let ownManager: UndoManager
+
+    /// The manager of the window the user is actually in, when one has said so.
+    private var adoptedManager: UndoManager?
+
+    /// Where registrations go: the focused window's manager when a window has adopted, otherwise
+    /// the standalone one.
+    ///
+    /// ### Why registration follows the window
+    /// `⌘Z` is dispatched to the first responder's undo manager — the window's — and a manager the
+    /// window has never heard of is a stack the Edit menu can never reach. Registering on the
+    /// window's own manager is also what interleaves structural undo with typing in the order the
+    /// user actually did them, which is the platform's contract for one window's history.
+    ///
+    /// ### Why an inverse pins the manager that registered it
+    /// The inverse of an undo is its redo, and `UndoManager` records it from whatever is
+    /// registered *while it is undoing*. That registration must land on the manager running the
+    /// undo — if the user has since focused another window, following the adoption would hand
+    /// this window's redo step to that window's history. So ``register(_:inverse:)`` pins the
+    /// manager it registered on for the duration of the inverse.
+    private var undoManager: UndoManager {
+        pinnedManager ?? adoptedManager ?? ownManager
+    }
+
+    /// The manager whose undo is currently running, set only while an inverse executes.
+    private var pinnedManager: UndoManager?
 
     public init(items: any ItemRepository, undoManager: UndoManager) {
         self.items = items
-        self.undoManager = undoManager
+        self.ownManager = undoManager
+    }
+
+    /// Routes future registrations to this window's manager.
+    ///
+    /// Called by the shell when a window becomes key, with that window's environment manager —
+    /// so in a two-window session each structural change lands on the history of the window it
+    /// was made in. `nil` restores the standalone fallback.
+    ///
+    /// Registrations already made stay with the manager that took them: an undo step belongs to
+    /// the window where the change happened, and moving it would let `⌘Z` in one window silently
+    /// rewrite another.
+    public func adopt(_ manager: UndoManager?) {
+        adoptedManager = manager
     }
 
     // MARK: - Grouping
@@ -226,9 +266,16 @@ public final class StructuralUndoCoordinator {
         _ change: StructuralChange,
         inverse: @escaping @MainActor (StructuralUndoCoordinator) throws -> Void
     ) {
-        undoManager.setActionName(change.actionName)
-        undoManager.registerUndo(withTarget: self) { coordinator in
+        let manager = undoManager
+        manager.setActionName(change.actionName)
+        manager.registerUndo(withTarget: self) { coordinator in
             MainActor.assumeIsolated {
+                // Pinned so the redo this inverse registers lands on the manager running the
+                // undo, whichever window has been focused since — see `undoManager`.
+                let previous = coordinator.pinnedManager
+                coordinator.pinnedManager = manager
+                defer { coordinator.pinnedManager = previous }
+
                 do {
                     try inverse(coordinator)
                 } catch {

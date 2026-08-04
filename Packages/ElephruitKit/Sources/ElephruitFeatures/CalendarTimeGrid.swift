@@ -617,27 +617,27 @@ struct EventBlockView: View {
 
                 if event.isRecurring {
                     Image(systemName: "repeat")
-                        .font(.system(size: 7))
+                        .font(Theme.Text.denseLabel)
                         .accessibilityHidden(true)
                 }
                 if isAnnotated {
                     Image(systemName: "text.append")
-                        .font(.system(size: 7))
+                        .font(Theme.Text.denseLabel)
                         .accessibilityHidden(true)
                 }
             }
 
             if showsDetail, let detail {
                 Text(detail)
-                    .font(.system(size: 9))
+                    .font(Theme.Text.denseLabel)
                     .foregroundStyle(Theme.Colors.secondaryText)
                     .lineLimit(1)
             }
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 3)
-        .padding(.vertical, 1)
+        .padding(.horizontal, Theme.Spacing.tight)
+        .padding(.vertical, Theme.Spacing.hairline)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
@@ -702,7 +702,7 @@ struct EventBarView: View {
         HStack(spacing: Theme.Spacing.tight) {
             if bar.continuesBefore {
                 Image(systemName: "chevron.compact.left")
-                    .font(.system(size: 8))
+                    .font(Theme.Text.denseLabel)
                     .accessibilityHidden(true)
             }
 
@@ -714,7 +714,7 @@ struct EventBarView: View {
 
             if bar.continuesAfter {
                 Image(systemName: "chevron.compact.right")
-                    .font(.system(size: 8))
+                    .font(Theme.Text.denseLabel)
                     .accessibilityHidden(true)
             }
         }

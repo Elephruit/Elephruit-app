@@ -74,11 +74,11 @@
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<!--
-		  The type a task carries while it is being dragged inside the app.
+		  The type a work item carries while it is being dragged inside the app.
 
 		  `UTType(exportedAs:)` means "this application is the authority on this identifier", and the
 		  system checks that claim against this file at launch. It was not declared here, so every
-		  launch logged `Type "com.elephruit.task-drag" was expected to be declared and exported in
+		  launch logged `Type "com.elephruit.work-item-drag" was expected to be declared and exported in
 		  the Info.plist of Elephruit.app, but it was not found` — and the type fell back to an
 		  undeclared, dynamically-assigned identifier, which is not stable across launches.
 
@@ -88,9 +88,9 @@
 		-->
 		<dict>
 			<key>UTTypeIdentifier</key>
-			<string>com.elephruit.task-drag</string>
+			<string>com.elephruit.work-item-drag</string>
 			<key>UTTypeDescription</key>
-			<string>Elephruit Task</string>
+			<string>Elephruit Work Item</string>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.data</string>

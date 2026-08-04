@@ -10,7 +10,7 @@ struct WorkItemCompletionControl: View {
     var body: some View {
         Button(action: onToggle) {
             Image(systemName: symbolName)
-                .font(.system(size: 13))
+                .font(Theme.Text.rowTitle)
                 .rowTint(controlColor)
                 .contentTransition(.symbolEffect(.replace))
         }

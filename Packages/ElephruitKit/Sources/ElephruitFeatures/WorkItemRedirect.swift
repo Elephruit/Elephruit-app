@@ -22,20 +22,27 @@ struct WorkItemRedirect: View {
     }
 
     private func redirect() {
-        if item.kind == .task || item.kind == .reminder {
-            navigation.select(.reminders)
-            navigation.selectItem(item.id)
-            return
-        }
+        // One rule, stated on the navigation model, shared with the command palette — the two
+        // doors this mistake used to be made through.
+        navigation.open(item)
+    }
+}
 
-        var cursor = item.parent
-        while let candidate = cursor {
-            if candidate.kind == .project {
-                navigation.select(.project(id: candidate.id, viewID: nil))
-                navigation.selectItem(item.id)
-                return
-            }
-            cursor = candidate.parent
-        }
+/// Sends a project selected as an item to its workspace Home.
+///
+/// The old path rendered a second project page here — a hidden landing surface that drifted from
+/// the real one. Every door now leads to the same room.
+struct ProjectHomeRedirect: View {
+    let project: Item
+    let navigation: NavigationModel
+
+    var body: some View {
+        EmptyStateView(
+            symbolName: "arrow.forward",
+            headline: "Opening in Projects",
+            message: "Opening “\(project.displayTitle)” on its Home page."
+        )
+        .task(id: project.id) { navigation.open(project) }
+        .accessibilityIdentifier("project.redirect")
     }
 }

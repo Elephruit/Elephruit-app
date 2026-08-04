@@ -18,7 +18,18 @@ struct RecordsWorkspaceView: View {
     @State private var contactMessage: String?
 
     var body: some View {
-        detail
+        HStack(spacing: 0) {
+            // The record browser — search, scopes, groups, and the records themselves. This was
+            // the second-level sidebar the module swapped the whole navigation column for; with
+            // the sidebar staying primary, the browser lives where a list column belongs: inside
+            // the workspace, beside what it selects.
+            RecordsModuleSidebar(navigation: navigation)
+                .frame(width: SidebarMetrics.defaultWidth + Theme.Spacing.generous)
+
+            Divider()
+
+            detail
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Colors.contentBackground)
         .task(id: navigation.selectedItemID) { refresh() }
@@ -75,7 +86,7 @@ struct RecordsWorkspaceView: View {
             }
         } else {
             EmptyStateView(
-                symbolName: "circle.grid.2x2",
+                symbolName: "person.text.rectangle",
                 headline: "No record selected",
                 message: "Choose a person or thing to see its details, notes, history, relationships, and shared work."
             )

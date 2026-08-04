@@ -39,6 +39,9 @@ extension AppModule {
             )
 
         case .reminders:
+            // One wide pane, as it was built: the module edits inline, in place, and a reading
+            // pane beside an inline editor is two places for the same edit. A reminder opened
+            // from ⌘K or a redirect is no dead end — `ItemDetailView` shows its editor there.
             ModuleShellLayout(
                 primary: PaneWidth(minimum: 420, ideal: 900),
                 detail: .unavailable,
@@ -108,10 +111,14 @@ extension AppModule {
                     opensAfterSelection: false,
                     hidesWhenNothingSelected: true,
                     width: PaneWidth(minimum: 260, ideal: 300, maximum: 360),
-                    // Higher than it was. The inspector may only appear once the profile already has
-                    // the room it needs; below this the arithmetic can satisfy every minimum and
-                    // still leave the main content the narrowest thing on screen.
-                    compactWindowWidth: 1280
+                    // Derived from the minimums rather than picked: sidebar 240 + list 220 +
+                    // profile 450 + inspector 260 = 1,170, which the app's own 1,180-point default
+                    // window clears. This was 1,280 — a threshold above the default size, which
+                    // made ⌥⌘I a no-op in every window nobody had widened, and the pane that
+                    // answers "what do I owe this person" unreachable in exactly the window most
+                    // people use. The proportional-slack arithmetic already guarantees no column
+                    // goes below its minimum on the way down.
+                    compactWindowWidth: 1170
                 )
             )
 
@@ -251,6 +258,12 @@ public enum PrimaryNavigationLayout {
     public static let shell = ModuleShellLayout(
         primary: PaneWidth(minimum: Theme.Size.listMinWidth, ideal: Theme.Size.listIdealWidth, maximum: 520),
         detail: DetailPanePolicy(
+            // The single most visible thing wrong with the app, fixed by policy rather than copy:
+            // on the Inbox, a tag, or a saved search with nothing selected, two thirds of the
+            // window was a void captioned "Nothing selected". A list surface with no reading
+            // selection is a *list* — it takes the window, and the reading pane exists from the
+            // moment there is something to read.
+            hidesWhenNothingSelected: true,
             width: PaneWidth(minimum: Theme.Size.detailMinWidth, ideal: 640, maximum: 900),
             compactWindowWidth: 860
         ),
@@ -282,6 +295,11 @@ extension NavigationModel {
     /// window that reads the module alone gives the day a 340-point column. The module still decides
     /// wherever there is one; this is the one destination that has an opinion of its own.
     public var shellLayout: ModuleShellLayout {
+        // Search replaces whatever the module was showing with a results list and a reading pane,
+        // so it wears the primary-navigation layout wherever it was invoked. Without this, ⌘F on a
+        // canvas module ran the search in a full-width column with no detail pane, and a result
+        // could be selected but never seen — the ⌘K dead end, recreated inside search.
+        guard !isSearchActive else { return PrimaryNavigationLayout.shell }
         guard activeModule == nil else { return activeModule.shellLayout }
         return selection.canonical == .today ? TodayLayout.shell : PrimaryNavigationLayout.shell
     }

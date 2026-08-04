@@ -266,6 +266,14 @@ extension ModuleShellLayout {
         if sidebarWidth == nil { visible.remove(.sidebar) }
         if !showsList { visible.remove(.primary) }
 
+        // The detail pane answers to its policy too. A module that hides it when nothing is
+        // selected gets a list that takes the window instead of a two-thirds void captioned
+        // "Nothing selected" — the empty rectangle both prior audits ranked first. The pane
+        // returns the moment there is a selection to read; nothing here needs re-opening.
+        let detailFits = visible.contains(.detail)
+            && detail.isVisible(userWants: true, hasSelection: hasSelection, windowWidth: windowWidth)
+        if !detailFits { visible.remove(.detail) }
+
         // The inspector answers to its module's policy as well as to the arithmetic. Both must say
         // yes: a window wide enough for one does not mean this module wants one here.
         let inspectorFits = visible.contains(.inspector)

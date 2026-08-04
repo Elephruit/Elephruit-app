@@ -61,7 +61,7 @@ public struct MonthGrid<Cell: View>: View {
                 switch element {
                 case let .weekday(_, initial):
                     Text(initial)
-                        .font(.system(size: 9))
+                        .font(Theme.Text.denseLabel)
                         .foregroundStyle(Theme.Colors.tertiaryText)
                         .frame(width: cellSize.width, height: cellSize.height)
                         .accessibilityHidden(true)

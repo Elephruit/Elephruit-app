@@ -1,4 +1,5 @@
 import ElephruitCore
+import ElephruitModel
 import ElephruitPersistence
 import Foundation
 import Observation
@@ -183,6 +184,30 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         }
     }
 
+    /// Whether the reading pane opens the newest item when nothing is selected.
+    ///
+    /// True for the surfaces whose right side is a *document* — a note, a bookmark, an archived
+    /// or deleted item being reconsidered — where an empty editor is a void and the newest item
+    /// is almost always the one wanted. False for the list-centric surfaces (Inbox, tags, saved
+    /// searches), whose answer to an empty selection is the list taking the window; false for
+    /// work items, whose module opens a composer instead; and false for canvases, which have no
+    /// reading pane at all.
+    public var autoSelectsFirstItem: Bool {
+        switch self {
+        case .kind(let kind):
+            switch kind {
+            case .note, .idea, .reference, .dailyEntry, .meeting, .decision, .bookmark:
+                true
+            default:
+                false
+            }
+        case .archive, .trash:
+            true
+        default:
+            false
+        }
+    }
+
     /// The kind a "New Item" action should create here, so `⌘N` does the obvious thing.
     public var defaultNewItemKind: ItemKind {
         switch self {
@@ -363,6 +388,9 @@ public final class NavigationModel {
         didSet {
             let previousPrimary = selectedItemID
             reconcilePrimarySelection()
+            Diagnostics.shell.info(
+                "selection: \(self.selectedItemIDs.count, privacy: .public) items, primary \(self.selectedItemID?.uuidString.prefix(8) ?? "none", privacy: .public)"
+            )
             guard !isApplyingHistory, previousPrimary != selectedItemID else { return }
             recordNavigation(
                 NavigationLocation(
@@ -422,9 +450,11 @@ public final class NavigationModel {
     /// said it in. Opening the event inspector to check a meeting's guest list should not mean that
     /// every note you open for the rest of the session arrives with a field editor beside it.
     ///
-    /// Per *window*, not persisted, unlike the widths: a width is an opinion about the module and a
-    /// window's open panes are the shape of this window's session. Two windows in People are
-    /// entitled to disagree about whether the context sidebar is showing.
+    /// Per *window*: a width is an opinion about the module, but a window's open panes are the
+    /// shape of this window's session, and two windows in People are entitled to disagree about
+    /// whether the context sidebar is showing. It restores with the window all the same — through
+    /// ``RestorationState``, which is scene storage and therefore per window too — so each window
+    /// keeps its own shape rather than forgetting it.
     ///
     /// A module absent from the dictionary uses its own policy's answer, so a module whose
     /// inspector is the point of it does not start closed.
@@ -550,7 +580,13 @@ public final class NavigationModel {
         // makes "Home and Upcoming still work" true everywhere rather than at the call sites
         // somebody remembered.
         let selection = requested.canonical
-        guard self.selection != selection else { return }
+        guard self.selection != selection else {
+            // Re-selecting Today while standing on it means "take me back to today" — the page
+            // may be browsing another day, and ⌘0 is its keyboard route home now that the
+            // toolbar's return button no longer claims a key of its own.
+            if selection == .today { todayReturnRequest &+= 1 }
+            return
+        }
 
         recordNavigation(currentLocation)
 
@@ -714,16 +750,45 @@ public final class NavigationModel {
         /// build — which never recorded it — still decodes; `nil` restores to the log.
         public var timeSurface: TimeSurface?
 
+        /// The item the detail pane was showing.
+        ///
+        /// The single biggest cause of the empty-pane relaunch: everything else about the window
+        /// came back and the one thing being read did not, so every launch opened onto
+        /// "Nothing selected". Optional twice over — an older scene never wrote it, and the item
+        /// may since have been deleted, in which case the detail pane's own empty state is the
+        /// honest answer.
+        public var selectedItemID: UUID?
+
+        /// The window's layout mode, so a sidebar someone collapsed stays collapsed.
+        public var layoutMode: LayoutMode?
+
+        /// Which modules had their inspector open or closed, and the same for primary navigation.
+        ///
+        /// Per window like the live dictionary it mirrors — `@SceneStorage` is per scene, so two
+        /// windows still get to disagree; what stops is one window forgetting its own shape.
+        /// Split into two fields because a dictionary keyed by an *optional* module does not
+        /// round-trip through `Codable`.
+        public var moduleInspectorVisibility: [AppModule: Bool]?
+        public var primaryInspectorVisible: Bool?
+
         public init(
             module: AppModule?,
             selection: SidebarSelection,
             moduleSelections: [AppModule: SidebarSelection] = [:],
-            timeSurface: TimeSurface? = nil
+            timeSurface: TimeSurface? = nil,
+            selectedItemID: UUID? = nil,
+            layoutMode: LayoutMode? = nil,
+            moduleInspectorVisibility: [AppModule: Bool]? = nil,
+            primaryInspectorVisible: Bool? = nil
         ) {
             self.module = module
             self.selection = selection
             self.moduleSelections = moduleSelections
             self.timeSurface = timeSurface
+            self.selectedItemID = selectedItemID
+            self.layoutMode = layoutMode
+            self.moduleInspectorVisibility = moduleInspectorVisibility
+            self.primaryInspectorVisible = primaryInspectorVisible
         }
 
         /// Encoded for `@SceneStorage`, which stores strings.
@@ -745,11 +810,25 @@ public final class NavigationModel {
     }
 
     public var restorationState: RestorationState {
-        RestorationState(
+        var moduleVisibility: [AppModule: Bool] = [:]
+        var primaryVisibility: Bool?
+        for (module, isOpen) in inspectorVisibility {
+            if let module {
+                moduleVisibility[module] = isOpen
+            } else {
+                primaryVisibility = isOpen
+            }
+        }
+
+        return RestorationState(
             module: activeModule,
             selection: selection,
             moduleSelections: moduleSelections,
-            timeSurface: timeSurface
+            timeSurface: timeSurface,
+            selectedItemID: selectedItemID,
+            layoutMode: layoutMode,
+            moduleInspectorVisibility: moduleVisibility.isEmpty ? nil : moduleVisibility,
+            primaryInspectorVisible: primaryVisibility
         )
     }
 
@@ -771,6 +850,23 @@ public final class NavigationModel {
                 // inside one.
                 activeModule = module
             }
+
+            // After `select`, which clears the selection as part of changing destination — the
+            // order is the difference between restoring the item being read and wiping it.
+            if let id = state.selectedItemID {
+                selectItem(id)
+            }
+
+            if let mode = state.layoutMode {
+                layoutMode = mode
+            }
+
+            for (module, isOpen) in state.moduleInspectorVisibility ?? [:] {
+                inspectorVisibility[module] = isOpen
+            }
+            if let primaryVisibility = state.primaryInspectorVisible {
+                inspectorVisibility[AppModule?.none] = primaryVisibility
+            }
         }
     }
 
@@ -786,6 +882,48 @@ public final class NavigationModel {
             return selection.title
         }
         return activeModule.title
+    }
+
+    /// Opens an item on the surface that owns its full editing UI.
+    ///
+    /// ### Why this is not `select(.kind(item.kind))` + `selectItem`
+    /// Because for work items that pair is a dead end: a reminder's kind list lives inside the
+    /// Reminders module, whose policy declares no detail pane and no inspector, so the row was
+    /// selected and nothing opened anywhere. The command palette did exactly that, while
+    /// ``WorkItemRedirect`` — the view that catches the same mistake made by clicking — already
+    /// knew the right answer. This is that answer, stated once: a reminder opens in Reminders
+    /// (whose workspace opens its composer for an externally selected row), and project work opens
+    /// on the project that owns it.
+    public func open(_ item: Item) {
+        switch item.kind {
+        case .task, .reminder:
+            select(.reminders)
+            selectItem(item.id)
+
+        // A project opens on its workspace — Home — never on the item-detail surface. This is
+        // the rule that makes the palette, a note's wiki link, and the sidebar agree about what
+        // "open the project" means.
+        case .project:
+            select(.project(id: item.id, viewID: nil))
+
+        case .bug, .feature, .milestone, .release:
+            var cursor = item.parent
+            while let candidate = cursor {
+                if candidate.kind == .project {
+                    select(.project(id: candidate.id, viewID: nil))
+                    selectItem(item.id)
+                    return
+                }
+                cursor = candidate.parent
+            }
+            // An orphan — no owning project to open on. The kind list is the honest fallback.
+            select(.kind(item.kind))
+            selectItem(item.id)
+
+        default:
+            select(.kind(item.kind))
+            selectItem(item.id)
+        }
     }
 
     /// Selects exactly one item.
@@ -866,6 +1004,9 @@ public final class NavigationModel {
 
         focusedPane = .list
     }
+
+    /// Bumped when Today is selected while already showing, so the page can return to the day.
+    public private(set) var todayReturnRequest = 0
 
     /// Leaves search, restoring the previous list and selection.
     ///

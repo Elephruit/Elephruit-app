@@ -112,7 +112,9 @@ final class AppEnvironment {
 
         do {
             let location = useTemporaryStore
-                ? StoreLocation.temporary(name: "UITests")
+                // Named, so a design-review sweep can open a library nothing else on the
+                // machine is writing to. The default keeps the XCUITest suite's store.
+                ? StoreLocation.temporary(name: DesignReviewLaunch.storeName ?? "UITests")
                 : try StoreLocation.application()
 
             let stack = try PersistenceStack.open(mode: .onDisk(location))

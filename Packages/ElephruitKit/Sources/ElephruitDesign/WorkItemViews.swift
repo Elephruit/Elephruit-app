@@ -54,7 +54,7 @@ public struct BlockedMarker: View {
 
     public var body: some View {
         Image(systemName: "hand.raised.fill")
-            .font(.system(size: 10))
+            .font(Theme.Text.metadata)
             .foregroundStyle(Theme.Colors.warning)
             .accessibilityLabel("Blocked")
     }

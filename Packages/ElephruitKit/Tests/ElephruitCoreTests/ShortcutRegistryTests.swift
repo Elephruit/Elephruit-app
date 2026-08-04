@@ -145,6 +145,16 @@ struct ShortcutRegistryTests {
         #expect(KeyBinding("n", [.command, .shift, .option]).glyphs == ["⌥", "⇧", "⌘", "N"])
     }
 
+    @Test("Invisible keys print the glyph macOS prints, not the character itself")
+    func invisibleKeysHaveFaces() {
+        // "\r".uppercased() is still a carriage return, and a settings row rendering the
+        // Complete Reminder binding as a blank is a shortcut that cannot be learned.
+        #expect(KeyBinding("\r", .command).display == "⌘↩")
+        #expect(KeyBinding("\u{8}", .command).display == "⌘⌫")
+        #expect(KeyBinding(" ", [.command, .control]).display == "⌃⌘Space")
+        #expect(KeyBinding("\t", .command).display == "⌘⇥")
+    }
+
     @Test("Case is carried by shift, not by the letter")
     func keysAreNormalised() {
         #expect(KeyBinding("N").key == "n")

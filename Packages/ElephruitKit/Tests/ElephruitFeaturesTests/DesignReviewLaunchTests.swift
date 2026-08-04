@@ -83,13 +83,33 @@ struct DesignReviewLaunchTests {
 
     // MARK: Appearance
 
-    @Test("Both appearances are nameable")
+    @Test("All four appearances are nameable")
     func readsAppearance() {
         #expect(
             DesignReviewLaunch.appearanceName(in: ["-ElephruitAppearance", "dark"]) == .darkAqua
         )
         #expect(
             DesignReviewLaunch.appearanceName(in: ["-ElephruitAppearance", "light"]) == .aqua
+        )
+        #expect(
+            DesignReviewLaunch.appearanceName(in: ["-ElephruitAppearance", "light-contrast"])
+                == .accessibilityHighContrastAqua
+        )
+        #expect(
+            DesignReviewLaunch.appearanceName(in: ["-ElephruitAppearance", "dark-contrast"])
+                == .accessibilityHighContrastDarkAqua
+        )
+    }
+
+    @Test("A store name is read, and its absence means the shared store")
+    func readsStoreName() {
+        #expect(
+            DesignReviewLaunch.storeName(in: ["-ElephruitStoreName", "review"]) == "review"
+        )
+        #expect(DesignReviewLaunch.storeName(in: []) == nil)
+        // A following flag means the value was omitted, not that the flag is the name.
+        #expect(
+            DesignReviewLaunch.storeName(in: ["-ElephruitStoreName", "-ElephruitAppearance"]) == nil
         )
     }
 

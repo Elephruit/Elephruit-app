@@ -134,11 +134,16 @@ struct ModuleLayoutTests {
         #expect(inspector.opensAfterSelection == false)
         #expect(inspector.shouldOpenAfterSelection() == false)
 
-        // And it is not offered at all until the profile already has room. Below this the
-        // arithmetic can satisfy every minimum and still leave the main content the narrowest
-        // thing on the screen.
+        // And it is not offered until every column's minimum fits beside it — but it *must* be
+        // reachable at the app's own default window, because a pane whose threshold sits above
+        // `.defaultSize` is a pane ⌥⌘I cannot open in the window most people actually have. The
+        // threshold is the sum of the minimums: sidebar 240 + list 220 + profile 450 + its own 260.
         #expect(
-            inspector.isVisible(userWants: true, hasSelection: true, windowWidth: 1200) == false
+            inspector.isVisible(userWants: true, hasSelection: true, windowWidth: 1100) == false
+        )
+        #expect(
+            inspector.isVisible(userWants: true, hasSelection: true, windowWidth: 1180),
+            "reachable at the default window size"
         )
         #expect(inspector.isVisible(userWants: true, hasSelection: true, windowWidth: 1400))
     }
@@ -778,6 +783,78 @@ struct ShellFitTests {
 
         navigation.enterModule(.notes)
         #expect(navigation.shellLayout == AppModule.notes.shellLayout)
+    }
+
+    /// The empty rectangle both prior audits ranked first, fixed by policy: a list surface with
+    /// nothing selected is a list, and the reading pane exists from the moment there is something
+    /// to read.
+    @Test("A list surface with nothing selected gives the list the window")
+    func emptySelectionGivesTheListTheWindow() {
+        let layout = PrimaryNavigationLayout.shell
+
+        let empty = layout.widths(
+            windowWidth: 1400, sidebarWidth: sidebar, userWantsInspector: false, hasSelection: false
+        )
+        #expect(empty.detail == nil, "no selection, no two-thirds void")
+        #expect(
+            empty.primary == 1400 - sidebar,
+            "the list takes what the pane gave up"
+        )
+
+        let reading = layout.widths(
+            windowWidth: 1400, sidebarWidth: sidebar, userWantsInspector: false, hasSelection: true
+        )
+        #expect(reading.detail != nil, "selecting something brings the reading pane back")
+    }
+
+    @Test("Modules that keep their pane on an empty selection still keep it")
+    func recordsKeepsItsPane() {
+        // Records declares the opposite policy — a Records with no profile is a list of names —
+        // and the gate must honour that declaration, not impose the primary-nav one.
+        let widths = AppModule.records.shellLayout.widths(
+            windowWidth: 1400, sidebarWidth: sidebar, userWantsInspector: false, hasSelection: false
+        )
+        #expect(widths.detail != nil)
+    }
+
+    @Test("The newest item opens only where the right side is a document")
+    func autoSelectionIsForDocuments() {
+        #expect(SidebarSelection.kind(.note).autoSelectsFirstItem)
+        #expect(SidebarSelection.kind(.bookmark).autoSelectsFirstItem)
+        #expect(SidebarSelection.archive.autoSelectsFirstItem)
+        #expect(SidebarSelection.trash.autoSelectsFirstItem)
+
+        #expect(!SidebarSelection.inbox.autoSelectsFirstItem, "the Inbox's answer is the full-width list")
+        #expect(!SidebarSelection.tag(slug: "work").autoSelectsFirstItem)
+        #expect(!SidebarSelection.kind(.reminder).autoSelectsFirstItem, "Reminders opens a composer instead")
+        #expect(!SidebarSelection.kind(.project).autoSelectsFirstItem)
+    }
+
+    /// ⌘F replaces whatever the module shows with a results list and a reading pane, so the shell
+    /// must wear a layout that *has* a reading pane — a canvas module's own layout would let a
+    /// result be selected and never seen.
+    @Test("Search wears the list-and-detail layout wherever it was invoked")
+    func searchWearsThePrimaryLayout() {
+        let navigation = NavigationModel()
+
+        navigation.enterModule(.calendar)
+        #expect(navigation.shellLayout == AppModule.calendar.shellLayout)
+
+        navigation.beginSearch()
+        #expect(navigation.shellLayout == PrimaryNavigationLayout.shell)
+
+        navigation.endSearch()
+        #expect(
+            navigation.shellLayout == AppModule.calendar.shellLayout,
+            "leaving search hands the module its own shape back"
+        )
+
+        // The override holds outside modules too — searching from Today must not keep the
+        // day's canvas.
+        navigation.leaveModule()
+        navigation.select(.today)
+        navigation.beginSearch()
+        #expect(navigation.shellLayout == PrimaryNavigationLayout.shell)
     }
 
     /// The inspector goes first and the editor second, rather than everything narrowing at once.

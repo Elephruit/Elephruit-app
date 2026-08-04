@@ -18,6 +18,7 @@ import SwiftUI
 /// common labels are offered as a menu; anything can be typed.
 struct EditContactDetailsSheet: View {
     @Environment(\.services) private var services
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let person: Item
 
@@ -65,15 +66,9 @@ struct EditContactDetailsSheet: View {
     private var editorSidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: Theme.Spacing.medium) {
-                ZStack {
-                    Circle().fill(Theme.Colors.selection.gradient)
-                    Text(personInitials)
-                        .font(.system(.headline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(Theme.Colors.onAccent)
-                }
-                .frame(width: 44, height: 44)
+                Avatar(name: person.displayTitle, diameter: Theme.Size.iconTileLarge)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                     Text(person.displayTitle)
                         .font(.system(.headline, weight: .semibold))
                         .lineLimit(1)
@@ -86,26 +81,27 @@ struct EditContactDetailsSheet: View {
             .padding(.top, Theme.Spacing.section)
             .padding(.bottom, Theme.Spacing.large)
 
-            Text("DETAILS")
-                .font(.system(size: 10, weight: .bold))
-                .tracking(0.8)
-                .foregroundStyle(Theme.Colors.tertiaryText)
+            SectionHeader("Details")
                 .padding(.horizontal, Theme.Spacing.large)
                 .padding(.bottom, Theme.Spacing.small)
 
-            VStack(spacing: 4) {
+            VStack(spacing: Theme.Spacing.tight) {
                 ForEach(ContactEditorPage.allCases) { page in
                     Button {
-                        withAnimation(.easeOut(duration: 0.18)) { selectedPage = page }
+                        withAnimation(
+                            Theme.Motion.respectingReduceMotion(
+                                Theme.Motion.standard, reduceMotion: reduceMotion
+                            )
+                        ) { selectedPage = page }
                     } label: {
                         HStack(spacing: Theme.Spacing.small) {
                             Image(systemName: page.systemImage)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(.body, weight: .semibold))
                                 .foregroundStyle(selectedPage == page ? page.tint : Theme.Colors.secondaryText)
-                                .frame(width: 24, height: 24)
+                                .frame(width: Theme.Size.iconTileSmall, height: Theme.Size.iconTileSmall)
                                 .background(
-                                    page.tint.opacity(selectedPage == page ? 0.14 : 0),
-                                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    selectedPage == page ? Theme.Colors.tintedFill(page.tint) : .clear,
+                                    in: RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
                                 )
                             Text(page.title)
                                 .font(.system(.body, weight: selectedPage == page ? .semibold : .regular))
@@ -113,11 +109,11 @@ struct EditContactDetailsSheet: View {
                             Spacer()
                             if let count = pageCount(page), count > 0 {
                                 Text("\(count)")
-                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .font(Theme.Text.keyHint)
                                     .foregroundStyle(selectedPage == page ? page.tint : Theme.Colors.secondaryText)
-                                    .padding(.horizontal, 6)
+                                    .padding(.horizontal, Theme.Spacing.tight)
                                     .frame(minHeight: 18)
-                                    .background(page.tint.opacity(0.1), in: Capsule())
+                                    .background(Theme.Colors.tintedFill(page.tint), in: Capsule())
                             }
                         }
                         .padding(.horizontal, Theme.Spacing.small)
@@ -125,9 +121,9 @@ struct EditContactDetailsSheet: View {
                         .frame(height: 38)
                         .contentShape(Rectangle())
                         .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                                 .fill(selectedPage == page ? Theme.Colors.contentBackground : .clear)
-                                .shadow(color: selectedPage == page ? Theme.Colors.shadow.opacity(0.06) : .clear, radius: 5, y: 2)
+                                .elevation(selectedPage == page ? .raised : .flat)
                         )
                     }
                     .buttonStyle(.plain)
@@ -151,7 +147,10 @@ struct EditContactDetailsSheet: View {
                     }
                 }
                 .padding(Theme.Spacing.medium)
-                .background(Theme.Colors.selection.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
+                .background(
+                    Theme.Colors.tintedFill(Theme.Colors.selection),
+                    in: RoundedRectangle(cornerRadius: Theme.Radius.large)
+                )
                 .padding(Theme.Spacing.medium)
             }
         }
@@ -160,12 +159,8 @@ struct EditContactDetailsSheet: View {
 
     private var pageHeader: some View {
         HStack(spacing: Theme.Spacing.medium) {
-            Image(systemName: selectedPage.systemImage)
-                .font(.system(size: 19, weight: .semibold))
-                .foregroundStyle(selectedPage.tint)
-                .frame(width: 42, height: 42)
-                .background(selectedPage.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
-            VStack(alignment: .leading, spacing: 2) {
+            IconTile(systemImage: selectedPage.systemImage, tint: selectedPage.tint, size: .large)
+            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 Text(selectedPage.title)
                     .font(.system(.title2, weight: .semibold))
                 Text(selectedPage.subtitle)
@@ -249,10 +244,6 @@ struct EditContactDetailsSheet: View {
 
     private func contactPage(_ kind: ContactDetailKind) -> some View {
         EditorPanel { ValueListSection(kind: kind, values: binding(for: kind)) }
-    }
-
-    private var personInitials: String {
-        person.displayTitle.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased()
     }
 
     private func pageCount(_ page: ContactEditorPage) -> Int? {
@@ -392,14 +383,14 @@ private struct EditorPanel<Content: View>: View {
         .padding(Theme.Spacing.section)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.Radius.sheet, style: .continuous)
                 .fill(Theme.Colors.contentBackground)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Theme.Colors.separator.opacity(0.55))
+            RoundedRectangle(cornerRadius: Theme.Radius.sheet, style: .continuous)
+                .strokeBorder(Theme.Colors.separator)
         )
-        .shadow(color: Theme.Colors.shadow.opacity(0.04), radius: 16, y: 6)
+        .elevation(.raised)
     }
 }
 
@@ -439,7 +430,7 @@ private struct EditorField: View {
             .fill(Theme.Colors.windowBackground)
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                    .strokeBorder(Theme.Colors.separator.opacity(0.8))
+                    .strokeBorder(Theme.Colors.separator)
             )
     }
 }
@@ -453,12 +444,8 @@ private struct ValueListSection: View {
         VStack(spacing: Theme.Spacing.medium) {
             if values.isEmpty {
                 VStack(spacing: Theme.Spacing.medium) {
-                    Image(systemName: kind.symbolName)
-                        .font(.system(size: 26, weight: .medium))
-                        .foregroundStyle(kind.editorTint)
-                        .frame(width: 54, height: 54)
-                        .background(kind.editorTint.opacity(0.1), in: Circle())
-                    VStack(spacing: 4) {
+                    IconTile(systemImage: kind.symbolName, tint: kind.editorTint, size: .large)
+                    VStack(spacing: Theme.Spacing.tight) {
                         Text("No \(kind.displayName.lowercased()) added")
                             .font(.system(.body, weight: .semibold))
                         Text("Add one whenever it becomes useful.")
@@ -484,7 +471,7 @@ private struct ValueListSection: View {
                                     .fill(Theme.Colors.windowBackground)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                                            .strokeBorder(Theme.Colors.separator.opacity(0.8))
+                                            .strokeBorder(Theme.Colors.separator)
                                     )
                             )
                             .frame(maxWidth: .infinity)
@@ -512,13 +499,13 @@ private struct ValueListSection: View {
                     .font(.system(.body, weight: .semibold))
                     .padding(.horizontal, Theme.Spacing.medium)
                     .frame(height: 34)
-                    .background(kind.editorTint.opacity(0.1), in: Capsule())
+                    .background(Theme.Colors.tintedFill(kind.editorTint), in: Capsule())
             }
             .buttonStyle(.borderless)
             .foregroundStyle(kind.editorTint)
             .frame(maxWidth: .infinity, alignment: values.isEmpty ? .center : .leading)
         }
-        .animation(.easeOut(duration: 0.16), value: values.count)
+        .calmAnimation(Theme.Motion.appearance, value: values.count)
     }
 }
 
@@ -555,7 +542,7 @@ private struct LabelField: View {
                 .fill(Theme.Colors.windowBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                        .strokeBorder(Theme.Colors.separator.opacity(0.8))
+                        .strokeBorder(Theme.Colors.separator)
                 )
         )
     }

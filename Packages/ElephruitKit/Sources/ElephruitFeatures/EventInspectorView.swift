@@ -31,6 +31,9 @@ public struct EventInspectorView: View {
     @State private var debriefText = ""
     @State private var preparationText = ""
     @State private var brief: [BriefEntry] = []
+
+    /// Per-person briefs for a meeting with several linked people, first three people only.
+    @State private var groupBriefs: [(person: Item, entries: [BriefEntry])] = []
     @State private var meetingItem: Item?
 
     var onOpenItem: (UUID) -> Void
@@ -54,6 +57,7 @@ public struct EventInspectorView: View {
                 if showsPersonContext {
                     records
                     if !brief.isEmpty { meetingBrief }
+                    if !groupBriefs.isEmpty { groupMeetingBrief }
                     if !priorMeetings.isEmpty { history }
                     notes
                     attachments
@@ -78,7 +82,7 @@ public struct EventInspectorView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
             HStack(spacing: Theme.Spacing.small) {
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                Capsule()
                     .fill(Theme.EventStyle.accent(colorName: event.calendarColorName))
                     .frame(width: 4, height: 30)
 
@@ -262,7 +266,7 @@ public struct EventInspectorView: View {
                         .foregroundStyle(Theme.Colors.tertiaryText)
                 }
 
-                Button("Add Record…", systemImage: "circle.grid.2x2") {
+                Button("Add Record…", systemImage: "person.text.rectangle") {
                     isShowingRecordPicker = true
                 }
                     .buttonStyle(.borderless)
@@ -348,6 +352,43 @@ public struct EventInspectorView: View {
                             .accessibilityElement(children: .combine)
                         }
                     }
+                }
+            }
+        }
+    }
+
+    /// The several-person form: a short section per person, four lines each.
+    private var groupMeetingBrief: some View {
+        InspectorSection("Worth knowing") {
+            VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                ForEach(groupBriefs, id: \.person.id) { entry in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label(entry.person.displayTitle, systemImage: "person")
+                            .font(Theme.Text.keyHint)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
+
+                        ForEach(entry.entries) { line in
+                            Button {
+                                if let id = line.sourceItemID { onOpenItem(id) }
+                            } label: {
+                                Text(line.text)
+                                    .font(Theme.Text.rowSubtitle)
+                                    .multilineTextAlignment(.leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(.rect)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(line.sourceItemID == nil)
+                            .help(line.detail ?? line.text)
+                        }
+                    }
+                }
+
+                if linkedPeople.count > 3 {
+                    Text("\(linkedPeople.count - 3) more linked — open their pages for the rest.")
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.tertiaryText)
                 }
             }
         }
@@ -582,13 +623,23 @@ public struct EventInspectorView: View {
 
         meetingItem = found.meetingItemID.flatMap { try? services.items.item(id: $0) }
 
-        // One person's brief, and only when exactly one is linked. A brief about three people is
-        // three briefs, and reading them stacked in an inspector column before a meeting is worse
-        // than reading none — the point of a brief is that it can be taken in at a glance.
+        // One person reads as one brief; several read as a short section each. The old rule —
+        // exactly one, or nothing — was sound about glance-ability and silent about itself: a
+        // two-person meeting showed no brief and no reason, which reads as a feature that broke.
+        // Capped at three people and four lines each, so the glance survives the group.
         if linkedPeople.count == 1, let person = linkedPeople.first {
             brief = (try? services.personWorkspace.brief(for: person))?.entries ?? []
+            groupBriefs = []
+        } else if linkedPeople.count > 1 {
+            brief = []
+            groupBriefs = linkedPeople.prefix(3).compactMap { person in
+                let entries = (try? services.personWorkspace.brief(for: person))?.entries ?? []
+                guard !entries.isEmpty else { return nil }
+                return (person: person, entries: Array(entries.prefix(4)))
+            }
         } else {
             brief = []
+            groupBriefs = []
         }
     }
 
@@ -743,6 +794,7 @@ private struct LinkedItemRow: View {
 struct EventRecordPicker: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let event: CalendarEventSummary
     let linkedRecordIDs: Set<UUID>
@@ -768,7 +820,7 @@ struct EventRecordPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            Label("Records", systemImage: "circle.grid.2x2")
+            Label("Records", systemImage: "person.text.rectangle")
                 .font(Theme.Text.sectionHeader)
                 .lineLimit(2)
 
@@ -851,7 +903,11 @@ struct EventRecordPicker: View {
                         }
                         .onChange(of: highlightedIndex) { _, index in
                             guard candidates.indices.contains(index) else { return }
-                            withAnimation(.easeOut(duration: 0.1)) {
+                            withAnimation(
+                                Theme.Motion.respectingReduceMotion(
+                                    Theme.Motion.appearance, reduceMotion: reduceMotion
+                                )
+                            ) {
                                 proxy.scrollTo(candidates[index].id, anchor: .center)
                             }
                         }

@@ -24,6 +24,10 @@ public final class TodayModel {
     /// The day with the strongest emphasis. Not persisted — see ``TodayPreferences``.
     public private(set) var selectedDate: Date
 
+    /// The task whose "Pick a Date…" calendar is open, if any. One at a time — two open
+    /// calendars would both answer the next click.
+    var datePickerTaskID: UUID?
+
     /// Whether the days before the selected one are on screen.
     ///
     /// Off by default and behind a deliberate control. Yesterday is not a plan; it is a record, and

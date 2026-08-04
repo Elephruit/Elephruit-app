@@ -28,6 +28,7 @@ import SwiftUI
 /// single sentence is constrained by ``Theme/Size/todayContentWidth`` instead.
 public struct TodayView: View {
     @Environment(\.services) private var services
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let navigation: NavigationModel
 
@@ -67,22 +68,35 @@ public struct TodayView: View {
             guard model == nil, let services else { return }
             model = TodayModel(services: services)
         }
+        // ⌘0 while already on Today: the page may be browsing another day, and re-selecting the
+        // destination is the keyboard route back to the day itself.
+        .onChange(of: navigation.todayReturnRequest) { _, _ in model?.returnToToday() }
+        // The Edit menu's work-item verbs, meaning what they mean here: acting on the selected row.
+        .focusedSceneValue(\.workItemActions, workItemCommandActions)
         .accessibilityIdentifier(AccessibilityID.Today.root)
+    }
+
+    /// The selected row's verbs for the Edit menu — complete, flag, move to today.
+    private var workItemCommandActions: WorkItemCommandActions? {
+        guard let model, let services,
+              let id = navigation.selectedItemID,
+              let task = model.task(id)
+        else { return nil }
+
+        let actions = TodayActions(services: services, navigation: navigation, model: model)
+        return WorkItemCommandActions(
+            isEnabled: true,
+            isFlagged: task.isFlagged,
+            complete: { actions.toggleCompletion(task) },
+            toggleFlag: { actions.setFlagged(!task.isFlagged, on: task) },
+            moveToToday: { actions.reschedule(task, to: services.dateProvider.startOfToday) }
+        )
     }
 
     // MARK: - The page
 
     private func page(_ model: TodayModel) -> some View {
         VStack(spacing: 0) {
-            TodayToolbar(
-                model: model,
-                preferences: services?.todayPreferences,
-                calendars: services?.calendar,
-                isDatePickerPresented: $isDatePickerPresented
-            )
-
-            Divider()
-
             if services?.calendar.isEnabled == false || services?.calendar.authorization.canRead == false {
                 calendarBanner
             }
@@ -91,6 +105,16 @@ public struct TodayView: View {
         }
         .navigationTitle(title(model))
         .navigationSubtitle(subtitle(model))
+        // The window toolbar owns the day's controls now — the in-content bar this replaces was a
+        // second row of chrome above the day, spending the day's own room.
+        .toolbar {
+            TodayToolbarItems(
+                model: model,
+                preferences: services?.todayPreferences,
+                calendars: services?.calendar,
+                isDatePickerPresented: $isDatePickerPresented
+            )
+        }
         // Moving the window is the only thing that reads the calendar. Everything else rebuilds the
         // days from what is already in memory — which is what stops the page asking the calendar a
         // question in response to the calendar having answered one. See `TodayModel.WindowToken`.
@@ -190,7 +214,7 @@ public struct TodayView: View {
         if model.isOnToday {
             HStack {
                 Button {
-                    withAnimation(Theme.Motion.standard) {
+                    withAnimation(Theme.Motion.respectingReduceMotion(Theme.Motion.standard, reduceMotion: reduceMotion)) {
                         model.isShowingPreviousDays ? model.hidePreviousDays() : model.showPreviousDays()
                     }
                 } label: {

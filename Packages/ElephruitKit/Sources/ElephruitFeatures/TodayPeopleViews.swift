@@ -11,6 +11,8 @@ import SwiftUI
 /// it is their birthday — and every card says which. Somebody with no reason to appear does not
 /// appear, and somebody with three reasons appears once with three.
 struct TodayPeopleGrid: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let people: [DayPerson]
     let plan: DayPlan
     let model: TodayModel
@@ -48,7 +50,7 @@ struct TodayPeopleGrid: View {
 
             if people.count > Self.visibleLimit {
                 Button {
-                    withAnimation(Theme.Motion.standard) { isShowingAll.toggle() }
+                    withAnimation(Theme.Motion.respectingReduceMotion(Theme.Motion.standard, reduceMotion: reduceMotion)) { isShowingAll.toggle() }
                 } label: {
                     Text(isShowingAll ? "Show fewer" : "\(people.count - Self.visibleLimit) more")
                         .font(Theme.Text.metadata)
@@ -144,7 +146,7 @@ struct TodayPersonCard: View {
 
             if person.celebration != nil {
                 Image(systemName: "birthday.cake.fill")
-                    .font(.system(size: 11))
+                    .font(Theme.Text.rowSubtitle)
                     .foregroundStyle(Theme.Colors.secondaryText)
                     .accessibilityHidden(true)
             }
@@ -160,7 +162,7 @@ struct TodayPersonCard: View {
             ForEach(Array(person.reasons.prefix(2).enumerated()), id: \.offset) { _, reason in
                 HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.tight) {
                     Image(systemName: reason.symbolName)
-                        .font(.system(size: 9))
+                        .font(Theme.Text.denseLabel)
                         .foregroundStyle(Theme.Colors.tertiaryText)
                         .accessibilityHidden(true)
 
@@ -243,7 +245,7 @@ struct TodayPersonCard: View {
     private var menu: some View {
         if let item = model.person(person.personID) {
             Button("Open Profile", systemImage: "person.crop.circle") { actions.select(item.id) }
-            Button("Open in Records", systemImage: "circle.grid.2x2") { actions.openInModule(item) }
+            Button("Open in Records", systemImage: "person.text.rectangle") { actions.openInModule(item) }
 
             let contacts = actions.contactActions(for: item).filter(\.isRunnable)
             if !contacts.isEmpty {

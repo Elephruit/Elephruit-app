@@ -68,6 +68,31 @@ public final class NoteEditorModel {
         return registry.view(forOrdinal: 0)
     }
 
+    // MARK: - The menu bar's surface
+    //
+    // Public facades over the command target, because the Format menu lives in the app target
+    // and the text view it drives does not.
+
+    /// Opens the system find bar over the note's own text — what ⌘F means while a note is open.
+    ///
+    /// The find bar was enabled on the text view since it was built; no menu ever asked for it,
+    /// because the standard Find items had been replaced wholesale by app navigation.
+    public func showFindBar() {
+        let request = NSMenuItem()
+        request.tag = NSTextFinder.Action.showFindInterface.rawValue
+        commandTarget?.performTextFinderAction(request)
+    }
+
+    /// Toggles an inline mark at the caret or over the selection.
+    public func toggleInlineMark(_ mark: NoteInlineMarks) {
+        commandTarget?.toggleMark(mark)
+    }
+
+    /// Applies a paragraph kind to the current paragraph or selection.
+    public func applyParagraph(_ kind: NoteParagraphKind) {
+        commandTarget?.applyParagraphKind(kind)
+    }
+
     var slashMatches: [NoteInsertionCommand] {
         NoteInsertionCommand.matching(slashMenu?.query ?? "")
     }

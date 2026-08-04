@@ -21,21 +21,19 @@ struct ProjectNavigationTests {
         navigation.select(.project(id: UUID(), viewID: nil))
 
         #expect(navigation.activeModule == .projects, "Layout still keys off the module")
-        #expect(
-            !SidebarView.showsModuleLevel(for: navigation.activeModule),
-            "The sidebar must not swap: the project tree lives in the primary list"
-        )
     }
 
-    @Test("The sidebar swaps levels exactly for the modules that bring their own")
-    func sidebarSwapsOnlyForModulesWithTheirOwn() {
-        #expect(!SidebarView.showsModuleLevel(for: nil))
-        for module in AppModule.allCases {
-            #expect(
-                SidebarView.showsModuleLevel(for: module) == module.hasOwnSidebar,
-                "\(module.title) disagrees with its own declaration"
-            )
-        }
+    @Test("The Library band holds the working modules, and only those")
+    func libraryBandComposition() {
+        // The sidebar no longer has a second level to swap to — a module's sources render as
+        // sections inside the one primary list. What is worth pinning instead: Areas live inside
+        // the projects tree, and Archive and Trash live on the bottom rail, because a wastebasket
+        // listed as a peer of Calendar is what made the old module band read as an index.
+        #expect(SidebarView.libraryModules == [.notes, .reminders, .calendar, .records, .time, .bookmarks])
+        #expect(!SidebarView.libraryModules.contains(.areas))
+        #expect(!SidebarView.libraryModules.contains(.archive))
+        #expect(!SidebarView.libraryModules.contains(.trash))
+        #expect(!SidebarView.libraryModules.contains(.projects))
     }
 
     @Test("Every selection the Projects module owns keeps the primary sidebar")
@@ -51,10 +49,7 @@ struct ProjectNavigationTests {
         for selection in selections {
             let navigation = NavigationModel()
             navigation.select(selection)
-            #expect(
-                !SidebarView.showsModuleLevel(for: navigation.activeModule),
-                "\(selection) swapped the sidebar away"
-            )
+            #expect(navigation.activeModule == .projects, "\(selection) resolved elsewhere")
         }
     }
 
@@ -87,7 +82,6 @@ struct ProjectNavigationTests {
         restored.restore(navigation.restorationState)
 
         #expect(restored.selection == navigation.selection, "Same project, same view")
-        #expect(!SidebarView.showsModuleLevel(for: restored.activeModule))
     }
 
     @Test("Leaving a project for a global destination and coming back preserves the view")

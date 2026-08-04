@@ -104,6 +104,10 @@ public struct CommandPaletteView: View {
         }
         .frame(width: 560, height: 420)
         .background(.regularMaterial)
+        // Declarative rather than an onAppear write alone: `defaultFocus` is what tells the
+        // focus system where a fresh presentation starts, and it survives the representation
+        // timing the appearance write used to race against.
+        .defaultFocus($isFieldFocused, true)
         .onAppear {
             isFieldFocused = true
             refreshItemMatches()
@@ -335,8 +339,9 @@ public struct CommandPaletteView: View {
 
     private func openItem(id: UUID) {
         guard let services, let item = try? services.items.item(id: id) else { return }
-        navigation.select(.kind(item.kind))
-        navigation.selectItem(id)
+        // Through the router, not `.kind(...)`: a reminder or a bug opened by kind lands in a
+        // list whose module has no detail pane — selected, and shown nowhere.
+        navigation.open(item)
         dismiss()
     }
 }

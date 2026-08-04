@@ -83,6 +83,8 @@ public struct NotePageView: View {
                 referencePickerLocation = nil
             }
         }
+        // The Format menu and the ⌘F flip act on whichever note's editor is open in this scene.
+        .focusedSceneValue(\.noteEditor, model)
         .accessibilityIdentifier(AccessibilityID.Notes.page)
     }
 

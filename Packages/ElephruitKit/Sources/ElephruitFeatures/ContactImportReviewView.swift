@@ -83,7 +83,7 @@ struct ContactImportReviewView: View {
                             line.outcome.needsAttention ? Theme.Colors.warning : Theme.Colors.secondaryText
                         )
                         .padding(.horizontal, Theme.Spacing.small)
-                        .padding(.vertical, 3)
+                        .padding(.vertical, Theme.Spacing.tight)
                         .background(Theme.Colors.subtleFill, in: Capsule())
                 }
             }

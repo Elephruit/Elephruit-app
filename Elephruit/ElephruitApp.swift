@@ -48,6 +48,9 @@ struct ElephruitApp: App {
                 Label("Elephruit", systemImage: "timer")
             }
         }
+        // The style the comment above always promised: `.window` is what lets the content be a
+        // live view rather than a static menu. It was documented and never applied.
+        .menuBarExtraStyle(.window)
 
         // The calendar's menu bar item.
         //
@@ -72,6 +75,7 @@ struct ElephruitApp: App {
                 Label("Calendar", systemImage: "calendar")
             }
         }
+        .menuBarExtraStyle(.window)
 
         Settings {
             SettingsView(environment: environment)
@@ -167,6 +171,11 @@ struct ElephruitCommands: Commands {
     @FocusedValue(\.navigationModel) private var navigation
     @FocusedValue(\.transferActions) private var transfer
     @FocusedValue(\.rowActions) private var rowActions
+    @FocusedValue(\.workItemActions) private var workItem
+    @FocusedValue(\.newItemCommand) private var newItem
+    @FocusedValue(\.noteEditor) private var noteEditor
+
+    @Environment(\.openWindow) private var openWindow
 
     /// The services, for the few commands that act on the app rather than on a window.
     ///
@@ -186,8 +195,17 @@ struct ElephruitCommands: Commands {
         // MARK: File
 
         CommandGroup(replacing: .newItem) {
-            Button("New Note") { create(.note) }
-                .shortcut(.newItem, in: shortcuts)
+            // The focused surface says what creating means there — a reminder in Reminders, a note
+            // in Notes — and the menu owns the key. The two toolbar buttons that used to bind ⌘N
+            // behind the registry's back are wired through this instead.
+            Button(newItem?.title ?? "New Note") {
+                if let newItem {
+                    newItem.run()
+                } else {
+                    create(.note)
+                }
+            }
+            .shortcut(.newItem, in: shortcuts)
 
             Button("New Reminder") { navigation?.requestNewReminder() }
                 .shortcut(.newReminder, in: shortcuts)
@@ -221,14 +239,12 @@ struct ElephruitCommands: Commands {
             Divider()
 
             // A new window is genuinely useful in this app — two projects side by side — so it is a
-            // first-class command rather than something the user has to discover.
-            Button("New Window") {
-                if let url = URL(string: "everything://main") {
-                    NSWorkspace.shared.open(url)
-                }
-            }
-            .shortcut(.newWindow, in: shortcuts)
-            .disabled(true)  // Enabled with the URL scheme in Phase 2.
+            // first-class command rather than something the user has to discover. Through the
+            // scene action, not a URL: this used to open `everything://main`, a scheme the
+            // Info.plist never registered, behind a `.disabled(true)` — a menu item that was
+            // wrong twice and pressable zero times.
+            Button("New Window") { openWindow(id: "main") }
+                .shortcut(.newWindow, in: shortcuts)
         }
 
         CommandGroup(after: .newItem) {
@@ -254,16 +270,40 @@ struct ElephruitCommands: Commands {
             Button("Move to Trash") { rowActions?.moveToTrash() }
                 .shortcut(.moveToTrash, in: shortcuts)
                 .disabled(rowActions?.isEnabled != true)
+
+            Divider()
+
+            // The three work-item verbs the registry has carried since the module shipped — bound,
+            // shown in Settings, and wired to nothing until the surfaces below published what they
+            // mean. The focused surface decides; the menu only carries the keys.
+            Button("Mark Complete") { workItem?.complete() }
+                .shortcut(.completeReminder, in: shortcuts)
+                .disabled(workItem?.isEnabled != true)
+
+            Button(workItem?.isFlagged == true ? "Unflag" : "Flag") { workItem?.toggleFlag() }
+                .shortcut(.flagReminder, in: shortcuts)
+                .disabled(workItem?.isEnabled != true)
+
+            Button("Move to Today") { workItem?.moveToToday() }
+                .shortcut(.moveToToday, in: shortcuts)
+                .disabled(workItem?.isEnabled != true)
         }
 
         // MARK: Find
 
         CommandGroup(replacing: .textEditing) {
-            // ⌘F, not ⌘⇧F. Search is no longer a separate place with its own shortcut — it is what
-            // the list becomes — so it takes the shortcut everyone already reaches for.
-            Button("Search Everything") { navigation?.beginSearch() }
-                .shortcut(.search, in: shortcuts)
-                .disabled(navigation == nil)
+            // ⌘F, and the focused context wins: with a note open the key finds *in the note* —
+            // Mail's rule, where ⌘F searches the message being read — and everywhere else it is
+            // the app-wide search it has always been. One key, titled for what it will do.
+            Button(noteEditor != nil ? "Find in Note" : "Search Everything") {
+                if let noteEditor {
+                    noteEditor.showFindBar()
+                } else {
+                    navigation?.beginSearch()
+                }
+            }
+            .shortcut(.search, in: shortcuts)
+            .disabled(navigation == nil)
 
             Button("Command Palette…") { navigation?.isCommandPaletteVisible = true }
                 .shortcut(.commandPalette, in: shortcuts)
@@ -275,6 +315,13 @@ struct ElephruitCommands: Commands {
             }
             .shortcut(.searchCalendar, in: shortcuts)
             .disabled(navigation == nil)
+
+            // The natural-language command bar for records. Its binding existed in the registry
+            // and in Settings from the day it shipped, and fired nothing — reachable only by name
+            // inside the other palette.
+            Button("Records Command Bar…") { navigation?.isRecordsCommandBarVisible = true }
+                .shortcut(.recordsCommandBar, in: shortcuts)
+                .disabled(navigation == nil)
         }
 
         // MARK: View
@@ -286,21 +333,39 @@ struct ElephruitCommands: Commands {
             // control you can only reach with a pointer is one a keyboard user cannot reach at all.
             if services?.miniTimer.isCollapsed == true {
                 Button("Back to Elephruit") { services?.miniTimer.expand() }
-                    .keyboardShortcut(KeyEquivalent("m"), modifiers: [.command, .control])
+                    .shortcut(.collapseToTimer, in: shortcuts)
             } else {
                 Button("Collapse to Timer") { services?.miniTimer.collapse() }
-                    .keyboardShortcut(KeyEquivalent("m"), modifiers: [.command, .control])
+                    .shortcut(.collapseToTimer, in: shortcuts)
                     .disabled(services == nil)
             }
 
             Divider()
 
+            // ⌃⌘T finally does what its name says, on the thing you have selected. It started an
+            // *untitled* timer from the palette — there was no keyboard route to "time this".
+            Button("Start or Stop Timer") {
+                guard let services else { return }
+                if services.timer.isRunning {
+                    services.timer.stop()
+                } else if let id = navigation?.selectedItemID,
+                          let item = try? services.items.item(id: id) {
+                    services.timer.switchTo(item: item)
+                } else {
+                    services.timer.switchTo(item: nil)
+                }
+            }
+            .shortcut(.toggleTimer, in: shortcuts)
+            .disabled(services == nil)
+
+            Divider()
+
             Button("Back") { navigation?.goBack() }
-                .keyboardShortcut(KeyEquivalent("["), modifiers: .command)
+                .shortcut(.goBack, in: shortcuts)
                 .disabled(navigation?.canGoBack != true)
 
             Button("Forward") { navigation?.goForward() }
-                .keyboardShortcut(KeyEquivalent("]"), modifiers: .command)
+                .shortcut(.goForward, in: shortcuts)
                 .disabled(navigation?.canGoForward != true)
 
             Divider()
@@ -370,15 +435,63 @@ struct ElephruitCommands: Commands {
                 .disabled(navigation == nil)
         }
 
+        // MARK: Format
+
+        // The menu a rich-text editor owes the menu bar: every operation the in-window Format
+        // popover offers was reachable only by mouse, and none appeared where macOS users look
+        // for formatting. Enabled exactly while a note's editor is open.
+        CommandMenu("Format") {
+            Button("Bold") { noteEditor?.toggleInlineMark(.bold) }
+                .keyboardShortcut("b")
+                .disabled(noteEditor == nil)
+            Button("Italic") { noteEditor?.toggleInlineMark(.italic) }
+                .keyboardShortcut("i")
+                .disabled(noteEditor == nil)
+            Button("Strikethrough") { noteEditor?.toggleInlineMark(.strikethrough) }
+                .disabled(noteEditor == nil)
+            Button("Code") { noteEditor?.toggleInlineMark(.code) }
+                .disabled(noteEditor == nil)
+
+            Divider()
+
+            Menu("Paragraph") {
+                Button("Body") { noteEditor?.applyParagraph(.paragraph) }
+                    .keyboardShortcut("0", modifiers: [.command, .option])
+                Button("Heading 1") { noteEditor?.applyParagraph(.heading1) }
+                    .keyboardShortcut("1", modifiers: [.command, .option])
+                Button("Heading 2") { noteEditor?.applyParagraph(.heading2) }
+                    .keyboardShortcut("2", modifiers: [.command, .option])
+                Button("Heading 3") { noteEditor?.applyParagraph(.heading3) }
+                    .keyboardShortcut("3", modifiers: [.command, .option])
+                Divider()
+                Button("Quote") { noteEditor?.applyParagraph(.quote) }
+                Button("Code Block") { noteEditor?.applyParagraph(.code) }
+            }
+            .disabled(noteEditor == nil)
+
+            Menu("Lists") {
+                // Apple Notes' own keys, because fingers already know them.
+                Button("Numbered List") { noteEditor?.applyParagraph(.numbered) }
+                    .keyboardShortcut("7", modifiers: [.command, .shift])
+                Button("Bulleted List") { noteEditor?.applyParagraph(.bulleted) }
+                    .keyboardShortcut("8", modifiers: [.command, .shift])
+                Button("Checklist") { noteEditor?.applyParagraph(.checklist) }
+                    .keyboardShortcut("9", modifiers: [.command, .shift])
+            }
+            .disabled(noteEditor == nil)
+        }
+
         // MARK: Help
 
         CommandGroup(replacing: .help) {
+            // A Help menu whose only item is permanently disabled is worse than no Help menu:
+            // it also removed the system's Help search field, which is how macOS users discover
+            // menu commands. The documentation genuinely lives in the repository, and the app's
+            // no-network entitlement is about the *app* — the link opens in the browser.
             Link(
-                "Elephruit Design Notes",
-                destination: URL(filePath: FileManager.default.currentDirectoryPath)
-                    .appending(path: "docs", directoryHint: .isDirectory)
+                "Elephruit Documentation",
+                destination: URL(string: "https://github.com/Elephruit/Elephruit-app/tree/main/docs")!
             )
-            .disabled(true)  // Bundled documentation arrives with the App Store build.
         }
     }
 
@@ -394,6 +507,7 @@ struct ElephruitCommands: Commands {
         case .reminders: .goReminders
         case .notes: .goNotes
         case .records: .goRecords
+        case .time: .goTime
         default: nil
         }
 
@@ -474,14 +588,14 @@ struct SettingsView: View {
                 .accessibilityIdentifier(AccessibilityID.Settings.calendarTab)
             }
 
-            Tab("Records", systemImage: "circle.grid.2x2") {
+            Tab("Records", systemImage: "person.text.rectangle") {
                 records.accessibilityIdentifier(AccessibilityID.Records.contactsSettings)
             }
 
             Tab("Shortcuts", systemImage: "keyboard") {
                 whenReady { services in
                     ShortcutSettingsSection(
-                        registry: services.shortcuts,
+                        services: services,
                         globalResults: environment.hotKeyResults
                     )
                 }

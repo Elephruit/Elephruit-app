@@ -533,4 +533,190 @@ struct SourceHygieneTests {
             "Interpolated log values need an explicit privacy annotation so user content cannot leak: \(offenders)"
         )
     }
+
+    // MARK: - The metric layer
+    //
+    // The colour rule above held at one violation in five hundred files because it was tested; the
+    // numeric layer failed at 581 across 82 files because it was not. The four tests below are its
+    // equivalents. Each carries an allowlist of the files that were already off the scale when the
+    // rule arrived — a debt ledger, not a permission slip: entries only come *off* as the phases
+    // clean their files, and a file that is clean today may not regress tomorrow. Adding a file to
+    // an allowlist is the one edit these tests exist to make embarrassing.
+
+    /// Runs one line-level check over every source file, honouring an allowlist.
+    private func metricScan(
+        exempt: Set<String> = [],
+        allowlisted: Set<String>,
+        offense: (String) -> String?
+    ) -> (offenders: [String], stale: [String]) {
+        var offenders: [String] = []
+        var offendersInAllowlistedFiles: Set<String> = []
+
+        for file in Self.swiftFiles() {
+            let name = file.lastPathComponent
+            guard !exempt.contains(name) else { continue }
+            guard let contents = try? String(contentsOf: file, encoding: .utf8) else { continue }
+
+            for (index, line) in contents.components(separatedBy: .newlines).enumerated() {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.hasPrefix("//"), !trimmed.hasPrefix("///") else { continue }
+                guard let found = offense(line) else { continue }
+
+                if allowlisted.contains(name) {
+                    offendersInAllowlistedFiles.insert(name)
+                } else {
+                    offenders.append("\(name):\(index + 1) — \(found)")
+                }
+            }
+        }
+
+        // An allowlist entry whose file has come clean is a rule quietly weaker than it looks.
+        let stale = allowlisted.subtracting(offendersInAllowlistedFiles).sorted()
+        return (offenders, stale)
+    }
+
+    @Test("Shadows come from the elevation scale")
+    func shadowsComeFromElevation() {
+        // The ledger is paid. Every shadow in the tree is an `.elevation(_:)` now; the only raw
+        // `.shadow(` left is the one inside Tokens.swift that the modifier itself is made of.
+        let (offenders, stale) = metricScan(
+            exempt: ["Tokens.swift"],
+            allowlisted: []
+        ) { line in
+            line.contains(".shadow(") ? ".shadow(" : nil
+        }
+
+        #expect(
+            offenders.isEmpty,
+            "A raw shadow is a depth nobody decided. Use `.elevation(_:)`: \(offenders)"
+        )
+        #expect(stale.isEmpty, "These files are clean — remove them from the allowlist: \(stale)")
+    }
+
+    @Test("Fonts come from the type scale")
+    func fontsComeFromTheTypeScale() {
+        // The ledger is paid. Every piece of text and every glyph is set from the type scale or
+        // a text style, so Dynamic Type reaches all of it.
+        let (offenders, stale) = metricScan(
+            exempt: ["Tokens.swift", "AppKitTokens.swift"],
+            allowlisted: []
+        ) { line in
+            if line.contains(".font(.system(size:") { return ".font(.system(size:" }
+            if line.contains("Font.system(size:") { return "Font.system(size:" }
+            return nil
+        }
+
+        #expect(
+            offenders.isEmpty,
+            """
+            A fixed point size defeats Dynamic Type, which every `Theme.Text` style honours by \
+            construction. Use a token — `denseLabel` is the floor for the dense surfaces: \(offenders)
+            """
+        )
+        #expect(stale.isEmpty, "These files are clean — remove them from the allowlist: \(stale)")
+    }
+
+    @Test("Corner radii come from the four-step scale")
+    func radiiComeFromTheScale() throws {
+        // 4, 6, 10, 16 — `Theme.Radius`. Zero is "no radius", which is a statement, not a value.
+        // The ledger is paid: the sub-scale radii on thin accent bars became `Capsule`, which is
+        // the statement they were approximating.
+        let allowed: Set<Int> = [0, 4, 6, 10, 16]
+        let literal = /cornerRadius: *(\d+)/
+
+        let (offenders, stale) = metricScan(
+            exempt: ["Tokens.swift"],
+            allowlisted: []
+        ) { line in
+            for match in line.matches(of: literal) {
+                guard let value = Int(match.1), !allowed.contains(value) else { continue }
+                return "cornerRadius: \(value)"
+            }
+            return nil
+        }
+
+        #expect(
+            offenders.isEmpty,
+            "Twelve distinct radii grew against a scale of three. Use `Theme.Radius`: \(offenders)"
+        )
+        #expect(stale.isEmpty, "These files are clean — remove them from the allowlist: \(stale)")
+    }
+
+    @Test("Padding stays on the grid")
+    func paddingStaysOnTheGrid() throws {
+        // The grid: eight-major, four-half-step, two as the glyph gap. `Theme.Spacing`, as numbers.
+        // The ledger is paid; alignment offsets that were never spacing (a divider inset, a label
+        // column) are now named and derived where they are used.
+        let allowed: Set<Int> = [0, 2, 4, 8, 12, 16, 24, 32, 40]
+        let literal = /\.padding\((?:\.[a-zA-Z]+, *)?(\d+)\)/
+
+        let (offenders, stale) = metricScan(
+            exempt: ["Tokens.swift"],
+            allowlisted: []
+        ) { line in
+            for match in line.matches(of: literal) {
+                guard let value = Int(match.1), !allowed.contains(value) else { continue }
+                return ".padding(\(value))"
+            }
+            return nil
+        }
+
+        #expect(
+            offenders.isEmpty,
+            """
+            One- and three-point paddings are not density, they are drift — thirty-three of them \
+            had accumulated below the scale's own floor. Use `Theme.Spacing`: \(offenders)
+            """
+        )
+        #expect(stale.isEmpty, "These files are clean — remove them from the allowlist: \(stale)")
+    }
+
+    @Test("Animation honours Reduce Motion by construction")
+    func animationsHonourReduceMotion() {
+        // The ledger is paid. Every animation is either a `calmAnimation` or wrapped in
+        // `respectingReduceMotion` at the call, so the setting is honoured by construction.
+        let allowlisted: Set<String> = []
+
+        // `.calmAnimation` reads Reduce Motion itself, and an imperative `withAnimation` wrapped
+        // in `respectingReduceMotion` has made the same promise by hand. The wrap legitimately
+        // spans lines, so the check looks a two-line window around the call rather than at the
+        // call's line alone — anything else animates for the people who asked it not to.
+        var offenders: [String] = []
+        var offendersInAllowlistedFiles: Set<String> = []
+
+        for file in Self.swiftFiles() {
+            let name = file.lastPathComponent
+            guard name != "Tokens.swift" else { continue }
+            guard let contents = try? String(contentsOf: file, encoding: .utf8) else { continue }
+            let lines = contents.components(separatedBy: .newlines)
+
+            for (index, line) in lines.enumerated() {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.hasPrefix("//"), !trimmed.hasPrefix("///") else { continue }
+                guard !line.contains("calmAnimation") else { continue }
+                guard line.contains("withAnimation(") || line.contains(".animation(") else { continue }
+
+                let window = lines[max(0, index - 2)...min(lines.count - 1, index + 2)]
+                guard !window.contains(where: { $0.contains("respectingReduceMotion") }) else { continue }
+
+                if allowlisted.contains(name) {
+                    offendersInAllowlistedFiles.insert(name)
+                } else {
+                    offenders.append("\(name):\(index + 1)")
+                }
+            }
+        }
+
+        let stale = allowlisted.subtracting(offendersInAllowlistedFiles).sorted()
+
+        #expect(
+            offenders.isEmpty,
+            """
+            Nine of twelve ad-hoc animations bypassed Reduce Motion, against an explicit promise \
+            in Tokens.swift. Use `.calmAnimation`, or wrap in `Theme.Motion.respectingReduceMotion`: \
+            \(offenders)
+            """
+        )
+        #expect(stale.isEmpty, "These files are clean — remove them from the allowlist: \(stale)")
+    }
 }

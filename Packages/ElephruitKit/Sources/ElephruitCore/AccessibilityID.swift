@@ -70,6 +70,7 @@ public enum AccessibilityID {
         /// The row of chips — what the interpretation line used to say in prose.
         public static let interpretation = "quickCapture.interpretation"
         public static let destinationButton = "quickCapture.destination"
+        public static let createProjectButton = "quickCapture.createProject"
         public static let whenButton = "quickCapture.when"
         public static let tagButton = "quickCapture.tag"
         public static let personButton = "quickCapture.person"
@@ -288,6 +289,7 @@ public enum AccessibilityID {
         // The workspace.
         public static let workspace = "calendar.workspace"
         public static let viewSwitcher = "calendar.viewSwitcher"
+        public static let optionsMenu = "calendar.optionsMenu"
         public static let todayButton = "calendar.today"
         public static let previousButton = "calendar.previous"
         public static let nextButton = "calendar.next"

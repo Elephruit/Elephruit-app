@@ -107,7 +107,7 @@ struct CaptureSuggestionList: View {
                         .font(Theme.Text.metadata)
                     Spacer()
                 }
-                .padding(.vertical, 3)
+                .padding(.vertical, Theme.Spacing.tight)
                 .padding(.horizontal, Theme.Spacing.small)
                 .background(
                     index == selection ? Theme.Colors.selectionFill : Color.clear,
@@ -170,7 +170,7 @@ struct CaptureSearchPicker: View {
                                 Label(title, systemImage: symbolName)
                                     .font(Theme.Text.metadata)
                                     .lineLimit(1)
-                                    .padding(.vertical, 3)
+                                    .padding(.vertical, Theme.Spacing.tight)
                                     .padding(.horizontal, Theme.Spacing.tight)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .contentShape(Rectangle())

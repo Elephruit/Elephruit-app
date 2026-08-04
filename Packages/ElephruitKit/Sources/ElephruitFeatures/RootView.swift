@@ -37,17 +37,26 @@ public struct RootView: View {
     /// in this window is where the next window and the next launch find it. See ``ModuleLayoutStore``.
     @State private var moduleLayout = ModuleLayoutStore()
 
-    /// The sidebar changes width through one path only: the user dragging its handle.
+    /// Which columns the native split view is showing, kept in step with ``LayoutMode``.
     ///
-    /// The root `HStack` gives the sidebar this exact width, so destinations, empty states, module
-    /// policies and sibling panes cannot negotiate it. Scene storage preserves the user's choice
-    /// for this window without measuring the rendered sidebar and feeding layout back into itself.
-    @SceneStorage("layout.sidebar.width") private var storedSidebarWidth = Double(SidebarMetrics.defaultWidth)
-    @State private var sidebarDragStart: CGFloat?
-    @State private var isWindowFullScreen = false
+    /// The split view owns the sidebar now — its material, its divider, its width autosave, its
+    /// toggle — which is the whole point of the change: the hand-rolled `HStack` bought a width
+    /// policy at the price of everything the platform draws for free.
+    /// Development-only: the mouseDown observer behind `installClickDiagnosticsIfNeeded`.
+    @State private var clickDiagnosticsMonitor: Any?
+
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     /// The window's own width, so a restored column width can be clamped to what there is.
     @State private var windowWidth: CGFloat = 0
+
+    /// The content area's width — everything trailing the sidebar — so the interior arithmetic
+    /// can keep reasoning in full-window terms by deriving what the sidebar actually takes.
+    @State private var contentAreaWidth: CGFloat = 0
+
+    /// The interior divider's drag anchor. One divider left, between the list and the reading
+    /// pane; the sidebar's belongs to AppKit again.
+    @State private var paneDragStart: CGFloat?
 
     @State private var isExportPresented = false
     @State private var isImportPresented = false
@@ -59,6 +68,13 @@ public struct RootView: View {
     @State private var reminderRefresh: ReminderRefreshCoordinator?
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// This window's own undo manager — the one `⌘Z` and the Edit menu actually reach.
+    @Environment(\.undoManager) private var windowUndoManager
+
+    /// Whether this window is key, so structural undo registers on the focused window's history.
+    @Environment(\.controlActiveState) private var controlActiveState
 
     /// Hoisted out of the `onChange` that watches it: inlining the optional chain and the `??` into
     /// a modifier argument pushes this body past the type checker's budget.
@@ -183,7 +199,9 @@ public struct RootView: View {
             // sidebar. The weak capture avoids joining the two window-scoped coordinators into a
             // retain cycle: navigation already owns the callback that closes row actions above.
             swipes.onSidebarSwipe = { [weak navigation = navigation] direction in
-                withAnimation(.easeOut(duration: 0.2)) {
+                withAnimation(
+                    Theme.Motion.respectingReduceMotion(Theme.Motion.standard, reduceMotion: reduceMotion)
+                ) {
                     navigation?.setSidebarVisible(direction == .show)
                 }
             }
@@ -191,6 +209,10 @@ public struct RootView: View {
             // Before the calendar request, so a link that arrived at launch wins over the place the
             // window was last left rather than being overwritten by it.
             restoreNavigation()
+
+            // The split view starts in the shape the restored layout mode says, not in its own
+            // default — a window left in focus mode comes back without its sidebar.
+            columnVisibility = navigation.layoutMode.showsSidebar ? .all : .detailOnly
 
             // Everything the sidebar reads is computed on change and never during a render, so the
             // *first* computation has to come from somewhere — and at launch this is the only
@@ -249,6 +271,18 @@ public struct RootView: View {
         .onKeyPress(.escape) {
             navigation.handleEscape() ? .handled : .ignored
         }
+        // Structural undo registers on the focused window's manager, so Edit ▸ Undo — which is
+        // dispatched to the first responder — can actually reach it. Without this, every trash,
+        // move, retag and status change lands on a manager no menu has ever heard of, and ⌘Z
+        // silently does nothing. Re-adopted whenever this window becomes key, so a two-window
+        // session keeps each change on the history of the window it was made in.
+        .task { adoptUndoManagerIfKey() }
+        .onChange(of: controlActiveState) { _, _ in adoptUndoManagerIfKey() }
+    }
+
+    private func adoptUndoManagerIfKey() {
+        guard controlActiveState == .key || controlActiveState == .active else { return }
+        services?.undo.adopt(windowUndoManager)
     }
 
     /// The shell, with the repair offer above it when there is one.
@@ -265,38 +299,27 @@ public struct RootView: View {
             }
             splitView
         }
+        // Once, over an empty library only, and never again after any action: the three
+        // keystrokes the product is built around, said instead of left to the menus.
+        .overlay {
+            WelcomeView(navigation: navigation)
+        }
     }
 
     /// The column widths whatever this window is showing has asked for.
     private var shellLayout: ModuleShellLayout { navigation.shellLayout }
 
-    /// The user's sidebar width, bounded only to keep the column usable.
-    private var sidebarWidth: CGFloat {
-        let stored = storedSidebarWidth.isFinite
-            ? CGFloat(storedSidebarWidth)
-            : SidebarMetrics.defaultWidth
-        return min(max(stored, SidebarMetrics.floorWidth), SidebarMetrics.maximumWidth)
-    }
-
-    /// A deliberate replacement for the split view's automatic divider negotiation.
+    /// What the sidebar is actually taking, derived rather than owned.
     ///
-    /// The start is captured once so every update uses the gesture's total translation rather than
-    /// accumulating deltas. Nothing outside this gesture writes `storedSidebarWidth`.
-    private var sidebarResizeGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                let start = sidebarDragStart ?? sidebarWidth
-                if sidebarDragStart == nil { sidebarDragStart = start }
-
-                let proposed = start + value.translation.width
-                storedSidebarWidth = Double(min(
-                    max(proposed, SidebarMetrics.floorWidth),
-                    SidebarMetrics.maximumWidth
-                ))
-            }
-            .onEnded { _ in
-                sidebarDragStart = nil
-            }
+    /// AppKit owns the sidebar's width now — the user drags the native divider, the system
+    /// autosaves it — so the interior arithmetic, which reasons in full-window terms, derives the
+    /// footprint from the two measurements it already has. Before the first layout pass the
+    /// default is the honest guess.
+    private var sidebarWidth: CGFloat {
+        guard windowWidth > 0, contentAreaWidth > 0, windowWidth > contentAreaWidth else {
+            return SidebarMetrics.defaultWidth
+        }
+        return windowWidth - contentAreaWidth
     }
 
     /// Every column's width, decided together.
@@ -325,81 +348,52 @@ public struct RootView: View {
         )
     }
 
+    /// The shell, on the platform's own split view at last.
+    ///
+    /// ### What the hand-rolled `HStack` cost, now recovered
+    /// The sidebar gets its material, its desktop tint, its native divider with a cursor and an
+    /// autosaved width, its own toolbar section — which retires the `Color.clear` shim that faked
+    /// the boundary with a magic number tied to the traffic-light width — and the system's own
+    /// toggle behaviour. What stays ours, deliberately, is the interior: the list-and-reading-pane
+    /// arithmetic in ``ModuleShellLayout`` is tested to the point of being the most trustworthy
+    /// layout code in the app, and the fight this codebase lost twice was over AppKit's divider
+    /// *restoration* fighting per-module widths — a fight that only existed when AppKit owned
+    /// those columns. One column each: AppKit takes the sidebar, the policy keeps the interior.
     private var splitView: some View {
-        HStack(spacing: 0) {
-            if navigation.layoutMode.showsSidebar {
-                SidebarView(navigation: navigation)
-                    .frame(width: sidebarWidth, alignment: .topLeading)
-                    .frame(maxHeight: .infinity, alignment: .topLeading)
-                    .background(Theme.Colors.windowBackground)
-                    .overlay(alignment: .trailing) {
-                        Rectangle()
-                            .fill(.clear)
-                            .frame(width: 8)
-                            .contentShape(Rectangle())
-                            .gesture(sidebarResizeGesture)
-                            .help("Drag to resize the sidebar")
-                            .accessibilityLabel("Resize sidebar")
-                    }
-
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            SidebarView(navigation: navigation)
+                .navigationSplitViewColumnWidth(
+                    min: SidebarMetrics.floorWidth,
+                    ideal: SidebarMetrics.defaultWidth,
+                    max: SidebarMetrics.maximumWidth
+                )
+        } detail: {
+            // No `NavigationStack` here, deliberately. The item lists build their rows as
+            // `NavigationLink(value:)` — inert on this platform, where selection is the model —
+            // and giving them a stack ancestor put the link machinery back in business with no
+            // destination registered: clicks went to a push that could never happen instead of
+            // to the list's selection, and switching notes stopped working. The split view's
+            // detail column carries the title and toolbar perfectly well on its own.
+            contentPanes
+                // Every destination supplies a nearer title. This keeps the unified toolbar
+                // present during the loading frames between destinations.
+                .navigationTitle(navigation.windowTitle)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                guard width > 0 else { return }
+                contentAreaWidth = width
             }
-
-            NavigationStack {
-                contentPanes
-                    // Every destination supplies a nearer title. This keeps the unified toolbar
-                    // present during the loading frames between destinations.
-                    .navigationTitle(navigation.windowTitle)
-                    .toolbar {
-                        ToolbarItem(placement: .navigation) {
-                            Button {
-                                navigation.toggleSidebar()
-                            } label: {
-                                Label("Toggle Sidebar", systemImage: "sidebar.leading")
-                            }
-                            .help("Toggle Sidebar")
-                        }
-
-                        // Keep this outside the button's toolbar item. Putting the invisible
-                        // alignment space beside the button made macOS draw one enormous rounded
-                        // control background around both views.
-                        ToolbarItem(placement: .navigation) {
-                            Color.clear
-                                .frame(
-                                    width: max(
-                                        0,
-                                        sidebarWidth - (isWindowFullScreen ? 40 : 128)
-                                    ),
-                                    height: 1
-                                )
-                                .accessibilityHidden(true)
-                        }
-                        .sharedBackgroundVisibility(.hidden)
-                    }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        // The content begins below the unified toolbar, but the sidebar is a window region rather
-        // than page content. Paint its surface and boundary through the title bar as well.
-        .background(alignment: .leading) {
-            Theme.Colors.windowBackground
-                .frame(width: navigation.layoutMode.showsSidebar ? sidebarWidth : 0)
-                .ignoresSafeArea()
+        .navigationSplitViewStyle(.balanced)
+        // Two owners of "is the sidebar showing" — the layout mode, which the Escape ladder,
+        // focus mode and the swipe write; and the split view, which the native toggle and the
+        // user's divider write. Synced both ways, with the mode as the source of truth.
+        .onChange(of: navigation.layoutMode.showsSidebar) { _, shows in
+            columnVisibility = shows ? .all : .detailOnly
         }
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(Theme.Colors.separator)
-                .frame(width: 1)
-                // Follow the collapsing column instead of fading at its old edge while content
-                // moves through it. Opacity finishes the disappearance at the window edge.
-                .offset(x: navigation.layoutMode.showsSidebar ? sidebarWidth : 0)
-                .opacity(navigation.layoutMode.showsSidebar ? 1 : 0)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
+        .onChange(of: columnVisibility) { _, visibility in
+            navigation.setSidebarVisible(visibility != .detailOnly)
         }
-        .background {
-            WindowFullScreenReader(isFullScreen: $isWindowFullScreen)
-        }
+        .onAppear { installClickDiagnosticsIfNeeded() }
         .inspector(isPresented: inspectorBinding) {
             // SwiftUI retains the inspector content even while its binding is false. Building the
             // real inspector for a module whose policy says it is unavailable gave AppKit both the
@@ -452,7 +446,7 @@ public struct RootView: View {
     /// without moving or resizing the fixed sibling at the window's leading edge.
     @ViewBuilder
     private var contentPanes: some View {
-        if case .records(let scope) = navigation.selection {
+        if case .records(let scope) = navigation.selection, !navigation.isSearchActive {
             RecordsWorkspaceView(navigation: navigation, scope: scope)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -466,7 +460,7 @@ public struct RootView: View {
 
             if shellWidths.detail != nil {
                 if navigation.layoutMode.showsList {
-                    Divider()
+                    paneDivider
                 }
 
                 ItemDetailView(navigation: navigation)
@@ -483,9 +477,81 @@ public struct RootView: View {
         }
     }
 
+    /// The one divider still ours: between the list and the reading pane.
+    ///
+    /// Draggable at last — it was a plain `Divider()` for the whole life of the custom shell, so
+    /// the list column could not be resized at all and the per-module width store sat orphaned
+    /// with nothing ever writing it. The drag writes through ``ModuleLayoutStore/setWidth``, which
+    /// is exactly the pipeline built for it: raw record on the way in, policy-clamped on the way
+    /// out, per module, shared across windows and launches.
+    /// Logs which view actually receives each left mouseDown, so a click that dies can say
+    /// where it died. Development mode only, observation only: the event always passes through.
+    private func installClickDiagnosticsIfNeeded() {
+        guard DesignReviewLaunch.isDevelopmentMode, clickDiagnosticsMonitor == nil else { return }
+        clickDiagnosticsMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+            if let root = event.window?.contentView?.superview,
+               let hit = root.hitTest(event.locationInWindow) {
+                var chain: [String] = []
+                var view: NSView? = hit
+                for _ in 0..<5 {
+                    guard let current = view else { break }
+                    chain.append(String(describing: type(of: current)))
+                    view = current.superview
+                }
+                Diagnostics.shell.info(
+                    "clickDiag at \(Int(event.locationInWindow.x), privacy: .public),\(Int(event.locationInWindow.y), privacy: .public): \(chain.joined(separator: " < "), privacy: .public)"
+                )
+            }
+            return event
+        }
+    }
+
+    private var paneDivider: some View {
+        Rectangle()
+            .fill(Theme.Colors.separator)
+            .frame(width: 1)
+            .overlay {
+                Color.clear
+                    .frame(width: 9)
+                    .contentShape(Rectangle())
+                    .gesture(paneDragGesture)
+                    .onHover { hovering in
+                        if hovering {
+                            NSCursor.resizeLeftRight.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                    .help("Drag to resize the list")
+                    .accessibilityLabel("Resize the list")
+            }
+    }
+
+    private var paneDragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let start = paneDragStart ?? shellWidths.primary
+                if paneDragStart == nil { paneDragStart = start }
+                moduleLayout.setWidth(
+                    start + value.translation.width,
+                    of: .primary,
+                    in: navigation.activeModule,
+                    available: windowWidth > 0 ? windowWidth : Theme.Size.assumedWindowWidth
+                )
+            }
+            .onEnded { _ in paneDragStart = nil }
+    }
+
     @ViewBuilder
     private var primaryPane: some View {
-        if case .project(let id, let viewID) = navigation.selection {
+        // Search wins over every module surface: ⌘F means "search from here", and five of the
+        // seven primary surfaces had no search UI at all — `beginSearch()` set state nothing
+        // rendered, and the window sat in an invisible mode whose Escape consumed a keypress to
+        // leave. `ItemListView` owns the one search field and the results; while search is
+        // active it renders nothing else.
+        if navigation.isSearchActive {
+            ItemListView(navigation: navigation)
+        } else if case .project(let id, let viewID) = navigation.selection {
             ProjectWorkspaceView(navigation: navigation, projectID: id, viewID: viewID)
         } else if navigation.selection.isTaskDestination || navigation.selection == .reminders {
             RemindersWorkspaceView(navigation: navigation)
@@ -962,6 +1028,66 @@ public struct RowActions: Sendable, Equatable {
     }
 }
 
+/// What the focused surface can do to its selected work items, exposed to the Edit menu.
+///
+/// The registry has carried bindings for Complete, Flag and Move to Today since the Reminders
+/// module shipped — shown in Settings, wired to nothing. This is the channel that wires them: a
+/// surface with a work-item selection publishes what those verbs mean *there*, and the menu calls
+/// through it.
+public struct WorkItemCommandActions: Sendable, Equatable {
+    public var isEnabled: Bool
+
+    /// Whether the whole selection is flagged, so the menu can read "Unflag" when it would.
+    public var isFlagged: Bool
+
+    public var complete: @MainActor () -> Void
+    public var toggleFlag: @MainActor () -> Void
+    public var moveToToday: @MainActor () -> Void
+
+    public init(
+        isEnabled: Bool,
+        isFlagged: Bool,
+        complete: @escaping @MainActor () -> Void,
+        toggleFlag: @escaping @MainActor () -> Void,
+        moveToToday: @escaping @MainActor () -> Void
+    ) {
+        self.isEnabled = isEnabled
+        self.isFlagged = isFlagged
+        self.complete = complete
+        self.toggleFlag = toggleFlag
+        self.moveToToday = moveToToday
+    }
+
+    /// Equal when the menu would look the same — closures excluded, for the reason ``RowActions``
+    /// documents: a fresh closure per body evaluation would otherwise be a new focused value per
+    /// frame.
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.isEnabled == rhs.isEnabled && lhs.isFlagged == rhs.isFlagged
+    }
+}
+
+/// The focused surface's own "new item", for the File menu's first slot.
+///
+/// ⌘N had three owners: the File menu's New Note (which only *navigated*), and two literal
+/// `.keyboardShortcut("n")` toolbar buttons that bypassed the registry. Now the menu owns the key
+/// and asks the focused surface what creating means there — a reminder in Reminders, a note in
+/// Notes — falling back to New Note when nothing has said.
+public struct NewItemCommand: Sendable, Equatable {
+    /// What the menu item reads — "New Reminder", "New Note".
+    public var title: String
+
+    public var run: @MainActor () -> Void
+
+    public init(title: String, run: @escaping @MainActor () -> Void) {
+        self.title = title
+        self.run = run
+    }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.title == rhs.title
+    }
+}
+
 /// Export and import, exposed to the menu bar through the focused scene.
 public struct TransferActions: Sendable {
     public var export: @MainActor () -> Void
@@ -981,6 +1107,15 @@ extension FocusedValues {
 
     /// What the focused list can do to its selection.
     @Entry public var rowActions: RowActions?
+
+    /// What the focused surface can do to its selected work items.
+    @Entry public var workItemActions: WorkItemCommandActions?
+
+    /// What creating something means on the focused surface.
+    @Entry public var newItemCommand: NewItemCommand?
+
+    /// The note editor open in the focused scene, for the Format menu and find-in-note.
+    @Entry public var noteEditor: NoteEditorModel?
 }
 
 #Preview("Root", traits: .fixedLayout(width: 1180, height: 720)) {

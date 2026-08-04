@@ -56,6 +56,8 @@ public struct ItemListView: View {
                         && !navigation.selection.showsTrashedItems
                 ) { trashSelection() }
             )
+            .focusedSceneValue(\.workItemActions, workItemCommandActions)
+            .focusedSceneValue(\.newItemCommand, newItemCommand)
             .navigationTitle(navigation.isSearchActive ? "Search" : navigation.windowTitle)
             .navigationSubtitle(subtitle)
             .searchable(text: searchBinding, placement: .toolbar, prompt: searchPrompt)
@@ -73,7 +75,15 @@ public struct ItemListView: View {
                 open(result)
             }
             .toolbar { toolbarContent }
-            .task { makeSessionIfNeeded() }
+            .task {
+                makeSessionIfNeeded()
+                // Mounted *into* an already-active search — ⌘F on a module surface swaps this
+                // view in with the mode already set, so the `onChange` below never fires and the
+                // session and field focus have to be caught up here.
+                if navigation.isSearchActive {
+                    searchModeDidChange(isActive: true)
+                }
+            }
             .task(id: reloadToken) { await reload() }
             .onChange(of: navigation.isSearchActive) { _, isActive in
                 searchModeDidChange(isActive: isActive)
@@ -82,7 +92,29 @@ public struct ItemListView: View {
                 guard navigation.isSearchActive else { return }
                 focusSearchField(selectingContents: !(session?.text.isEmpty ?? true))
             }
+            // Type-to-select — the baseline list behaviour of Finder and every NSTableView. The
+            // buffer existed, fully tested, wired to nothing.
+            .onKeyPress(characters: .alphanumerics, phases: .down) { press in
+                handleTypeToSelect(press.characters)
+            }
             .accessibilityIdentifier(AccessibilityID.ItemList.root)
+    }
+
+    /// Accumulated keystrokes, jumping the selection to the first title with that prefix.
+    @State private var typeToSelect = TypeToSelectBuffer()
+
+    private func handleTypeToSelect(_ characters: String) -> KeyPress.Result {
+        // Not while searching (typing is the query) and not while a field has the keyboard.
+        guard !navigation.isSearchActive, !isSearchFieldFocused else { return .ignored }
+        guard let first = characters.first else { return .ignored }
+
+        let now = services?.dateProvider.now ?? Date()
+        let prefix = typeToSelect.append(first, at: now).lowercased()
+
+        guard let match = items.first(where: { $0.displayTitle.lowercased().hasPrefix(prefix) })
+        else { return .ignored }
+        navigation.selectItem(match.id)
+        return .handled
     }
 
     /// The one search field.
@@ -142,9 +174,20 @@ public struct ItemListView: View {
     private var itemList: some View {
         List(selection: selectedItemBinding) {
             ForEach(displayedItems, id: \.id) { item in
-                NavigationLink(value: SidebarSelection.item(id: item.id)) {
-                    row(for: item)
-                }
+                // A plain row with a tag, not a `NavigationLink`. The link was inert decoration
+                // under the old custom shell — no navigator existed, so every click fell through
+                // to the table's selection — but inside `NavigationSplitView` it finally had a
+                // navigator to answer to: its button swallowed the click and then had nowhere to
+                // send the value, because no `navigationDestination` exists in this app. Clicking
+                // a note selected nothing. Selection is the model here; the row says only that.
+                row(for: item)
+                    .tag(item.id)
+                // No drag modifier on the row — deliberately, and the diagnostics prove why:
+                // with one attached (either `.draggable` or `.onDrag`), a mouseDown reaches the
+                // row's cell and the list still refuses to change selection, on this OS. A drag
+                // affordance that costs click-to-select is a bad trade on a list whose whole job
+                // is being clicked. Filing under a project still works from the context menu;
+                // if row-drag returns, it returns as a dedicated grab area, not a row-wide claim.
                 .contextMenu { contextMenu(for: item) }
                 .modifier(ItemSwipeActions(item: item, navigation: navigation, onPermanentDeletion: { pendingPermanentDeletion = $0 }, onChange: { Task { await reload() } }))
             }
@@ -192,10 +235,60 @@ public struct ItemListView: View {
     }
 
 
+    /// The work-item verbs the Edit menu carries, meaning what they mean in this list.
+    private var workItemCommandActions: WorkItemCommandActions {
+        let workItems = selectedItems.filter(\.kind.isWorkItem)
+        return WorkItemCommandActions(
+            isEnabled: !workItems.isEmpty && !navigation.selection.showsTrashedItems,
+            isFlagged: !workItems.isEmpty && workItems.allSatisfy(\.isFlagged),
+            complete: { batchToggleCompletion() },
+            toggleFlag: { batchToggleFlag() },
+            moveToToday: { batchMoveToToday() }
+        )
+    }
+
+    /// What ⌘N creates here — the same action as the toolbar's `+`, owned by the File menu.
+    private var newItemCommand: NewItemCommand? {
+        guard navigation.selection != .trash else { return nil }
+        let kind = navigation.selection.defaultNewItemKind
+        return NewItemCommand(title: "New \(kind.displayName)") {
+            createItem(kind: kind)
+        }
+    }
+
     /// Each is one undo step, because each is one thing the user did.
     private func batchToggleCompletion() {
         runBatch { undo, targets in
             try undo.toggleCompletion(targets.filter { $0.kind.supportsStatus })
+        }
+    }
+
+    /// Flags the selection when any of it is unflagged; unflags when all of it is.
+    private func batchToggleFlag() {
+        guard let services else { return }
+        let targets = selectedItems.filter(\.kind.isWorkItem)
+        guard !targets.isEmpty else { return }
+
+        let newValue = !targets.allSatisfy(\.isFlagged)
+        services.perform {
+            for item in targets {
+                try services.reminderLifecycle.setFlagged(newValue, on: item)
+                services.noteChange(to: item)
+            }
+        }
+    }
+
+    /// Commits the selection to today — the same write the Today page's reschedule makes.
+    private func batchMoveToToday() {
+        guard let services else { return }
+        let targets = selectedItems.filter(\.kind.isWorkItem)
+        guard !targets.isEmpty else { return }
+
+        services.perform {
+            for item in targets {
+                try services.reminderLifecycle.commit(item, to: services.dateProvider.startOfToday)
+                services.noteChange(to: item)
+            }
         }
     }
 
@@ -392,7 +485,9 @@ public struct ItemListView: View {
                     Label("New \(navigation.selection.defaultNewItemKind.displayName)", systemImage: "plus")
                 }
                 .accessibilityIdentifier(AccessibilityID.ItemList.newItemButton)
-                .keyboardShortcut("n")
+                // No literal ⌘N here: the File menu owns the key and calls this surface's
+                // published `NewItemCommand` — a second binding beside the registry's is exactly
+                // the drift the registry exists to prevent.
             }
         }
     }
@@ -578,6 +673,18 @@ public struct ItemListView: View {
         let query = navigation.currentQuery(using: services.dateProvider)
         services.perform {
             items = try services.items.items(matching: query)
+        }
+
+        // A reading surface never opens onto a void: with nothing selected — a fresh window, a
+        // just-deleted item — the newest item opens, which is what Notes does and what keeps the
+        // editor alive. Restoration runs before this and wins, because the condition is "nothing
+        // selected", never "something else selected". List-centric surfaces decline (their answer
+        // is the list taking the window), and search is left alone — its selection is the preview.
+        if navigation.selectedItemID == nil,
+           !navigation.isSearchActive,
+           navigation.selection.autoSelectsFirstItem,
+           let first = items.first {
+            navigation.selectItem(first.id)
         }
     }
 

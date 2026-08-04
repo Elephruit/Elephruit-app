@@ -86,7 +86,7 @@ struct ProjectsSidebarSection: View {
                 }
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(Theme.Text.sectionHeader)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -124,7 +124,26 @@ struct ProjectsSidebarSection: View {
             )
             .tag(selection(for: row))
             .contextMenu { menu(for: row) }
+            // A row from any item list, dropped here, files under this project or area — the
+            // undoable reparent every list's context menu already offers, aimed by hand.
+            .dropDestination(for: WorkItemTransfer.self) { (transfers: [WorkItemTransfer], _: CGPoint) -> Bool in
+                file(transfers, under: row)
+            }
         }
+    }
+
+    /// Files dropped items under a container, as one undo step.
+    private func file(_ transfers: [WorkItemTransfer], under row: ProjectSidebarRow) -> Bool {
+        guard let services, let container = try? services.items.item(id: row.id) else { return false }
+        let dropped = transfers.compactMap { try? services.items.item(id: $0.id) }
+            .filter { $0.id != container.id }
+        guard !dropped.isEmpty else { return false }
+
+        services.perform {
+            try services.undo.setParent(dropped, to: container)
+            dropped.forEach { services.noteChange(to: $0) }
+        }
+        return true
     }
 
     private var emptyRow: some View {
@@ -395,7 +414,7 @@ struct ProjectSidebarRowView: View {
 
             if let accessorySymbol {
                 Image(systemName: accessorySymbol)
-                    .font(.system(size: 9))
+                    .font(Theme.Text.denseLabel)
                     .foregroundStyle(Theme.Colors.tertiaryText)
                     .accessibilityHidden(true)
             }

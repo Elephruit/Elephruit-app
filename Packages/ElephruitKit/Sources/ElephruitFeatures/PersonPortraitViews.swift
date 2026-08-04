@@ -149,11 +149,7 @@ struct PortraitCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
             HStack(spacing: Theme.Spacing.small) {
-                Image(systemName: card.attribute.symbolName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(category.tint)
-                    .frame(width: 30, height: 30)
-                    .background(category.tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 9))
+                IconTile(systemImage: card.attribute.symbolName, tint: category.tint, size: .medium)
 
                 Text(card.attribute.displayName)
                     .font(Theme.Text.sectionHeader)
@@ -190,12 +186,12 @@ struct PortraitCardView: View {
         }
         .padding(Theme.Spacing.medium)
         .frame(maxWidth: 420, alignment: .leading)
-        .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: 15))
+        .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: Theme.Radius.large))
         .overlay {
-            RoundedRectangle(cornerRadius: 15)
-                .strokeBorder(category.tint.opacity(0.16))
+            RoundedRectangle(cornerRadius: Theme.Radius.large)
+                .strokeBorder(Theme.Colors.tintedStroke(category.tint))
         }
-        .shadow(color: Theme.Colors.shadow.opacity(0.025), radius: 8, y: 2)
+        .elevation(.raised)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(card.attribute.displayName)
     }
@@ -260,7 +256,7 @@ struct PortraitValueRow: View {
         }
         .padding(.horizontal, Theme.Spacing.small)
         .padding(.vertical, Theme.Spacing.tight)
-        .background(tint.opacity(0.055), in: RoundedRectangle(cornerRadius: 9))
+        .background(Theme.Colors.tintedFill(tint), in: RoundedRectangle(cornerRadius: Theme.Radius.large))
         .contentShape(.rect)
         .onHover { isHovering = $0 }
         .contextMenu {
@@ -369,7 +365,7 @@ struct StaleFactsBanner: View {
         .padding(.vertical, Theme.Spacing.small)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            Theme.Colors.warning.opacity(0.10),
+            Theme.Colors.tintedFill(Theme.Colors.warning),
             in: RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
         )
         .accessibilityIdentifier(AccessibilityID.Records.staleFacts)
@@ -775,7 +771,7 @@ struct RelationshipCard: View {
                 }
                 .foregroundStyle(Theme.Colors.secondaryText)
                 .padding(.horizontal, Theme.Spacing.small)
-                .padding(.vertical, 1)
+                .padding(.vertical, Theme.Spacing.hairline)
                 .background(Theme.Colors.contentBackground, in: Capsule())
                 .contentShape(.capsule)
             }

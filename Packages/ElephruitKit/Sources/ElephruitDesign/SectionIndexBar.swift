@@ -94,7 +94,7 @@ public struct SectionIndexBar: View {
         VStack(spacing: 0) {
             ForEach(titles, id: \.self) { title in
                 Text(shortened(title))
-                    .font(.system(size: 9, weight: weight(for: title), design: .rounded))
+                    .font(.system(.caption2, design: .rounded, weight: weight(for: title)))
                     .foregroundStyle(color(for: title))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background {
@@ -246,7 +246,7 @@ public struct SectionScrubIndicator: View {
                 RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                     .strokeBorder(Theme.Colors.separator)
             )
-            .shadow(radius: 8, y: 2)
+            .elevation(.floating)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }

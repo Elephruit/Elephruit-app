@@ -176,19 +176,39 @@ public final class ModuleLayoutStore {
         save()
     }
 
+    /// Module names earlier builds stored, mapped to the module that replaced them.
+    ///
+    /// A preference written before a rename is still the user's preference: the People pane they
+    /// widened is the Records pane of this build, and dropping the key would cost them the drag.
+    /// `save()` always writes the canonical name, so an alias is read once and then gone.
+    private static let legacyModuleNames: [String: AppModule] = [
+        "people": .records,
+        "tasks": .reminders,
+    ]
+
     private func decode<Stored, Value>(
         _ raw: [String: [String: Stored]],
         _ transform: (Stored) -> Value
     ) -> [Key: [ModuleShellLayout.Column: Value]] {
         var out: [Key: [ModuleShellLayout.Column: Value]] = [:]
-        for (moduleName, columns) in raw {
+
+        // Legacy names first, canonical second, so that a file holding both — one written before
+        // a rename and one after — resolves to the name the user chose most recently.
+        func rank(_ name: String) -> Int { Self.legacyModuleNames.keys.contains(name) ? 0 : 1 }
+        let ordered = raw.sorted { rank($0.key) < rank($1.key) }
+
+        for (moduleName, columns) in ordered {
             // A module or a column this build does not have is skipped rather than treated as a
             // failure: a preference file written by a newer version is not a reason to lose the
             // rest of the layout.
-            let key: Key = moduleName == "_primary"
-                ? .primaryNavigation
-                : AppModule(rawValue: moduleName).map(Key.module) ?? .primaryNavigation
-            guard moduleName == "_primary" || AppModule(rawValue: moduleName) != nil else { continue }
+            let key: Key
+            if moduleName == "_primary" {
+                key = .primaryNavigation
+            } else if let module = AppModule(rawValue: moduleName) ?? Self.legacyModuleNames[moduleName] {
+                key = .module(module)
+            } else {
+                continue
+            }
 
             for (columnName, value) in columns {
                 guard let column = ModuleShellLayout.Column(rawValue: columnName) else { continue }

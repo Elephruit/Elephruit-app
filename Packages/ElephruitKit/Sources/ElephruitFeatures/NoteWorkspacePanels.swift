@@ -49,7 +49,7 @@ struct NoteSlashMenuView: View {
             RoundedRectangle(cornerRadius: Theme.Radius.large)
                 .strokeBorder(Theme.Colors.separator, lineWidth: 1)
         )
-        .shadow(color: Theme.Colors.shadow.opacity(0.18), radius: 12, y: 4)
+        .elevation(.floating)
     }
 
 }

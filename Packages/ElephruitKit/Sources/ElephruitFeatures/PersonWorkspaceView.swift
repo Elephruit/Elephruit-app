@@ -91,6 +91,12 @@ struct PersonWorkspaceView: View {
                         onOpenSource: { navigation.selectItem($0) }
                     )
 
+                    // Promoted from the inspector, where a 1,280-point threshold once made it
+                    // unreachable at the default window: "what do we owe each other" is one of
+                    // the two questions a person's page exists to answer, and it was the one
+                    // hidden behind ⌥⌘I. The inspector keeps its fuller version.
+                    PersonOpenThreadsSection(person: person, navigation: navigation)
+
                     PersonContactSection(
                         person: person,
                         onAction: { pendingAction = $0 },
@@ -447,7 +453,7 @@ struct PersonHeaderView: View {
                                 .font(Theme.Text.metadata)
                                 .foregroundStyle(Theme.Colors.secondaryText)
                                 .padding(.horizontal, Theme.Spacing.tight)
-                                .padding(.vertical, 1)
+                                .padding(.vertical, Theme.Spacing.hairline)
                                 .background(Theme.Colors.subtleFill, in: Capsule())
                                 .accessibilityLabel("Pronouns: \(pronouns)")
                         }
@@ -593,7 +599,8 @@ struct PersonAvatar: View {
             .fill(fill)
             .overlay {
                 Text(initials)
-                    .font(.system(size: size * 0.38, weight: .medium, design: .rounded))
+                    .font(.system(.body, design: .rounded, weight: .semibold))
+                    .minimumScaleFactor(0.5)
                     .foregroundStyle(foreground)
             }
             .frame(width: size, height: size)

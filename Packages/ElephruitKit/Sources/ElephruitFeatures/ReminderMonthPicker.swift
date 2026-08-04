@@ -56,7 +56,7 @@ struct ReminderMonthPicker: View {
 
         return Button { onPick(day) } label: {
             Text("\(calendar.component(.day, from: day))")
-                .font(.system(size: 11))
+                .font(Theme.Text.rowSubtitle)
                 .monospacedDigit()
                 .foregroundStyle(isChosen ? Theme.Colors.onAccent : Theme.Colors.primaryText)
                 .frame(width: 26, height: 22)

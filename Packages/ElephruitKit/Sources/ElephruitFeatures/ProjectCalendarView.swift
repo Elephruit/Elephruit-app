@@ -125,7 +125,7 @@ struct ProjectCalendarView: View {
                 .monospacedDigit()
                 .foregroundStyle(isToday ? Theme.Colors.onAccent : Theme.Colors.secondaryText)
                 .padding(.horizontal, Theme.Spacing.tight)
-                .padding(.vertical, 1)
+                .padding(.vertical, Theme.Spacing.hairline)
                 .background(
                     Capsule().fill(isToday ? Theme.Colors.selection : .clear)
                 )
@@ -172,7 +172,7 @@ struct ProjectCalendarView: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, Theme.Spacing.tight)
-            .padding(.vertical, 1)
+            .padding(.vertical, Theme.Spacing.hairline)
             .background(
                 RoundedRectangle(cornerRadius: Theme.Radius.small)
                     .fill(isSelected ? Theme.Colors.selectionFill : Theme.Colors.subtleFill)

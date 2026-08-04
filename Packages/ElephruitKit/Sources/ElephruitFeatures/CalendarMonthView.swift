@@ -193,9 +193,9 @@ private struct MonthCell: View {
 
             if events.count > limit {
                 Text("\(events.count - limit) more")
-                    .font(.system(size: 9, weight: .medium))
+                    .font(Theme.Text.denseLabel.weight(.medium))
                     .foregroundStyle(Theme.Colors.secondaryText)
-                    .padding(.leading, 3)
+                    .padding(.leading, Theme.Spacing.tight)
             }
 
             Spacer(minLength: 0)
@@ -224,7 +224,7 @@ private struct MonthCell: View {
         style.timeZone = calendar.timeZone
 
         return Text(day.formatted(style))
-            .font(.system(size: 11, weight: isToday ? .bold : .regular))
+            .font(Theme.Text.rowSubtitle.weight(isToday ? .bold : .regular))
             .foregroundStyle(isToday ? Theme.Colors.onAccent : Theme.Colors.primaryText)
             .frame(minWidth: 17, minHeight: 17)
             .background {
@@ -254,7 +254,7 @@ private struct MonthEventIndicator: View {
             if event.isAllDay {
                 // An all-day event is a band rather than a dot, so the two are told apart by shape
                 // as well as by position — which survives greyscale and colour-blindness.
-                RoundedRectangle(cornerRadius: 1, style: .continuous)
+                Capsule()
                     .fill(Theme.EventStyle.accent(colorName: event.calendarColorName))
                     .frame(width: 8, height: 3)
             } else {
@@ -263,21 +263,21 @@ private struct MonthEventIndicator: View {
                     .frame(width: 5, height: 5)
 
                 Text(shortTime)
-                    .font(.system(size: 9))
+                    .font(Theme.Text.denseLabel)
                     .monospacedDigit()
                     .foregroundStyle(Theme.Colors.tertiaryText)
             }
 
             Text(event.displayTitle)
-                .font(.system(size: 10))
+                .font(Theme.Text.metadata)
                 .strikethrough(event.isCancelled)
                 .lineLimit(1)
                 .foregroundStyle(Theme.Colors.primaryText)
 
             if isAnnotated {
-                Image(systemName: "circle.fill")
-                    .font(.system(size: 3))
-                    .foregroundStyle(Theme.Colors.secondaryText)
+                Circle()
+                    .fill(Theme.Colors.secondaryText)
+                    .frame(width: 3, height: 3)
                     .accessibilityHidden(true)
             }
 
@@ -305,7 +305,7 @@ private struct WeekNumberLabel: View {
 
     var body: some View {
         Text("\(calendar.component(.weekOfYear, from: week))")
-            .font(.system(size: 9))
+            .font(Theme.Text.denseLabel)
             .monospacedDigit()
             .foregroundStyle(Theme.Colors.tertiaryText)
             .frame(width: 28)

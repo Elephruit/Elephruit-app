@@ -468,7 +468,7 @@ struct PeoplePickerContent: View {
                             }
                             .font(Theme.Text.metadata)
                             .padding(.horizontal, Theme.Spacing.small)
-                            .padding(.vertical, 3)
+                            .padding(.vertical, Theme.Spacing.tight)
                             .background(Capsule().fill(Theme.Colors.subtleFill))
                         }
                         .buttonStyle(.plain)
@@ -612,7 +612,7 @@ struct TagPickerContent: View {
                             }
                             .toggleStyle(.checkbox)
                             .padding(.horizontal, Theme.Spacing.small)
-                            .padding(.vertical, 1)
+                            .padding(.vertical, Theme.Spacing.hairline)
                         }
                     }
                     .padding(.vertical, Theme.Spacing.tight)

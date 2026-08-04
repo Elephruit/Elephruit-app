@@ -45,6 +45,21 @@ public struct CalendarWorkspaceView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        // The visible range is the window's own title — this window used to be the one module
+        // still titled "Elephruit", with its real title printed on a second chrome row below the
+        // empty toolbar. One row of chrome now, the window's.
+        .navigationTitle(workspace?.title ?? "Calendar")
+        .toolbar {
+            if let services, let workspace {
+                CalendarToolbarItems(
+                    workspace: workspace,
+                    calendar: services.calendar,
+                    now: services.dateProvider.now,
+                    onCreate: { quickEntryStart = defaultStart(workspace: workspace, services: services) },
+                    onEditSets: { isShowingSetEditor = true }
+                )
+            }
+        }
         .task {
             guard navigation.calendarWorkspace == nil, let services else { return }
             let model = CalendarWorkspaceModel(
@@ -70,16 +85,6 @@ public struct CalendarWorkspaceView: View {
     @ViewBuilder
     private func content(services: AppServices, workspace: CalendarWorkspaceModel) -> some View {
         VStack(spacing: 0) {
-            CalendarToolbar(
-                workspace: workspace,
-                calendar: services.calendar,
-                now: services.dateProvider.now,
-                onCreate: { quickEntryStart = defaultStart(workspace: workspace, services: services) },
-                onEditSets: { isShowingSetEditor = true }
-            )
-
-            Divider()
-
             if services.calendar.isShowingCachedEvents {
                 CalendarOfflineBanner(authorization: services.calendar.authorization)
             }
@@ -616,7 +621,12 @@ private struct ScopedChangeRequest: Identifiable {
 /// The switcher is still reachable when the sidebar is collapsed: `⌘1`–`⌘6` select a view, the
 /// overflow menu at the trailing edge lists them, and both go through the same
 /// ``CalendarWorkspaceModel/setViewKind(_:)``.
-struct CalendarToolbar: View {
+/// The calendar's chrome, as real toolbar items rather than a second row below an empty toolbar.
+///
+/// The window used to carry a nearly empty unified toolbar with the whole calendar's chrome —
+/// arrows, title, options, add — printed on its own row beneath it: two stacked rows of chrome
+/// where every native calendar has one. The title became the window's; everything else is here.
+struct CalendarToolbarItems: ToolbarContent {
     let workspace: CalendarWorkspaceModel
     let calendar: CalendarService
     let now: Date
@@ -624,34 +634,43 @@ struct CalendarToolbar: View {
     var onCreate: () -> Void
     var onEditSets: () -> Void
 
-    var body: some View {
-        HStack(spacing: Theme.Spacing.medium) {
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .navigation) {
             navigationControls
+        }
 
-            Text(workspace.title)
-                .font(.system(.headline, design: .default, weight: .semibold))
-                .lineLimit(1)
-                .accessibilityAddTraits(.isHeader)
+        // The view switcher, visible at last: it was sidebar rows plus a fallback menu, so the
+        // choice made most often had no standing control. Segmented, as Calendar's own is.
+        ToolbarItem {
+            Picker("View", selection: viewBinding) {
+                ForEach(CalendarViewKind.allCases) { kind in
+                    Text(kind.displayName).tag(kind)
+                }
+            }
+            .pickerStyle(.segmented)
+            .help("Which view of your days")
+            .accessibilityIdentifier(AccessibilityID.Calendar.viewSwitcher)
+        }
 
-            if calendar.isLoading {
+        if calendar.isLoading {
+            ToolbarItem {
                 ProgressView()
                     .controlSize(.small)
                     .accessibilityLabel("Reading your calendar")
             }
+        }
 
-            Spacer(minLength: Theme.Spacing.small)
-
+        ToolbarItem {
             overflowMenu
+        }
 
+        ToolbarItem(placement: .primaryAction) {
             Button(action: onCreate) {
                 Image(systemName: "plus")
             }
-            .buttonStyle(.borderless)
             .help("New event (N)")
             .accessibilityLabel("New event")
         }
-        .padding(.horizontal, Theme.Spacing.medium)
-        .padding(.vertical, Theme.Spacing.small)
     }
 
     /// Everything the sidebar owns, still reachable when the sidebar is not on screen.
@@ -662,19 +681,6 @@ struct CalendarToolbar: View {
     /// controls, because this is the fallback rather than the place it is meant to be used.
     private var overflowMenu: some View {
         Menu {
-            Section("View") {
-                ForEach(CalendarViewKind.allCases) { kind in
-                    Button {
-                        workspace.setViewKind(kind)
-                    } label: {
-                        Label(
-                            kind.displayName,
-                            systemImage: workspace.viewKind == kind ? "checkmark" : kind.symbolName
-                        )
-                    }
-                }
-            }
-
             Section("Calendars") {
                 ForEach(calendar.calendarsByAccount, id: \.account) { group in
                     ForEach(group.calendars) { entry in
@@ -723,9 +729,9 @@ struct CalendarToolbar: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help("View, calendars, and sets — the same choices the sidebar offers")
+        .help("Calendars and sets — the same choices the sidebar offers")
         .accessibilityLabel("Calendar options")
-        .accessibilityIdentifier(AccessibilityID.Calendar.viewSwitcher)
+        .accessibilityIdentifier(AccessibilityID.Calendar.optionsMenu)
     }
 
     private var navigationControls: some View {
