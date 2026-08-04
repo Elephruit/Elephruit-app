@@ -1,4 +1,6 @@
-import AppKit
+#if os(macOS)
+    import AppKit
+#endif
 import ElephruitCore
 import SwiftUI
 
@@ -54,6 +56,11 @@ public struct SwipeAction: Identifiable {
         self.handler = handler
     }
 }
+
+// The machinery below reads `NSEvent.scrollWheel` — a trackpad concept. On iOS a swipe
+// *is* a drag, and `List`'s native `.swipeActions` already owns the gesture, so only the
+// `SwipeAction` value above (the vocabulary the two platforms share) crosses over.
+#if os(macOS)
 
 /// The one open row, and the trackpad.
 ///
@@ -472,3 +479,5 @@ extension View {
         environment(\.swipeActions, coordinator)
     }
 }
+
+#endif

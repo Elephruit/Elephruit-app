@@ -39,6 +39,7 @@ let package = Package(
                 "ElephruitSearch",
                 "ElephruitTransfer",
                 "ElephruitIntegrations",
+                "ElephruitDesign",
             ]
         ),
     ],

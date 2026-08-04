@@ -207,9 +207,21 @@ public struct EditingSurface<Content: View>: View {
                     )
             )
             // An I-beam over an editable region, so the pointer says what the border implies before
-            // anybody clicks to find out.
-            .pointerStyle(isEditable ? .horizontalText : nil)
+            // anybody clicks to find out. A finger has no resting position, so on iOS there is
+            // nothing to say and the modifier says nothing.
+            .editingPointer(isEditable: isEditable)
             .calmAnimation(Theme.Motion.appearance, value: isFocused)
+    }
+}
+
+extension View {
+    @ViewBuilder
+    fileprivate func editingPointer(isEditable: Bool) -> some View {
+        #if os(macOS)
+            pointerStyle(isEditable ? .horizontalText : nil)
+        #else
+            self
+        #endif
     }
 }
 

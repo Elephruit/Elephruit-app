@@ -159,14 +159,14 @@ extension Theme.Colors {
     /// Red, and the only red in a calendar grid, so it cannot be confused with anything else. This
     /// is the one place in the app where a colour carries meaning on its own — but it is also a
     /// *line across the whole width*, which is a shape nothing else has, so it survives greyscale.
-    public static let currentTime = Color(nsColor: .systemRed)
+    public static let currentTime = SystemColors.red
 
     /// The shading over hours outside the working day.
     ///
     /// Applied to the *outside*, so working hours are the plain background and the rest is dimmed.
     /// Shading the working hours instead would make the useful part of the day the visually noisy
     /// one.
-    public static let outsideWorkingHours = Color(nsColor: .quaternarySystemFill)
+    public static let outsideWorkingHours = SystemColors.quaternaryFill
 
     /// The fill of a block being dragged or created.
     public static let draftEvent = Color.accentColor

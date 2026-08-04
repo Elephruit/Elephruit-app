@@ -379,8 +379,13 @@ struct SourceHygieneTests {
             /(^|[^A-Za-z0-9_])\.(pink|red|blue|green|orange|yellow|purple|gray|grey|brown|teal|cyan|indigo|mint|black|white)(?![A-Za-z0-9_])/
 
         for file in Self.swiftFiles() {
-            // The tokens file is where the palette is *defined*; everywhere else consumes it.
-            guard file.lastPathComponent != "Tokens.swift" else { continue }
+            // The tokens file is where the palette is *defined*, and SystemColors.swift is where
+            // each platform's own names for those meanings live — including the one literal that
+            // is the faithful mapping, not an escape from one (iOS paints white on filled
+            // controls in every appearance). Everywhere else consumes them.
+            guard file.lastPathComponent != "Tokens.swift",
+                file.lastPathComponent != "SystemColors.swift"
+            else { continue }
             guard let contents = try? String(contentsOf: file, encoding: .utf8) else { continue }
 
             for (index, line) in contents.components(separatedBy: .newlines).enumerated() {
