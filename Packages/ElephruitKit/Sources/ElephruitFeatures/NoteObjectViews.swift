@@ -132,6 +132,7 @@ private struct NoteWebClipFace: View {
 
     @State private var html: String?
     @State private var capturedWidth: CGFloat = 720
+    @State private var capturedInset: CGFloat = 0
     @State private var resolved = false
 
     var body: some View {
@@ -148,7 +149,11 @@ private struct NoteWebClipFace: View {
             .background(Theme.Colors.subtleFill)
 
             if let html {
-                SelectableWebClipView(html: html, capturedWidth: capturedWidth)
+                SelectableWebClipView(
+                    html: html,
+                    capturedWidth: capturedWidth,
+                    capturedInset: capturedInset
+                )
                     .frame(width: capturedWidth)
                     .frame(maxWidth: .infinity)
             } else if resolved {
@@ -206,6 +211,7 @@ private struct NoteWebClipFace: View {
             options: .regularExpression
         )
         capturedWidth = Self.capturedWidth(in: loadedHTML)
+        capturedInset = Self.capturedInset(in: loadedHTML)
         html = displayHTML
     }
 
@@ -221,11 +227,34 @@ private struct NoteWebClipFace: View {
         else { return 720 }
         return min(max(CGFloat(width), 320), 1_200)
     }
+
+    private static func capturedInset(in html: String) -> CGFloat {
+        // The capture stores computed styles inline. The first symmetric, nonzero block padding
+        // under the article is its content inset on fidelity clips (15 px on MacRumors). AppKit's
+        // HTML importer drops CSS box padding, so retain that measure for the native renderer.
+        let expression = try? NSRegularExpression(
+            pattern: #"padding-right:\s*([0-9.]+)px;[^\"]*padding-left:\s*([0-9.]+)px"#,
+            options: .caseInsensitive
+        )
+        let range = NSRange(html.startIndex..., in: html)
+        for match in expression?.matches(in: html, range: range) ?? [] {
+            guard let rightRange = Range(match.range(at: 1), in: html),
+                  let leftRange = Range(match.range(at: 2), in: html),
+                  let right = Double(html[rightRange]),
+                  let left = Double(html[leftRange]),
+                  right > 0,
+                  abs(right - left) < 0.5
+            else { continue }
+            return min(CGFloat(left), 64)
+        }
+        return 0
+    }
 }
 
 private struct SelectableWebClipView: NSViewRepresentable {
     let html: String
     let capturedWidth: CGFloat
+    let capturedInset: CGFloat
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -243,8 +272,12 @@ private struct SelectableWebClipView: NSViewRepresentable {
         textView.backgroundColor = .textBackgroundColor
         textView.textContainerInset = .zero
         textView.textContainer?.lineFragmentPadding = 0
-        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.widthTracksTextView = false
         textView.textContainer?.heightTracksTextView = false
+        textView.textContainer?.containerSize = NSSize(
+            width: capturedWidth,
+            height: .greatestFiniteMagnitude
+        )
         textView.isHorizontallyResizable = false
         textView.isVerticallyResizable = true
         // NSTextView otherwise paints every link with the system accent color, overriding the
@@ -267,12 +300,16 @@ private struct SelectableWebClipView: NSViewRepresentable {
             documentAttributes: nil
         ) else { return }
         prepareForDisplay(rendered)
+        textView.textContainer?.containerSize = NSSize(
+            width: capturedWidth,
+            height: .greatestFiniteMagnitude
+        )
         textView.textStorage?.setAttributedString(rendered)
         textView.invalidateIntrinsicContentSize()
     }
 
     private func prepareForDisplay(_ rendered: NSMutableAttributedString) {
-        let mediaWidth = max(capturedWidth - 30, 1)
+        let mediaWidth = max(capturedWidth - capturedInset * 2, 1)
         var mediaReplacements: [(range: NSRange, content: NSAttributedString)] = []
         rendered.enumerateAttribute(
             .attachment,
@@ -311,6 +348,8 @@ private struct SelectableWebClipView: NSViewRepresentable {
             rendered.replaceCharacters(in: replacement.range, with: replacement.content)
         }
 
+        restoreCapturedBlockLayout(rendered)
+
         // AppKit applies its standard blue link color even when the captured page explicitly
         // placed a link on a dark background. Restore contrast for linked headings and buttons.
         rendered.enumerateAttributes(
@@ -325,6 +364,59 @@ private struct SelectableWebClipView: NSViewRepresentable {
         }
     }
 
+    private func restoreCapturedBlockLayout(_ rendered: NSMutableAttributedString) {
+        guard capturedInset > 0 else { return }
+        let plainText = rendered.string as NSString
+        var location = 0
+
+        while location < rendered.length {
+            let paragraphRange = plainText.paragraphRange(
+                for: NSRange(location: location, length: 0)
+            )
+            let attributes = rendered.attributes(
+                at: paragraphRange.location,
+                effectiveRange: nil
+            )
+            let style = ((attributes[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy()
+                as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+
+            style.firstLineHeadIndent = capturedInset
+            style.headIndent = capturedInset
+            style.tailIndent = -capturedInset
+
+            if let background = attributes[.backgroundColor] as? NSColor,
+               background.isVisibleBlockBackground {
+                let block = NSTextBlock()
+                block.backgroundColor = background
+                block.setContentWidth(
+                    capturedWidth - capturedInset * 2,
+                    type: .absoluteValueType
+                )
+                let verticalInset = min(max(capturedInset * 2 / 3, 4), 12)
+                block.setWidth(verticalInset, type: .absoluteValueType, for: .padding)
+                block.setWidth(
+                    capturedInset,
+                    type: .absoluteValueType,
+                    for: .padding,
+                    edge: .minX
+                )
+                block.setWidth(
+                    capturedInset,
+                    type: .absoluteValueType,
+                    for: .padding,
+                    edge: .maxX
+                )
+                style.firstLineHeadIndent = 0
+                style.headIndent = 0
+                style.tailIndent = 0
+                style.textBlocks = [block]
+            }
+
+            rendered.addAttribute(.paragraphStyle, value: style, range: paragraphRange)
+            location = NSMaxRange(paragraphRange)
+        }
+    }
+
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextView, context: Context) -> CGSize? {
         // The surrounding SwiftUI frame can offer the representable its compressed ideal width
         // before expanding the wrapper. Laying out at that proposal clips a desktop capture to
@@ -333,6 +425,10 @@ private struct SelectableWebClipView: NSViewRepresentable {
         if abs(nsView.frame.width - width) > 0.5 {
             nsView.setFrameSize(NSSize(width: width, height: nsView.frame.height))
         }
+        nsView.textContainer?.containerSize = NSSize(
+            width: width,
+            height: .greatestFiniteMagnitude
+        )
         let measuredHeight = context.coordinator.measuredHeight(for: nsView, width: width)
         return CGSize(width: width, height: measuredHeight)
     }
@@ -361,6 +457,14 @@ private extension NSColor {
             + 0.7152 * color.greenComponent
             + 0.0722 * color.blueComponent
         return color.alphaComponent > 0.5 && luminance < 0.45
+    }
+
+    var isVisibleBlockBackground: Bool {
+        guard let color = usingColorSpace(.deviceRGB) else { return false }
+        return color.alphaComponent > 0.5
+            && (color.redComponent < 0.95
+                || color.greenComponent < 0.95
+                || color.blueComponent < 0.95)
     }
 }
 
