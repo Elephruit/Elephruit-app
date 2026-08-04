@@ -49,7 +49,7 @@ struct PersonTimelineDetailSheet: View {
                                         .foregroundStyle(accent)
                                         .padding(.horizontal, Theme.Spacing.small)
                                         .frame(height: 28)
-                                        .background(accent.opacity(0.1), in: Capsule())
+                                        .background(Theme.Colors.tintedFill(accent), in: Capsule())
                                 }
                             }
                         }
@@ -111,16 +111,12 @@ struct PersonTimelineDetailSheet: View {
 
     private var hero: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.medium) {
-            Image(systemName: heroSymbol)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(accent)
-                .frame(width: 52, height: 52)
-                .background(accent.opacity(0.13), in: RoundedRectangle(cornerRadius: 15))
+            IconTile(systemImage: heroSymbol, tint: accent, size: .large)
 
             VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                 Text(eyebrow.uppercased())
-                    .font(.system(size: 10, weight: .bold))
-                    .tracking(0.8)
+                    .font(Theme.Text.sectionHeader)
+                    .kerning(Theme.Text.Tracking.caps)
                     .foregroundStyle(accent)
                 Text(entry.title)
                     .font(.system(.title2, weight: .semibold))
@@ -134,16 +130,12 @@ struct PersonTimelineDetailSheet: View {
         }
         .padding(Theme.Spacing.large)
         .background(
-            LinearGradient(
-                colors: [accent.opacity(0.11), accent.opacity(0.035)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+            Theme.Colors.tintedFill(accent),
+            in: RoundedRectangle(cornerRadius: Theme.Radius.sheet, style: .continuous)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(accent.opacity(0.14))
+            RoundedRectangle(cornerRadius: Theme.Radius.sheet, style: .continuous)
+                .strokeBorder(Theme.Colors.tintedStroke(accent))
         }
     }
 
@@ -189,9 +181,9 @@ struct PersonTimelineDetailSheet: View {
         }
         .padding(Theme.Spacing.medium)
         .frame(maxWidth: .infinity)
-        .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: 12))
+        .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: Theme.Radius.large))
         .overlay {
-            RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.Colors.separator.opacity(0.6))
+            RoundedRectangle(cornerRadius: Theme.Radius.large).strokeBorder(Theme.Colors.separator)
         }
     }
 

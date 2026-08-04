@@ -579,7 +579,7 @@ struct SourceHygieneTests {
     func shadowsComeFromElevation() {
         let allowlisted: Set<String> = [
             "FloatingTimerView.swift", "KanbanBoardView.swift", "KindDetailViews.swift",
-            "NoteWorkspacePanels.swift", "PersonPortraitViews.swift",
+            "NoteWorkspacePanels.swift",
             "ReminderComposer.swift", "SectionIndexBar.swift",
         ]
 
@@ -604,9 +604,8 @@ struct SourceHygieneTests {
             "CalendarOverviewViews.swift", "CalendarTimeGrid.swift", "CaptureActionRow.swift",
             "CaptureChipRow.swift", "Components.swift", "ContactOnboardingView.swift",
             "EventQuickEntry.swift", "KanbanBoardView.swift", "LinkedContactViews.swift",
-            "MonthGrid.swift", "PersonCaptureSheets.swift",
-            "PersonPortraitViews.swift", "PersonSheets.swift", "PersonTimelineDetailSheet.swift",
-            "PersonWorkspaceView.swift", "ProjectsSidebarSection.swift", "ReminderComposer.swift",
+            "MonthGrid.swift",
+            "ProjectsSidebarSection.swift", "ReminderComposer.swift",
             "ReminderMonthPicker.swift", "SectionIndexBar.swift", "SwipeActionsRow.swift",
             "TodayComponents.swift", "TodayPeopleViews.swift", "TodayRows.swift",
             "TodayToolbar.swift", "WorkItemCompletionControl.swift", "WorkItemDetailView.swift",
@@ -637,8 +636,7 @@ struct SourceHygieneTests {
         let allowlisted: Set<String> = [
             "CalendarAgendaView.swift", "CalendarMonthView.swift", "CalendarOverviewViews.swift",
             "CalendarSearchView.swift", "Components.swift", "EventInspectorView.swift",
-            "PersonCaptureSheets.swift", "PersonPortraitViews.swift",
-            "PersonSheets.swift", "PersonTimelineDetailSheet.swift", "TodayRows.swift",
+            "TodayRows.swift",
         ]
 
         // 4, 6, 10, 16 — `Theme.Radius`. Zero is "no radius", which is a statement, not a value.
@@ -669,7 +667,6 @@ struct SourceHygieneTests {
             "BugTrackerView.swift", "CalendarAgendaView.swift", "CalendarMonthView.swift",
             "CalendarSearchView.swift", "CalendarTimeGrid.swift", "CaptureSuggestionSource.swift",
             "Components.swift", "ContactImportReviewView.swift", "MapPlaceSearchField.swift",
-            "PersonPortraitViews.swift", "PersonWorkspaceView.swift",
             "ProjectCalendarView.swift", "ReminderComposer.swift", "TimeEntryEditing.swift",
             "TimePickers.swift", "TodayRows.swift", "TodayToolbar.swift", "WorkItemDetailView.swift",
         ]
@@ -703,8 +700,8 @@ struct SourceHygieneTests {
     func animationsHonourReduceMotion() {
         let allowlisted: Set<String> = [
             "BugTrackerView.swift", "EventEditorView.swift", "EventInspectorView.swift",
-            "FloatingTimerView.swift", "KanbanBoardView.swift", "PersonCaptureSheets.swift",
-            "PersonSheets.swift", "ReminderComposer.swift",
+            "FloatingTimerView.swift", "KanbanBoardView.swift",
+            "ReminderComposer.swift",
             "RootView.swift", "TodayComponents.swift",
             "TodayDayView.swift", "TodayPeopleViews.swift", "TodayRows.swift", "TodayView.swift",
             "WorkItemDetailView.swift",

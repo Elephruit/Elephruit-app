@@ -447,7 +447,7 @@ struct PersonHeaderView: View {
                                 .font(Theme.Text.metadata)
                                 .foregroundStyle(Theme.Colors.secondaryText)
                                 .padding(.horizontal, Theme.Spacing.tight)
-                                .padding(.vertical, 1)
+                                .padding(.vertical, Theme.Spacing.hairline)
                                 .background(Theme.Colors.subtleFill, in: Capsule())
                                 .accessibilityLabel("Pronouns: \(pronouns)")
                         }
@@ -593,7 +593,8 @@ struct PersonAvatar: View {
             .fill(fill)
             .overlay {
                 Text(initials)
-                    .font(.system(size: size * 0.38, weight: .medium, design: .rounded))
+                    .font(.system(.body, design: .rounded, weight: .semibold))
+                    .minimumScaleFactor(0.5)
                     .foregroundStyle(foreground)
             }
             .frame(width: size, height: size)

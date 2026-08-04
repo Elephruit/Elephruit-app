@@ -248,6 +248,8 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
 
 /// A fast, human-shaped way to remember something useful about somebody.
 struct AddFactSheet: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let personName: String
     let onSave: (ObservationDraft, FactConfidence, FactSensitivity, Date) -> Void
     let onCancel: () -> Void
@@ -278,11 +280,7 @@ struct AddFactSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: Theme.Spacing.medium) {
-                Image(systemName: category.symbol)
-                    .font(.system(size: 21, weight: .semibold))
-                    .foregroundStyle(category.tint)
-                    .frame(width: 44, height: 44)
-                    .background(category.tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 12))
+                IconTile(systemImage: category.symbol, tint: category.tint, size: .large)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Add a quick fact")
                         .font(Theme.Text.title)
@@ -310,7 +308,11 @@ struct AddFactSheet: View {
                         ) {
                             ForEach(QuickFactCategory.allCases) { option in
                                 Button {
-                                    withAnimation(Theme.Motion.appearance) { category = option }
+                                    withAnimation(
+                                        Theme.Motion.respectingReduceMotion(
+                                            Theme.Motion.appearance, reduceMotion: reduceMotion
+                                        )
+                                    ) { category = option }
                                 } label: {
                                     HStack(spacing: Theme.Spacing.small) {
                                         Image(systemName: option.symbol)
@@ -328,7 +330,7 @@ struct AddFactSheet: View {
                                     .padding(.horizontal, Theme.Spacing.small)
                                     .frame(height: 38)
                                     .background(
-                                        category == option ? option.tint.opacity(0.1) : Theme.Colors.subtleFill,
+                                        category == option ? Theme.Colors.tintedFill(option.tint) : Theme.Colors.subtleFill,
                                         in: RoundedRectangle(cornerRadius: 10)
                                     )
                                     .contentShape(Rectangle())
@@ -340,10 +342,7 @@ struct AddFactSheet: View {
 
                     if !category.suggestions.isEmpty {
                         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                            Text("QUICK PICKS")
-                                .font(.system(size: 10, weight: .bold))
-                                .tracking(0.8)
-                                .foregroundStyle(Theme.Colors.tertiaryText)
+                            SectionHeader("Quick Picks")
 
                             HStack(spacing: Theme.Spacing.small) {
                                 ForEach(category.suggestions, id: \.self) { suggestion in
@@ -355,7 +354,7 @@ struct AddFactSheet: View {
                                     .font(Theme.Text.chip)
                                     .padding(.horizontal, Theme.Spacing.small)
                                     .frame(height: 28)
-                                    .background(category.tint.opacity(0.1), in: Capsule())
+                                    .background(Theme.Colors.tintedFill(category.tint), in: Capsule())
                                     .foregroundStyle(category.tint)
                                 }
                             }
@@ -375,9 +374,9 @@ struct AddFactSheet: View {
                             .font(.system(.title3, weight: .medium))
                             .lineLimit(1...4)
                             .padding(Theme.Spacing.medium)
-                            .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: 12))
+                            .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: Theme.Radius.large))
                             .overlay {
-                                RoundedRectangle(cornerRadius: 12)
+                                RoundedRectangle(cornerRadius: Theme.Radius.large)
                                     .strokeBorder(category.tint.opacity(isValueFocused ? 0.7 : 0.2), lineWidth: isValueFocused ? 2 : 1)
                             }
                             .focused($isValueFocused)

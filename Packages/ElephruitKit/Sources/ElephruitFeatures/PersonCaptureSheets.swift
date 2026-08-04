@@ -58,6 +58,8 @@ struct PersonNoteDraft: Sendable, Equatable {
 }
 
 struct PersonNoteSheet: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let personName: String
     let onSave: (PersonNoteDraft) -> Void
     let onCancel: () -> Void
@@ -129,11 +131,7 @@ struct PersonNoteSheet: View {
 
     private var captureHeader: some View {
         HStack(spacing: Theme.Spacing.medium) {
-            Image(systemName: "square.and.pencil")
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(draft.category.tint)
-                .frame(width: 44, height: 44)
-                .background(draft.category.tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+            IconTile(systemImage: "square.and.pencil", tint: draft.category.tint, size: .large)
 
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 Text("Add a note")
@@ -158,7 +156,11 @@ struct PersonNoteSheet: View {
             HStack(spacing: Theme.Spacing.small) {
                 ForEach(PersonNoteCategory.allCases, id: \.self) { category in
                     Button {
-                        withAnimation(Theme.Motion.appearance) { draft.category = category }
+                        withAnimation(
+                            Theme.Motion.respectingReduceMotion(
+                                Theme.Motion.appearance, reduceMotion: reduceMotion
+                            )
+                        ) { draft.category = category }
                     } label: {
                         Label(category.displayName, systemImage: category.symbolName)
                             .font(Theme.Text.chip)
@@ -167,12 +169,12 @@ struct PersonNoteSheet: View {
                             .foregroundStyle(draft.category == category ? category.tint : Theme.Colors.secondaryText)
                             .background(
                                 Capsule().fill(
-                                    draft.category == category ? category.tint.opacity(0.14) : Theme.Colors.subtleFill
+                                    draft.category == category ? Theme.Colors.tintedFill(category.tint) : Theme.Colors.subtleFill
                                 )
                             )
                             .overlay {
                                 Capsule().strokeBorder(
-                                    draft.category == category ? category.tint.opacity(0.45) : Color.clear
+                                    draft.category == category ? Theme.Colors.tintedStroke(category.tint) : Color.clear
                                 )
                             }
                     }
@@ -236,6 +238,8 @@ struct PersonInteractionDraft: Sendable, Equatable {
 }
 
 struct LogInteractionSheet: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let person: Item
     let onSave: (PersonInteractionDraft) -> Void
     let onCancel: () -> Void
@@ -302,11 +306,7 @@ struct LogInteractionSheet: View {
 
     private var header: some View {
         HStack(spacing: Theme.Spacing.medium) {
-            Image(systemName: draft.kind.symbolName)
-                .font(.system(size: 23, weight: .semibold))
-                .foregroundStyle(Theme.Palette.purple.color)
-                .frame(width: 44, height: 44)
-                .background(Theme.Colors.captureAccent.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+            IconTile(systemImage: draft.kind.symbolName, tint: Theme.Colors.captureAccent, size: .large)
 
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 Text("Log an interaction")
@@ -330,7 +330,11 @@ struct LogInteractionSheet: View {
             HStack(spacing: Theme.Spacing.small) {
                 ForEach(PersonInteractionKind.allCases, id: \.self) { kind in
                     Button {
-                        withAnimation(Theme.Motion.appearance) { draft.kind = kind }
+                        withAnimation(
+                            Theme.Motion.respectingReduceMotion(
+                                Theme.Motion.appearance, reduceMotion: reduceMotion
+                            )
+                        ) { draft.kind = kind }
                     } label: {
                         Label(kind.displayName, systemImage: kind.symbolName)
                             .font(Theme.Text.chip)
@@ -339,7 +343,7 @@ struct LogInteractionSheet: View {
                             .foregroundStyle(draft.kind == kind ? Theme.Colors.captureAccent : Theme.Colors.secondaryText)
                             .background(
                                 Capsule().fill(
-                                    draft.kind == kind ? Theme.Colors.captureAccent.opacity(0.14) : Theme.Colors.subtleFill
+                                    draft.kind == kind ? Theme.Colors.tintedFill(Theme.Colors.captureAccent) : Theme.Colors.subtleFill
                                 )
                             )
                     }
@@ -382,7 +386,7 @@ struct LogInteractionSheet: View {
                         }
                         .padding(.horizontal, 8)
                         .frame(height: 32)
-                        .background(Theme.Colors.captureAccent.opacity(0.1), in: Capsule())
+                        .background(Theme.Colors.tintedFill(Theme.Colors.captureAccent), in: Capsule())
                     }
 
                     Button {
@@ -413,7 +417,7 @@ struct LogInteractionSheet: View {
             }
             .padding(.horizontal, Theme.Spacing.medium)
             .frame(height: 38)
-            .background(Theme.Colors.subtleFill, in: RoundedRectangle(cornerRadius: 10))
+            .background(Theme.Colors.subtleFill, in: RoundedRectangle(cornerRadius: Theme.Radius.large))
             .padding(Theme.Spacing.medium)
 
             Divider()
@@ -480,11 +484,7 @@ struct LogInteractionSheet: View {
             }
 
             HStack(spacing: Theme.Spacing.medium) {
-                Image(systemName: "calendar.badge.clock")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Theme.Colors.captureAccent)
-                    .frame(width: 34, height: 34)
-                    .background(Theme.Colors.captureAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 9))
+                IconTile(systemImage: "calendar.badge.clock", tint: Theme.Colors.captureAccent)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("When")
@@ -503,10 +503,10 @@ struct LogInteractionSheet: View {
             }
             .padding(.horizontal, Theme.Spacing.medium)
             .frame(height: 58)
-            .background(Theme.Colors.captureAccent.opacity(0.055), in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
+            .background(Theme.Colors.tintedFill(Theme.Colors.captureAccent), in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.Radius.medium)
-                    .strokeBorder(Theme.Colors.captureAccent.opacity(0.16))
+                    .strokeBorder(Theme.Colors.tintedStroke(Theme.Colors.captureAccent))
             }
         }
     }
@@ -551,10 +551,10 @@ struct LogInteractionSheet: View {
         }
         .padding(Theme.Spacing.medium)
         .frame(maxWidth: .infinity)
-        .background(tint.opacity(0.07), in: RoundedRectangle(cornerRadius: Theme.Radius.large))
+        .background(Theme.Colors.tintedFill(tint), in: RoundedRectangle(cornerRadius: Theme.Radius.large))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.large)
-                .strokeBorder(tint.opacity(0.18))
+                .strokeBorder(Theme.Colors.tintedStroke(tint))
         }
     }
 
