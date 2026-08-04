@@ -859,8 +859,11 @@ the app building warning-free with all seven test targets green (~2,430 tests).
   user's idle windows. Reviewed clean: Today, Inbox, Reminders, Calendar day, Notes, person
   page. The dark/contrast pairs proved the adaptive tints respond (calendar and Today differ
   under forced contrast; screens with no tinted surface are pixel-identical, as expected).
-  Still to review from the captures on disk: Records list, Time, Bookmarks, Kanban, and the
-  contrast set; Reminders needs recapturing after the restoration below.
+  Completed across every module: Today, Inbox, Reminders (recaptured after the restoration
+  below, both modes), Calendar, Notes, Records/person, Time, Bookmarks, Kanban, plus the
+  contrast set. No defects to fix — the one suspect (dim Records rows) was the unfocused-window
+  appearance in background captures, with code identical to main. "home" and "upcoming"
+  photographing as Today is the canonical redirect working, not a navigation failure.
 - **D1 presentation withdrawn — owner decision.** Mike rejected both the sectioned List and a
   flat chromeless replacement: the module on main was polished by hand and is the design.
   Restored from main whole (header, centred card column, full inline composer, bottom bar,
