@@ -22,6 +22,13 @@ struct WebClipTests {
             comment: "Read before Friday.",
             tagSlugs: ["research"],
             projectHint: "Launch",
+            images: [WebClipImage(
+                sourceURL: URL(string: "https://example.com/diagram.png"),
+                altText: "System diagram",
+                filename: "diagram.png",
+                typeIdentifier: "public.png",
+                data: Data([0x89, 0x50, 0x4E, 0x47])
+            )],
             screenshotData: Data([0x89, 0x50, 0x4E, 0x47]),
             clippedAt: Date(timeIntervalSince1970: 1_700_000_000)
         )

@@ -99,6 +99,36 @@ struct WebClipServiceTests {
         #expect(attachment.typeIdentifier == "public.png")
         let url = try #require(fixture.attachments.resolve(attachment))
         #expect(try Data(contentsOf: url) == clip.screenshotData)
+        #expect(item.noteDocument.pieces.contains { piece in
+            if case .object(.image(let attachmentID, _)) = piece { return attachmentID == attachment.id }
+            return false
+        })
+    }
+
+    @Test("Downloaded page images are local and inline in the note")
+    func savesInlinePageImages() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+
+        var clip = makeClip()
+        let bytes = Data([0x89, 0x50, 0x4E, 0x47, 0x01, 0x02])
+        clip.images = [WebClipImage(
+            sourceURL: URL(string: "https://example.com/hero.png"),
+            altText: "A durable local-first diagram",
+            filename: "hero.png",
+            typeIdentifier: "public.png",
+            data: bytes
+        )]
+
+        let item = try fixture.service.save(clip)
+        let attachment = try #require(item.attachments.first(where: { $0.filename == "hero.png" }))
+        let imageURL = try #require(fixture.attachments.resolve(attachment))
+
+        #expect(try Data(contentsOf: imageURL) == bytes)
+        #expect(item.noteDocument.pieces.contains { piece in
+            guard case .object(.image(let attachmentID, let caption)) = piece else { return false }
+            return attachmentID == attachment.id && caption.plainText == "A durable local-first diagram"
+        })
     }
 
     @Test("Retrying an interrupted import completes attachments without duplicating the item")

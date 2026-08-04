@@ -10,6 +10,7 @@ import Foundation
 public struct WebClipService {
     public static let maximumTextLength = 8_000_000
     public static let maximumScreenshotBytes = 24_000_000
+    public static let maximumImageBytes = 24_000_000
 
     private let items: any ItemRepository
     private let attachments: AttachmentStore
@@ -33,6 +34,9 @@ public struct WebClipService {
         }
         guard (clip.screenshotData?.count ?? 0) <= Self.maximumScreenshotBytes else {
             throw .importFailed(format: "web clip", reason: "The screenshot is too large to save.")
+        }
+        guard clip.images.reduce(0, { $0 + $1.data.count }) <= Self.maximumImageBytes else {
+            throw .importFailed(format: "web clip", reason: "The page images are too large to save.")
         }
 
         let sourceURL = clip.preferredSourceURL
@@ -72,15 +76,53 @@ public struct WebClipService {
             )
         }
 
+        var inlineImages: [(attachment: Attachment, caption: String)] = []
+        for (index, image) in clip.images.enumerated() where !image.data.isEmpty {
+            let filename = image.filename.trimmingCharacters(in: .whitespacesAndNewlines)
+            let stableName = filename.isEmpty ? "web-image-\(index + 1).png" : filename
+            let attachment: Attachment
+            if let existing = item.attachments.first(where: { $0.filename == stableName }) {
+                attachment = existing
+            } else {
+                attachment = try attachments.attach(
+                    data: image.data,
+                    filename: stableName,
+                    typeIdentifier: image.typeIdentifier,
+                    to: item
+                )
+            }
+            inlineImages.append((attachment, image.altText))
+        }
+
         if let screenshot = clip.screenshotData,
            !screenshot.isEmpty,
            !item.attachments.contains(where: { $0.typeIdentifier == "public.png" }) {
-            _ = try attachments.attach(
+            let attachment = try attachments.attach(
                 data: screenshot,
                 filename: "\(filenameStem(for: item.title))-screenshot.png",
                 typeIdentifier: "public.png",
                 to: item
             )
+            inlineImages.append((attachment, clip.mode == .fullPage ? "Full-page capture" : "Page capture"))
+        } else if let screenshot = item.attachments.first(where: { $0.filename.hasSuffix("-screenshot.png") }) {
+            inlineImages.append((screenshot, clip.mode == .fullPage ? "Full-page capture" : "Page capture"))
+        }
+
+        if item.kind == .note, item.noteDocumentData == nil, !inlineImages.isEmpty {
+            let body = noteBody(for: clip, sourceURL: sourceURL)
+            var document = NoteBodyImport.document(from: body)
+            let insertion = document.pieces.lastIndex(where: {
+                if case .object(.divider) = $0 { return true }
+                return false
+            }).map { $0 + 1 } ?? document.pieces.count
+            let imagePieces = inlineImages.map { image in
+                NotePiece.object(.image(
+                    attachmentID: image.attachment.id,
+                    caption: NoteRichText(image.caption)
+                ))
+            }
+            document.pieces.insert(contentsOf: imagePieces, at: insertion)
+            try items.update(item) { $0.setNoteDocument(document) }
         }
 
         return item
