@@ -1,6 +1,6 @@
 (() => {
-  if ((globalThis.__elephruitClipperVersion || 0) >= 6) return;
-  globalThis.__elephruitClipperVersion = 6;
+  if ((globalThis.__elephruitClipperVersion || 0) >= 7) return;
+  globalThis.__elephruitClipperVersion = 7;
 
   const REMOVE = [
     "script", "style", "noscript", "template", "nav", "form", "button", "input", "select",
@@ -315,7 +315,7 @@
     renderArticleOverlay();
     const payload = articleSelectionPayload();
     if (announce) {
-      browser.runtime.sendMessage({ type: "elephruit.article.changed.v4", payload }).catch(() => {});
+      globalThis.__elephruitClipperPanelUI?.articleChanged(payload);
     }
     return payload;
   }
@@ -326,23 +326,15 @@
     host.dataset.elephruitClipperUi = "panel";
     host.style.cssText = "position:fixed;inset:0;z-index:2147483647;pointer-events:none;";
     const shadow = host.attachShadow({ mode: "closed" });
-    const style = document.createElement("style");
-    style.textContent = `
-      :host { all: initial; }
-      iframe { position: fixed; top: 12px; right: 12px; width: min(390px, calc(100vw - 24px));
-        height: calc(100vh - 24px); border: 1px solid rgba(31, 45, 35, .18); border-radius: 15px;
-        background: white; box-shadow: 0 18px 56px rgba(0, 0, 0, .28), 0 2px 8px rgba(0, 0, 0, .16);
-        pointer-events: auto; color-scheme: light dark; }
-      @media (max-width: 520px) {
-        iframe { top: 6px; right: 6px; width: calc(100vw - 12px); height: calc(100vh - 12px); }
-      }
-    `;
-    const frame = document.createElement("iframe");
-    frame.title = "Elephruit Web Clipper";
-    frame.src = browser.runtime.getURL("popup.html?panel=1");
-    shadow.append(style, frame);
     document.documentElement.append(host);
-    clipperPanel = { host, frame };
+    clipperPanel = { host, shadow };
+    const panelUI = globalThis.__elephruitClipperPanelUI;
+    if (!panelUI || panelUI.version < 1) {
+      host.remove();
+      clipperPanel = null;
+      throw new Error("The clipper panel is not ready.");
+    }
+    panelUI.mount(shadow, globalThis.__elephruitClipperAPI);
     return { open: true };
   }
 
@@ -350,8 +342,8 @@
     hideArticleSelection();
     const panel = clipperPanel;
     clipperPanel = null;
-    // Let the extension caller receive its reply before removing the iframe that made the call.
-    setTimeout(() => panel?.host?.remove(), 0);
+    globalThis.__elephruitClipperPanelUI?.unmount();
+    panel?.host?.remove();
     return { open: false };
   }
 
@@ -482,8 +474,10 @@
         element,
         visibility: element.style.getPropertyValue("visibility"),
         priority: element.style.getPropertyPriority("visibility")
-      }))
+      })),
+      panelVisibility: clipperPanel?.host?.style.visibility || ""
     };
+    if (clipperPanel?.host) clipperPanel.host.style.visibility = "hidden";
     document.documentElement.style.setProperty("scroll-behavior", "auto", "important");
     return pageSize();
   }
@@ -512,6 +506,7 @@
       if (visibility) element.style.setProperty("visibility", visibility, priority);
       else element.style.removeProperty("visibility");
     });
+    if (clipperPanel?.host) clipperPanel.host.style.visibility = session.panelVisibility;
     window.scrollTo(session.x, session.y);
     return afterPaint(true);
   }
@@ -521,7 +516,7 @@
   // that listener's empty response before the new listener answers. `scripting.executeScript` calls
   // this newest API explicitly, so upgrading never requires the user to reload their page.
   globalThis.__elephruitClipperAPI = {
-    version: 6,
+    version: 7,
     extract,
     showArticleSelection,
     hideArticleSelection,
@@ -535,7 +530,7 @@
   };
 
   browser.runtime.onMessage.addListener((message) => {
-    if (message?.type === "elephruit.panel.toggle.v1") return Promise.resolve(togglePanel());
+    if (message?.type === "elephruit.panel.toggle.v2") return Promise.resolve(togglePanel());
     if (message?.type === "elephruit.extract.v4") return Promise.resolve(extract());
     if (message?.type === "elephruit.article.show.v4") return Promise.resolve(showArticleSelection());
     if (message?.type === "elephruit.article.adjust.v4") {

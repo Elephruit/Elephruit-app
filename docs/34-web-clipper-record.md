@@ -35,9 +35,13 @@ removes the page overlay, as does closing the panel or completing the clip.
 
 The toolbar action has no popup document. Its nonpersistent Manifest V3 background worker sends a
 toggle command directly to the active tab, eliminating an intermediate “Reading this page” popover
-that could remain visible while Safari waited for page scripting.
+that could remain visible while Safari waited for page scripting. The right-side panel is ordinary
+isolated-world content rendered into a closed Shadow DOM; it is not an extension iframe embedded in
+the website. Screenshot and native-messaging operations are proxied through the background worker,
+so privileged extension APIs never run from Safari's website WebContent process. This avoids WebKit
+rejecting an invalid extension IPC message and terminating the tab.
 
-Panel-to-page commands call a versioned API in the extension's isolated page world. This is more than
+Panel-to-page commands call a versioned API in the extension's isolated world. This is more than
 an implementation detail: a tab that was open during an extension upgrade can retain the previous
 message listener, and Safari may accept that listener's empty response before the new one answers.
 Directly invoking the newest API makes extraction, boundary changes, and full-page capture work on
