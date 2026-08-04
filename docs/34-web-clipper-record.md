@@ -48,9 +48,10 @@ optional access to the current website before injecting it. After access is gran
 closes itself and hands the interaction to the right-side panel. Keeping this handshake in the
 toolbar popup gives Safari the direct user gesture required for a runtime permission request and
 avoids depending on a nonpersistent Manifest V3 background worker waking in time for the click. The
-popup never extracts the page and never becomes the clipper UI. No script is registered on every
-page at document start; the guarded page scripts are installed only when the user opens the clipper
-on an allowed site. Because Safari can leave an injection promise pending after the script has
+popup never extracts the page and never becomes the clipper UI. A dormant guarded script registers
+the page API at document start only on sites Safari has allowed; it does not inspect the page until
+the user opens the clipper. The launcher can also install that API into a tab that predates the
+permission grant or extension update. Because Safari can leave an injection promise pending after the script has
 executed, the launcher polls for the working listener instead of trusting that promise. Short
 deadlines ensure Safari can never leave an endless launcher spinner. The right-side panel is ordinary isolated-world content
 rendered into a closed Shadow DOM; it is not an extension iframe embedded in the website. Screenshot,
@@ -92,8 +93,8 @@ Safari page
 
 - The extension has scripting, storage, and native-messaging permissions, plus optional HTTP/HTTPS
   website access. The launcher requests access only for the website the user is clipping, and Safari
-  exposes those choices in its Extensions settings. Page scripts are installed after that grant and
-  do not inspect or copy the DOM until the user opens the clipper.
+  exposes those choices in its Extensions settings. A dormant page script registers on allowed
+  sites, but it does not inspect or copy the DOM until the user opens the clipper.
 - It does not upload, synchronize, or call a remote API.
 - Only HTTP and HTTPS source URLs are accepted.
 - Text, screenshot, and downloaded-image payloads have explicit size limits before persistence.
