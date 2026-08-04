@@ -39,20 +39,12 @@ extension AppModule {
             )
 
         case .reminders:
-            // A real reading pane at last. `detail: .unavailable` made this module the app's one
-            // dead end: a reminder opened from ⌘K or a redirect was selected and shown nowhere.
-            // The pane hides while nothing is selected — the list takes the window, per the
-            // primary-navigation rule — and holds the reminder's editor once something is.
-            // The same arithmetic as primary navigation, which every cross-module invariant is
-            // proven against: the minimums fit the smallest window, the compact threshold equals
-            // what the columns need, and the list's ceiling stays within the no-reshape bound.
+            // One wide pane, as it was built: the module edits inline, in place, and a reading
+            // pane beside an inline editor is two places for the same edit. A reminder opened
+            // from ⌘K or a redirect is no dead end — `ItemDetailView` shows its editor there.
             ModuleShellLayout(
-                primary: PaneWidth(minimum: 260, ideal: 380, maximum: 560),
-                detail: DetailPanePolicy(
-                    hidesWhenNothingSelected: true,
-                    width: PaneWidth(minimum: Theme.Size.detailMinWidth, ideal: 640, maximum: 900),
-                    compactWindowWidth: 880
-                ),
+                primary: PaneWidth(minimum: 420, ideal: 900),
+                detail: .unavailable,
                 inspector: .unavailable
             )
 

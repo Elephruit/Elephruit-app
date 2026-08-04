@@ -7,6 +7,23 @@ import Foundation
 /// Kept as a small state machine rather than relying on AppKit's incidental key-view order: some
 /// stops live in popovers and the checklist rows are created on demand, so the view hierarchy is
 /// not the product's focus order.
+enum ReminderComposerField: Int, CaseIterable, Sendable, Hashable {
+    case title
+    case notes
+    case project
+    case when
+    case tags
+    case people
+    case checklist
+    case deadline
+
+    func advanced(reverse: Bool = false) -> Self {
+        let fields = Self.allCases
+        guard let index = fields.firstIndex(of: self) else { return .title }
+        let offset = reverse ? -1 : 1
+        return fields[(index + offset + fields.count) % fields.count]
+    }
+}
 
 /// One row in the Things-style date search shown by When and Deadline.
 ///
