@@ -655,7 +655,12 @@ extension Item {
             // The reference and the bug report join the projection. A handle is what people paste
             // into a search box, and reproduction steps are where the searchable words actually
             // live: "the crash when the list is empty" is written in the steps, never in the title.
-            extra: [referenceKey, personProfile?.searchableText, bugRecord?.searchableText]
+            extra: [
+                referenceKey,
+                personProfile?.searchableText,
+                bugRecord?.searchableText,
+                attachments.compactMap(\.extractedText).joined(separator: " ").nilWhenEmpty,
+            ]
                 .compactMap { $0 }
                 .filter { !$0.isEmpty }
                 .joined(separator: " ")

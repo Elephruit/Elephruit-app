@@ -72,15 +72,27 @@ public struct WebClipService {
             }
         }
 
-        if let html = clip.contentHTML?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !html.isEmpty,
-           !item.attachments.contains(where: { $0.typeIdentifier == "public.html" }) {
-            _ = try attachments.attach(
-                data: Data(html.utf8),
-                filename: "\(filenameStem(for: item.title)).html",
-                typeIdentifier: "public.html",
-                to: item
-            )
+        var attachmentSearchChanged = false
+        if let html = clip.contentHTML?.trimmingCharacters(in: .whitespacesAndNewlines), !html.isEmpty {
+            let attachment: Attachment
+            if let existing = item.attachments.first(where: { $0.typeIdentifier == "public.html" }) {
+                attachment = existing
+            } else {
+                attachment = try attachments.attach(
+                    data: Data(html.utf8),
+                    filename: "\(filenameStem(for: item.title)).html",
+                    typeIdentifier: "public.html",
+                    to: item
+                )
+            }
+
+            if clip.mode == .fullPage {
+                let searchableText = String(clip.contentMarkdown.prefix(1_000_000))
+                if attachment.extractedText != searchableText {
+                    attachment.extractedText = searchableText
+                    attachmentSearchChanged = true
+                }
+            }
         }
 
         var inlineImages: [InlineImage] = []
@@ -137,6 +149,8 @@ public struct WebClipService {
         if item.kind == .note, item.noteDocumentData == nil, !inlineImages.isEmpty {
             let document = noteDocument(for: clip, sourceURL: sourceURL, inlineImages: inlineImages)
             try items.update(item) { $0.setNoteDocument(document) }
+        } else if attachmentSearchChanged {
+            try items.update(item) { $0.refreshSearchText() }
         }
 
         return item
@@ -159,11 +173,13 @@ public struct WebClipService {
         if !byline.isEmpty { source += "  \n\(byline)" }
         sections.append(source)
 
-        let content = clip.contentMarkdown.trimmingCharacters(in: .whitespacesAndNewlines)
+        let markdown = clip.contentMarkdown.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = clip.excerpt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let content = clip.mode == .fullPage ? summary : markdown
         if !content.isEmpty {
             sections.append(content)
-        } else if let excerpt = clip.excerpt?.trimmingCharacters(in: .whitespacesAndNewlines), !excerpt.isEmpty {
-            sections.append(excerpt)
+        } else if !summary.isEmpty {
+            sections.append(summary)
         }
 
         return sections

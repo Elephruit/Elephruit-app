@@ -120,10 +120,12 @@ struct WebClipServiceTests {
             return false
         })
         let contentIndex = try #require(item.noteDocument.pieces.firstIndex { piece in
-            piece.paragraph?.plainText.contains("Page introduction") == true
+            piece.paragraph?.plainText.contains("A fallback excerpt") == true
         })
 
         #expect(imageIndex < contentIndex)
+        #expect(!item.body.contains("Page introduction"))
+        #expect(item.searchText.contains("page introduction"))
     }
 
     @Test("Full-page panels remain together before the copied page text")
@@ -148,7 +150,7 @@ struct WebClipServiceTests {
             return false
         }
         let contentIndex = try #require(item.noteDocument.pieces.firstIndex {
-            $0.paragraph?.plainText.contains("Searchable page text") == true
+            $0.paragraph?.plainText.contains("A fallback excerpt") == true
         })
 
         #expect(imageIndices.count == 2)
@@ -159,6 +161,8 @@ struct WebClipServiceTests {
             }
             return caption.isEmpty
         })
+        #expect(!item.body.contains("Searchable page text"))
+        #expect(item.searchText.contains("searchable page text"))
     }
 
     @Test("Downloaded page images are local and inline in the note")

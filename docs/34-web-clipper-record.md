@@ -10,9 +10,10 @@ into the local Elephruit library. It supports six modes:
   removes navigation, advertising, forms, scripts, and other page chrome.
 - **Simplified article** keeps the readable region while also stripping site-specific presentation.
 - **Selection** saves the current DOM selection with its source metadata.
-- **Full page** saves the cleaned body and a sequence of readable, full-width visual panels. The
-  note renders adjacent panels edge-to-edge without captions or attachment-card chrome, so they read
-  as one continuous page instead of separate screenshots.
+- **Full page** saves a sequence of readable, full-width visual panels. The note renders adjacent
+  panels edge-to-edge without captions or attachment-card chrome, so they read as one continuous
+  page instead of separate screenshots. A short source summary stays visible; the complete extracted
+  text is indexed from the HTML attachment instead of being dumped into the editor below the page.
 - **Bookmark** stores the canonical URL, page excerpt, and a local visual thumbnail.
 - **Screenshot** captures the visible Safari tab and stores a PNG attachment.
 
