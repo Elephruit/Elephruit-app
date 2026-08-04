@@ -32,6 +32,12 @@ control is intentional: Safari may dismiss a toolbar popover when focus moves ba
 while the popup controls remain a reliable way to make several adjustments in one pass. Changing to
 a non-article mode removes the page overlay, as does closing the popup or completing the clip.
 
+Popup-to-page commands call a versioned API in the extension's isolated page world. This is more than
+an implementation detail: a tab that was open during an extension upgrade can retain the previous
+message listener, and Safari may accept that listener's empty response before the new one answers.
+Directly invoking the newest API makes extraction, boundary changes, and full-page capture work on
+those already-open tabs without asking the user to reload.
+
 ## Architecture
 
 The boundary between Safari and Elephruit is a versioned `WebClip` value in `ElephruitCore`. Browser

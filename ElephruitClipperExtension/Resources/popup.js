@@ -6,16 +6,31 @@ async function activeTab() {
   return tabs[0];
 }
 
+async function callPageAPI(tabID, method, ...args) {
+  const results = await browser.scripting.executeScript({
+    target: { tabId: tabID },
+    func: (methodName, parameters) => {
+      const api = globalThis.__elephruitClipperAPI;
+      if (!api || api.version < 5 || typeof api[methodName] !== "function") return null;
+      return api[methodName](...parameters);
+    },
+    args: [method, args]
+  });
+  return results?.[0]?.result ?? null;
+}
+
 async function extractPage(tabID) {
   try {
-    const page = await browser.tabs.sendMessage(tabID, { type: "elephruit.extract.v4" });
+    const page = await callPageAPI(tabID, "extract");
     if (page?.schemaVersion === 4) return page;
     throw new Error("This tab has an older page extractor.");
   } catch {
     // The tab may have been open before the extension was enabled or updated. Inject once so the
     // user does not have to reload; the guard in content.js makes this safe on already-prepared tabs.
     await browser.scripting.executeScript({ target: { tabId: tabID }, files: ["content.js"] });
-    return browser.tabs.sendMessage(tabID, { type: "elephruit.extract.v4" });
+    const page = await callPageAPI(tabID, "extract");
+    if (page?.schemaVersion === 4) return page;
+    throw new Error("Safari couldn’t start the page extractor.");
   }
 }
 
@@ -95,9 +110,9 @@ async function syncArticleBoundary(mode) {
   const showsBoundary = ["article", "simplifiedArticle"].includes(mode);
   byID("article-boundary").hidden = !showsBoundary;
   if (showsBoundary) {
-    applyArticleBoundary(await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.article.show.v4" }));
+    applyArticleBoundary(await callPageAPI(state.tab.id, "showArticleSelection"));
   } else {
-    await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.article.hide.v4" }).catch(() => {});
+    await callPageAPI(state.tab.id, "hideArticleSelection").catch(() => {});
   }
 }
 
@@ -116,10 +131,7 @@ async function adjustArticleBoundary(delta) {
   if (state.busy) return;
   byID("article-narrow").disabled = true;
   byID("article-expand").disabled = true;
-  const operation = browser.tabs.sendMessage(state.tab.id, {
-    type: "elephruit.article.adjust.v4",
-    delta
-  }).then(applyArticleBoundary);
+  const operation = callPageAPI(state.tab.id, "adjustArticleSelection", delta).then(applyArticleBoundary);
   state.boundaryPromise = operation;
   await operation;
 }
@@ -196,7 +208,7 @@ function loadedImage(source) {
 }
 
 async function fullPageImages() {
-  const metrics = await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.capture.start.v3" });
+  const metrics = await callPageAPI(state.tab.id, "beginCapture");
   const maximumCaptures = 32;
   const pageHeight = Math.min(metrics.pageHeight, metrics.viewportHeight * maximumCaptures);
   const positions = [];
@@ -207,12 +219,12 @@ async function fullPageImages() {
   const captures = [];
   try {
     for (const y of positions) {
-      const settled = await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.capture.scroll.v3", y });
+      const settled = await callPageAPI(state.tab.id, "scrollCapture", y);
       const data = await browser.tabs.captureVisibleTab(state.tab.windowId, { format: "jpeg", quality: 90 });
       captures.push({ y: settled.scrollY, image: await loadedImage(data) });
     }
   } finally {
-    await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.capture.finish.v3" }).catch(() => {});
+    await callPageAPI(state.tab.id, "finishCapture").catch(() => {});
   }
 
   const pixelRatio = captures[0].image.width / metrics.viewportWidth;
@@ -362,6 +374,6 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && event.metaKey) byID("clip-form").requestSubmit();
 });
 window.addEventListener("pagehide", () => {
-  if (state.tab?.id) browser.tabs.sendMessage(state.tab.id, { type: "elephruit.article.hide.v4" }).catch(() => {});
+  if (state.tab?.id) callPageAPI(state.tab.id, "hideArticleSelection").catch(() => {});
 });
 loadPage();

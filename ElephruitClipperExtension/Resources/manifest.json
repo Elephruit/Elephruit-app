@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Elephruit Web Clipper",
   "description": "Keep articles, selections, pages, bookmarks, and screenshots in your local Elephruit library.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "permissions": [
     "activeTab",
     "nativeMessaging",

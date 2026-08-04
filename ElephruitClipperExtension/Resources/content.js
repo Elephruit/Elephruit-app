@@ -1,6 +1,6 @@
 (() => {
-  if ((globalThis.__elephruitClipperVersion || 0) >= 4) return;
-  globalThis.__elephruitClipperVersion = 4;
+  if ((globalThis.__elephruitClipperVersion || 0) >= 5) return;
+  globalThis.__elephruitClipperVersion = 5;
 
   const REMOVE = [
     "script", "style", "noscript", "template", "nav", "form", "button", "input", "select",
@@ -475,6 +475,21 @@
     window.scrollTo(session.x, session.y);
     return afterPaint(true);
   }
+
+  // A stable callable surface for the popup. Direct invocation matters during extension upgrades:
+  // an already-open tab can still have the previous message listener, and Safari is allowed to use
+  // that listener's empty response before the new listener answers. `scripting.executeScript` calls
+  // this newest API explicitly, so upgrading never requires the user to reload their page.
+  globalThis.__elephruitClipperAPI = {
+    version: 5,
+    extract,
+    showArticleSelection,
+    hideArticleSelection,
+    adjustArticleSelection,
+    beginCapture,
+    scrollCapture,
+    finishCapture
+  };
 
   browser.runtime.onMessage.addListener((message) => {
     if (message?.type === "elephruit.extract.v4") return Promise.resolve(extract());
