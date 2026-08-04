@@ -20,24 +20,26 @@ async function activeTab() {
   return tabs[0];
 }
 
-async function callNewestPanelAPI(tabID) {
-  const results = await browser.scripting.executeScript({
-    target: { tabId: tabID },
-    func: () => {
-      const api = globalThis.__elephruitClipperAPI;
-      if (!api || api.version < 10 || typeof api.togglePanel !== "function") return null;
-      return api.togglePanel();
-    }
-  });
-  return results?.[0]?.result ?? null;
-}
-
 async function messagePanel(tabID) {
   return withTimeout(
     browser.tabs.sendMessage(tabID, { type: "elephruit.panel.toggle.v5" }),
     3_000,
     "Safari did not answer the clipper."
   );
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function waitForInjectedPanel(tabID, milliseconds) {
+  const deadline = Date.now() + milliseconds;
+  while (Date.now() < deadline) {
+    const response = await messagePanel(tabID).catch(() => null);
+    if (typeof response?.open === "boolean") return response;
+    await delay(250);
+  }
+  return null;
 }
 
 async function togglePanel() {
@@ -57,26 +59,19 @@ async function togglePanel() {
     let response = await messagePanel(tab.id).catch(() => null);
     if (typeof response?.open !== "boolean") {
       // A tab opened before the extension was enabled or updated has no current isolated-world API.
-      // Inject both halves explicitly; the scripts are guarded and therefore safe on prepared tabs.
-      await withTimeout(
-        browser.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ["panel.js", "content.js"]
-        }),
-        8_000,
-        "Safari took too long to prepare this page. Reload it once, then try again."
-      );
-      response = await messagePanel(tab.id).catch(() => null);
-      if (typeof response?.open !== "boolean") {
-        response = await withTimeout(
-          callNewestPanelAPI(tab.id),
-          3_000,
-          "Safari did not answer the clipper. Reload this page once, then try again."
-        );
-      }
+      // Safari can leave the returned injection promise pending on continuously loading pages even
+      // after it has executed the scripts. Start the guarded injection, then poll the listener that
+      // proves the page is actually ready instead of trusting that completion promise.
+      browser.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["panel.js", "content.js"]
+      }).catch(() => {});
+      response = await waitForInjectedPanel(tab.id, 8_000);
     }
 
-    if (typeof response?.open !== "boolean") throw new Error("Safari could not start the clipper on this page.");
+    if (typeof response?.open !== "boolean") {
+      throw new Error("Safari took too long to prepare this page. Reload it once, then try again.");
+    }
     window.close();
   } catch (error) {
     spinner.hidden = true;
