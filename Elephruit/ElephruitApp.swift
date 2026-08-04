@@ -441,6 +441,7 @@ struct SettingsView: View {
     @AppStorage("people.followUpThresholdDays") private var followUpThresholdDays = 0
 
     @State private var indexStatistics: (items: Int, terms: Int, isWarm: Bool)?
+    @State private var clipperSettingsError: String?
     var body: some View {
         TabView {
             Tab("General", systemImage: "gearshape") {
@@ -668,6 +669,17 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .alert(
+            "Couldn’t Open Safari Extension Settings",
+            isPresented: Binding(
+                get: { clipperSettingsError != nil },
+                set: { if !$0 { clipperSettingsError = nil } }
+            )
+        ) {
+            Button("OK") { clipperSettingsError = nil }
+        } message: {
+            Text(clipperSettingsError ?? "")
+        }
     }
 
     private func openSafariExtensionSettings() {
@@ -675,9 +687,13 @@ struct SettingsView: View {
         // UI-actor isolated but currently invokes it on an ExtensionHelper XPC queue, which trips
         // Swift 6's executor check. Opening Safari's settings is reliable and remains authoritative.
         Task {
-            try? await SFSafariApplication.showPreferencesForExtension(
-                withIdentifier: "com.elephruit.Elephruit.Clipper"
-            )
+            do {
+                try await SFSafariApplication.showPreferencesForExtension(
+                    withIdentifier: "com.elephruit.Elephruit.Clipper"
+                )
+            } catch {
+                clipperSettingsError = "Safari could not find the Elephruit extension. The app and extension must be signed by the same development team before Safari can enable it.\n\n\(error.localizedDescription)"
+            }
         }
     }
 
