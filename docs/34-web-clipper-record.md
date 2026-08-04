@@ -19,20 +19,21 @@ into the local Elephruit library. It supports six modes:
 - **Bookmark** stores the canonical URL, page excerpt, and a local visual thumbnail.
 - **Screenshot** captures the visible Safari tab and stores a PNG attachment.
 
-The popup lets the user revise the title, preview the extracted text and a representative image, add
-a note and tags, and name an existing project for filing. Article images are downloaded into the
-local library and placed in their original reading order in the resulting note. Article,
+The toolbar item toggles a fixed panel at the page's right edge. The panel lets the user revise the
+title, preview the extracted text and a representative image, add a note and tags, and name an
+existing project for filing without covering the primary reading column. Article images are
+downloaded into the local library and placed in their original reading order in the resulting note. Article,
 simplified-article, selection,
 full-page, and screenshot clips become notes; bookmark clips remain bookmarks with a visual preview.
 Every clipped PNG and JPEG is passed through macOS Vision locally, and its recognized text joins the
 item's search projection without becoming visible note content.
 
-The boundary adjustment appears in both the popup and a floating control on the page. The duplicated
-control is intentional: Safari may dismiss a toolbar popover when focus moves back to page content,
-while the popup controls remain a reliable way to make several adjustments in one pass. Changing to
-a non-article mode removes the page overlay, as does closing the popup or completing the clip.
+The boundary adjustment appears in both the panel and a floating control on the page. Because the
+panel belongs to the page instead of Safari's transient toolbar popover, clicks on either control
+reach their target and several adjustments can be made in one pass. Changing to a non-article mode
+removes the page overlay, as does closing the panel or completing the clip.
 
-Popup-to-page commands call a versioned API in the extension's isolated page world. This is more than
+Panel-to-page commands call a versioned API in the extension's isolated page world. This is more than
 an implementation detail: a tab that was open during an extension upgrade can retain the previous
 message listener, and Safari may accept that listener's empty response before the new one answers.
 Directly invoking the newest API makes extraction, boundary changes, and full-page capture work on
@@ -53,7 +54,7 @@ is idempotent: a retry reuses the stable clip identifier and completes any missi
 ```text
 Safari page
   → content extractor (Markdown, cleaned HTML, metadata, image candidates)
-  → extension popup (review and filing)
+  → right-side extension panel (review and filing)
   → native extension handler
   → App Group inbox (atomic JSON)
   → Elephruit importer
@@ -107,7 +108,7 @@ xcodebuild -project Elephruit.xcodeproj -scheme Elephruit \
   -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
-The popup uses a three-by-two mode picker at its shipping width so all capture types remain legible.
+The panel uses a three-by-two mode picker at its shipping width so all capture types remain legible.
 The content extractor was also exercised against a representative article DOM to verify canonical
 metadata, absolute links, readable Markdown, and removal of navigation and ads.
 

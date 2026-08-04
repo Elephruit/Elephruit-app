@@ -1,6 +1,6 @@
 (() => {
-  if ((globalThis.__elephruitClipperVersion || 0) >= 5) return;
-  globalThis.__elephruitClipperVersion = 5;
+  if ((globalThis.__elephruitClipperVersion || 0) >= 6) return;
+  globalThis.__elephruitClipperVersion = 6;
 
   const REMOVE = [
     "script", "style", "noscript", "template", "nav", "form", "button", "input", "select",
@@ -151,6 +151,7 @@
 
   let articleSelection = null;
   let articleOverlay = null;
+  let clipperPanel = null;
 
   function articleSelectionLevels(root) {
     const levels = [root];
@@ -198,7 +199,7 @@
     if (articleOverlay?.host?.isConnected) return articleOverlay;
     const host = document.createElement("div");
     host.dataset.elephruitClipperUi = "article-boundary";
-    host.style.cssText = "position:fixed;inset:0;z-index:2147483647;pointer-events:none;";
+    host.style.cssText = "position:fixed;inset:0;z-index:2147483646;pointer-events:none;";
     const shadow = host.attachShadow({ mode: "closed" });
     const style = document.createElement("style");
     style.textContent = `
@@ -317,6 +318,45 @@
       browser.runtime.sendMessage({ type: "elephruit.article.changed.v4", payload }).catch(() => {});
     }
     return payload;
+  }
+
+  function openPanel() {
+    if (clipperPanel?.host?.isConnected) return { open: true };
+    const host = document.createElement("div");
+    host.dataset.elephruitClipperUi = "panel";
+    host.style.cssText = "position:fixed;inset:0;z-index:2147483647;pointer-events:none;";
+    const shadow = host.attachShadow({ mode: "closed" });
+    const style = document.createElement("style");
+    style.textContent = `
+      :host { all: initial; }
+      iframe { position: fixed; top: 12px; right: 12px; width: min(390px, calc(100vw - 24px));
+        height: calc(100vh - 24px); border: 1px solid rgba(31, 45, 35, .18); border-radius: 15px;
+        background: white; box-shadow: 0 18px 56px rgba(0, 0, 0, .28), 0 2px 8px rgba(0, 0, 0, .16);
+        pointer-events: auto; color-scheme: light dark; }
+      @media (max-width: 520px) {
+        iframe { top: 6px; right: 6px; width: calc(100vw - 12px); height: calc(100vh - 12px); }
+      }
+    `;
+    const frame = document.createElement("iframe");
+    frame.title = "Elephruit Web Clipper";
+    frame.src = browser.runtime.getURL("popup.html?panel=1");
+    shadow.append(style, frame);
+    document.documentElement.append(host);
+    clipperPanel = { host, frame };
+    return { open: true };
+  }
+
+  function closePanel() {
+    hideArticleSelection();
+    const panel = clipperPanel;
+    clipperPanel = null;
+    // Let the extension caller receive its reply before removing the iframe that made the call.
+    setTimeout(() => panel?.host?.remove(), 0);
+    return { open: false };
+  }
+
+  function togglePanel() {
+    return clipperPanel?.host?.isConnected ? closePanel() : openPanel();
   }
 
   window.addEventListener("scroll", renderArticleOverlay, { passive: true });
@@ -481,11 +521,14 @@
   // that listener's empty response before the new listener answers. `scripting.executeScript` calls
   // this newest API explicitly, so upgrading never requires the user to reload their page.
   globalThis.__elephruitClipperAPI = {
-    version: 5,
+    version: 6,
     extract,
     showArticleSelection,
     hideArticleSelection,
     adjustArticleSelection,
+    openPanel,
+    closePanel,
+    togglePanel,
     beginCapture,
     scrollCapture,
     finishCapture

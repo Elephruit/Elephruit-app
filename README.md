@@ -117,9 +117,11 @@ on-device OCR behind it, so searches find text in the page without appending a t
 the image. Cleaned HTML is retained as a managed attachment for fidelity. Screenshots are copied
 into the same attachment store as your other files and OCR-indexed locally.
 
-Choosing **Article** or **Simplified** outlines the detected article directly on the Safari page and
-dims everything outside it. Use − and + in the clipper—or on the floating page control—to narrow or
-expand the meaningful page boundary before saving. The preview and saved content update together.
+Opening the toolbar item places the clipper in a fixed panel at the page's right edge, away from the
+primary reading column. Choosing **Article** or **Simplified** outlines the detected article directly
+on the Safari page and dims everything outside it. Use − and + in the panel—or on the floating page
+control—to narrow or expand the meaningful page boundary before saving. The preview and saved
+content update together.
 
 Nothing is uploaded. The extension reads only the page on which you invoke it, places an atomic clip
 envelope in the app-group inbox, and wakes Elephruit to import it. If importing is interrupted, the
