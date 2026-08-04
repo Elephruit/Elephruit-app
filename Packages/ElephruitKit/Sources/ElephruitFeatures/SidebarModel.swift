@@ -220,7 +220,7 @@ public enum SidebarRegistry {
             band: .module,
             module: .records,
             title: "All Records",
-            symbolName: "circle.grid.2x2",
+            symbolName: "person.text.rectangle",
             hint: "Every person and thing you keep track of."
         ),
         SidebarDestination(

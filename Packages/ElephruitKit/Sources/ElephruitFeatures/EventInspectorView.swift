@@ -262,7 +262,7 @@ public struct EventInspectorView: View {
                         .foregroundStyle(Theme.Colors.tertiaryText)
                 }
 
-                Button("Add Record…", systemImage: "circle.grid.2x2") {
+                Button("Add Record…", systemImage: "person.text.rectangle") {
                     isShowingRecordPicker = true
                 }
                     .buttonStyle(.borderless)
@@ -768,7 +768,7 @@ struct EventRecordPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            Label("Records", systemImage: "circle.grid.2x2")
+            Label("Records", systemImage: "person.text.rectangle")
                 .font(Theme.Text.sectionHeader)
                 .lineLimit(2)
 

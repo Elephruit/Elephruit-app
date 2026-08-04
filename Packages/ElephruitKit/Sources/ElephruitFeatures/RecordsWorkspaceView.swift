@@ -75,7 +75,7 @@ struct RecordsWorkspaceView: View {
             }
         } else {
             EmptyStateView(
-                symbolName: "circle.grid.2x2",
+                symbolName: "person.text.rectangle",
                 headline: "No record selected",
                 message: "Choose a person or thing to see its details, notes, history, relationships, and shared work."
             )

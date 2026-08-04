@@ -68,7 +68,7 @@ public struct DetailEmptyState: Sendable, Hashable {
         // the + button above the list, and naming the wrong shortcut would teach the wrong habit.
         case .records:
             DetailEmptyState(
-                symbolName: "circle.grid.2x2",
+                symbolName: "person.text.rectangle",
                 headline: "No record selected",
                 message: "Choose a person or thing to see its details, notes, history, and relationships."
             )

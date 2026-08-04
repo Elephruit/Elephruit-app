@@ -243,7 +243,7 @@ struct TodayPersonCard: View {
     private var menu: some View {
         if let item = model.person(person.personID) {
             Button("Open Profile", systemImage: "person.crop.circle") { actions.select(item.id) }
-            Button("Open in Records", systemImage: "circle.grid.2x2") { actions.openInModule(item) }
+            Button("Open in Records", systemImage: "person.text.rectangle") { actions.openInModule(item) }
 
             let contacts = actions.contactActions(for: item).filter(\.isRunnable)
             if !contacts.isEmpty {

@@ -87,7 +87,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         switch self {
         case .calendar: "calendar"
         case .reminders: "bell"
-        case .records: "circle.grid.2x2"
+        case .records: "person.text.rectangle"
         case .notes: "note.text"
         case .time: "timer"
         case .projects: "square.stack.3d.up"

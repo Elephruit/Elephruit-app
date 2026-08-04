@@ -515,7 +515,7 @@ struct SettingsView: View {
                 .accessibilityIdentifier(AccessibilityID.Settings.calendarTab)
             }
 
-            Tab("Records", systemImage: "circle.grid.2x2") {
+            Tab("Records", systemImage: "person.text.rectangle") {
                 records.accessibilityIdentifier(AccessibilityID.Records.contactsSettings)
             }
 
