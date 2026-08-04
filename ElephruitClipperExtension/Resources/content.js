@@ -1,6 +1,6 @@
 (() => {
-  if ((globalThis.__elephruitClipperVersion || 0) >= 13) return;
-  globalThis.__elephruitClipperVersion = 13;
+  if ((globalThis.__elephruitClipperVersion || 0) >= 14) return;
+  globalThis.__elephruitClipperVersion = 14;
 
   // An already-open tab can retain the previous isolated-world script after an extension update.
   // Remove its detached UI before installing the new API so the next toolbar click cannot produce
@@ -216,21 +216,12 @@
     let candidate = heading?.querySelector("a") || heading || root;
     const levels = [];
 
-    // Walk the complete containment ladder, including useful regions inside the detected article
-    // and page-wide ancestors outside it. Visually identical wrapper divs are collapsed; real
-    // changes in padding, width, height, or text produce another selectable boundary.
-    while (candidate && candidate !== document.documentElement && levels.length < 10) {
+    // Every ancestor already contains the chosen heading, so it is a valid cheap boundary. Keep
+    // structural wrappers even when their rectangles are similar; no text or style snapshot is
+    // generated until Save.
+    while (candidate && candidate !== document.documentElement && levels.length < 16) {
       const rect = candidate.getBoundingClientRect();
-      const previous = levels.at(-1);
-      const previousRect = previous?.getBoundingClientRect();
-      const isRequired = candidate === root || candidate === document.body;
-      const isDistinct = !previousRect
-        || Math.abs(rect.width - previousRect.width) >= 12
-        || Math.abs(rect.height - previousRect.height) >= 12;
-      const hasContent = isRequired
-        || candidate.matches("a,h1,h2,h3,p,li,table,figure")
-        || Boolean(candidate.querySelector(":scope > p, :scope > section, :scope > article, :scope > figure, :scope > table"));
-      if (rect.width >= 40 && rect.height >= 18 && hasContent && (isRequired || isDistinct)) {
+      if (rect.width >= 40 && rect.height >= 18) {
         levels.push(candidate);
       }
       if (candidate === document.body) break;
@@ -634,7 +625,7 @@
   // that listener's empty response before the new listener answers. `scripting.executeScript` calls
   // this newest API explicitly, so upgrading never requires the user to reload their page.
   globalThis.__elephruitClipperAPI = {
-    version: 13,
+    version: 14,
     extract,
     captureContent,
     showArticleSelection,
@@ -649,7 +640,7 @@
   };
 
   browser.runtime.onMessage.addListener((message) => {
-    if (message?.type === "elephruit.panel.open.v1") return Promise.resolve(openPanel());
+    if (message?.type === "elephruit.panel.open.v1") return openPanel();
     if (message?.type === "elephruit.extract.v4") return Promise.resolve(extract());
     if (message?.type === "elephruit.article.show.v4") return Promise.resolve(showArticleSelection());
     if (message?.type === "elephruit.article.adjust.v4") {

@@ -8,25 +8,17 @@ function readableError(error) {
   return error?.message || error?.localizedDescription || error?.description || String(error || "Safari denied access to this page.");
 }
 
-function withTimeout(promise, milliseconds, message) {
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), milliseconds);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
-
 async function activeTab() {
   const tabs = await browser.tabs.query({ active: true, currentWindow: true });
   return tabs[0];
 }
 
-async function messagePanel(tabID) {
-  return withTimeout(
-    browser.tabs.sendMessage(tabID, { type: "elephruit.panel.open.v1" }, { frameId: 0 }),
-    700,
-    "Safari did not answer the clipper."
-  );
+async function invokePanel(tabID) {
+  const results = await browser.scripting.executeScript({
+    target: { tabId: tabID },
+    func: () => globalThis.__elephruitClipperAPI?.openPanel?.() || null
+  });
+  return results.find((result) => result.frameId === 0)?.result || results[0]?.result || null;
 }
 
 function delay(milliseconds) {
@@ -53,11 +45,7 @@ async function injectAndOpenPanel(tabID, milliseconds = 15_000) {
         target: { tabId: tabID },
         files: ["panel.js", "content.js"]
       });
-      const results = await browser.scripting.executeScript({
-        target: { tabId: tabID },
-        func: () => globalThis.__elephruitClipperAPI?.openPanel?.() || null
-      });
-      const response = results.find((result) => result.frameId === 0)?.result || results[0]?.result;
+      const response = await invokePanel(tabID);
       if (typeof response?.open === "boolean") return response;
       lastError = new Error("The clipper script loaded, but its page API was unavailable.");
     } catch (error) {
@@ -91,7 +79,7 @@ function showFailure(error) {
 }
 
 async function openOnTab(tab) {
-  let response = await messagePanel(tab.id).catch(() => null);
+  let response = await invokePanel(tab.id).catch(() => null);
   if (typeof response?.open === "boolean") {
     window.close();
     return;

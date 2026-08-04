@@ -117,6 +117,9 @@ Opening the panel uses bounded semantic article candidates and capped text/image
 changes update only that lightweight preview; computed-style capture, full Markdown generation, and
 image enumeration are deferred until Save. This keeps interaction responsive on very large pages
 while retaining the high-fidelity saved result.
+Panel opening invokes the top-frame API directly rather than leaving a timed-out Safari message
+promise pending. Boundary choices preserve the heading's structural ancestor ladder without
+performing text or computed-style analysis for each level.
 
 The main app still has no network entitlement. Safari itself naturally has network access to display
 the page being clipped; the extension operates on that active page.
