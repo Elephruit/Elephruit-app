@@ -56,7 +56,7 @@ the page being clipped; the extension operates on that active page.
 1. Select a development team for both **Elephruit** and **Elephruit Web Clipper**.
 2. Register `group.com.elephruit.Elephruit` and include it in both provisioning profiles.
 3. Build and run Elephruit once.
-4. Open **Settings → Web Clipper → Enable in Safari…**.
+4. Open **Settings → Web Clipper → Open Safari Extension Settings**.
 5. Enable Elephruit Web Clipper in Safari and optionally pin it to the toolbar.
 
 Unsigned builds verify compilation and embedding, but macOS does not provide a functioning shared App

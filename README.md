@@ -119,8 +119,9 @@ Nothing is uploaded. The extension reads only the page on which you invoke it, p
 envelope in the app-group inbox, and wakes Elephruit to import it. If importing is interrupted, the
 same clip resumes without duplicating the item or its attachments.
 
-To turn it on, run Elephruit, open **Settings → Web Clipper**, choose **Enable in Safari…**, and enable
-Elephruit Web Clipper. Pin it to Safari's toolbar if you use it often. A signed development or
+To turn it on, run Elephruit, open **Settings → Web Clipper**, choose **Open Safari Extension
+Settings**, and enable Elephruit Web Clipper. Pin it to Safari's toolbar if you use it often. A signed
+development or
 distribution build must provision the `group.com.elephruit.Elephruit` App Group for both targets.
 
 See [the implementation record](docs/34-web-clipper-record.md) for the capture contract, privacy

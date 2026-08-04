@@ -441,8 +441,6 @@ struct SettingsView: View {
     @AppStorage("people.followUpThresholdDays") private var followUpThresholdDays = 0
 
     @State private var indexStatistics: (items: Int, terms: Int, isWarm: Bool)?
-    @State private var clipperEnabled: Bool?
-
     var body: some View {
         TabView {
             Tab("General", systemImage: "gearshape") {
@@ -636,13 +634,13 @@ struct SettingsView: View {
                 LabeledContent("Safari extension") {
                     HStack(spacing: Theme.Spacing.tight) {
                         Circle()
-                            .fill(clipperEnabled == true ? Color.green : Theme.Colors.tertiaryText)
+                            .fill(Color.green)
                             .frame(width: 7, height: 7)
-                        Text(clipperStatus)
+                        Text("Included")
                     }
                 }
 
-                Button(clipperEnabled == true ? "Open Safari Extension Settings" : "Enable in Safari…") {
+                Button("Open Safari Extension Settings") {
                     openSafariExtensionSettings()
                 }
             } header: {
@@ -670,41 +668,16 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .task { await refreshClipperState() }
-    }
-
-    private var clipperStatus: String {
-        switch clipperEnabled {
-        case true: "Enabled"
-        case false: "Not enabled"
-        case nil: "Checking…"
-        }
-    }
-
-    private func refreshClipperState() async {
-        clipperEnabled = await Self.safariExtensionEnabled()
-    }
-
-    /// SafariServices currently invokes this completion handler on its private XPC queue even
-    /// though the SDK annotates it for the UI actor. Keep the callback outside the view's main-actor
-    /// isolation; awaiting the result naturally returns `refreshClipperState()` to the main actor
-    /// before it mutates SwiftUI state.
-    private nonisolated static func safariExtensionEnabled() async -> Bool {
-        await withCheckedContinuation { continuation in
-            SFSafariExtensionManager.getStateOfSafariExtension(
-                withIdentifier: "com.elephruit.Elephruit.Clipper"
-            ) { state, error in
-                continuation.resume(returning: error == nil && state?.isEnabled == true)
-            }
-        }
     }
 
     private func openSafariExtensionSettings() {
+        // Do not probe `SFSafariExtensionManager` here. SafariServices marks its state callback as
+        // UI-actor isolated but currently invokes it on an ExtensionHelper XPC queue, which trips
+        // Swift 6's executor check. Opening Safari's settings is reliable and remains authoritative.
         Task {
             try? await SFSafariApplication.showPreferencesForExtension(
                 withIdentifier: "com.elephruit.Elephruit.Clipper"
             )
-            await refreshClipperState()
         }
     }
 
