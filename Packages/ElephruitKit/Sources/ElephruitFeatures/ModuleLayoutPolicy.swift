@@ -255,6 +255,12 @@ public enum PrimaryNavigationLayout {
     public static let shell = ModuleShellLayout(
         primary: PaneWidth(minimum: Theme.Size.listMinWidth, ideal: Theme.Size.listIdealWidth, maximum: 520),
         detail: DetailPanePolicy(
+            // The single most visible thing wrong with the app, fixed by policy rather than copy:
+            // on the Inbox, a tag, or a saved search with nothing selected, two thirds of the
+            // window was a void captioned "Nothing selected". A list surface with no reading
+            // selection is a *list* — it takes the window, and the reading pane exists from the
+            // moment there is something to read.
+            hidesWhenNothingSelected: true,
             width: PaneWidth(minimum: Theme.Size.detailMinWidth, ideal: 640, maximum: 900),
             compactWindowWidth: 860
         ),

@@ -184,6 +184,30 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         }
     }
 
+    /// Whether the reading pane opens the newest item when nothing is selected.
+    ///
+    /// True for the surfaces whose right side is a *document* — a note, a bookmark, an archived
+    /// or deleted item being reconsidered — where an empty editor is a void and the newest item
+    /// is almost always the one wanted. False for the list-centric surfaces (Inbox, tags, saved
+    /// searches), whose answer to an empty selection is the list taking the window; false for
+    /// work items, whose module opens a composer instead; and false for canvases, which have no
+    /// reading pane at all.
+    public var autoSelectsFirstItem: Bool {
+        switch self {
+        case .kind(let kind):
+            switch kind {
+            case .note, .idea, .reference, .dailyEntry, .meeting, .decision, .bookmark:
+                true
+            default:
+                false
+            }
+        case .archive, .trash:
+            true
+        default:
+            false
+        }
+    }
+
     /// The kind a "New Item" action should create here, so `⌘N` does the obvious thing.
     public var defaultNewItemKind: ItemKind {
         switch self {

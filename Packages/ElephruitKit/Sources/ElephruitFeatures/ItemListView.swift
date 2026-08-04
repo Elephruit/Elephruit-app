@@ -641,6 +641,18 @@ public struct ItemListView: View {
         services.perform {
             items = try services.items.items(matching: query)
         }
+
+        // A reading surface never opens onto a void: with nothing selected — a fresh window, a
+        // just-deleted item — the newest item opens, which is what Notes does and what keeps the
+        // editor alive. Restoration runs before this and wins, because the condition is "nothing
+        // selected", never "something else selected". List-centric surfaces decline (their answer
+        // is the list taking the window), and search is left alone — its selection is the preview.
+        if navigation.selectedItemID == nil,
+           !navigation.isSearchActive,
+           navigation.selection.autoSelectsFirstItem,
+           let first = items.first {
+            navigation.selectItem(first.id)
+        }
     }
 
     /// Runs a saved search and resolves its hits to items, once.
