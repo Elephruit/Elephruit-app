@@ -220,7 +220,7 @@ struct QuickJotControllerTests {
                 .first { $0.title == "Renew the studio insurance" }
         )
         #expect(item.body == "The excess went up again")
-        #expect(item.tags.contains { $0.slug == "admin" })
+        #expect((item.tags ?? []).contains { $0.slug == "admin" })
     }
 
     @Test("Saving strips visible Notes grammar after applying it")
@@ -304,7 +304,7 @@ struct QuickJotControllerTests {
         #expect(item.kind == .reminder)
         #expect(item.dueAt != nil)
         #expect(item.priority == .high)
-        #expect(item.tags.contains { $0.slug == "errand" })
+        #expect((item.tags ?? []).contains { $0.slug == "errand" })
     }
 
     /// Saving flushes first, so a token the user finished but never terminated becomes a chip on the
@@ -338,7 +338,7 @@ struct QuickJotControllerTests {
             try services.items.items(matching: .everything()).first { $0.title == "Call the framer" }
         )
         #expect(item.parent?.id == project.id)
-        #expect(item.tags.map(\.slug).sorted() == ["errand", "urgent"])
+        #expect((item.tags ?? []).map(\.slug).sorted() == ["errand", "urgent"])
         #expect(try services.items.items(matching: .everything()).contains { $0.title == "Sarah" })
     }
 }

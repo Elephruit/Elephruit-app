@@ -401,7 +401,7 @@ public final class SwiftDataItemRepository: ItemRepository {
             guard visited.insert(subject.id).inserted else { return }
             subject.archivedAt = stamp
             subject.updatedAt = dateProvider.now
-            for child in subject.children { apply(child) }
+            for child in (subject.children ?? []) { apply(child) }
         }
 
         apply(item)
@@ -415,7 +415,7 @@ public final class SwiftDataItemRepository: ItemRepository {
     /// Linking twice is a no-op rather than an error: the caller's intent is "these are related",
     /// and a second call means that is still true.
     public func link(_ source: Item, to target: Item, kind: LinkKind) throws(AppError) {
-        let existing = source.outgoingLinks.contains {
+        let existing = (source.outgoingLinks ?? []).contains {
             $0.kind == kind && $0.target?.id == target.id
         }
         guard !existing else { return }
@@ -426,7 +426,7 @@ public final class SwiftDataItemRepository: ItemRepository {
 
     public func fileItem(_ item: Item, under container: Item?) throws(AppError) {
         guard let container else {
-            for link in item.outgoingLinks where link.kind == .filedUnder {
+            for link in (item.outgoingLinks ?? []) where link.kind == .filedUnder {
                 context.delete(link)
             }
             try save()
@@ -443,7 +443,7 @@ public final class SwiftDataItemRepository: ItemRepository {
         }
 
         // Already filed there — filing twice is not an error, it is a no-op.
-        let existing = item.outgoingLinks.contains {
+        let existing = (item.outgoingLinks ?? []).contains {
             $0.kind == .filedUnder && $0.target?.id == container.id
         }
         guard !existing else { return }
@@ -455,7 +455,7 @@ public final class SwiftDataItemRepository: ItemRepository {
     }
 
     public func unfileItem(_ item: Item, from container: Item) throws(AppError) {
-        for link in item.outgoingLinks
+        for link in (item.outgoingLinks ?? [])
         where link.kind == .filedUnder && link.target?.id == container.id {
             context.delete(link)
         }
@@ -467,7 +467,7 @@ public final class SwiftDataItemRepository: ItemRepository {
         guard heading.kind == .heading else { return }
         let destination = heading.parent
 
-        for task in heading.children.filter({ $0.kind.isWorkItem }) {
+        for task in (heading.children ?? []).filter({ $0.kind.isWorkItem }) {
             task.parent = destination
             task.updatedAt = dateProvider.now
         }
@@ -713,7 +713,7 @@ public final class SwiftDataItemRepository: ItemRepository {
             guard visited.insert(subject.id).inserted else { return }
             if subject.deletedAt == nil { subject.deletedAt = now }
             subject.updatedAt = now
-            for child in subject.children { trash(child) }
+            for child in (subject.children ?? []) { trash(child) }
         }
 
         trash(item)
@@ -735,7 +735,7 @@ public final class SwiftDataItemRepository: ItemRepository {
             guard visited.insert(subject.id).inserted else { return }
             subject.deletedAt = nil
             subject.updatedAt = now
-            for child in subject.children where child.deletedAt == timestamp {
+            for child in (subject.children ?? []) where child.deletedAt == timestamp {
                 restore(child, matching: timestamp)
             }
         }
@@ -782,7 +782,7 @@ public final class SwiftDataItemRepository: ItemRepository {
         let desiredKeys = Set(found.map(\.matchKey))
 
         // Remove wiki links no longer present in the text.
-        for link in item.outgoingLinks where link.kind == .wiki {
+        for link in (item.outgoingLinks ?? []) where link.kind == .wiki {
             let key = link.target.map { TextNormalizer.foldedForMatching($0.title) }
                 ?? link.unresolvedMatchKey
                 ?? ""
@@ -792,7 +792,7 @@ public final class SwiftDataItemRepository: ItemRepository {
         }
 
         let existingKeys = Set(
-            item.outgoingLinks
+            (item.outgoingLinks ?? [])
                 .filter { $0.kind == .wiki }
                 .compactMap { link -> String? in
                     link.target.map { TextNormalizer.foldedForMatching($0.title) } ?? link.unresolvedMatchKey

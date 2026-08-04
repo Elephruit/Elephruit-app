@@ -121,7 +121,12 @@ final class AppEnvironment {
                 ? StoreLocation.temporary(name: DesignReviewLaunch.storeName ?? "UITests")
                 : try StoreLocation.application()
 
-            let stack = try PersistenceStack.open(mode: .onDisk(location))
+            // The setting asks; the stack decides — a temporary store never syncs
+            // regardless, which is what keeps a review sweep out of the real library.
+            let stack = try PersistenceStack.open(
+                mode: .onDisk(location),
+                syncEnabled: SyncSetting.isEnabled()
+            )
             // Hoisted and explicitly typed: a ternary between a closure and `nil` in an argument
             // position defeats the type checker here.
             let makeFixtureContacts: @Sendable () -> any ContactsProviding = {

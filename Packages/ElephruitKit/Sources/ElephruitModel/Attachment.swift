@@ -68,6 +68,22 @@ public final class Attachment {
     /// Populated in Phase 3; feeds ``Item/searchText``.
     public var extractedText: String?
 
+    // MARK: Sync
+
+    /// The managed copy's bytes, as sync carries them.
+    ///
+    /// The file at ``relativePath`` stays the working copy — ADR 0003's decision that bytes
+    /// live on disk is untouched. This column is the *transport*: externally stored so
+    /// mirroring maps it to a CKAsset rather than inlining megabytes into a record, filled
+    /// for managed copies within the sync size cap, and never for bookmark references, whose
+    /// scoped tokens are machine-local by nature. A device that receives the row without the
+    /// file hydrates the working copy from here in the reconciliation pass.
+    @Attribute(.externalStorage)
+    public var syncedContent: Data?
+
+    /// Which device's library first held the bytes — the name shown when they are not here.
+    public var originDeviceName: String?
+
     public var owner: Item?
 
     public init(

@@ -62,16 +62,16 @@ public final class PersonWorkspaceService {
                     suggestedFactCount: 0,
                     isOpen: related.status == .open,
                     isPromise: Self.isPromise(related),
-                    attachmentCount: related.attachments.count
+                    attachmentCount: (related.attachments ?? []).count
                 )
             )
         }
 
-        for link in person.incomingLinks {
+        for link in (person.incomingLinks ?? []) {
             guard let source = link.source else { continue }
             consider(source)
         }
-        for link in person.outgoingLinks {
+        for link in (person.outgoingLinks ?? []) {
             guard let target = link.target else { continue }
             consider(target)
         }
@@ -121,12 +121,12 @@ public final class PersonWorkspaceService {
         var references: [PersonReference] = []
         var seen: Set<UUID> = [personID]
 
-        for link in item.outgoingLinks {
+        for link in (item.outgoingLinks ?? []) {
             guard let target = link.target, target.kind == .person, target.deletedAt == nil else { continue }
             guard seen.insert(target.id).inserted else { continue }
             references.append(PersonReference(id: target.id, name: target.displayTitle))
         }
-        for link in item.incomingLinks {
+        for link in (item.incomingLinks ?? []) {
             guard let source = link.source, source.kind == .person, source.deletedAt == nil else { continue }
             guard seen.insert(source.id).inserted else { continue }
             references.append(PersonReference(id: source.id, name: source.displayTitle))
@@ -481,7 +481,7 @@ public final class PersonWorkspaceService {
         var seen = Set<UUID>()
         var result: [PersonReference] = []
 
-        for link in person.incomingLinks {
+        for link in (person.incomingLinks ?? []) {
             guard let source = link.source, source.deletedAt == nil else { continue }
             guard let project = source.enclosingProject() ?? source.filedUnderContainers().first else { continue }
             guard seen.insert(project.id).inserted else { continue }

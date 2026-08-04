@@ -127,7 +127,7 @@ public final class WorkItemService {
     /// express it — a link is a link — and because a store that has somehow acquired two must still
     /// open rather than refusing to load somebody's library over a duplicate row.
     public func assign(_ item: Item, to person: Item?) throws(AppError) {
-        let existing = item.outgoingLinks.filter { $0.kind == .assignee }
+        let existing = (item.outgoingLinks ?? []).filter { $0.kind == .assignee }
         let previous = existing.first?.target
         guard previous?.id != person?.id else { return }
 
@@ -153,7 +153,7 @@ public final class WorkItemService {
     @discardableResult
     public func addDependency(_ item: Item, blockedBy blocker: Item) throws(AppError) -> Bool {
         guard item.id != blocker.id, !wouldCycle(item, blockedBy: blocker) else { return false }
-        guard !item.outgoingLinks.contains(where: { $0.kind == .blockedBy && $0.target?.id == blocker.id })
+        guard !(item.outgoingLinks ?? []).contains(where: { $0.kind == .blockedBy && $0.target?.id == blocker.id })
         else { return true }
 
         try items.link(item, to: blocker, kind: .blockedBy)
@@ -163,7 +163,7 @@ public final class WorkItemService {
     }
 
     public func removeDependency(_ item: Item, blockedBy blocker: Item) throws(AppError) {
-        let stale = item.outgoingLinks.filter { $0.kind == .blockedBy && $0.target?.id == blocker.id }
+        let stale = (item.outgoingLinks ?? []).filter { $0.kind == .blockedBy && $0.target?.id == blocker.id }
         guard !stale.isEmpty else { return }
         for link in stale { context.delete(link) }
         record(.blockedByRemoved, on: item, oldValue: blocker.title)
@@ -179,7 +179,7 @@ public final class WorkItemService {
         var queue = [blocker]
         while let next = queue.popLast() {
             if next.id == item.id { return true }
-            for link in next.outgoingLinks where link.kind == .blockedBy {
+            for link in (next.outgoingLinks ?? []) where link.kind == .blockedBy {
                 guard let target = link.target, seen.insert(target.id).inserted else { continue }
                 queue.append(target)
             }
@@ -218,7 +218,7 @@ public final class WorkItemService {
         to target: Item?,
         activity: ActivityKind
     ) throws(AppError) {
-        let existing = item.outgoingLinks.filter { $0.kind == kind }
+        let existing = (item.outgoingLinks ?? []).filter { $0.kind == kind }
         let previous = existing.first?.target
         guard previous?.id != target?.id else { return }
         for link in existing { context.delete(link) }
@@ -303,13 +303,13 @@ public final class WorkItemService {
     }
 
     public func comments(on item: Item) -> [ItemComment] {
-        item.comments.sorted { $0.createdAt < $1.createdAt }
+        (item.comments ?? []).sorted { $0.createdAt < $1.createdAt }
     }
 
     // MARK: - History
 
     public func history(of item: Item) -> [ItemActivity] {
-        item.activities.sorted { $0.at > $1.at }
+        (item.activities ?? []).sorted { $0.at > $1.at }
     }
 
     /// Writes one line of history.

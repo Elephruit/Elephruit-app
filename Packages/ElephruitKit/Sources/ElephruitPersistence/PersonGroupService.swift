@@ -218,7 +218,7 @@ public final class PersonGroupService {
                 name: String(collection.name.dropFirst(Self.groupPrefix.count)),
                 symbolName: collection.effectiveSymbolName,
                 definition: .fixed,
-                memberIDs: collection.memberships
+                memberIDs: (collection.memberships ?? [])
                     .sorted { $0.position < $1.position }
                     .compactMap { membership in
                         guard let item = membership.item, item.kind == .person, item.deletedAt == nil else {
@@ -307,9 +307,9 @@ public final class PersonGroupService {
         let descriptor = FetchDescriptor<ItemCollection>(predicate: #Predicate { $0.id == groupID })
         guard let collection = try fetch(descriptor).first else { throw .itemNotFound(id: groupID) }
 
-        guard !collection.memberships.contains(where: { $0.item?.id == person.id }) else { return }
+        guard !(collection.memberships ?? []).contains(where: { $0.item?.id == person.id }) else { return }
 
-        let position = (collection.memberships.map(\.position).max() ?? 0) + 1024
+        let position = ((collection.memberships ?? []).map(\.position).max() ?? 0) + 1024
         let membership = CollectionMembership()
         membership.position = position
         membership.addedAt = dateProvider.now
@@ -323,7 +323,7 @@ public final class PersonGroupService {
         let descriptor = FetchDescriptor<ItemCollection>(predicate: #Predicate { $0.id == groupID })
         guard let collection = try fetch(descriptor).first else { return }
 
-        for membership in collection.memberships where membership.item?.id == person.id {
+        for membership in (collection.memberships ?? []) where membership.item?.id == person.id {
             context.delete(membership)
         }
         try save()

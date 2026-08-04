@@ -1,4 +1,8 @@
-import AppKit
+#if canImport(AppKit)
+    import AppKit
+#elseif canImport(UIKit)
+    import UIKit
+#endif
 import ElephruitCore
 import SwiftUI
 
@@ -25,27 +29,44 @@ extension Theme {
     /// something the save path will not do. It gets a quiet amber underline instead: enough to say
     /// *this looked like syntax and did not work*, not enough to look like a failure, and it stays
     /// ordinary text that deletes one letter at a time — which is how the user fixes it.
+    ///
+    /// The colour members are the native colour type of each platform's text view —
+    /// `NSColor` for the AppKit field, `UIColor` for the UIKit one — because these values
+    /// exist to be handed to an attributed string, not to SwiftUI.
     public enum CaptureToken {
-        /// The rounded fill behind an understood token.
-        public static var fill: NSColor {
-            .controlAccentColor.withAlphaComponent(0.15)
-        }
+        #if canImport(AppKit)
+            /// The rounded fill behind an understood token.
+            public static var fill: NSColor {
+                .controlAccentColor.withAlphaComponent(0.15)
+            }
 
-        /// The text inside an understood token.
-        ///
-        /// The accent colour at full strength rather than the label colour, so a token reads as a
-        /// token in a monochrome screenshot and at a glance.
-        public static var foreground: NSColor { .controlAccentColor }
+            /// The text inside an understood token.
+            ///
+            /// The accent colour at full strength rather than the label colour, so a token reads as a
+            /// token in a monochrome screenshot and at a glance.
+            public static var foreground: NSColor { .controlAccentColor }
 
-        /// The mark under syntax the parser did not understand.
-        public static var unresolvedUnderline: NSColor { .systemOrange }
+            /// The mark under syntax the parser did not understand.
+            public static var unresolvedUnderline: NSColor { .systemOrange }
+        #elseif canImport(UIKit)
+            /// The rounded fill behind an understood token.
+            public static var fill: UIColor {
+                .tintColor.withAlphaComponent(0.15)
+            }
+
+            /// The text inside an understood token.
+            public static var foreground: UIColor { .tintColor }
+
+            /// The mark under syntax the parser did not understand.
+            public static var unresolvedUnderline: UIColor { .systemOrange }
+        #endif
 
         /// How far the fill extends past the glyphs, horizontally and vertically.
         ///
         /// Small on purpose. A token in a one-line capture field sits between ordinary words, and a
         /// pill with generous padding pushes the line height around as soon as one appears — which
         /// makes the field jump while somebody is typing into it.
-        public static let padding = NSSize(width: 2, height: 1)
+        public static let padding = CGSize(width: 2, height: 1)
 
         /// Matches ``Theme/Radius/small``, which is what every other chip in the app uses.
         public static let cornerRadius: CGFloat = Theme.Radius.small
@@ -54,5 +75,11 @@ extension Theme {
 
 extension Theme.CaptureToken {
     /// The SwiftUI mirror of ``foreground``, for the parts of the panel that are not a text view.
-    public static var accent: Color { Color(nsColor: foreground) }
+    public static var accent: Color {
+        #if canImport(AppKit)
+            Color(nsColor: foreground)
+        #else
+            Color(uiColor: foreground)
+        #endif
+    }
 }

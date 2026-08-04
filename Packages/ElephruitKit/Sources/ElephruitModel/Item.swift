@@ -68,6 +68,13 @@ public final class Item {
     /// — rather than in a migration stage that rewrites everybody's library at once on the strength
     /// of a parser nobody has run against their notes yet. The legacy read path stays until that has
     /// been validated in the field, which is what ADR 0006's consequence 6 asks for.
+    ///
+    /// External storage because sync requires it, and this is the one payload with no cap: a
+    /// CKRecord holds about a megabyte, and mirroring maps externally-stored data to CKAsset,
+    /// which has no such ceiling. This is not the `.externalStorage` ADR 0003 rejected — that
+    /// decision was about *user files*, whose bytes belong in a folder the user can reach;
+    /// this is the app's own rich-text payload, which no one opens with another tool.
+    @Attribute(.externalStorage)
     public var noteDocumentData: Data?
 
     /// Denormalised projection of title, body, tag slugs, and person names.
@@ -377,25 +384,25 @@ public final class Item {
 
     /// Contained items. Cascades: trashing a project trashes its tasks.
     @Relationship(deleteRule: .cascade, inverse: \Item.parent)
-    public var children: [Item] = []
+    public var children: [Item]? = []
 
     @Relationship(inverse: \Tag.items)
-    public var tags: [Tag] = []
+    public var tags: [Tag]? = []
 
     /// Links *from* this item. Cascade: the link belongs to its source.
     @Relationship(deleteRule: .cascade, inverse: \ItemLink.source)
-    public var outgoingLinks: [ItemLink] = []
+    public var outgoingLinks: [ItemLink]? = []
 
     /// Links *to* this item — the raw material of the Backlinks section, which is a
     /// query over this and never a second stored copy.
     @Relationship(deleteRule: .cascade, inverse: \ItemLink.target)
-    public var incomingLinks: [ItemLink] = []
+    public var incomingLinks: [ItemLink]? = []
 
     @Relationship(deleteRule: .cascade, inverse: \Attachment.owner)
-    public var attachments: [Attachment] = []
+    public var attachments: [Attachment]? = []
 
     @Relationship(deleteRule: .cascade, inverse: \CollectionMembership.item)
-    public var collectionMemberships: [CollectionMembership] = []
+    public var collectionMemberships: [CollectionMembership]? = []
 
     /// Present only for ``ItemKind/person``.
     @Relationship(deleteRule: .cascade, inverse: \PersonProfile.item)
@@ -424,19 +431,19 @@ public final class Item {
     // from the project that defines it.
 
     @Relationship(deleteRule: .cascade, inverse: \WorkflowStage.project)
-    public var workflowStages: [WorkflowStage] = []
+    public var workflowStages: [WorkflowStage]? = []
 
     @Relationship(deleteRule: .cascade, inverse: \ProjectViewRecord.project)
-    public var projectViews: [ProjectViewRecord] = []
+    public var projectViews: [ProjectViewRecord]? = []
 
     @Relationship(deleteRule: .cascade, inverse: \CustomFieldDefinition.project)
-    public var customFieldDefinitions: [CustomFieldDefinition] = []
+    public var customFieldDefinitions: [CustomFieldDefinition]? = []
 
     @Relationship(deleteRule: .cascade, inverse: \AutomationRule.project)
-    public var automationRules: [AutomationRule] = []
+    public var automationRules: [AutomationRule]? = []
 
     @Relationship(deleteRule: .cascade, inverse: \ItemComment.item)
-    public var comments: [ItemComment] = []
+    public var comments: [ItemComment]? = []
 
     /// This item's history.
     ///
@@ -444,10 +451,10 @@ public final class Item {
     /// item that no longer exists is history with nothing to be history *of*; four hours worked is
     /// a fact about the past that outlives what it was worked on.
     @Relationship(deleteRule: .cascade, inverse: \ItemActivity.item)
-    public var activities: [ItemActivity] = []
+    public var activities: [ItemActivity]? = []
 
     @Relationship(deleteRule: .cascade, inverse: \InboxNotification.item)
-    public var notifications: [InboxNotification] = []
+    public var notifications: [InboxNotification]? = []
 
     /// Time tracked against this item.
     ///
@@ -460,7 +467,36 @@ public final class Item {
     /// relationships, and the decision of record is that deferring sync must not make adopting it
     /// harder later.
     @Relationship(deleteRule: .nullify)
-    public var timeEntries: [TimeEntry] = []
+    public var timeEntries: [TimeEntry]? = []
+
+    // MARK: The person-record inverses
+
+    // Six relationships reached this Item from the person records with no inverse declared —
+    // found by the pre-sync audit, against the same rule ``timeEntries`` states. Each is the
+    // plain side of its pair; the `@Relationship(inverse:)` naming lives on the to-one side,
+    // matching every other pair in the model. All nullify, deliberately: before these inverses
+    // existed, deleting an item never touched the referencing rows, and a schema bump made for
+    // sync must not quietly change what deletion means. Orphaned rows remain the integrity
+    // pass's to reap, exactly as they were.
+
+    /// The Contacts-app links that name this person. Inverse of ``SystemContactLink/person``.
+    public var contactLinks: [SystemContactLink]? = []
+
+    /// Observed facts about this person. Inverse of ``PersonObservationRecord/subject``.
+    public var observationsAbout: [PersonObservationRecord]? = []
+
+    /// Facts this note or meeting produced. Inverse of ``PersonObservationRecord/sourceItem``.
+    public var observationsSourced: [PersonObservationRecord]? = []
+
+    /// Relationships read from this person's page. Inverse of ``PersonRelationship/subject``.
+    public var relationshipsAsSubject: [PersonRelationship]? = []
+
+    /// Relationships in which this person is the other party. Inverse of
+    /// ``PersonRelationship/other``.
+    public var relationshipsAsOther: [PersonRelationship]? = []
+
+    /// This person's recurring dates. Inverse of ``PersonCelebration/person``.
+    public var celebrations: [PersonCelebration]? = []
 
     /// Time tracked *with* this person, as opposed to *against* this item.
     ///
@@ -473,7 +509,7 @@ public final class Item {
     /// `.nullify` for the reason ``timeEntries`` is: deleting a person must not destroy the record
     /// of hours worked alongside them.
     @Relationship(deleteRule: .nullify)
-    public var attendedTimeEntries: [TimeEntry] = []
+    public var attendedTimeEntries: [TimeEntry]? = []
 
     /// Time billed to this project by an entry that does not sit inside it.
     ///
@@ -482,7 +518,7 @@ public final class Item {
     /// project* answerable without filing anything twice. This carries only the case derivation
     /// cannot reach: a note, a meeting, or nothing at all, worked on for a project it is not inside.
     @Relationship(deleteRule: .nullify)
-    public var billedTimeEntries: [TimeEntry] = []
+    public var billedTimeEntries: [TimeEntry]? = []
 
     // MARK: Init
 
@@ -583,7 +619,7 @@ extension String {
 
 extension Item: ContentItem {
     public var tagSlugs: [String] {
-        tags.map(\.slug).sorted()
+        (tags ?? []).map(\.slug).sorted()
     }
 
     public var parentTitle: String? {
@@ -651,7 +687,7 @@ extension Item {
         searchText = Self.projectedSearchText(
             title: title,
             body: body,
-            tagSlugs: tags.map(\.slug),
+            tagSlugs: (tags ?? []).map(\.slug),
             // The reference and the bug report join the projection. A handle is what people paste
             // into a search box, and reproduction steps are where the searchable words actually
             // live: "the crash when the list is empty" is written in the steps, never in the title.
@@ -659,7 +695,7 @@ extension Item {
                 referenceKey,
                 personProfile?.searchableText,
                 bugRecord?.searchableText,
-                attachments.compactMap(\.extractedText).joined(separator: " ").nilWhenEmpty,
+                (attachments ?? []).compactMap(\.extractedText).joined(separator: " ").nilWhenEmpty,
             ]
                 .compactMap { $0 }
                 .filter { !$0.isEmpty }
@@ -741,7 +777,7 @@ extension Item {
     /// Backlinks worth showing: incoming links whose kind belongs in that section and
     /// whose source is neither trashed nor the item itself.
     public func visibleBacklinks() -> [ItemLink] {
-        incomingLinks.filter { link in
+        (incomingLinks ?? []).filter { link in
             guard link.kind.appearsInBacklinks else { return false }
             guard let source = link.source else { return false }
             return source.deletedAt == nil && source.id != id
@@ -753,14 +789,14 @@ extension Item {
     /// Empty for anything that is not a project. An empty heading is legitimate — it is a
     /// placeholder for work not yet written down — and is never pruned automatically.
     public func orderedHeadings() -> [Item] {
-        children
+        (children ?? [])
             .filter { $0.kind == .heading && $0.deletedAt == nil }
             .sorted { $0.sortOrder < $1.sortOrder }
     }
 
     /// Direct child tasks that sit outside any heading, in order.
     public func ungroupedTasks() -> [Item] {
-        children
+        (children ?? [])
             .filter { $0.kind.isWorkItem && $0.deletedAt == nil }
             .sorted { $0.sortOrder < $1.sortOrder }
     }
@@ -771,14 +807,14 @@ extension Item {
     public func descendantTasks(limit: Int = 10_000) -> [Item] {
         var result: [Item] = []
         var seen: Set<UUID> = [id]
-        var queue = children
+        var queue = children ?? []
 
         while let next = queue.popLast(), result.count < limit {
             guard next.deletedAt == nil, seen.insert(next.id).inserted else { continue }
             if next.kind.isWorkItem { result.append(next) }
             // Descend through headings and tasks alike: a heading holds tasks, a task holds subtasks.
             if next.kind == .heading || next.kind.isWorkItem {
-                queue.append(contentsOf: next.children)
+                queue.append(contentsOf: next.children ?? [])
             }
         }
 
@@ -799,13 +835,13 @@ extension Item {
     public func descendantWork(limit: Int = 10_000) -> [Item] {
         var result: [Item] = []
         var seen: Set<UUID> = [id]
-        var queue = children
+        var queue = children ?? []
 
         while let next = queue.popLast(), result.count < limit {
             guard next.deletedAt == nil, seen.insert(next.id).inserted else { continue }
             if next.kind.isWorkItem { result.append(next) }
             if next.kind.supportedFields.contains(.children) {
-                queue.append(contentsOf: next.children)
+                queue.append(contentsOf: next.children ?? [])
             }
         }
 
@@ -814,7 +850,7 @@ extension Item {
 
     /// The milestones and releases directly inside this project, in order.
     public func planningMarkers() -> [Item] {
-        children
+        (children ?? [])
             .filter { ItemKind.planningMarkerKinds.contains($0.kind) && $0.deletedAt == nil }
             .sorted { $0.sortOrder < $1.sortOrder }
     }
@@ -863,7 +899,7 @@ extension Item {
     /// A note may be filed under several projects at once — that is the whole reason filing is a link
     /// rather than a parent.
     public func filedUnderContainers() -> [Item] {
-        outgoingLinks
+        (outgoingLinks ?? [])
             .filter { $0.kind == .filedUnder }
             .compactMap(\.target)
             .filter { $0.deletedAt == nil }
@@ -874,7 +910,7 @@ extension Item {
     /// Distinct from what merely mentions it. Nothing here is *owned* by the container, so archiving
     /// or completing it leaves all of this untouched.
     public func filedItems() -> [Item] {
-        incomingLinks
+        (incomingLinks ?? [])
             .filter { $0.kind == .filedUnder }
             .compactMap(\.source)
             .filter { $0.deletedAt == nil }
@@ -886,7 +922,7 @@ extension Item {
         var seen = Set<UUID>()
         let filed = Set(filedItems().map(\.id))
 
-        return incomingLinks
+        return (incomingLinks ?? [])
             .filter { $0.kind != .filedUnder && $0.kind.appearsInBacklinks }
             .compactMap(\.source)
             .filter { $0.deletedAt == nil && !filed.contains($0.id) && seen.insert($0.id).inserted }

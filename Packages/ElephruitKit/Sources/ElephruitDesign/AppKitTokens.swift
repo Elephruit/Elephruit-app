@@ -1,3 +1,7 @@
+#if canImport(AppKit)
+// The AppKit boundary exists only where AppKit does. The iOS note editor will bring a
+// UIKit twin of this file when it arrives; until then there is nothing here for iOS to see.
+
 import AppKit
 
 extension Theme {
@@ -45,3 +49,4 @@ extension Theme {
 
 // The palette's AppKit accessors live in `Tokens.swift`, beside the palette itself — the source
 // hygiene scan rightly treats any other file that spells out colour names as a second palette.
+#endif

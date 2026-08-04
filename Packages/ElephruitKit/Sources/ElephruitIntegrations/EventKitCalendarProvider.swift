@@ -1,4 +1,6 @@
-import AppKit
+#if canImport(AppKit)
+    import AppKit
+#endif
 import ElephruitCore
 import EventKit
 import Foundation
@@ -603,18 +605,34 @@ public actor EventKitCalendarProvider: CalendarProviding {
 
     /// A calendar's colour, reduced to a palette name.
     ///
-    /// Converted through `NSColor` rather than by reading `CGColor.components` directly, because the
+    /// Converted into sRGB rather than by reading `CGColor.components` directly, because the
     /// components of a colour in a device or pattern space are not red, green, and blue — and
-    /// treating them as though they were is how a grey calendar comes out pink.
+    /// treating them as though they were is how a grey calendar comes out pink. On macOS the
+    /// conversion goes through `NSColor`, exactly as it always has; iOS has no `NSColor`, so
+    /// the same conversion is asked of CoreGraphics itself.
     static func paletteName(for calendar: EKCalendar) -> String {
-        guard let color = NSColor(cgColor: calendar.cgColor)?.usingColorSpace(.sRGB) else {
-            return "blue"
-        }
-        return CalendarPalette.name(
-            red: Double(color.redComponent),
-            green: Double(color.greenComponent),
-            blue: Double(color.blueComponent)
-        )
+        #if canImport(AppKit)
+            guard let color = NSColor(cgColor: calendar.cgColor)?.usingColorSpace(.sRGB) else {
+                return "blue"
+            }
+            return CalendarPalette.name(
+                red: Double(color.redComponent),
+                green: Double(color.greenComponent),
+                blue: Double(color.blueComponent)
+            )
+        #else
+            guard let sRGB = CGColorSpace(name: CGColorSpace.sRGB),
+                let converted = calendar.cgColor.converted(to: sRGB, intent: .defaultIntent, options: nil),
+                let components = converted.components, components.count >= 3
+            else {
+                return "blue"
+            }
+            return CalendarPalette.name(
+                red: Double(components[0]),
+                green: Double(components[1]),
+                blue: Double(components[2])
+            )
+        #endif
     }
 
     static func accountKind(for calendar: EKCalendar) -> CalendarAccountKind {

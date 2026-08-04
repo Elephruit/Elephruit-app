@@ -82,7 +82,7 @@ extension Item {
         var milestoneItem: Item?
         var releaseItem: Item?
         var blocking: [Item] = []
-        for link in outgoingLinks {
+        for link in (outgoingLinks ?? []) {
             guard let target = link.target, target.deletedAt == nil else { continue }
             switch link.kind {
             case .assignee: assigneeItem = assigneeItem ?? target
@@ -134,9 +134,9 @@ extension Item {
             tagSlugs: tagSlugs,
             relatedPersonIDs: people.related,
             waitingOnPersonID: people.waitingOn,
-            hasAttachments: !attachments.isEmpty,
+            hasAttachments: !(attachments ?? []).isEmpty,
             isRepeating: recurrenceData != nil,
-            hasSubtasks: children.contains { $0.kind.isWorkItem && $0.deletedAt == nil },
+            hasSubtasks: (children ?? []).contains { $0.kind.isWorkItem && $0.deletedAt == nil },
             checklistTotal: steps.total,
             checklistCompleted: steps.completed,
             source: source.kind,
@@ -164,7 +164,7 @@ extension Item {
             isVerified: bugRecord?.verifiedAt != nil,
             estimateMinutes: estimateMinutes,
             trackedMinutes: trackedMinutes(),
-            commentCount: comments.count,
+            commentCount: (comments ?? []).count,
             customFields: userMetadata
         )
     }
@@ -180,7 +180,7 @@ extension Item {
     /// already in hand.
     public func resolvedStageCategory(within project: Item?) -> WorkflowStageCategory? {
         guard let stageID = workflowStageID, let project else { return nil }
-        return project.workflowStages.first { $0.id == stageID }?.category
+        return (project.workflowStages ?? []).first { $0.id == stageID }?.category
     }
 
     /// The person doing this work. At most one — see `WorkItemService.assign`.
@@ -190,12 +190,12 @@ extension Item {
 
     /// The single item this one points at with a link of the given kind.
     public func linkedTarget(kind: LinkKind) -> Item? {
-        outgoingLinks.first { $0.kind == kind }?.target
+        (outgoingLinks ?? []).first { $0.kind == kind }?.target
     }
 
     /// What must be resolved before this can proceed.
     public func blockers() -> [Item] {
-        outgoingLinks
+        (outgoingLinks ?? [])
             .filter { $0.kind == .blockedBy }
             .compactMap(\.target)
             .filter { $0.deletedAt == nil }
@@ -203,7 +203,7 @@ extension Item {
 
     /// What this is holding up.
     public func blockedItems() -> [Item] {
-        incomingLinks
+        (incomingLinks ?? [])
             .filter { $0.kind == .blockedBy }
             .compactMap(\.source)
             .filter { $0.deletedAt == nil }
@@ -215,7 +215,7 @@ extension Item {
 
     /// Minutes actually recorded against this item.
     public func trackedMinutes(now: Date = Date()) -> Int {
-        let seconds = timeEntries.reduce(into: 0.0) { total, entry in
+        let seconds = (timeEntries ?? []).reduce(into: 0.0) { total, entry in
             total += entry.duration(at: now)
         }
         return Int(seconds / 60)
@@ -261,7 +261,7 @@ extension Item {
     /// would catch a task captured *here* and then exported to a list, which was an Inbox capture
     /// before the export and has not been processed by being copied somewhere.
     public var hasHome: Bool {
-        if parent != nil || !tags.isEmpty || !filedUnderContainers().isEmpty { return true }
+        if parent != nil || !(tags ?? []).isEmpty || !filedUnderContainers().isEmpty { return true }
         return isKeptInStepWithAnExternalList && inboxedAt == nil
     }
 
@@ -319,7 +319,7 @@ extension Item {
         var related: [UUID] = []
         var waitingOn: UUID?
 
-        for link in outgoingLinks {
+        for link in (outgoingLinks ?? []) {
             guard let target = link.target, target.kind == .person, target.deletedAt == nil else {
                 continue
             }
@@ -339,7 +339,7 @@ extension Item {
 
     /// People this item points at, by the kinds of link named.
     public func linkedPeople(kinds: Set<LinkKind>) -> [Item] {
-        outgoingLinks
+        (outgoingLinks ?? [])
             .filter { kinds.contains($0.kind) }
             .compactMap(\.target)
             .filter { $0.kind == .person && $0.deletedAt == nil }

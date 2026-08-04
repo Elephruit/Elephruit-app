@@ -60,7 +60,7 @@ public struct AttachmentSection: View {
     }
 
     private var attachments: [Attachment] {
-        item.attachments.sorted { $0.createdAt < $1.createdAt }
+        (item.attachments ?? []).sorted { $0.createdAt < $1.createdAt }
     }
 
     private var relocatingBinding: Binding<Bool> {

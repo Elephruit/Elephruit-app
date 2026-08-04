@@ -96,7 +96,7 @@ struct TimeMigrationTests {
         let note = try #require(try context.fetch(noteDescriptor).first)
 
         #expect(note.filedUnderContainers().count == 1, "Filing links survive")
-        #expect(note.outgoingLinks.contains { $0.kind == .mentions }, "Mentions survive")
+        #expect((note.outgoingLinks ?? []).contains { $0.kind == .mentions }, "Mentions survive")
 
         #expect(try context.fetchCount(FetchDescriptor<SavedSearch>()) == 1)
         #expect(try context.fetchCount(FetchDescriptor<ItemCollection>()) == 1)
@@ -136,7 +136,7 @@ struct TimeMigrationTests {
 
         _ = try time.stopRunning(at: clock.now.addingTimeInterval(1_800))
         #expect(entry.duration() == 1_800)
-        #expect(task.timeEntries.count == 1, "The inverse relationship is wired both ways")
+        #expect((task.timeEntries ?? []).count == 1, "The inverse relationship is wired both ways")
     }
 
     @Test("Tracked time survives a relaunch")

@@ -1,3 +1,8 @@
+#if canImport(AppKit)
+// The sidebar is a macOS surface — the iPhone shell navigates with tabs, and the iPad's
+// split view will bring its own metrics when it arrives — so its measurements, and the
+// NSFont derivation they rest on, compile only where the sidebar does.
+
 import AppKit
 import SwiftUI
 
@@ -139,3 +144,4 @@ public struct SidebarWidths: Sendable, Hashable {
         self.maximum = maximum
     }
 }
+#endif

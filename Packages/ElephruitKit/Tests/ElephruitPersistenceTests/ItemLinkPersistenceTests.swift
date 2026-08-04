@@ -31,13 +31,13 @@ struct ItemLinkPersistenceTests {
         let refetchedSource = try fixture.requireItem(id: source.id)
         let refetchedTarget = try fixture.requireItem(id: target.id)
 
-        #expect(refetchedSource.outgoingLinks.count == 1)
-        #expect(refetchedSource.incomingLinks.isEmpty)
-        #expect(refetchedTarget.incomingLinks.count == 1)
-        #expect(refetchedTarget.outgoingLinks.isEmpty)
+        #expect((refetchedSource.outgoingLinks ?? []).count == 1)
+        #expect((refetchedSource.incomingLinks ?? []).isEmpty)
+        #expect((refetchedTarget.incomingLinks ?? []).count == 1)
+        #expect((refetchedTarget.outgoingLinks ?? []).isEmpty)
 
-        #expect(refetchedSource.outgoingLinks.first?.target?.id == target.id)
-        #expect(refetchedTarget.incomingLinks.first?.source?.id == source.id)
+        #expect((refetchedSource.outgoingLinks ?? []).first?.target?.id == target.id)
+        #expect((refetchedTarget.incomingLinks ?? []).first?.source?.id == source.id)
     }
 
     @Test("Inverses do not cross-contaminate when links run both ways")
@@ -55,10 +55,10 @@ struct ItemLinkPersistenceTests {
         // The danger with two relationships to one type is that SwiftData conflates the
         // inverses, which would show up here as two entries in one collection and none in
         // the other.
-        #expect(refetchedA.outgoingLinks.count == 1)
-        #expect(refetchedA.incomingLinks.count == 1)
-        #expect(refetchedA.outgoingLinks.first?.target?.id == b.id)
-        #expect(refetchedA.incomingLinks.first?.source?.id == b.id)
+        #expect((refetchedA.outgoingLinks ?? []).count == 1)
+        #expect((refetchedA.incomingLinks ?? []).count == 1)
+        #expect((refetchedA.outgoingLinks ?? []).first?.target?.id == b.id)
+        #expect((refetchedA.incomingLinks ?? []).first?.source?.id == b.id)
     }
 
     @Test("An item can hold many links in both directions")
@@ -74,8 +74,8 @@ struct ItemLinkPersistenceTests {
         }
 
         let refetched = try fixture.requireItem(id: hub.id)
-        #expect(refetched.outgoingLinks.count == 5)
-        #expect(refetched.incomingLinks.count == 5)
+        #expect((refetched.outgoingLinks ?? []).count == 5)
+        #expect((refetched.incomingLinks ?? []).count == 5)
     }
 
     @Test("Deleting an item cascades its links away rather than leaving dangling rows")
@@ -106,7 +106,7 @@ struct ItemLinkPersistenceTests {
         )
 
         let refetchedSource = try fixture.requireItem(id: source.id)
-        let link = try #require(refetchedSource.outgoingLinks.first)
+        let link = try #require((refetchedSource.outgoingLinks ?? []).first)
         #expect(link.kind == .wiki)
         #expect(link.isResolved == false)
         #expect(link.unresolvedTitle == "Not Yet Written")
@@ -115,7 +115,7 @@ struct ItemLinkPersistenceTests {
         let target = try fixture.makeNote(title: "Not Yet Written")
 
         let resolvedSource = try fixture.requireItem(id: source.id)
-        let resolvedLink = try #require(resolvedSource.outgoingLinks.first)
+        let resolvedLink = try #require((resolvedSource.outgoingLinks ?? []).first)
         #expect(resolvedLink.isResolved)
         #expect(resolvedLink.target?.id == target.id)
         #expect(resolvedLink.unresolvedTitle == nil)
@@ -161,14 +161,14 @@ struct WikiLinkReconciliationTests {
         )
 
         let before = try fixture.requireItem(id: source.id)
-        #expect(before.outgoingLinks.count == 1)
+        #expect((before.outgoingLinks ?? []).count == 1)
 
         try fixture.items.update(source) { $0.body = "Points at nothing now." }
 
         let afterSource = try fixture.requireItem(id: source.id)
         let afterTarget = try fixture.requireItem(id: target.id)
-        #expect(afterSource.outgoingLinks.isEmpty)
-        #expect(afterTarget.incomingLinks.isEmpty)
+        #expect((afterSource.outgoingLinks ?? []).isEmpty)
+        #expect((afterTarget.incomingLinks ?? []).isEmpty)
     }
 
     @Test("Reconciliation leaves deliberate links untouched")
@@ -185,8 +185,8 @@ struct WikiLinkReconciliationTests {
         try fixture.items.update(source) { $0.body = "Some unrelated edit." }
 
         let refetched = try fixture.requireItem(id: source.id)
-        #expect(refetched.outgoingLinks.count == 1)
-        #expect(refetched.outgoingLinks.first?.kind == .related)
+        #expect((refetched.outgoingLinks ?? []).count == 1)
+        #expect((refetched.outgoingLinks ?? []).first?.kind == .related)
     }
 
     @Test("Repeated saves do not accumulate duplicate links")
@@ -203,7 +203,7 @@ struct WikiLinkReconciliationTests {
         }
 
         let refetched = try fixture.requireItem(id: source.id)
-        #expect(refetched.outgoingLinks.count == 1)
+        #expect((refetched.outgoingLinks ?? []).count == 1)
     }
 
     @Test("Alias syntax keeps the display text and still resolves the target")
@@ -216,7 +216,7 @@ struct WikiLinkReconciliationTests {
         )
 
         let refetchedSource = try fixture.requireItem(id: source.id)
-        let link = try #require(refetchedSource.outgoingLinks.first)
+        let link = try #require((refetchedSource.outgoingLinks ?? []).first)
         #expect(link.target?.id == target.id)
         #expect(link.displayText == "the plan")
         #expect(link.label == "the plan")

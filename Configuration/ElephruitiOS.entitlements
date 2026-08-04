@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  The iPhone app's entitlements: sync, and nothing else.
+
+	  iOS has no network-client entitlement to withhold — the "no network beyond CloudKit"
+	  claim rests on the code here, as the iPhone record (docs/33) says plainly. The same
+	  rule as the Mac applies: an entitlement lands in the same commit as its feature.
+
+	  Deliberately ABSENT: app groups (no extension shares this container yet — the widget
+	  pass adds a group.-prefixed identifier when it exists to need one), Photos, Camera,
+	  Microphone, Location, and every temporary exception. Calendars, Contacts, and
+	  Reminders need no entitlement on iOS — the usage strings and TCC carry that policy.
+	-->
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.com.elephruit.Elephruit</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+
+	<!-- Silent pushes: how a change on the Mac reaches this phone without polling. -->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

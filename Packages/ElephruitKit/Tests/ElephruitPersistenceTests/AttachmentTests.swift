@@ -220,8 +220,8 @@ struct AttachmentTests {
         descriptor.fetchLimit = 1
         let reopened = try #require(try context.fetch(descriptor).first)
 
-        #expect(reopened.attachments.count == 1)
-        let attachment = try #require(reopened.attachments.first)
+        #expect((reopened.attachments ?? []).count == 1)
+        let attachment = try #require((reopened.attachments ?? []).first)
         let resolved = try #require(store.resolve(attachment))
         #expect(try String(contentsOf: resolved, encoding: .utf8) == "persisted")
     }

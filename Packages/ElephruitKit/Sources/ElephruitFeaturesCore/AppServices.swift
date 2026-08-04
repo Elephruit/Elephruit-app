@@ -47,18 +47,29 @@ public final class AppServices {
     /// Tracked time written out to a calendar. Off, and outbound only — see ``TimeCalendarMirror``.
     public let timeMirror: TimeCalendarMirror
 
-    /// The app collapsed to its clock, and whether it currently is.
+    /// The platform shell's long-lived companions — the mini timer panel, the quick-log
+    /// panel — created on first use and then held for the life of the app.
     ///
-    /// Built lazily on first use, because an app nobody collapses should never construct a panel.
-    /// Held here rather than per window: collapsing is a statement about the *application*, and two
-    /// windows racing to hide each other would be two mini timers and no way back.
-    ///
-    /// `@ObservationIgnored` because the *reference* never changes and there is nothing to observe
-    /// about it — and because the `@Observable` macro cannot rewrite a `lazy` stored property at
-    /// all. What views actually watch is the controller's own state, and `MiniTimerController` is
-    /// `@Observable` in its own right.
+    /// A registry rather than named properties, because the types are platform-specific: the
+    /// macOS target declares `MiniTimerController` and `QuickLogController` and reaches them
+    /// through ``accessory(_:make:)``, and this shared class never has to know either name.
+    /// One instance per type, on the same argument the old lazy properties made: collapsing
+    /// to a clock is a statement about the *application*, and two windows racing to hide each
+    /// other would be two mini timers and no way back.
     @ObservationIgnored
-    public private(set) lazy var miniTimer = MiniTimerController(services: self, defaults: defaults)
+    private var accessories: [ObjectIdentifier: AnyObject] = [:]
+
+    /// The one instance of a platform accessory, created on first use.
+    ///
+    /// `@ObservationIgnored` storage, on the same terms as the lazy properties this replaces:
+    /// the reference never changes, so there is nothing to observe about it — what views watch
+    /// is the accessory's own observable state.
+    public func accessory<A: AnyObject>(_ type: A.Type, make: () -> A) -> A {
+        if let held = accessories[ObjectIdentifier(type)] as? A { return held }
+        let made = make()
+        accessories[ObjectIdentifier(type)] = made
+        return made
+    }
 
     /// One date's worth of everything, assembled from the records that already exist.
     ///
@@ -73,24 +84,12 @@ public final class AppServices {
     @ObservationIgnored
     public private(set) lazy var todayPreferences = TodayPreferences(defaults: defaults)
 
-    /// The panel that starts a timer from any application, and names it once it is going.
-    ///
-    /// Held here rather than on the composition root — which is where Quick Jot's controller lives —
-    /// because three separate surfaces need to open it: the global shortcut, the File menu, and the
-    /// menu bar. A controller reachable only from the app object would have to be threaded through
-    /// every one of them, and `ElephruitCommands` has no route to it at all.
-    ///
-    /// Lazy and `@ObservationIgnored` on the same terms as ``miniTimer``: an app whose owner never
-    /// presses the shortcut should never construct a panel, the reference never changes, and what
-    /// views watch is the controller's own observable state.
-    @ObservationIgnored
-    public private(set) lazy var quickLog = QuickLogController(services: self)
-
     /// Where this machine's preferences live.
     ///
     /// Held rather than reached for, so a preview or a test can hand over a throwaway suite and not
-    /// have a focus-cycle length leak into the real one.
-    let defaults: UserDefaults
+    /// have a focus-cycle length leak into the real one. Public so the platform shells can hand
+    /// the same suite to their accessories — see ``accessory(_:make:)``.
+    public let defaults: UserDefaults
 
     /// The user's calendar: what it holds, which sets are saved, and every write.
     ///
@@ -110,7 +109,7 @@ public final class AppServices {
     public let containerSidebar: ContainerSidebarModel
 
     /// The Reminders module's direct view of first-class items.
-    let reminderStore: ReminderStore
+    public let reminderStore: ReminderStore
 
     // MARK: Projects
 
@@ -298,8 +297,12 @@ public final class AppServices {
     /// change already announced, and bumping there would turn one write into two rounds of reloads.
     public private(set) var changeToken = 0
 
-    /// Reported to the sidebar's status line. ``SyncStatus/disabled`` until Phase 4.
-    public var syncStatus: SyncStatus = .disabled
+    /// Reported to the sidebar's status line. Truth lives on the monitor; this is the read.
+    public var syncStatus: SyncStatus { syncMonitor.status }
+
+    /// Watches the mirroring machinery. Constructed disabled when the store is local-only,
+    /// so the status line never claims what the container is not doing.
+    public let syncMonitor: SyncMonitor
 
     /// The most recent recoverable failure, surfaced as an alert and then cleared.
     ///
@@ -353,6 +356,7 @@ public final class AppServices {
         self.isDevelopmentMode = isDevelopmentMode
         self.defaults = defaults
         self.shortcuts = ShortcutRegistry.load(from: .standard)
+        self.syncMonitor = SyncMonitor(enabled: stack.isSyncEnabled)
 
         // The main-actor context. Background work creates its own from the container.
         let context = ModelContext(stack.container)
@@ -682,6 +686,24 @@ public final class AppServices {
                 return (try? context.fetch(descriptor)) ?? []
             }
         )
+
+        // The moment another device's changes land is the moment everything derived from
+        // the store is stale — same cue, same pass, no polling.
+        syncMonitor.onImportCompleted = { [weak self] in
+            self?.absorbRemoteChanges()
+        }
+    }
+
+    /// Recomputes what a remote import made stale: badges, trees, snapshots, the index.
+    ///
+    /// The counterpart of a local mutation's announce-and-refresh, for mutations announced
+    /// by iCloud instead of a view. Derived date keys that arrive stale from another device
+    /// converge on each row's next local save — the fetch over-reads until then, which
+    /// costs milliseconds and never work (the `dayRelevanceKey` argument, applied to sync).
+    public func absorbRemoteChanges() {
+        changeToken &+= 1
+        refreshDerivedState()
+        Task { await warmSearchIndex() }
     }
 
     /// An isolated in-memory instance, for previews and tests.
@@ -834,6 +856,15 @@ public final class AppServices {
     // MARK: - Index
 
     /// Builds the search index. Called once after the window appears, never blocking launch.
+    /// Throws away the index and rebuilds it. The user-visible "Rebuild Search Index" command.
+    ///
+    /// Lives beside ``warmSearchIndex()`` rather than in the shell that offers the command,
+    /// because a contact import needs the same rebuild and both shells offer the command.
+    public func invalidateAndWarmIndex() async {
+        await search.invalidateIndex()
+        await warmSearchIndex()
+    }
+
     public func warmSearchIndex() async {
         await search.warmIndex()
     }
@@ -904,7 +935,7 @@ public final class AppServices {
     /// findable without dumping another transcription into the note editor.
     private func indexWebClipImages(in item: Item) async throws(AppError) {
         var changed = false
-        for attachment in item.attachments where attachment.typeIdentifier == "public.png"
+        for attachment in (item.attachments ?? []) where attachment.typeIdentifier == "public.png"
             || attachment.typeIdentifier == "public.jpeg" {
             guard attachment.extractedText == nil,
                   let url = attachments.resolve(attachment),
@@ -1047,6 +1078,33 @@ public final class AppServices {
         // on change and never during a render, so the *first* computation has to come from
         // somewhere, and at launch this is the only somewhere there is.
         projectSidebar.refresh()
+    }
+
+    // MARK: - Pending edits at suspension
+
+    /// The editors that still owe a write, by the item they owe it about.
+    ///
+    /// On macOS this registry lives on each window's `NavigationModel`, because the moments
+    /// that endanger a pending edit there are navigational. On iOS the dangerous moment is
+    /// the scene leaving the foreground — a suspended app can be killed with no further
+    /// notice — and the scene is something only the application object sees. So the shared
+    /// service graph carries the registry, both shells' editors register here, and each
+    /// shell flushes on the hazard its platform actually has.
+    @ObservationIgnored private var suspensionFlushes: [UUID: () -> Void] = [:]
+
+    /// Registers work that must not be lost if the process is about to stop being trusted
+    /// with it. One editor per item; a second registration replaces the first.
+    public func registerSuspensionFlush(_ id: UUID, _ flush: @escaping () -> Void) {
+        suspensionFlushes[id] = flush
+    }
+
+    public func unregisterSuspensionFlush(_ id: UUID) {
+        suspensionFlushes[id] = nil
+    }
+
+    /// Runs every registered flush now. Safe to call from a scene-phase change.
+    public func flushForSuspension() {
+        for flush in suspensionFlushes.values { flush() }
     }
 
     // MARK: - Sample data

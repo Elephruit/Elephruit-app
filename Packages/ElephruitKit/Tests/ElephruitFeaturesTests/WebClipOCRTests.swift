@@ -58,7 +58,7 @@ struct WebClipOCRTests {
         )
 
         let item = try await services.saveWebClip(clip)
-        let attachment = try #require(item.attachments.first { $0.filename == image.filename })
+        let attachment = try #require((item.attachments ?? []).first { $0.filename == image.filename })
 
         #expect(attachment.extractedText == "Top left\nTop right\nBottom line")
         #expect(item.searchText.contains("top left"))

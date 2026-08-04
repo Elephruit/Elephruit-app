@@ -168,7 +168,7 @@ public struct Exporter {
             sourceKind: item.sourceKindRaw,
             sourceURL: item.sourceURLString,
             sourceIdentifier: item.sourceIdentifier,
-            tagIDs: item.tags.map(\.id).sorted { $0.uuidString < $1.uuidString },
+            tagIDs: (item.tags ?? []).map(\.id).sorted { $0.uuidString < $1.uuidString },
             parentID: item.parent?.id,
             userMetadata: item.userMetadata
         )
@@ -208,7 +208,7 @@ public struct Exporter {
             createdAt: collection.createdAt,
             sortOrder: collection.sortOrder,
             isPinned: collection.isPinned,
-            members: collection.memberships
+            members: (collection.memberships ?? [])
                 .sorted { $0.position < $1.position }
                 .compactMap { membership in
                     guard let itemID = membership.item?.id else { return nil }
@@ -260,7 +260,7 @@ public struct Exporter {
             endedAt: entry.endedAt,
             entryDescription: entry.entryDescription,
             itemID: entry.item?.id,
-            tagIDs: entry.tags.map(\.id),
+            tagIDs: (entry.tags ?? []).map(\.id),
             source: entry.sourceRaw,
             isBillable: entry.isBillable,
             createdAt: entry.createdAt,

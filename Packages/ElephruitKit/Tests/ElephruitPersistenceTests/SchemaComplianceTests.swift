@@ -87,7 +87,47 @@ struct SchemaComplianceTests {
     /// whether a migrating launch takes a backup.
     @Test("Schema version is reported for archives and diagnostics")
     func schemaVersionIsReadable() {
-        #expect(CurrentSchema.versionString == "0.0.14")
+        #expect(CurrentSchema.versionString == "0.0.16")
+    }
+
+    /// The constraint table from `docs/05-cloudkit-and-migrations.md`, scanned rather than
+    /// remembered.
+    ///
+    /// The hand-written checks above cover the nine v1 entities; nineteen more have arrived
+    /// since, and the risk register's claim that "a test scans for unique constraints and
+    /// deny rules" was aspiration until this test. It walks the *current* schema's own
+    /// metadata, so an entity added next year is governed the day it appears — the audit
+    /// that found six inverse-less relationships was this walk, run by hand, once. Now it
+    /// runs every time.
+    @Test("Every entity in the current schema satisfies the mirroring constraints")
+    func mirroringConstraintsHoldForEveryEntity() {
+        let entities = CurrentSchema.schema.entities
+        #expect(entities.count >= 27, "The walk sees the whole schema, not a subset")
+
+        for entity in entities {
+            for attribute in entity.attributes {
+                #expect(
+                    !attribute.isUnique,
+                    "\(entity.name).\(attribute.name): CloudKit does not support unique constraints"
+                )
+            }
+            for relationship in entity.relationships {
+                #expect(
+                    relationship.inverseName != nil,
+                    "\(entity.name).\(relationship.name): CloudKit requires an inverse"
+                )
+                // The rule the first real container open taught: *every* relationship must
+                // be optional — to-many included, and a default does not substitute.
+                #expect(
+                    relationship.isOptional,
+                    "\(entity.name).\(relationship.name): CloudKit requires optional relationships"
+                )
+                #expect(
+                    relationship.deleteRule != .deny,
+                    "\(entity.name).\(relationship.name): CloudKit does not support deny"
+                )
+            }
+        }
     }
 
     @Test("Every released schema stays in source, with a stage between each")

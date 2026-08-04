@@ -222,7 +222,7 @@ public final class DefaultSearchEngine: SearchEngine {
         if !item.kind.participatesInContentViews, !query.kinds.contains(item.kind) { return false }
 
         if !query.tagSlugs.isEmpty {
-            let slugs = Set(item.tags.map(\.slug))
+            let slugs = Set((item.tags ?? []).map(\.slug))
             // A parent tag matches its descendants: `tag:work` finds `work/clients` too, which
             // is the whole reason hierarchical tags are worth having.
             let satisfied = query.tagSlugs.allSatisfy { required in
@@ -260,10 +260,10 @@ public final class DefaultSearchEngine: SearchEngine {
         // Handled above as scope, so they never exclude here.
         case .archived, .trashed: true
         case .overdue: item.isOverdue(using: dateProvider)
-        case .untagged: item.tags.isEmpty
+        case .untagged: (item.tags ?? []).isEmpty
         case .unfiled: item.parent == nil
-        case .linked: !item.outgoingLinks.isEmpty || !item.incomingLinks.isEmpty
-        case .unlinked: item.outgoingLinks.isEmpty && item.incomingLinks.isEmpty
+        case .linked: !(item.outgoingLinks ?? []).isEmpty || !(item.incomingLinks ?? []).isEmpty
+        case .unlinked: (item.outgoingLinks ?? []).isEmpty && (item.incomingLinks ?? []).isEmpty
         }
     }
 

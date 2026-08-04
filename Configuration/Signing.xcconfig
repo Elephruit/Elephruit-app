@@ -1,0 +1,11 @@
+// The one per-machine fact: which Apple Developer team signs the builds.
+//
+// Every target includes this file, so the team lives on exactly one line. Setting it does two
+// things beyond signing itself: it makes ELEPHRUIT_APP_GROUP expand to a real team-prefixed
+// identifier (until now it expanded with a leading dot and the code fell back to
+// `group.com.elephruit.Elephruit`), and it is the precondition for the iCloud container that
+// sync uses — CloudKit will not provision against an empty team.
+//
+// Team 6YXGZMLWFB is Michael Zehrer's individual (paid) membership, discovered from this
+// machine's Xcode provisioning state. On a different machine, change this line.
+DEVELOPMENT_TEAM = 6YXGZMLWFB

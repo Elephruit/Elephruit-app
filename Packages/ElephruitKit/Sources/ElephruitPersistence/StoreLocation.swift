@@ -61,6 +61,18 @@ public struct StoreLocation: Sendable, Hashable {
         self.cachesRoot = cachesRoot
     }
 
+    /// Whether this location lives in a temporary directory — a review store, a test store.
+    ///
+    /// The property exists for one rule: an ephemeral store must never sync. A design-review
+    /// session seeded with fixtures, mirrored into a person's real iCloud library, would be
+    /// the worst data-integrity bug this app could have, so the refusal is derived from the
+    /// path itself rather than remembered at each call site.
+    public var isEphemeral: Bool {
+        root.path(percentEncoded: false).hasPrefix(
+            URL.temporaryDirectory.path(percentEncoded: false)
+        )
+    }
+
     /// The production location, inside the sandbox container.
     ///
     /// - Throws: ``AppError/storeUnavailable(underlying:)`` if the system cannot supply

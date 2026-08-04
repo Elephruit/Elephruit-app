@@ -239,7 +239,7 @@ struct ArchiveRoundTripTests {
         #expect(destinationSlugs == sourceSlugs)
 
         let project = try destination.item(id: graph.projectID)
-        #expect(project.tags.map(\.slug) == ["work/clients/acme"])
+        #expect((project.tags ?? []).map(\.slug) == ["work/clients/acme"])
     }
 
     @Test("Links survive, both resolved and unresolved")
@@ -255,15 +255,15 @@ struct ArchiveRoundTripTests {
 
         // A wiki link to a real note, a wiki link to a title that does not exist, and a
         // deliberate `related` link.
-        let kinds = Set(note.outgoingLinks.map(\.kind))
+        let kinds = Set((note.outgoingLinks ?? []).map(\.kind))
         #expect(kinds.contains(.wiki))
         #expect(kinds.contains(.related))
 
-        let unresolved = note.outgoingLinks.filter { !$0.isResolved }
+        let unresolved = (note.outgoingLinks ?? []).filter { !$0.isResolved }
         #expect(unresolved.count == 1)
         #expect(unresolved.first?.unresolvedTitle == "Something Unwritten")
 
-        let resolvedWiki = note.outgoingLinks.filter { $0.kind == .wiki && $0.isResolved }
+        let resolvedWiki = (note.outgoingLinks ?? []).filter { $0.kind == .wiki && $0.isResolved }
         #expect(resolvedWiki.first?.target?.id == graph.projectID)
     }
 
@@ -281,7 +281,7 @@ struct ArchiveRoundTripTests {
 
         #expect(collection.name == "Launch reading")
         #expect(collection.orderedItems().map(\.id) == [graph.bookmarkID, graph.noteID])
-        #expect(collection.memberships.first { $0.item?.id == graph.bookmarkID }?.note == "Read first")
+        #expect((collection.memberships ?? []).first { $0.item?.id == graph.bookmarkID }?.note == "Read first")
     }
 
     @Test("Saved searches survive as text")
@@ -592,7 +592,7 @@ struct MarkdownImportTests {
         #expect(created.completedAt != nil, "The completion invariant holds even on import")
         #expect(created.priority == .high)
         #expect(created.isFavorite)
-        #expect(Set(created.tags.map(\.slug)) == ["work", "urgent"])
+        #expect(Set((created.tags ?? []).map(\.slug)) == ["work", "urgent"])
     }
 
     @Test("Importing the same file twice skips by default")

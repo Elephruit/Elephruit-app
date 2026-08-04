@@ -74,7 +74,7 @@ public final class ContainerSidebarModel {
 
         for area in areas {
             rows.append(row(for: area, depth: 0))
-            let children = area.children
+            let children = (area.children ?? [])
                 .filter { ($0.kind == .project || $0.kind == .list) && $0.deletedAt == nil }
                 .sorted { $0.sortOrder < $1.sortOrder }
             rows.append(contentsOf: children.map { row(for: $0, depth: 1) })

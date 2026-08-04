@@ -118,11 +118,11 @@ struct TagBrowserView: View {
 
             Spacer(minLength: 0)
 
-            Text("\(tag.items.count)")
+            Text("\((tag.items ?? []).count)")
                 .font(Theme.Text.metadata)
                 .monospacedDigit()
                 .foregroundStyle(Theme.Colors.tertiaryText)
-                .accessibilityLabel("\(tag.items.count) items")
+                .accessibilityLabel("\((tag.items ?? []).count) items")
         }
         .contentShape(.rect)
         .contextMenu {
@@ -146,7 +146,7 @@ struct TagBrowserView: View {
             Divider()
 
             Button("Delete Tag…", role: .destructive) {
-                pendingDeletion = TagDeletion(id: tag.id, name: tag.name, itemCount: tag.items.count)
+                pendingDeletion = TagDeletion(id: tag.id, name: tag.name, itemCount: (tag.items ?? []).count)
             }
         }
         .accessibilityIdentifier("tags.row.\(tag.slug)")

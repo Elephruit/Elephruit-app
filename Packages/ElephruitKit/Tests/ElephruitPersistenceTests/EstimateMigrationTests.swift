@@ -132,6 +132,6 @@ struct EstimateMigrationTests {
 
         let restamped = try String(contentsOf: stamp, encoding: .utf8)
         #expect(restamped == CurrentSchema.versionString)
-        #expect(restamped == "0.0.14")
+        #expect(restamped == "0.0.16")
     }
 }

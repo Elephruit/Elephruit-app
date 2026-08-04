@@ -288,9 +288,9 @@ public struct InspectorView: View {
                 .accessibilityIdentifier(AccessibilityID.Inspector.projectPicker)
             }
 
-            if !item.children.isEmpty {
+            if !(item.children ?? []).isEmpty {
                 InspectorRow("Contains") {
-                    Button("\(item.children.count) item\(item.children.count == 1 ? "" : "s")") {
+                    Button("\((item.children ?? []).count) item\((item.children ?? []).count == 1 ? "" : "s")") {
                         navigation.select(.item(id: item.id))
                     }
                     .buttonStyle(.borderless)
@@ -435,11 +435,11 @@ public struct InspectorView: View {
 
     private func descendants(of item: Item) -> Set<UUID> {
         var result: Set<UUID> = []
-        var queue = item.children
+        var queue = item.children ?? []
 
         while let next = queue.popLast() {
             guard result.insert(next.id).inserted else { continue }
-            queue.append(contentsOf: next.children)
+            queue.append(contentsOf: next.children ?? [])
         }
         return result
     }

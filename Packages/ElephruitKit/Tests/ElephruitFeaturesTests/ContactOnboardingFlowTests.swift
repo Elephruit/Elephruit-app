@@ -403,7 +403,7 @@ struct ContactOnboardingFlowTests {
 
         // The previous value is history, and the CRM layer is exactly as it was.
         let link = try #require(try fixture.imports.link(for: person))
-        #expect(link.values.contains { $0.value == "512-555-0192" && !$0.isCurrent })
+        #expect((link.values ?? []).contains { $0.value == "512-555-0192" && !$0.isCurrent })
         #expect(try fixture.people.ledger(for: person).value(of: .significance)
                     == "Taught me to run a design review")
     }

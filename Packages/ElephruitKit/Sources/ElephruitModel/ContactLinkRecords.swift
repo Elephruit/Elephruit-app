@@ -59,11 +59,12 @@ public final class SystemContactLink {
 
     // MARK: Relationships
 
+    @Relationship(deleteRule: .nullify, inverse: \Item.contactLinks)
     public var person: Item?
 
     /// Every value this link has supplied, current and superseded.
     @Relationship(deleteRule: .cascade, inverse: \ImportedContactValue.link)
-    public var values: [ImportedContactValue] = []
+    public var values: [ImportedContactValue]? = []
 
     public init(
         id: UUID = UUID(),
@@ -104,7 +105,7 @@ extension SystemContactLink {
 
     /// Values this link currently supplies, newest first.
     public var currentValues: [ImportedContactValue] {
-        values.filter { $0.supersededAt == nil }.sorted { $0.lastObservedAt > $1.lastObservedAt }
+        (values ?? []).filter { $0.supersededAt == nil }.sorted { $0.lastObservedAt > $1.lastObservedAt }
     }
 
     /// Values the user changed here, which a refresh must not overwrite.

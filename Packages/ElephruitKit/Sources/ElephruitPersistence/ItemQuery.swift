@@ -433,7 +433,7 @@ extension ItemQuery {
         if !tagSlugs.isEmpty {
             let required = tagSlugs
             result = result.filter { item in
-                required.isSubset(of: Set(item.tags.map(\.slug)))
+                required.isSubset(of: Set((item.tags ?? []).map(\.slug)))
             }
         }
 

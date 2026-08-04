@@ -203,7 +203,7 @@ public final class PersonSearchService {
     private func promiseReason(for person: Item, query: PersonQuery) throws(AppError) -> PersonMatchReason? {
         guard query.hasOpenPromises else { return nil }
 
-        let open = person.incomingLinks.compactMap(\.source).filter { source in
+        let open = (person.incomingLinks ?? []).compactMap(\.source).filter { source in
             source.deletedAt == nil && source.status == .open && PersonWorkspaceService.isPromise(source)
         }
         guard !open.isEmpty else { return nil }

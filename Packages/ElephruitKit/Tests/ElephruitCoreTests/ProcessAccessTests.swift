@@ -134,6 +134,33 @@ enum SourceScan {
         return enumerator
             .compactMap { $0 as? URL }
             .filter { $0.pathExtension == "swift" }
+            + iOSAppSwiftFiles()
+    }
+
+    /// The iPhone app target's sources, governed by every rule from their first commit.
+    ///
+    /// In ``swiftFiles()`` rather than only the shipping-copy scan, unlike the Mac's app
+    /// directory: the Mac app dir is a thin shell whose views all live in the package and are
+    /// already scanned there, whereas `ElephruitiOS/` *is* the iOS view layer. A screen that
+    /// existed unscanned for one commit would be a screen whose raw colours and off-scale
+    /// paddings arrive allowlisted by accident.
+    static func iOSAppSwiftFiles() -> [URL] {
+        var directory = URL(filePath: #filePath).deletingLastPathComponent()
+        for _ in 0..<10 {
+            let appDirectory = directory.appending(path: "ElephruitiOS", directoryHint: .isDirectory)
+            let appEntry = appDirectory.appending(path: "ElephruitMobileApp.swift")
+            if FileManager.default.fileExists(atPath: appEntry.path(percentEncoded: false)),
+               let enumerator = FileManager.default.enumerator(
+                   at: appDirectory,
+                   includingPropertiesForKeys: nil
+               ) {
+                return enumerator
+                    .compactMap { $0 as? URL }
+                    .filter { $0.pathExtension == "swift" }
+            }
+            directory = directory.deletingLastPathComponent()
+        }
+        return []
     }
 
     /// Lines of code, with comments and string literals removed.

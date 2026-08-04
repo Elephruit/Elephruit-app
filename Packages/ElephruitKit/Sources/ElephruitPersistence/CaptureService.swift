@@ -149,7 +149,7 @@ public struct CaptureService {
         }
 
         if item.workflowStageID == nil {
-            let landing = container.workflowStages
+            let landing = (container.workflowStages ?? [])
                 .sorted { $0.sortOrder < $1.sortOrder }
                 .first { !$0.category.isTerminal }
             item.workflowStageID = landing?.id

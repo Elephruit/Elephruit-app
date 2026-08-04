@@ -217,7 +217,7 @@ struct HeadingRemovalTests {
 
         try fixture.items.moveTasksOut(of: heading)
 
-        #expect(heading.children.isEmpty)
+        #expect((heading.children ?? []).isEmpty)
         #expect(project.taskProgress().total == 4, "The work survives, now directly in the project")
         #expect(project.ungroupedTasks().count == 4)
     }

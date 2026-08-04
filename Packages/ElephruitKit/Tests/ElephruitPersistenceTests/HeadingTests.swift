@@ -41,7 +41,7 @@ struct HeadingTests {
 
         #expect(planning.parent?.id == project.id)
         #expect(project.orderedHeadings().count == 2)
-        #expect(planning.children.count == 2)
+        #expect((planning.children ?? []).count == 2)
     }
 
     @Test("A heading may not go anywhere but a project")
@@ -87,7 +87,7 @@ struct HeadingTests {
             ItemDraft(kind: .heading, title: "Not written down yet", parentID: project.id)
         )
 
-        #expect(empty.children.isEmpty)
+        #expect((empty.children ?? []).isEmpty)
         #expect(try fixture.requireItem(id: empty.id).kind == .heading)
         #expect(project.orderedHeadings().count == 1)
     }
@@ -190,7 +190,7 @@ struct HeadingTests {
         let fixture = try StoreFixture()
         let (project, planning, _) = try makeProjectWithHeadings(fixture)
 
-        let parentTask = try #require(planning.children.first { $0.kind == .task })
+        let parentTask = try #require((planning.children ?? []).first { $0.kind == .task })
         _ = try fixture.items.create(ItemDraft(kind: .task, title: "A subtask", parentID: parentTask.id))
 
         #expect(project.taskProgress().total == 5)
@@ -202,7 +202,7 @@ struct HeadingTests {
     func trashAndRestoreCascade() throws {
         let fixture = try StoreFixture()
         let (_, planning, _) = try makeProjectWithHeadings(fixture)
-        let taskIDs = planning.children.map(\.id)
+        let taskIDs = (planning.children ?? []).map(\.id)
 
         try fixture.items.moveToTrash(planning)
 
@@ -215,14 +215,14 @@ struct HeadingTests {
         for id in taskIDs {
             #expect(try fixture.requireItem(id: id).deletedAt == nil)
         }
-        #expect(try fixture.requireItem(id: planning.id).children.count == 2)
+        #expect((try fixture.requireItem(id: planning.id).children ?? []).count == 2)
     }
 
     @Test("A heading's tasks can be moved out before it goes — the non-destructive path")
     func tasksCanBeMovedOutFirst() throws {
         let fixture = try StoreFixture()
         let (project, planning, _) = try makeProjectWithHeadings(fixture)
-        let taskIDs = planning.children.map(\.id)
+        let taskIDs = (planning.children ?? []).map(\.id)
 
         // What "Move the tasks out of the heading" does: re-parent to the project, then remove.
         for id in taskIDs {
@@ -249,7 +249,7 @@ struct HeadingTests {
         try fixture.items.move(buying, after: nil, before: planning)
 
         #expect(project.orderedHeadings().map(\.title) == ["Items to buy", "Planning"])
-        #expect(planning.children.count == 2, "Tasks travel with their heading, untouched")
+        #expect((planning.children ?? []).count == 2, "Tasks travel with their heading, untouched")
     }
 
     @Test("Converting a heading to a task drops what a task cannot inherit")
@@ -262,7 +262,7 @@ struct HeadingTests {
 
         #expect(planning.kind == .task)
         #expect(planning.status == .open, "A task needs a status; a heading never had one")
-        #expect(planning.children.count == 2, "Its tasks become subtasks rather than being orphaned")
+        #expect((planning.children ?? []).count == 2, "Its tasks become subtasks rather than being orphaned")
     }
 }
 

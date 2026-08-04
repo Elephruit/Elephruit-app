@@ -59,6 +59,7 @@ public final class PersonObservationRecord {
     // MARK: Relationships
 
     /// The person this is about.
+    @Relationship(deleteRule: .nullify, inverse: \Item.observationsAbout)
     public var subject: Item?
 
     /// The note, interaction, or meeting this came out of.
@@ -66,6 +67,7 @@ public final class PersonObservationRecord {
     /// `.nullify` by omission — deleting the note that mentioned somebody's new job must not delete
     /// the fact that they changed job. The fact survives having lost its source, which is worse than
     /// keeping both and far better than losing both.
+    @Relationship(deleteRule: .nullify, inverse: \Item.observationsSourced)
     public var sourceItem: Item?
 
     public init(
@@ -202,9 +204,11 @@ public final class PersonRelationship {
     // MARK: Relationships
 
     /// Whose page this reads from.
+    @Relationship(deleteRule: .nullify, inverse: \Item.relationshipsAsSubject)
     public var subject: Item?
 
     /// The other person.
+    @Relationship(deleteRule: .nullify, inverse: \Item.relationshipsAsOther)
     public var other: Item?
 
     public init(
@@ -270,6 +274,7 @@ public final class PersonCelebration {
 
     public var createdAt: Date = Date()
 
+    @Relationship(deleteRule: .nullify, inverse: \Item.celebrations)
     public var person: Item?
 
     public init(

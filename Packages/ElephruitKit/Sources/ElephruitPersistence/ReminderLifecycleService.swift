@@ -396,7 +396,7 @@ public final class ReminderLifecycleService {
     /// the view would put the "which ones went?" question in the surface rather than in the store.
     public func setRelatedPeople(_ people: [Item], on task: Item) throws(AppError) {
         let wanted = Set(people.map(\.id))
-        let existing = task.outgoingLinks.filter { $0.kind == .mentions && $0.target?.kind == .person }
+        let existing = (task.outgoingLinks ?? []).filter { $0.kind == .mentions && $0.target?.kind == .person }
         let stale = existing.filter { link in
             guard let id = link.target?.id else { return true }
             return !wanted.contains(id)
@@ -419,7 +419,7 @@ public final class ReminderLifecycleService {
     }
 
     private func clearWaitingLinks(on task: Item) throws(AppError) {
-        let stale = task.outgoingLinks.filter { $0.kind == .waitingOn }
+        let stale = (task.outgoingLinks ?? []).filter { $0.kind == .waitingOn }
         guard !stale.isEmpty else { return }
 
         do {
@@ -510,7 +510,7 @@ public final class ReminderLifecycleService {
             kind: .reminder,
             title: task.title,
             body: task.body,
-            tagSlugs: task.tags.map(\.slug),
+            tagSlugs: (task.tags ?? []).map(\.slug),
             parentID: task.parent?.id,
             dueAt: advance.deadlineAt,
             startAt: advance.startAt,

@@ -1,5 +1,10 @@
-import AppKit
 import SwiftUI
+
+#if canImport(AppKit)
+    import AppKit
+#elseif canImport(UIKit)
+    import UIKit
+#endif
 
 /// The design system's vocabulary.
 ///
@@ -280,37 +285,40 @@ extension Theme {
     /// Semantic colours.
     ///
     /// Built from the system's own semantic colours wherever one exists, so light mode, dark
-    /// mode, Increase Contrast, and the user's accent colour are all handled by AppKit rather
-    /// than approximated here. A hard-coded hex value would be wrong in at least one of those
-    /// four conditions.
+    /// mode, Increase Contrast, and the user's accent colour are all handled by the platform
+    /// rather than approximated here. A hard-coded hex value would be wrong in at least one of
+    /// those four conditions. Each platform's name for a meaning lives in ``SystemColors``;
+    /// the tokens here state only the meaning.
     public enum Colors {
         /// Primary reading text.
         public static let primaryText = Color.primary
         /// Supporting text: subtitles, metadata.
         public static let secondaryText = Color.secondary
         /// Text that is present but not currently relevant.
-        public static let tertiaryText = Color(nsColor: .tertiaryLabelColor)
+        public static let tertiaryText = SystemColors.tertiaryLabel
         /// Placeholder text in an empty field or an untitled item.
-        public static let placeholderText = Color(nsColor: .placeholderTextColor)
+        public static let placeholderText = SystemColors.placeholderText
 
         /// The window's own background. Sidebars use a material instead.
-        public static let windowBackground = Color(nsColor: .windowBackgroundColor)
+        public static let windowBackground = SystemColors.windowBackground
         /// The background of a content list or editor.
-        public static let contentBackground = Color(nsColor: .textBackgroundColor)
+        public static let contentBackground = SystemColors.contentBackground
         /// A subtle fill for chips and grouped rows.
-        public static let subtleFill = Color(nsColor: .quaternarySystemFill)
+        public static let subtleFill = SystemColors.quaternaryFill
         /// A separator hairline.
-        public static let separator = Color(nsColor: .separatorColor)
+        public static let separator = SystemColors.separator
 
         /// Selection. Follows the user's accent colour.
         public static let selection = Color.accentColor
 
         /// What is legible *on top of* ``selection`` — a filled button, a selected pill.
         ///
-        /// Not white. White is right under a blue accent and poor under a yellow one, and this is
-        /// the AppKit token that already knows which: it is the colour the system paints on its own
-        /// prominent controls, and it tracks the accent, the appearance, and Increase Contrast.
-        public static let onAccent = Color(nsColor: .alternateSelectedControlTextColor)
+        /// Not white on the Mac. White is right under a blue accent and poor under a yellow one,
+        /// and AppKit has a token that already knows which: the colour the system paints on its
+        /// own prominent controls, tracking the accent, the appearance, and Increase Contrast.
+        /// On iOS, white *is* what the system paints on filled controls in every appearance —
+        /// the faithful mapping, not an approximation. Both live in ``SystemColors``.
+        public static let onAccent = SystemColors.onAccent
 
         /// The fill under whatever the pointer is over.
         ///
@@ -318,42 +326,42 @@ extension Theme {
         /// selection answers "what am I looking at". Drawing hover in the accent colour conflates
         /// the two, so a pointer crossing a list leaves a wake of things that look chosen.
         ///
-        /// `quaternarySystemFill` is AppKit's own token for exactly this — a small area tinted
+        /// `quaternarySystemFill` is the system's own token for exactly this — a small area tinted
         /// enough to be noticed and not enough to be read as state — and it resolves correctly in
         /// dark mode and under Increase Contrast, where a fixed grey would not.
-        public static let hoverFill = Color(nsColor: .quaternarySystemFill)
+        public static let hoverFill = SystemColors.quaternaryFill
 
         /// Something needs attention now — an overdue date.
-        public static let overdue = Color(nsColor: .systemRed)
+        public static let overdue = SystemColors.red
         /// Something needs attention today.
-        public static let dueToday = Color(nsColor: .systemOrange)
+        public static let dueToday = SystemColors.orange
         /// Completed.
-        public static let completed = Color(nsColor: .systemGreen)
+        public static let completed = SystemColors.green
         /// A link that points at something.
         public static let link = Color.accentColor
         /// A link whose target does not exist yet.
-        public static let unresolvedLink = Color(nsColor: .systemOrange)
+        public static let unresolvedLink = SystemColors.orange
         /// A destructive action, and nothing else.
         ///
         /// Reserved for the moment something is about to be removed — a Move to Trash button, a
         /// Delete row. It shares a hue with ``overdue`` and ``recording``, but not a meaning, and
         /// the tokens stay separate so any of the three can be retuned without repainting the
         /// other two.
-        public static let destructive = Color(nsColor: .systemRed)
+        public static let destructive = SystemColors.red
 
         /// A timer that is running or paused — the live-recording signal.
         ///
         /// This used to be ``destructive`` at eight call sites, which made every running timer
         /// look like a deletion in progress. Red is still right — it is the platform's recording
         /// convention — but it is its own claim, made by its own token.
-        public static let recording = Color(nsColor: .systemRed)
+        public static let recording = SystemColors.red
 
         /// A favourite's star and a flag.
         ///
         /// One token for the three surfaces that draw it, which previously split between
         /// ``dueToday`` and ``warning`` — the same orange from two different meanings, so a
         /// retune of either would have broken the pair.
-        public static let favorite = Color(nsColor: .systemOrange)
+        public static let favorite = SystemColors.orange
 
         /// The umbra under a floating card or panel.
         ///
@@ -404,37 +412,47 @@ extension Theme {
             standard: CGFloat,
             increasedContrast: CGFloat
         ) -> Color {
-            let base = NSColor(tint)
-            return Color(nsColor: NSColor(name: nil) { appearance in
-                let highContrastNames: [NSAppearance.Name] = [
-                    .accessibilityHighContrastAqua,
-                    .accessibilityHighContrastDarkAqua,
-                    .accessibilityHighContrastVibrantLight,
-                    .accessibilityHighContrastVibrantDark,
-                ]
-                let isHighContrast = highContrastNames.contains(appearance.name)
-                return base.withAlphaComponent(isHighContrast ? increasedContrast : standard)
-            })
+            #if canImport(AppKit)
+                let base = NSColor(tint)
+                return Color(nsColor: NSColor(name: nil) { appearance in
+                    let highContrastNames: [NSAppearance.Name] = [
+                        .accessibilityHighContrastAqua,
+                        .accessibilityHighContrastDarkAqua,
+                        .accessibilityHighContrastVibrantLight,
+                        .accessibilityHighContrastVibrantDark,
+                    ]
+                    let isHighContrast = highContrastNames.contains(appearance.name)
+                    return base.withAlphaComponent(isHighContrast ? increasedContrast : standard)
+                })
+            #else
+                // UIKit asks the same question through the trait collection rather than the
+                // appearance name; the answer means the same thing.
+                let base = UIColor(tint)
+                return Color(uiColor: UIColor { traits in
+                    let isHighContrast = traits.accessibilityContrast == .high
+                    return base.withAlphaComponent(isHighContrast ? increasedContrast : standard)
+                })
+            #endif
         }
 
         /// Something the app could not interpret and has told the user about.
         ///
         /// Amber rather than red: an unreadable fragment of a search query is not a failure, it is
         /// a part of the request that was skipped. Red would overstate it.
-        public static let warning = Color(nsColor: .systemOrange)
+        public static let warning = SystemColors.orange
 
         /// A detail that belongs to somebody's private life — a home address, a personal email.
         ///
         /// Teal rather than green, which already means *completed*, and rather than blue, which is
         /// the default accent and so would be indistinguishable from selection on half the screen.
-        public static let personalDetail = Color(nsColor: .systemTeal)
+        public static let personalDetail = SystemColors.teal
 
         /// The accent for the capture surfaces — Quick Jot and the person capture sheets.
         ///
         /// Named rather than spelled `Color.purple` at nine call sites. The literal adapts between
         /// light and dark, so this is not a bug being fixed; it is nine independent decisions
         /// becoming one, so that changing the colour of capture is an edit rather than a search.
-        public static let captureAccent = Color(nsColor: .systemPurple)
+        public static let captureAccent = SystemColors.purple
 
         // There was a `familyAccent` here — pink, for a child's evolving details on a parent's
         // profile — and the argument for it was that those facts are deliberately local to this app
@@ -455,7 +473,7 @@ extension Theme {
         ///
         /// Never the only signal that something is work: every place this appears also carries the
         /// word and a symbol, because roughly one man in twelve cannot use the colour.
-        public static let workDetail = Color(nsColor: .systemIndigo)
+        public static let workDetail = SystemColors.indigo
     }
 
     /// The palette a user may pick from for projects, areas, tags, and collections.
@@ -468,19 +486,19 @@ extension Theme {
 
         public var color: Color {
             switch self {
-            case .red: Color(nsColor: .systemRed)
-            case .orange: Color(nsColor: .systemOrange)
-            case .yellow: Color(nsColor: .systemYellow)
-            case .green: Color(nsColor: .systemGreen)
-            case .mint: Color(nsColor: .systemMint)
-            case .teal: Color(nsColor: .systemTeal)
-            case .cyan: Color(nsColor: .systemCyan)
-            case .blue: Color(nsColor: .systemBlue)
-            case .indigo: Color(nsColor: .systemIndigo)
-            case .purple: Color(nsColor: .systemPurple)
-            case .pink: Color(nsColor: .systemPink)
-            case .brown: Color(nsColor: .systemBrown)
-            case .graphite: Color(nsColor: .systemGray)
+            case .red: SystemColors.red
+            case .orange: SystemColors.orange
+            case .yellow: SystemColors.yellow
+            case .green: SystemColors.green
+            case .mint: SystemColors.mint
+            case .teal: SystemColors.teal
+            case .cyan: SystemColors.cyan
+            case .blue: SystemColors.blue
+            case .indigo: SystemColors.indigo
+            case .purple: SystemColors.purple
+            case .pink: SystemColors.pink
+            case .brown: SystemColors.brown
+            case .graphite: SystemColors.gray
             }
         }
 
@@ -509,35 +527,38 @@ extension Theme {
             return entry.color
         }
 
-        /// The palette entry as AppKit sees it, for the note editor's drawing.
-        ///
-        /// Defined here beside ``color`` — and nowhere else — so the two resolutions cannot
-        /// drift apart, and so the hygiene scan keeps treating any other file that spells out
-        /// colour names as a second palette.
-        public var nsColor: NSColor {
-            switch self {
-            case .red: .systemRed
-            case .orange: .systemOrange
-            case .yellow: .systemYellow
-            case .green: .systemGreen
-            case .mint: .systemMint
-            case .teal: .systemTeal
-            case .cyan: .systemCyan
-            case .blue: .systemBlue
-            case .indigo: .systemIndigo
-            case .purple: .systemPurple
-            case .pink: .systemPink
-            case .brown: .systemBrown
-            case .graphite: .systemGray
+        #if canImport(AppKit)
+            /// The palette entry as AppKit sees it, for the note editor's drawing.
+            ///
+            /// Defined here beside ``color`` — and nowhere else — so the two resolutions cannot
+            /// drift apart, and so the hygiene scan keeps treating any other file that spells out
+            /// colour names as a second palette. When the iOS note editor arrives, its `uiColor`
+            /// twin belongs here for the same reason.
+            public var nsColor: NSColor {
+                switch self {
+                case .red: .systemRed
+                case .orange: .systemOrange
+                case .yellow: .systemYellow
+                case .green: .systemGreen
+                case .mint: .systemMint
+                case .teal: .systemTeal
+                case .cyan: .systemCyan
+                case .blue: .systemBlue
+                case .indigo: .systemIndigo
+                case .purple: .systemPurple
+                case .pink: .systemPink
+                case .brown: .systemBrown
+                case .graphite: .systemGray
+                }
             }
-        }
 
-        /// Resolves a stored name for an AppKit caller, falling back to the neutral it sits in —
-        /// the counterpart of ``color(named:neutral:)``, for the same reason it exists.
-        public static func nsColor(named name: String?, neutral: NSColor) -> NSColor {
-            guard let name, let entry = Palette(rawValue: name) else { return neutral }
-            return entry.nsColor
-        }
+            /// Resolves a stored name for an AppKit caller, falling back to the neutral it sits in —
+            /// the counterpart of ``color(named:neutral:)``, for the same reason it exists.
+            public static func nsColor(named name: String?, neutral: NSColor) -> NSColor {
+                guard let name, let entry = Palette(rawValue: name) else { return neutral }
+                return entry.nsColor
+            }
+        #endif
     }
 }
 

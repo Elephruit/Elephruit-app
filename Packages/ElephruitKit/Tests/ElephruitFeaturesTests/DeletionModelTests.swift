@@ -62,7 +62,7 @@ struct DeletionModelTests {
         let tags = try services.tags.ensureTags(named: ["work/clients"])
         let child = try #require(tags.first)
         let parent = try #require(child.parent)
-        try services.items.update(item) { $0.tags.append(child) }
+        try services.items.update(item) { $0.tags = ($0.tags ?? []) + [child] }
 
         try services.tags.delete(parent)
 

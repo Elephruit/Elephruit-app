@@ -1,3 +1,8 @@
+#if canImport(AppKit)
+// Trackpad swipe machinery rides the AppKit event monitor in SwipeActions.swift, so the row
+// modifier compiles only beside it. The iPhone's rows use the platform's own .swipeActions —
+// a system behaviour, not a port target.
+
 import ElephruitCore
 import SwiftUI
 
@@ -226,3 +231,4 @@ struct SwipeActionButton: View {
         isArmed ? (action.armedSystemImage ?? action.systemImage) : action.systemImage
     }
 }
+#endif

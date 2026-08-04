@@ -83,7 +83,7 @@ public final class AutomationEngine {
         let now = dateProvider.now
         var outcomes: [RuleOutcome] = []
 
-        for rule in project.automationRules.sorted(by: { $0.sortOrder < $1.sortOrder }) {
+        for rule in (project.automationRules ?? []).sorted(by: { $0.sortOrder < $1.sortOrder }) {
             guard let definition = rule.definition else {
                 outcomes.append(RuleOutcome(ruleID: rule.id, ruleName: rule.name, outcome: .notRunnable))
                 continue
@@ -275,7 +275,7 @@ public final class AutomationEngine {
             return true
 
         case .completeSubtasks:
-            let open = item.children.filter { $0.kind.isWorkItem && $0.status == .open }
+            let open = (item.children ?? []).filter { $0.kind.isWorkItem && $0.status == .open }
             guard !open.isEmpty else { return false }
             for child in open { try items.toggleCompletion(child) }
             return true
@@ -284,7 +284,7 @@ public final class AutomationEngine {
             guard let parent = item.parent, parent.kind.isWorkItem, parent.status == .open else {
                 return false
             }
-            let stillOpen = parent.children.filter { $0.kind.isWorkItem && $0.status == .open }
+            let stillOpen = (parent.children ?? []).filter { $0.kind.isWorkItem && $0.status == .open }
             guard stillOpen.isEmpty else { return false }
             try items.toggleCompletion(parent)
             return true

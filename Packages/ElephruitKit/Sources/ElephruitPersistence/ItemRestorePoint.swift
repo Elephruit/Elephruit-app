@@ -73,7 +73,7 @@ struct ItemRestorePoint {
         sourceURLString = item.sourceURLString
         sourceIdentifier = item.sourceIdentifier
         parent = item.parent
-        tags = item.tags
+        tags = item.tags ?? []
     }
 
     /// Puts every tracked field back as it was.

@@ -239,7 +239,7 @@ public final class ProjectWorkspaceModel {
         guard let project else { return [] }
         var ids = project.ungroupedTasks().map(\.id)
         for heading in project.orderedHeadings() {
-            ids += heading.children
+            ids += (heading.children ?? [])
                 .filter { $0.kind.isWorkItem }
                 .sorted { $0.sortOrder < $1.sortOrder }
                 .map(\.id)

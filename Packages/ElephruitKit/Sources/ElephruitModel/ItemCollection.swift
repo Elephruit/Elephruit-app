@@ -35,7 +35,7 @@ public final class ItemCollection {
     /// Cascade: a membership has no meaning without its collection. The items
     /// themselves are untouched — that is the whole point of the join entity.
     @Relationship(deleteRule: .cascade, inverse: \CollectionMembership.collection)
-    public var memberships: [CollectionMembership] = []
+    public var memberships: [CollectionMembership]? = []
 
     public init(
         id: UUID = UUID(),
@@ -60,14 +60,14 @@ public final class ItemCollection {
 extension ItemCollection {
     /// Members in the user's order, skipping trashed items and broken memberships.
     public func orderedItems() -> [Item] {
-        memberships
+        (memberships ?? [])
             .sorted { $0.position < $1.position }
             .compactMap(\.item)
             .filter { $0.deletedAt == nil }
     }
 
     public var activeItemCount: Int {
-        memberships.count { ($0.item?.deletedAt) == nil && $0.item != nil }
+        (memberships ?? []).count { ($0.item?.deletedAt) == nil && $0.item != nil }
     }
 
     public var displayName: String {

@@ -24,8 +24,8 @@ struct TaskToReminderMigrationTests {
         #expect(reminder.kind == .reminder)
         #expect(reminder.createdAt == createdAt)
         #expect(reminder.parent?.id == project.id)
-        #expect(reminder.outgoingLinks.first?.target?.id == person.id)
-        #expect(reminder.outgoingLinks.first?.kind == .promisedTo)
+        #expect((reminder.outgoingLinks ?? []).first?.target?.id == person.id)
+        #expect((reminder.outgoingLinks ?? []).first?.kind == .promisedTo)
     }
 
     @Test("A completed reminder migration is idempotent")

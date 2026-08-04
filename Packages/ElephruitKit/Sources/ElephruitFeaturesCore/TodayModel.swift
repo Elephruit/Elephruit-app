@@ -26,7 +26,7 @@ public final class TodayModel {
 
     /// The task whose "Pick a Date…" calendar is open, if any. One at a time — two open
     /// calendars would both answer the next click.
-    var datePickerTaskID: UUID?
+    public var datePickerTaskID: UUID?
 
     /// Whether the days before the selected one are on screen.
     ///

@@ -184,7 +184,7 @@ public struct ProjectDetailView: View {
     }
 
     private func headingSection(_ heading: Item) -> some View {
-        let tasks = filtered(heading.children.filter { $0.kind.isWorkItem }
+        let tasks = filtered((heading.children ?? []).filter { $0.kind.isWorkItem }
             .sorted { $0.sortOrder < $1.sortOrder })
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
@@ -197,7 +197,7 @@ public struct ProjectDetailView: View {
 
                 Menu {
                     Button("Move Work Items Out") { perform { try $0.moveTasksOut(of: heading) } }
-                        .disabled(heading.children.isEmpty)
+                        .disabled((heading.children ?? []).isEmpty)
                     Divider()
                     Button("Archive…") { confirm(.archive, for: heading) }
                     Button("Move to Trash…", role: .destructive) { confirm(.trash, for: heading) }
@@ -334,7 +334,7 @@ public struct ProjectDetailView: View {
 
     private var relatedPeople: [Item] {
         (project.visibleBacklinks().compactMap(\.source)
-            + project.outgoingLinks.compactMap(\.target))
+            + (project.outgoingLinks ?? []).compactMap(\.target))
             .filter { $0.kind == .person && $0.deletedAt == nil }
             .uniqued()
     }

@@ -172,7 +172,7 @@ struct ReminderReconcileTests {
         #expect(report.adopted == 1)
         #expect(stored.title == "Oat milk, the big one")
         // None of this has anywhere to live in Reminders, and none of it is lost.
-        #expect(stored.tags.map(\.slug) == ["errands"])
+        #expect((stored.tags ?? []).map(\.slug) == ["errands"])
         #expect(stored.isFlagged)
         #expect(stored.todayCommittedOn != nil)
     }
@@ -319,7 +319,7 @@ struct ReminderConflictTests {
         let stored = try fixture.store.requireItem(id: task.id)
 
         #expect(stored.title == "Soya milk")
-        #expect(stored.tags.map(\.slug) == ["errands"])
+        #expect((stored.tags ?? []).map(\.slug) == ["errands"])
         #expect(stored.syncState == .linked)
     }
 
@@ -342,7 +342,7 @@ struct ReminderConflictTests {
         let copy = try #require(all.first { $0.id != task.id })
         #expect(copy.title == "Almond milk")
         #expect(copy.syncState == .local)
-        #expect(copy.outgoingLinks.contains { $0.kind == .conflictCopy })
+        #expect((copy.outgoingLinks ?? []).contains { $0.kind == .conflictCopy })
     }
 }
 

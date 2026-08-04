@@ -83,7 +83,7 @@ struct CaptureServiceTests {
         let people = try fixture.items.items(matching: .kind(.person))
         #expect(people.count == 1)
         #expect(people.first?.title == "Sarah")
-        #expect(item.outgoingLinks.contains { $0.kind == .mentions })
+        #expect((item.outgoingLinks ?? []).contains { $0.kind == .mentions })
     }
 
     @Test("An existing person is reused rather than duplicated")
@@ -95,7 +95,7 @@ struct CaptureServiceTests {
         _ = try service.capture(text: "Chat with @\"sarah chen\"")
 
         #expect(try fixture.items.items(matching: .kind(.person)).count == 1)
-        #expect(existing.incomingLinks.contains { $0.kind == .mentions })
+        #expect((existing.incomingLinks ?? []).contains { $0.kind == .mentions })
     }
 
     /// An App Intent's process can exit the moment `perform()` returns.
@@ -249,7 +249,7 @@ struct CaptureServiceTests {
 
         let people = try fixture.items.items(matching: .kind(.person))
         #expect(people.count == 1, "a second person called “Mike” was created")
-        #expect(existing.incomingLinks.contains { $0.kind == .mentions })
+        #expect((existing.incomingLinks ?? []).contains { $0.kind == .mentions })
         #expect(item.title == "Ask about the beta")
     }
 
@@ -302,7 +302,7 @@ struct HotPathTests {
 
         #expect(tally.itemFetches <= 3, "Observed \(tally.description)")
 
-        let link = try #require(try fixture.requireItem(id: source.id).outgoingLinks.first)
+        let link = try #require((fixture.requireItem(id: source.id).outgoingLinks ?? []).first)
         #expect(link.target?.title == "Target Note")
     }
 

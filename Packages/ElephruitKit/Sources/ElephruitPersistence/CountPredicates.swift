@@ -64,10 +64,10 @@ enum CountPredicates {
         //         && item.archivedAt == nil
         //         && item.parent == nil
         //         && !ineligibleKindRaws.contains(item.kindRaw)
-        //         && item.tags.isEmpty
-        //         && !item.outgoingLinks.contains {
+        //         && (item.tags?.isEmpty ?? true)
+        //         && !(item.outgoingLinks?.contains {
         //             $0.kindRaw == filedRaw && $0.target != nil && $0.target?.deletedAt == nil
-        //         }
+        //         } ?? false)
         //
         // written as the expansion the macro itself produces (`-dump-macro-expansions`), because
         // the macro form of six clauses plus a subquery is over the type-checker's wall-clock
@@ -105,20 +105,37 @@ enum CountPredicates {
                     )
                 )
             )
-            let untagged = PredicateExpressions.build_KeyPath(
-                root: PredicateExpressions.build_KeyPath(
-                    root: PredicateExpressions.build_Arg(item),
-                    keyPath: \.tags
-                ),
-                keyPath: \.isEmpty
+            // Optional since the relationships became optional for CloudKit — and phrased as
+            // "contains nothing" rather than "isEmpty": `isEmpty` reaches the store as a bare
+            // `tags.@count`, which the count-request path refuses outright ("KVC aggregate
+            // where there shouldn't be one", a crash), while `contains` reaches it as the
+            // SUBQUERY the filing clause below has always used. A `nil` collection and an
+            // empty one both mean untagged, which is what the coalesce says.
+            let untagged = PredicateExpressions.build_Negation(
+                PredicateExpressions.build_NilCoalesce(
+                    lhs: PredicateExpressions.build_flatMap(
+                        PredicateExpressions.build_KeyPath(
+                            root: PredicateExpressions.build_Arg(item),
+                            keyPath: \.tags
+                        )
+                    ) { tags in
+                        PredicateExpressions.build_contains(tags) { _ in
+                            PredicateExpressions.build_Arg(true)
+                        }
+                    },
+                    rhs: PredicateExpressions.build_Arg(false)
+                )
             )
+            // Same shape for the filing subquery: no links and no live filing read alike.
             let notLiveFiled = PredicateExpressions.build_Negation(
-                PredicateExpressions.build_contains(
-                    PredicateExpressions.build_KeyPath(
-                        root: PredicateExpressions.build_Arg(item),
-                        keyPath: \.outgoingLinks
-                    )
-                ) {
+                PredicateExpressions.build_NilCoalesce(
+                    lhs: PredicateExpressions.build_flatMap(
+                        PredicateExpressions.build_KeyPath(
+                            root: PredicateExpressions.build_Arg(item),
+                            keyPath: \.outgoingLinks
+                        )
+                    ) { links in
+                        PredicateExpressions.build_contains(links) {
                     PredicateExpressions.build_Conjunction(
                         lhs: PredicateExpressions.build_Conjunction(
                             lhs: PredicateExpressions.build_Equal(
@@ -151,7 +168,10 @@ enum CountPredicates {
                             rhs: PredicateExpressions.build_NilLiteral()
                         )
                     )
-                }
+                        }
+                    },
+                    rhs: PredicateExpressions.build_Arg(false)
+                )
             )
 
             let scope = PredicateExpressions.build_Conjunction(lhs: notDeleted, rhs: notArchived)

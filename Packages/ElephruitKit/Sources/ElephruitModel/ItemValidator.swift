@@ -81,13 +81,13 @@ public enum ItemValidator {
            kind != .goal {
             throw fieldFailure("goalValue", kind)
         }
-        if !item.children.isEmpty, !fields.contains(.children) {
+        if !(item.children ?? []).isEmpty, !fields.contains(.children) {
             throw fieldFailure("children", kind)
         }
         if !item.body.isEmpty, !fields.contains(.body) {
             throw fieldFailure("body", kind)
         }
-        if !item.tags.isEmpty, !fields.contains(.tags) {
+        if !(item.tags ?? []).isEmpty, !fields.contains(.tags) {
             throw fieldFailure("tags", kind)
         }
         if item.reminderAt != nil, !fields.contains(.reminder) {
@@ -235,7 +235,7 @@ public enum ItemValidator {
             item.body = ""
             cleared.append("body")
         }
-        if !item.tags.isEmpty, !fields.contains(.tags) {
+        if !(item.tags ?? []).isEmpty, !fields.contains(.tags) {
             item.tags = []
             cleared.append("tags")
         }

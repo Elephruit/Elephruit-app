@@ -62,7 +62,16 @@ public struct WebClipInbox: Sendable {
             )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
-            try encoder.encode(clip).write(to: destination, options: [.atomic, .completeFileProtection])
+            // Complete protection is an iOS concept — the key is discarded while the phone is
+            // locked, which is right for a queue that might hold a page snapshot. On macOS the
+            // same flag is at best ignored and, on current systems, refuses the write outright;
+            // the sandbox and ordinary file permissions are the desktop's answer.
+            #if os(iOS)
+                let options: Data.WritingOptions = [.atomic, .completeFileProtection]
+            #else
+                let options: Data.WritingOptions = [.atomic]
+            #endif
+            try encoder.encode(clip).write(to: destination, options: options)
             return PendingWebClip(clip: clip, fileURL: destination)
         } catch {
             throw .writeFailed(path: directory.path(percentEncoded: false), reason: error.localizedDescription)

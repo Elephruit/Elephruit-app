@@ -978,14 +978,6 @@ public struct RootView: View {
 
 import AppKit
 
-extension AppServices {
-    /// Throws away the index and rebuilds it. The user-visible "Rebuild Search Index" command.
-    func invalidateAndWarmIndex() async {
-        await search.invalidateIndex()
-        await warmSearchIndex()
-    }
-}
-
 /// What the menu bar or an intent asked the calendar to do.
 ///
 /// Declared here rather than in the app target so a window can be handed one without the shell

@@ -30,7 +30,7 @@ changing them is a one-line edit.
 |---|---|
 | Every attribute must be optional **or** have a default value | Every non-optional property has a literal default in its declaration. Verified by a test that instantiates every entity with `init()` only. |
 | `@Attribute(.unique)` is unsupported on mirrored entities | No unique constraints anywhere. `Item.id` uniqueness is enforced by `ItemRepository` on insert and by the importer, and covered by a test that attempts a duplicate insert. |
-| Every relationship must be optional and must have an inverse | All to-one relationships are `Optional`; all to-many pairs declare `@Relationship(inverse:)` on exactly one side. |
+| Every relationship must be optional and must have an inverse | **Every** relationship is `Optional` — to-many included (`[Tag]?`, not `[Tag]` with a default: the first real container open rejected exactly that, naming all twenty-nine). Each pair declares `@Relationship(inverse:)` on exactly one side, and the compliance scan asserts both properties across every entity. |
 | `.deny` delete rules are unsupported | Only `.cascade` and `.nullify` are used. Containment cascades; associations nullify. |
 | Ordered relationships are unsupported | `Collection` order lives in `CollectionMembership.position`, an attribute. |
 | Large binaries bloat records | Attachment bytes live on disk (see storage matrix). Phase 4 maps them to `CKAsset` in a dedicated record, not inline. |

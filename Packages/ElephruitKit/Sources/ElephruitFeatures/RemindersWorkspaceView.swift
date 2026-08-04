@@ -401,7 +401,7 @@ struct RemindersWorkspaceView: View {
     @ViewBuilder
     private func metadata(for reminder: Item) -> some View {
         let facts = metadataFacts(for: reminder)
-        let tags = reminder.tags.sorted {
+        let tags = (reminder.tags ?? []).sorted {
             $0.slug.localizedStandardCompare($1.slug) == .orderedAscending
         }
         let checklist = checklistFact(for: reminder)
@@ -480,7 +480,7 @@ struct RemindersWorkspaceView: View {
             ))
         }
 
-        let people = reminder.outgoingLinks.compactMap { link -> Item? in
+        let people = (reminder.outgoingLinks ?? []).compactMap { link -> Item? in
             guard link.kind == .mentions,
                   let target = link.target,
                   target.kind == .person || target.kind == .organization
@@ -543,7 +543,7 @@ struct RemindersWorkspaceView: View {
     private var activeTags: [Tag] {
         var tagsByID: [UUID: Tag] = [:]
         let eligible = allReminders.filter { visibility.showsCompleted || !$0.isCompleted }
-        for tag in eligible.flatMap(\.tags) {
+        for tag in eligible.flatMap({ $0.tags ?? [] }) {
             tagsByID[tag.id] = tag
         }
         return tagsByID.values.sorted {
