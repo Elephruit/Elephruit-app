@@ -76,7 +76,6 @@ extension Theme {
         public static let listIdealWidth: CGFloat = 340
 
         public static let detailMinWidth: CGFloat = 420
-        public static let inspectorWidth: CGFloat = 280
 
         /// The editor's measure. Long lines are hard to read; this caps them at roughly 80
         /// characters at the default size while leaving the window free to be any width.

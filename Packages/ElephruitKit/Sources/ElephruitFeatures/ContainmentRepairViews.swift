@@ -165,31 +165,3 @@ struct ContainmentRepairSheet: View {
         }
     }
 }
-
-/// Confirmation that a repair ran, with what it did.
-struct ContainmentRepairSummary: View {
-    let report: MigrationReport
-    let onDismiss: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-            Label("Filing updated", systemImage: "checkmark.circle.fill")
-                .font(.system(.headline, design: .default, weight: .medium))
-                .foregroundStyle(Theme.Colors.completed)
-
-            Text(report.summary)
-                .font(Theme.Text.rowSubtitle)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack {
-                Spacer()
-                Button("Done", action: onDismiss)
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding(Theme.Spacing.large)
-        .frame(width: 480)
-        .accessibilityIdentifier("containmentRepair.summary")
-    }
-}

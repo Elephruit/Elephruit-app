@@ -48,6 +48,9 @@ struct ElephruitApp: App {
                 Label("Elephruit", systemImage: "timer")
             }
         }
+        // The style the comment above always promised: `.window` is what lets the content be a
+        // live view rather than a static menu. It was documented and never applied.
+        .menuBarExtraStyle(.window)
 
         // The calendar's menu bar item.
         //
@@ -72,6 +75,7 @@ struct ElephruitApp: App {
                 Label("Calendar", systemImage: "calendar")
             }
         }
+        .menuBarExtraStyle(.window)
 
         Settings {
             SettingsView(environment: environment)
@@ -170,6 +174,8 @@ struct ElephruitCommands: Commands {
     @FocusedValue(\.workItemActions) private var workItem
     @FocusedValue(\.newItemCommand) private var newItem
 
+    @Environment(\.openWindow) private var openWindow
+
     /// The services, for the few commands that act on the app rather than on a window.
     ///
     /// Switching Calendar Set is one: which calendars are showing is a property of the app's
@@ -232,14 +238,12 @@ struct ElephruitCommands: Commands {
             Divider()
 
             // A new window is genuinely useful in this app — two projects side by side — so it is a
-            // first-class command rather than something the user has to discover.
-            Button("New Window") {
-                if let url = URL(string: "everything://main") {
-                    NSWorkspace.shared.open(url)
-                }
-            }
-            .shortcut(.newWindow, in: shortcuts)
-            .disabled(true)  // Enabled with the URL scheme in Phase 2.
+            // first-class command rather than something the user has to discover. Through the
+            // scene action, not a URL: this used to open `everything://main`, a scheme the
+            // Info.plist never registered, behind a `.disabled(true)` — a menu item that was
+            // wrong twice and pressable zero times.
+            Button("New Window") { openWindow(id: "main") }
+                .shortcut(.newWindow, in: shortcuts)
         }
 
         CommandGroup(after: .newItem) {
@@ -408,12 +412,14 @@ struct ElephruitCommands: Commands {
         // MARK: Help
 
         CommandGroup(replacing: .help) {
+            // A Help menu whose only item is permanently disabled is worse than no Help menu:
+            // it also removed the system's Help search field, which is how macOS users discover
+            // menu commands. The documentation genuinely lives in the repository, and the app's
+            // no-network entitlement is about the *app* — the link opens in the browser.
             Link(
-                "Elephruit Design Notes",
-                destination: URL(filePath: FileManager.default.currentDirectoryPath)
-                    .appending(path: "docs", directoryHint: .isDirectory)
+                "Elephruit Documentation",
+                destination: URL(string: "https://github.com/Elephruit/Elephruit-app/tree/main/docs")!
             )
-            .disabled(true)  // Bundled documentation arrives with the App Store build.
         }
     }
 
