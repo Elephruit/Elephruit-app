@@ -96,15 +96,6 @@ public struct TodayView: View {
 
     private func page(_ model: TodayModel) -> some View {
         VStack(spacing: 0) {
-            TodayToolbar(
-                model: model,
-                preferences: services?.todayPreferences,
-                calendars: services?.calendar,
-                isDatePickerPresented: $isDatePickerPresented
-            )
-
-            Divider()
-
             if services?.calendar.isEnabled == false || services?.calendar.authorization.canRead == false {
                 calendarBanner
             }
@@ -113,6 +104,16 @@ public struct TodayView: View {
         }
         .navigationTitle(title(model))
         .navigationSubtitle(subtitle(model))
+        // The window toolbar owns the day's controls now — the in-content bar this replaces was a
+        // second row of chrome above the day, spending the day's own room.
+        .toolbar {
+            TodayToolbarItems(
+                model: model,
+                preferences: services?.todayPreferences,
+                calendars: services?.calendar,
+                isDatePickerPresented: $isDatePickerPresented
+            )
+        }
         // Moving the window is the only thing that reads the calendar. Everything else rebuilds the
         // days from what is already in memory — which is what stops the page asking the calendar a
         // question in response to the calendar having answered one. See `TodayModel.WindowToken`.

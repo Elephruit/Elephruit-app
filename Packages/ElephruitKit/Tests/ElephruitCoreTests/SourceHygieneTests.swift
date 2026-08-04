@@ -608,7 +608,7 @@ struct SourceHygieneTests {
             "ProjectsSidebarSection.swift", "ReminderComposer.swift",
             "ReminderMonthPicker.swift", "SectionIndexBar.swift", "SwipeActionsRow.swift",
             "TodayComponents.swift", "TodayPeopleViews.swift", "TodayRows.swift",
-            "TodayToolbar.swift", "WorkItemCompletionControl.swift", "WorkItemDetailView.swift",
+            "WorkItemCompletionControl.swift", "WorkItemDetailView.swift",
             "WorkItemViews.swift",
         ]
 
@@ -668,7 +668,7 @@ struct SourceHygieneTests {
             "CalendarSearchView.swift", "CalendarTimeGrid.swift", "CaptureSuggestionSource.swift",
             "Components.swift", "ContactImportReviewView.swift", "MapPlaceSearchField.swift",
             "ProjectCalendarView.swift", "ReminderComposer.swift", "TimeEntryEditing.swift",
-            "TimePickers.swift", "TodayRows.swift", "TodayToolbar.swift", "WorkItemDetailView.swift",
+            "TimePickers.swift", "TodayRows.swift", "WorkItemDetailView.swift",
         ]
 
         // The grid: eight-major, four-half-step, two as the glyph gap. `Theme.Spacing`, as numbers.

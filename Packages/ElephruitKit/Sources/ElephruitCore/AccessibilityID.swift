@@ -289,6 +289,7 @@ public enum AccessibilityID {
         // The workspace.
         public static let workspace = "calendar.workspace"
         public static let viewSwitcher = "calendar.viewSwitcher"
+        public static let optionsMenu = "calendar.optionsMenu"
         public static let todayButton = "calendar.today"
         public static let previousButton = "calendar.previous"
         public static let nextButton = "calendar.next"
