@@ -1,6 +1,6 @@
 (() => {
-  if ((globalThis.__elephruitClipperPanelVersion || 0) >= 3) return;
-  globalThis.__elephruitClipperPanelVersion = 3;
+  if ((globalThis.__elephruitClipperPanelVersion || 0) >= 4) return;
+  globalThis.__elephruitClipperPanelVersion = 4;
 
   let activeCleanup = null;
   let activeApplyBoundary = null;
@@ -461,9 +461,17 @@
 
       try {
         await state.boundaryPromise;
-        const content = contentFor(state.mode);
+        let content = contentFor(state.mode);
         const tags = tagSlugs();
-        setStatus(state.mode === "fullPage" ? "Capturing the full page…" : "Preserving the page…");
+        if (["article", "simplifiedArticle", "selection", "fullPage"].includes(state.mode)) {
+          setStatus(state.mode === "fullPage" ? "Capturing the full page…" : "Preserving the page…");
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          content = await withTimeout(
+            Promise.resolve().then(() => api.captureContent(state.mode)),
+            30_000,
+            "Safari took too long to preserve this page."
+          );
+        }
         const images = await capturedImages(content);
         if (state.mode === "fullPage") images.push(...await fullPageImages());
         const clip = {
@@ -493,6 +501,9 @@
 
     async function loadPage() {
       try {
+        // Let the shell and spinner paint before analyzing the page. Programmatic toolbar
+        // invocation can then return without waiting for the extraction microtask to finish.
+        await new Promise((resolve) => requestAnimationFrame(resolve));
         const page = await withTimeout(Promise.resolve().then(() => api.extract()), 15_000, "Safari took too long to read this page.");
         if (page?.schemaVersion !== 4) throw new Error("Safari couldn’t read this page.");
         if (state.disposed) return;
@@ -542,7 +553,7 @@
   }
 
   globalThis.__elephruitClipperPanelUI = {
-    version: 3,
+    version: 4,
     mount,
     unmount() { activeCleanup?.(); },
     articleChanged(payload) { activeApplyBoundary?.(payload); }

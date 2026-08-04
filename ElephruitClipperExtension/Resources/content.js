@@ -1,6 +1,6 @@
 (() => {
-  if ((globalThis.__elephruitClipperVersion || 0) >= 12) return;
-  globalThis.__elephruitClipperVersion = 12;
+  if ((globalThis.__elephruitClipperVersion || 0) >= 13) return;
+  globalThis.__elephruitClipperVersion = 13;
 
   // An already-open tab can retain the previous isolated-world script after an extension update.
   // Remove its detached UI before installing the new API so the next toolbar click cannot produce
@@ -146,16 +146,16 @@
   }
 
   function linkDensity(element) {
-    const textLength = Math.max(element.innerText?.trim().length || 0, 1);
-    const linkLength = [...element.querySelectorAll("a")]
-      .reduce((total, link) => total + (link.innerText?.trim().length || 0), 0);
+    const textLength = Math.max(element.textContent?.trim().length || 0, 1);
+    const links = [...element.querySelectorAll("a")].slice(0, 200);
+    const linkLength = links.reduce((total, link) => total + (link.textContent?.trim().length || 0), 0);
     return linkLength / textLength;
   }
 
   function articleRoot() {
     const viewportArticles = [...document.querySelectorAll("article")]
       .filter((element) => {
-        const text = element.innerText?.trim() || "";
+        const text = element.textContent?.trim() || "";
         const identity = `${element.id} ${element.className}`;
         return text.length >= 300
           && (element.querySelectorAll("p").length >= 2 || text.length >= 800)
@@ -170,7 +170,7 @@
         const distance = visible > 0
           ? Math.abs(Math.max(0, Math.min(window.innerHeight, rect.top + rect.height / 2)) - center)
           : Math.min(Math.abs(rect.top - center), Math.abs(rect.bottom - center));
-        const textLength = element.innerText?.trim().length || 0;
+        const textLength = element.textContent?.trim().length || 0;
         const paragraphs = element.querySelectorAll("p").length;
         const quality = Math.min(textLength, 6_000) + Math.min(paragraphs, 30) * 100 - textLength * linkDensity(element);
         const score = quality + Math.min(visible, window.innerHeight) * 8 - distance * 2;
@@ -178,15 +178,20 @@
       }, null).element;
     }
 
-    const semantic = [...document.querySelectorAll("article, main, [role='main']")];
-    const broad = [...document.querySelectorAll("section, div")]
-      .filter((element) => element.querySelectorAll(":scope > p, :scope > section > p").length >= 2);
-    const candidates = [...new Set([...semantic, ...broad])];
+    // Avoid walking and rescoring every div on large pages. Modern article pages nearly always
+    // expose a semantic or identity-bearing container; direct body children cover the fallback.
+    const semantic = [...document.querySelectorAll([
+      "article", "main", "[role='main']", "[itemprop='articleBody']", ".article-body",
+      ".article-content", ".entry-content", ".post-content", ".story-body", "#article-body",
+      "#content", "#main-content"
+    ].join(","))].slice(0, 80);
+    const bodyChildren = [...(document.body?.children || [])].slice(0, 40);
+    const candidates = [...new Set([...semantic, ...bodyChildren])];
     let winner = document.body;
     let best = 0;
 
     for (const element of candidates) {
-      const text = element.innerText?.trim() || "";
+      const text = element.textContent?.trim() || "";
       if (text.length < 180) continue;
       const paragraphs = element.querySelectorAll("p").length;
       const headings = element.querySelectorAll("h1, h2, h3").length;
@@ -216,16 +221,16 @@
     // changes in padding, width, height, or text produce another selectable boundary.
     while (candidate && candidate !== document.documentElement && levels.length < 10) {
       const rect = candidate.getBoundingClientRect();
-      const textLength = candidate.innerText?.trim().length || 0;
       const previous = levels.at(-1);
       const previousRect = previous?.getBoundingClientRect();
-      const previousTextLength = previous?.innerText?.trim().length || 0;
       const isRequired = candidate === root || candidate === document.body;
       const isDistinct = !previousRect
         || Math.abs(rect.width - previousRect.width) >= 12
-        || Math.abs(rect.height - previousRect.height) >= 12
-        || textLength >= Math.max(previousTextLength + 40, previousTextLength * 1.08);
-      if (rect.width >= 40 && rect.height >= 18 && textLength > 0 && (isRequired || isDistinct)) {
+        || Math.abs(rect.height - previousRect.height) >= 12;
+      const hasContent = isRequired
+        || candidate.matches("a,h1,h2,h3,p,li,table,figure")
+        || Boolean(candidate.querySelector(":scope > p, :scope > section, :scope > article, :scope > figure, :scope > table"));
+      if (rect.width >= 40 && rect.height >= 18 && hasContent && (isRequired || isDistinct)) {
         levels.push(candidate);
       }
       if (candidate === document.body) break;
@@ -333,15 +338,16 @@
   function articleSelectionPayload() {
     const selection = ensureArticleSelection();
     const root = selectedArticleRoot();
+    const preview = quickSnapshot(root);
     return {
-      article: snapshot(root),
-      simplifiedArticle: snapshot(root, true),
+      article: preview,
+      simplifiedArticle: preview,
       boundary: {
         level: selection.index + 1,
         levelCount: selection.levels.length,
         canNarrow: selection.index > 0,
         canExpand: selection.index < selection.levels.length - 1,
-        characterCount: root.innerText?.trim().length || 0
+        characterCount: root.textContent?.trim().length || 0
       }
     };
   }
@@ -475,13 +481,71 @@
     };
   }
 
+  function quickText(root, maximumLength = 6_000) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const parts = [];
+    let length = 0;
+    while (length < maximumLength) {
+      const node = walker.nextNode();
+      if (!node) break;
+      const parent = node.parentElement;
+      if (!parent || parent.closest(REMOVE_UNSAFE)) continue;
+      const value = node.textContent?.replace(/\s+/g, " ").trim();
+      if (!value) continue;
+      const available = maximumLength - length;
+      parts.push(value.slice(0, available));
+      length += Math.min(value.length, available);
+    }
+    return parts.join(" ").replace(/\s+/g, " ").trim();
+  }
+
+  function previewImage(root) {
+    let inspected = 0;
+    for (const image of root.getElementsByTagName?.("img") || []) {
+      inspected += 1;
+      if (inspected > 200) break;
+      const url = absoluteURL(
+        image.currentSrc
+        || image.getAttribute("data-src")
+        || image.getAttribute("data-lazy-src")
+        || image.getAttribute("data-original")
+        || image.getAttribute("src")
+      );
+      const width = Number(image.naturalWidth || image.width || 0);
+      const height = Number(image.naturalHeight || image.height || 0);
+      if (url && width >= 120 && height >= 80) {
+        return [{ url, alt: (image.alt || image.getAttribute("aria-label") || "").trim().slice(0, 500), width, height }];
+      }
+    }
+    return [];
+  }
+
+  function quickSnapshot(root) {
+    return {
+      markdown: "",
+      html: null,
+      text: quickText(root),
+      images: previewImage(root)
+    };
+  }
+
+  function captureContent(mode) {
+    if (mode === "article") return snapshot(selectedArticleRoot());
+    if (mode === "simplifiedArticle") return snapshot(selectedArticleRoot(), true);
+    if (mode === "fullPage") return snapshot(document.body);
+    if (mode === "selection") {
+      const selected = selectedRoot();
+      return selected ? snapshot(selected) : { markdown: "", html: null, text: "", images: [] };
+    }
+    return null;
+  }
+
   function extract() {
     const root = selectedArticleRoot();
-    const article = snapshot(root);
-    const simplifiedArticle = snapshot(root, true);
-    const fullPage = snapshot(document.body);
+    const article = quickSnapshot(root);
+    const fullPage = quickSnapshot(document.body);
     const selected = selectedRoot();
-    const selection = selected ? snapshot(selected) : null;
+    const selection = selected ? quickSnapshot(selected) : null;
     const canonical = absoluteURL(document.querySelector("link[rel='canonical']")?.href);
     const description = meta("meta[name='description']", "meta[property='og:description']", "meta[name='twitter:description']");
 
@@ -494,7 +558,7 @@
       author: meta("meta[name='author']", "meta[property='article:author']"),
       excerpt: description || article.text.slice(0, 320),
       article,
-      simplifiedArticle,
+      simplifiedArticle: article,
       fullPage,
       selection
     };
@@ -570,8 +634,9 @@
   // that listener's empty response before the new listener answers. `scripting.executeScript` calls
   // this newest API explicitly, so upgrading never requires the user to reload their page.
   globalThis.__elephruitClipperAPI = {
-    version: 12,
+    version: 13,
     extract,
+    captureContent,
     showArticleSelection,
     hideArticleSelection,
     adjustArticleSelection,

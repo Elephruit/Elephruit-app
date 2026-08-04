@@ -113,6 +113,10 @@ approves a host, the popup injects the clipper into that tab's top frame and inv
 directly. Injection retries briefly when a redirect replaces a provisional document. It does not
 depend on Safari's persistent registered-content-script database, reload the page, or broadcast
 messages to unrelated embedded frames, and it does not request blanket access to every website.
+Opening the panel uses bounded semantic article candidates and capped text/image previews. Boundary
+changes update only that lightweight preview; computed-style capture, full Markdown generation, and
+image enumeration are deferred until Save. This keeps interaction responsive on very large pages
+while retaining the high-fidelity saved result.
 
 The main app still has no network entitlement. Safari itself naturally has network access to display
 the page being clipped; the extension operates on that active page.
