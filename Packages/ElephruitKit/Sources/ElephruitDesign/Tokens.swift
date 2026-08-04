@@ -356,7 +356,9 @@ extension Theme {
         /// drawn at eight different opacities between 0.06 and 0.18, one per screen that needed
         /// it, which is how the selection read stronger in some lists than others for no reason
         /// anybody chose.
-        public static var selectionFill: Color { selection.opacity(0.15) }
+        public static var selectionFill: Color {
+            adaptiveAlpha(of: selection, standard: 0.15, increasedContrast: 0.3)
+        }
 
         /// A surface tinted by something's own colour — a chip's body, a callout, a selected pill.
         ///
@@ -364,12 +366,41 @@ extension Theme {
         /// distinct opacities between 0.025 and 0.8 for what was always the same two ideas: a
         /// wash of the thing's colour behind it, and a firmer line of the same colour around it.
         /// The hue adapts with the appearance because the *tint* does; only the strength is
-        /// decided here.
-        public static func tintedFill(_ tint: Color) -> Color { tint.opacity(0.12) }
+        /// decided here — and it doubles under Increase Contrast, because a 12% wash is exactly
+        /// the kind of distinction that setting exists to strengthen.
+        public static func tintedFill(_ tint: Color) -> Color {
+            adaptiveAlpha(of: tint, standard: 0.12, increasedContrast: 0.24)
+        }
 
         /// The boundary that goes with ``tintedFill(_:)`` — strong enough to hold a chip's edge
         /// on the dark list background, where the fills alone were dissolving.
-        public static func tintedStroke(_ tint: Color) -> Color { tint.opacity(0.25) }
+        public static func tintedStroke(_ tint: Color) -> Color {
+            adaptiveAlpha(of: tint, standard: 0.25, increasedContrast: 0.55)
+        }
+
+        /// A translucent wash whose strength answers to Increase Contrast.
+        ///
+        /// The system's own semantic colours respond to the setting by themselves; the alphas this
+        /// app lays over a tint do not, so before this every hand-tinted fill stayed a 12% wash
+        /// for exactly the people who asked for more. A dynamic provider rather than an
+        /// environment read, so a static token can stay a static token.
+        private static func adaptiveAlpha(
+            of tint: Color,
+            standard: CGFloat,
+            increasedContrast: CGFloat
+        ) -> Color {
+            let base = NSColor(tint)
+            return Color(nsColor: NSColor(name: nil) { appearance in
+                let highContrastNames: [NSAppearance.Name] = [
+                    .accessibilityHighContrastAqua,
+                    .accessibilityHighContrastDarkAqua,
+                    .accessibilityHighContrastVibrantLight,
+                    .accessibilityHighContrastVibrantDark,
+                ]
+                let isHighContrast = highContrastNames.contains(appearance.name)
+                return base.withAlphaComponent(isHighContrast ? increasedContrast : standard)
+            })
+        }
 
         /// Something the app could not interpret and has told the user about.
         ///
