@@ -106,7 +106,7 @@ struct KanbanColumnView: View {
                     .draggable(WorkItemTransfer(id: facts.id)) {
                         KanbanCardView(facts: facts, model: model)
                             .frame(width: 248)
-                            .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
+                            .shadow(color: Theme.Colors.shadow.opacity(0.18), radius: 10, y: 4)
                     }
                     .onDragSessionUpdated { session in
                         switch session.phase {

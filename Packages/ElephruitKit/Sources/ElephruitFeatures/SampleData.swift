@@ -1,4 +1,5 @@
 import ElephruitCore
+import ElephruitIntegrations
 import ElephruitModel
 import ElephruitPersistence
 import Foundation
@@ -167,6 +168,60 @@ public enum SampleData {
             )
         )
 
+        // MARK: The four Reminders link states
+        //
+        // Restored from the Tasks-era sample data when that surface was removed: the whole point
+        // of `-ElephruitUseFixtureReminders` is that a reviewer can link the integration and see
+        // every state a linked reminder can be in, and losing the planting made the flag
+        // demonstrate an empty sync. `ReminderSampleDataSyncTests` holds these reconcilable.
+
+        // The unlinked twin, so matching by title alone stays ambiguous on purpose.
+        _ = try items.create(ItemDraft(kind: .reminder, title: "Oat milk"))
+
+        // In step with a reminder that exists and has not changed.
+        try link(
+            items: items,
+            title: "Oat milk",
+            externalID: "rem-milk",
+            listID: "list-groceries",
+            state: .linked,
+            parentID: personal.id,
+            clock: clock
+        )
+
+        // A conflict awaiting a decision.
+        try link(
+            items: items,
+            title: "Call the dentist",
+            externalID: "rem-call",
+            listID: "list-personal",
+            state: .conflicted,
+            parentID: nil,
+            clock: clock
+        )
+
+        // On a shared list that refuses writes.
+        try link(
+            items: items,
+            title: "Boiler service",
+            externalID: "rem-boiler",
+            listID: "list-shared",
+            state: .externalReadOnly,
+            parentID: houseMove.id,
+            clock: clock
+        )
+
+        // A reminder that has gone from the system store, with everything local intact.
+        try link(
+            items: items,
+            title: "Return the library books",
+            externalID: "rem-gone",
+            listID: "list-personal",
+            state: .externalMissing,
+            parentID: nil,
+            clock: clock
+        )
+
         // MARK: Notes
 
         let positioning = try items.create(
@@ -314,4 +369,66 @@ public enum SampleData {
         ("Urgent this week", "tag:urgent is:open due:<7d", "flame"),
         ("Unfiled notes", "type:note is:unfiled", "tray.2"),
     ]
+
+    /// A reminder carrying a Reminders link in a chosen state.
+    ///
+    /// Written directly rather than through `ReminderSyncEngine`, deliberately: sample data must not
+    /// require the integration to be switched on, and it must never touch a real store. The
+    /// identifiers match `FixtureRemindersProvider`, so launching with the fixture flag makes these
+    /// four rows genuinely reconcilable.
+    @MainActor
+    private static func link(
+        items: any ItemRepository,
+        title: String,
+        externalID: String,
+        listID: String,
+        state: TaskSyncState,
+        parentID: UUID?,
+        clock: any DateProvider
+    ) throws(AppError) {
+        let reminder = try items.create(
+            ItemDraft(
+                kind: .reminder,
+                title: title,
+                parentID: parentID,
+                source: ItemSource(kind: .systemStore, identifier: externalID)
+            )
+        )
+        // ### The fingerprint has to be the real one
+        // Planting a literal that can never equal a fingerprint made every row read as "changed in
+        // Reminders" on the first pass, so the states these rows exist to demonstrate — in step,
+        // read-only, gone — all came out as conflicts instead.
+        //
+        // `.conflicted` is the exception: that row is *meant* to disagree, so it keeps a
+        // fingerprint that deliberately does not match — a comparable one, so the disagreement is
+        // a real comparison rather than an artefact of the format.
+        let planted = FixtureRemindersProvider.defaultReminders.first { $0.id == externalID }
+        let fingerprint = switch state {
+        case .conflicted:
+            ReminderSnapshot.fingerprintPrefix + "changedelsewhere"
+        default:
+            planted?.fingerprint ?? ReminderSnapshot.fingerprintPrefix + "absent"
+        }
+
+        // A conflict needs *both* sides to have moved. A mismatched fingerprint on its own only
+        // says the reminder changed, which resolves to `.adoptRemote` — so backdating the local
+        // stamp is what makes this row demonstrate a disagreement rather than a quiet remote win.
+        let localStampOffset: TimeInterval = state == .conflicted ? -60 : 0
+
+        // Through `recordSyncMetadata`, for the reason given on it: `update` stamps `updatedAt`
+        // after the closure runs, so a local stamp written inside would be older than the value
+        // the write leaves behind, and the first pass would read a local edit nobody made.
+        try items.recordSyncMetadata(on: reminder) { subject in
+            subject.setReminderLink(
+                ReminderLinkState(
+                    externalID: externalID,
+                    listID: listID,
+                    lastSyncedFingerprint: fingerprint,
+                    lastSyncedAt: clock.now,
+                    lastSyncedLocalStamp: subject.updatedAt.addingTimeInterval(localStampOffset)
+                )
+            )
+            subject.syncState = state
+        }
+    }
 }

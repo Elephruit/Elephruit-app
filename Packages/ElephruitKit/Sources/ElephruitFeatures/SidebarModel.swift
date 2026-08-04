@@ -206,6 +206,15 @@ public enum SidebarRegistry {
             hint: "Standing responsibilities, which never finish."
         ),
         SidebarDestination(
+            id: "reminders",
+            selection: .reminders,
+            band: .module,
+            module: .reminders,
+            title: "All Reminders",
+            symbolName: "bell",
+            hint: "Things to remember, when they matter, and what you chose for today."
+        ),
+        SidebarDestination(
             id: "records",
             selection: .records(.all),
             band: .module,

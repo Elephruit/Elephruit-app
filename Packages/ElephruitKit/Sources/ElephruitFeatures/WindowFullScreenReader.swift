@@ -38,7 +38,9 @@ final class FullScreenObservingView: NSView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
+        // Unavailable, so this can never be reached; returning nil keeps the promise that
+        // shipping code holds no `fatalError` on any path.
+        nil
     }
 
     override func viewDidMoveToWindow() {

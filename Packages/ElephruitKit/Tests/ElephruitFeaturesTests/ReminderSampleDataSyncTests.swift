@@ -39,7 +39,7 @@ struct ReminderSampleDataSyncTests {
         let provider = FixtureRemindersProvider(authorization: .authorized)
 
         var query = ItemQuery()
-        query.kinds = [.task]
+        query.kinds = ItemKind.workItemKindSet
         query.scope = .all
         let linked = try services.items.items(matching: query).filter { $0.externalIdentifier != nil }
 
@@ -68,7 +68,7 @@ struct ReminderSampleDataSyncTests {
         let report = await services.reminderSync.reconcile(importingFrom: lists)
 
         var query = ItemQuery()
-        query.kinds = [.task]
+        query.kinds = ItemKind.workItemKindSet
         query.scope = .all
         let all = try services.items.items(matching: query)
 

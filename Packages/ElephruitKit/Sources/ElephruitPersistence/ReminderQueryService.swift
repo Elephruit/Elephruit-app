@@ -257,7 +257,11 @@ public final class ReminderQueryService {
     public func syncAttentionCount() -> Int {
         let descriptor = FetchDescriptor<Item>(
             predicate: CountPredicates.syncAttention(
-                workItemKindRaws: ItemKind.workItemKinds.map(\.rawValue),
+                // The readable set, not the producer set: legacy `.task` rows keep their sync
+                // state until the in-place migration has converged the library, and a conflict on
+                // one of them is still a conflict. `tasks(matching:)` reads the same set, and
+                // `SidebarRefreshQueryTests` holds the two answers equal.
+                workItemKindRaws: ItemKind.readableWorkItemKinds.map(\.rawValue),
                 attentionStateRaws: TaskSyncState.allCases.filter(\.needsAttention).map(\.rawValue)
             )
         )
