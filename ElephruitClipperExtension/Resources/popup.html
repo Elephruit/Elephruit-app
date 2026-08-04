@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clip to Elephruit</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="brandbar">
+      <div class="brand">
+        <img src="elephruit-icon.png" alt="">
+        <span>Elephruit</span>
+      </div>
+      <span class="local-badge"><i></i> Local</span>
+    </header>
+
+    <section id="loading" class="loading-state">
+      <div class="spinner"></div>
+      <p>Reading this page…</p>
+    </section>
+
+    <form id="clip-form" hidden>
+      <section class="page-card">
+        <div class="favicon" id="site-letter">E</div>
+        <div class="page-copy">
+          <input id="title" class="title-input" aria-label="Clip title" maxlength="500">
+          <div id="source" class="source-line"></div>
+        </div>
+      </section>
+
+      <fieldset class="mode-picker">
+        <legend>Clip format</legend>
+        <div class="mode-grid">
+          <button type="button" class="mode active" data-mode="article"><span>▤</span>Article</button>
+          <button type="button" class="mode" data-mode="selection"><span>◩</span>Selection</button>
+          <button type="button" class="mode" data-mode="fullPage"><span>▥</span>Full page</button>
+          <button type="button" class="mode" data-mode="bookmark"><span>↗</span>Bookmark</button>
+          <button type="button" class="mode" data-mode="screenshot"><span>⌗</span>Screenshot</button>
+        </div>
+      </fieldset>
+
+      <section class="preview-card" aria-live="polite">
+        <div class="preview-label"><span>Preview</span><span id="preview-count"></span></div>
+        <div id="preview" class="preview-copy"></div>
+      </section>
+
+      <label class="field">
+        <span>Add a note</span>
+        <textarea id="comment" rows="2" maxlength="4000" placeholder="Why are you keeping this?"></textarea>
+      </label>
+
+      <div class="field-row">
+        <label class="field">
+          <span>Tags</span>
+          <input id="tags" placeholder="research, design">
+        </label>
+        <label class="field">
+          <span>File under</span>
+          <input id="project" placeholder="Inbox">
+        </label>
+      </div>
+
+      <div id="status" class="status" role="status"></div>
+      <button id="save" class="save-button" type="submit"><span>Save clip</span><kbd>⌘↵</kbd></button>
+    </form>
+
+    <section id="error" class="error-state" hidden>
+      <div class="error-icon">!</div>
+      <h1>This page can’t be clipped</h1>
+      <p id="error-message">Open a regular web page and try again.</p>
+    </section>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

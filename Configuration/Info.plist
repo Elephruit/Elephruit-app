@@ -49,13 +49,14 @@
 	-->
 
 	<!--
-	  The `elephruit:` scheme, for deep links into the calendar.
+	  The `elephruit:` scheme, for deep links into the calendar and for waking the app after Safari
+	  has already placed a confirmed web clip in the shared app-group inbox.
 
 	  Registered now rather than in Phase 2's placeholder form because the calendar has links worth
 	  making: a note, a Shortcut, or a bookmark can point at a particular day. The scheme reads only —
-	  every URL it accepts navigates, and none creates, changes, or deletes anything. That is the
-	  same rule the intents follow and for the same reason: a link can be clicked from anywhere, by
-	  anything, and a URL that could write would be a write nobody confirmed.
+	  every calendar URL it accepts navigates. The clip URL carries no content and cannot choose what
+	  is written; it only wakes the importer after the user pressed Save in the extension. The signed
+	  extension has already written the immutable payload to the private app-group container.
 	-->
 	<key>CFBundleURLTypes</key>
 	<array>
