@@ -25,10 +25,6 @@ private struct PlaceholderScreen: View {
     }
 }
 
-struct TodayScreen: View {
-    var body: some View { PlaceholderScreen(title: "Today", symbolName: "sun.horizon") }
-}
-
 struct RemindersScreen: View {
     var body: some View { PlaceholderScreen(title: "Reminders", symbolName: "checkmark.circle") }
 }
