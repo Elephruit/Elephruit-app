@@ -126,6 +126,35 @@ struct WebClipServiceTests {
         #expect(imageIndex < contentIndex)
     }
 
+    @Test("Full-page panels remain together before the copied page text")
+    func placesFullPagePanelsFirst() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+
+        var clip = makeClip(mode: .fullPage)
+        clip.contentMarkdown = "Searchable page text."
+        clip.images = (1...2).map { index in
+            WebClipImage(
+                altText: "Full-page capture \(index) of 2",
+                filename: "full-page-0\(index).jpg",
+                typeIdentifier: "public.jpeg",
+                data: Data([0xFF, 0xD8, 0xFF, UInt8(index)])
+            )
+        }
+        let item = try fixture.service.save(clip)
+
+        let imageIndices = item.noteDocument.pieces.indices.filter { index in
+            if case .object(.image) = item.noteDocument.pieces[index] { return true }
+            return false
+        }
+        let contentIndex = try #require(item.noteDocument.pieces.firstIndex {
+            $0.paragraph?.plainText.contains("Searchable page text") == true
+        })
+
+        #expect(imageIndices.count == 2)
+        #expect(imageIndices.allSatisfy { $0 < contentIndex })
+    }
+
     @Test("Downloaded page images are local and inline in the note")
     func savesInlinePageImages() throws {
         let fixture = try Fixture()

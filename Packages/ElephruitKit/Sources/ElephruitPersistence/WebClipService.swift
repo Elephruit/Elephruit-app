@@ -102,7 +102,9 @@ public struct WebClipService {
                 attachment: attachment,
                 caption: image.altText,
                 sourceURL: image.sourceURL,
-                isPageCapture: false
+                isPageCapture: clip.mode == .fullPage
+                    && image.sourceURL == nil
+                    && stableName.hasPrefix("full-page-")
             ))
         }
 

@@ -10,7 +10,8 @@ into the local Elephruit library. It supports six modes:
   removes navigation, advertising, forms, scripts, and other page chrome.
 - **Simplified article** keeps the readable region while also stripping site-specific presentation.
 - **Selection** saves the current DOM selection with its source metadata.
-- **Full page** saves the cleaned body and a stitched visual capture of the page.
+- **Full page** saves the cleaned body and a sequence of readable, full-width visual panels instead
+  of shrinking one extremely tall screenshot into an unreadable strip.
 - **Bookmark** stores the canonical URL, page excerpt, and a local visual thumbnail.
 - **Screenshot** captures the visible Safari tab and stores a PNG attachment.
 
@@ -92,7 +93,7 @@ metadata, absolute links, readable Markdown, and removal of navigation and ads.
 
 ## Deliberate current boundary
 
-The screenshot mode captures the visible viewport. **Full page** scrolls and stitches as many as 32
-viewports into a JPEG, scales very tall pages to Safari's safe canvas limit, and keeps the cleaned
+The screenshot mode captures the visible viewport. **Full page** scrolls across as many as 32
+viewports, composes the result into panels no taller than three viewports, and keeps the cleaned
 document as searchable Markdown plus an HTML fidelity attachment. Screenshot annotation, direct PDF
 capture, multi-select, site-specific recipes, and a Chromium package remain follow-on slices.

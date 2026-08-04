@@ -151,7 +151,7 @@ function loadedImage(source) {
   });
 }
 
-async function fullPageScreenshot() {
+async function fullPageImages() {
   const metrics = await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.capture.start.v3" });
   const maximumCaptures = 32;
   const pageHeight = Math.min(metrics.pageHeight, metrics.viewportHeight * maximumCaptures);
@@ -172,29 +172,65 @@ async function fullPageScreenshot() {
   }
 
   const pixelRatio = captures[0].image.width / metrics.viewportWidth;
-  const maximumCanvas = 16_000;
-  const scale = Math.min(1, maximumCanvas / (metrics.viewportWidth * pixelRatio), maximumCanvas / (pageHeight * pixelRatio));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(metrics.viewportWidth * pixelRatio * scale));
-  canvas.height = Math.max(1, Math.round(pageHeight * pixelRatio * scale));
-  const context = canvas.getContext("2d");
+  const maximumPanelPixels = 7_200;
+  const panelHeight = Math.max(
+    metrics.viewportHeight,
+    Math.min(metrics.viewportHeight * 3, Math.floor(maximumPanelPixels / pixelRatio))
+  );
+  const panelCount = Math.ceil(pageHeight / panelHeight);
+  const panels = [];
 
-  for (const capture of captures) {
-    const destinationY = Math.round(capture.y * pixelRatio * scale);
-    const remaining = canvas.height - destinationY;
-    if (remaining <= 0) continue;
-    const destinationHeight = Math.min(Math.round(capture.image.height * scale), remaining);
-    const sourceHeight = Math.round(destinationHeight / scale);
-    context.drawImage(capture.image, 0, 0, capture.image.width, sourceHeight, 0, destinationY, canvas.width, destinationHeight);
+  for (let panelIndex = 0; panelIndex < panelCount; panelIndex += 1) {
+    const panelTop = panelIndex * panelHeight;
+    const panelBottom = Math.min(pageHeight, panelTop + panelHeight);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(metrics.viewportWidth * pixelRatio));
+    canvas.height = Math.max(1, Math.round((panelBottom - panelTop) * pixelRatio));
+    const context = canvas.getContext("2d");
+
+    for (const capture of captures) {
+      const captureTop = capture.y;
+      const captureBottom = capture.y + metrics.viewportHeight;
+      const overlapTop = Math.max(panelTop, captureTop);
+      const overlapBottom = Math.min(panelBottom, captureBottom);
+      if (overlapBottom <= overlapTop) continue;
+
+      const sourceY = Math.round((overlapTop - captureTop) * pixelRatio);
+      const sourceHeight = Math.min(
+        capture.image.height - sourceY,
+        Math.round((overlapBottom - overlapTop) * pixelRatio)
+      );
+      const destinationY = Math.round((overlapTop - panelTop) * pixelRatio);
+      context.drawImage(
+        capture.image,
+        0,
+        sourceY,
+        capture.image.width,
+        sourceHeight,
+        0,
+        destinationY,
+        canvas.width,
+        sourceHeight
+      );
+    }
+
+    let data = canvas.toDataURL("image/jpeg", 0.86);
+    if (data.length > 8_000_000) data = canvas.toDataURL("image/jpeg", 0.68);
+    if (data.length > 8_000_000) data = canvas.toDataURL("image/jpeg", 0.5);
+    if (data.length > 8_000_000) data = canvas.toDataURL("image/jpeg", 0.35);
+    panels.push({
+      id: crypto.randomUUID(),
+      sourceURL: null,
+      altText: `Full-page capture ${panelIndex + 1} of ${panelCount}`,
+      filename: `full-page-${String(panelIndex + 1).padStart(2, "0")}.jpg`,
+      typeIdentifier: "public.jpeg",
+      data
+    });
   }
-  let result = canvas.toDataURL("image/jpeg", 0.88);
-  if (result.length > 30_000_000) result = canvas.toDataURL("image/jpeg", 0.68);
-  if (result.length > 30_000_000) result = canvas.toDataURL("image/jpeg", 0.5);
-  return result;
+  return panels;
 }
 
 async function screenshotData() {
-  if (state.mode === "fullPage") return fullPageScreenshot();
   if (!["screenshot", "bookmark"].includes(state.mode)) return null;
   return browser.tabs.captureVisibleTab(state.tab.windowId, { format: "png" });
 }
@@ -211,6 +247,8 @@ async function save(event) {
     const content = contentFor(state.mode);
     const tags = tagSlugs();
     setStatus(state.mode === "fullPage" ? "Capturing the full page…" : "Preserving the page…");
+    const images = await capturedImages(content);
+    if (state.mode === "fullPage") images.push(...await fullPageImages());
     const clip = {
       version: 1,
       id: crypto.randomUUID(),
@@ -226,7 +264,7 @@ async function save(event) {
       comment: byID("comment").value.trim(),
       tagSlugs: tags,
       projectHint: byID("project").value.trim() || null,
-      images: await capturedImages(content),
+      images,
       screenshotData: await screenshotData(),
       clippedAt: new Date().toISOString()
     };
