@@ -5,6 +5,7 @@ import ElephruitFeatures
 import ElephruitModel
 import ElephruitPersistence
 import ElephruitSearch
+import SafariServices
 import SwiftUI
 
 /// The application.
@@ -440,6 +441,7 @@ struct SettingsView: View {
     @AppStorage("people.followUpThresholdDays") private var followUpThresholdDays = 0
 
     @State private var indexStatistics: (items: Int, terms: Int, isWarm: Bool)?
+    @State private var clipperEnabled: Bool?
 
     var body: some View {
         TabView {
@@ -486,6 +488,10 @@ struct SettingsView: View {
                     )
                 }
                 .accessibilityIdentifier(AccessibilityID.Settings.shortcutsTab)
+            }
+
+            Tab("Web Clipper", systemImage: "safari") {
+                webClipper
             }
 
             Tab("Privacy", systemImage: "lock.shield") {
@@ -614,9 +620,84 @@ struct SettingsView: View {
                     title: "Reminders",
                     detail: "Reads and writes the lists you tick. Areas, projects, Today, waiting-for, linked people, and provenance never cross."
                 )
+                PrivacyRow(
+                    symbolName: "safari",
+                    title: "Web Clipper",
+                    detail: "Reads only the Safari tab where you open the clipper. The page travels through a private on-device inbox and is never uploaded."
+                )
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var webClipper: some View {
+        Form {
+            Section {
+                LabeledContent("Safari extension") {
+                    HStack(spacing: Theme.Spacing.tight) {
+                        Circle()
+                            .fill(clipperEnabled == true ? Color.green : Theme.Colors.tertiaryText)
+                            .frame(width: 7, height: 7)
+                        Text(clipperStatus)
+                    }
+                }
+
+                Button(clipperEnabled == true ? "Open Safari Extension Settings" : "Enable in Safari…") {
+                    openSafariExtensionSettings()
+                }
+            } header: {
+                Text("Elephruit Web Clipper")
+            } footer: {
+                Text("In Safari, pin Elephruit to the toolbar. Open it on any page to keep an article, selection, full page, bookmark, or visible-page screenshot.")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section("What gets saved") {
+                Label("Readable Markdown for search and editing", systemImage: "text.document")
+                Label("Cleaned HTML for a faithful source snapshot", systemImage: "doc.richtext")
+                Label("Original URL, author, site, tags, and your note", systemImage: "link")
+                Label("Screenshots as managed local attachments", systemImage: "camera.viewfinder")
+            }
+
+            Section {
+                Label("Nothing is uploaded", systemImage: "lock.shield")
+                Text("Safari hands the clip directly to Elephruit through a private app-group container on this Mac. No account or web service is involved.")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .formStyle(.grouped)
+        .task { await refreshClipperState() }
+    }
+
+    private var clipperStatus: String {
+        switch clipperEnabled {
+        case true: "Enabled"
+        case false: "Not enabled"
+        case nil: "Checking…"
+        }
+    }
+
+    private func refreshClipperState() async {
+        clipperEnabled = await withCheckedContinuation { continuation in
+            SFSafariExtensionManager.getStateOfSafariExtension(
+                withIdentifier: "com.elephruit.Elephruit.Clipper"
+            ) { state, error in
+                continuation.resume(returning: error == nil && state?.isEnabled == true)
+            }
+        }
+    }
+
+    private func openSafariExtensionSettings() {
+        Task {
+            try? await SFSafariApplication.showPreferencesForExtension(
+                withIdentifier: "com.elephruit.Elephruit.Clipper"
+            )
+            await refreshClipperState()
+        }
     }
 
     private var advanced: some View {

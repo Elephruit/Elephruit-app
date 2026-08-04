@@ -101,6 +101,30 @@ struct WebClipServiceTests {
         #expect(try Data(contentsOf: url) == clip.screenshotData)
     }
 
+    @Test("Retrying an interrupted import completes attachments without duplicating the item")
+    func resumesInterruptedImport() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+
+        let clip = makeClip()
+        let partial = try fixture.items.create(
+            ItemDraft(
+                id: clip.id,
+                kind: .note,
+                title: clip.title,
+                source: ItemSource(kind: .webClip, url: clip.preferredSourceURL)
+            )
+        )
+
+        let completed = try fixture.service.save(clip)
+        let retried = try fixture.service.save(clip)
+
+        #expect(completed === partial)
+        #expect(retried === partial)
+        #expect(partial.attachments.count == 1)
+        #expect(try fixture.items.items(matching: .everything()).count == 1)
+    }
+
     @Test("A project hint files the clip without making it a child")
     func filesUnderProject() throws {
         let fixture = try Fixture()

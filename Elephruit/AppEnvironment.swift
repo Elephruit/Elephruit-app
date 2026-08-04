@@ -221,20 +221,15 @@ final class AppEnvironment {
         }
     }
 
-    /// Imports only complete envelopes and acknowledges each only after the item is committed.
-    /// Duplicate identifiers mean an earlier import committed but exited before deleting the queue
-    /// file; those are safe to acknowledge rather than turning one clip into two.
+    /// Imports only complete envelopes and acknowledges each after the item and its attachments are
+    /// committed. Saving is idempotent, so a launch interrupted between those writes resumes the
+    /// same clip rather than acknowledging a partial one or creating a duplicate.
     func importPendingWebClips() {
         guard case .ready(let services) = state else { return }
 
         do {
             let inbox = try WebClipInbox.applicationGroup()
             for pending in try inbox.pending() {
-                if try services.items.item(id: pending.id) != nil {
-                    try inbox.acknowledge(pending)
-                    continue
-                }
-
                 do {
                     _ = try services.saveWebClip(pending.clip)
                     try inbox.acknowledge(pending)

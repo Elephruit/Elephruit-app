@@ -36,24 +36,34 @@ public struct WebClipService {
         }
 
         let sourceURL = clip.preferredSourceURL
-        let kind: ItemKind = clip.mode == .bookmark ? .bookmark : .note
-        let item = try items.create(
-            ItemDraft(
-                id: clip.id,
-                kind: kind,
-                title: normalizedTitle(clip.title, sourceURL: sourceURL),
-                body: noteBody(for: clip, sourceURL: sourceURL),
-                tagSlugs: normalizedTags(clip.tagSlugs),
-                source: ItemSource(kind: .webClip, url: sourceURL, identifier: clip.mode.rawValue),
-                url: sourceURL
+        let item: Item
+        if let existing = try items.item(id: clip.id) {
+            guard existing.source.kind == .webClip else {
+                throw .importFailed(format: "web clip", reason: "The clip identifier is already in use.")
+            }
+            item = existing
+        } else {
+            let kind: ItemKind = clip.mode == .bookmark ? .bookmark : .note
+            item = try items.create(
+                ItemDraft(
+                    id: clip.id,
+                    kind: kind,
+                    title: normalizedTitle(clip.title, sourceURL: sourceURL),
+                    body: noteBody(for: clip, sourceURL: sourceURL),
+                    tagSlugs: normalizedTags(clip.tagSlugs),
+                    source: ItemSource(kind: .webClip, url: sourceURL, identifier: clip.mode.rawValue),
+                    url: sourceURL
+                )
             )
-        )
 
-        if let project = try resolveContainer(named: clip.projectHint) {
-            try items.fileItem(item, under: project)
+            if let project = try resolveContainer(named: clip.projectHint) {
+                try items.fileItem(item, under: project)
+            }
         }
 
-        if let html = clip.contentHTML?.trimmingCharacters(in: .whitespacesAndNewlines), !html.isEmpty {
+        if let html = clip.contentHTML?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !html.isEmpty,
+           !item.attachments.contains(where: { $0.typeIdentifier == "public.html" }) {
             _ = try attachments.attach(
                 data: Data(html.utf8),
                 filename: "\(filenameStem(for: item.title)).html",
@@ -62,7 +72,9 @@ public struct WebClipService {
             )
         }
 
-        if let screenshot = clip.screenshotData, !screenshot.isEmpty {
+        if let screenshot = clip.screenshotData,
+           !screenshot.isEmpty,
+           !item.attachments.contains(where: { $0.typeIdentifier == "public.png" }) {
             _ = try attachments.attach(
                 data: screenshot,
                 filename: "\(filenameStem(for: item.title))-screenshot.png",
