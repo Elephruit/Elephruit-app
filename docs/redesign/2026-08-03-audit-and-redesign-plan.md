@@ -814,3 +814,44 @@ reviewed via `DesignReviewLaunch` in both appearances.
 
 *End of plan. Every numbered item above can be revised independently — reference by section
 number (e.g. "revise 3.4.2", "answer D4: red").*
+
+---
+
+## 5. Implementation status — end of first execution session (2026-08-03)
+
+Executed on `claude/macos-ui-ux-audit-5489c0`, 25 implementation commits, every commit leaving
+the app building warning-free with all seven test targets green (~2,430 tests).
+
+### 5.1 Shipped
+
+- **Phase A complete** (A0–A8), plus two finds beyond the plan: six pre-existing test failures
+  from the unification merges repaired, and the features test host's segfault (an NSWindow
+  over-release in two tests) fixed — it had been eating the target's summary since before this
+  branch.
+- **Phase B complete except B4's residual sweep** (B1 tokens, B2 metric-ledger hygiene tests
+  with a self-checking shrink-only allowlist, B3 components + the whole Person cluster
+  converged, B5 contrast-adaptive tints, B6 assets/symbols).
+- **Phase C complete except C1** (C2 one-level sidebar with the Records browser moved into its
+  workspace, C3 empty-detail policy + auto-select-recent, C4 toolbar grammar for Calendar and
+  Today, C5 type-to-select + focus-aware hover + declarative palette focus).
+- **Phase D complete** (D1 Reminders rebuild — sectioned List, grammar composer, detail pane,
+  2,203-line composer deleted; D2 Today any-date reschedule + one grammar; D3 event-block
+  presence + group briefs; D4 verified-already-unified + Open Threads promoted onto the page;
+  D5 Format menu + ⌘F find-in-note flip; D6 ⌘8 + selection-aware ⌃⌘T; D7 kanban keyboard +
+  VoiceOver; D8 delivered via A2/A3/D1).
+- **Phase E: E2, E3 (Reminders multi-select), E4 (rows drag onto projects), E5, E6 shipped.**
+
+### 5.2 Remaining, in recommended order
+
+1. **C1 — the shell spike** (§4.6.1). Untouched by design: an XL, high-risk refactor gated on
+   its own decision, wrong to start at the tail of a long session. The fallback
+   (native-ize the custom shell) remains fully specified.
+2. **E1 — dark mode + Increase Contrast screen review.** Requires driving the app on a quiet
+   machine; the fixture launch arguments and capture method are proven (see the C2/C3/D1
+   screenshots in this session).
+3. **B4 residual** — the ledger files not cleared by rewrites (fonts ~20 files, paddings ~13,
+   radii ~10, shadows ~6). Mechanical; the hygiene tests enumerate every site and refuse
+   regressions meanwhile.
+4. Deferred small items, folded into the above: swipe-action sets on their declared lists,
+   `forSelectionType:` context menus, the project tab-bar-to-toolbar move, module-scoped
+   search default.
