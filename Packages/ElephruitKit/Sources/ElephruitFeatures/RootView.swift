@@ -365,13 +365,17 @@ public struct RootView: View {
                     max: SidebarMetrics.maximumWidth
                 )
         } detail: {
-            NavigationStack {
-                contentPanes
-                    // Every destination supplies a nearer title. This keeps the unified toolbar
-                    // present during the loading frames between destinations.
-                    .navigationTitle(navigation.windowTitle)
-            }
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            // No `NavigationStack` here, deliberately. The item lists build their rows as
+            // `NavigationLink(value:)` — inert on this platform, where selection is the model —
+            // and giving them a stack ancestor put the link machinery back in business with no
+            // destination registered: clicks went to a push that could never happen instead of
+            // to the list's selection, and switching notes stopped working. The split view's
+            // detail column carries the title and toolbar perfectly well on its own.
+            contentPanes
+                // Every destination supplies a nearer title. This keeps the unified toolbar
+                // present during the loading frames between destinations.
+                .navigationTitle(navigation.windowTitle)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
                 guard width > 0 else { return }
                 contentAreaWidth = width
             }
