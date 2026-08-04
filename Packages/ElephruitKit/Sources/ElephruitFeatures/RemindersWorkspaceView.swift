@@ -61,7 +61,7 @@ struct RemindersWorkspaceView: View {
         .focusedSceneValue(\.workItemActions, workItemCommandActions)
         .focusedSceneValue(
             \.rowActions,
-            RowActions(isEnabled: selectedReminder != nil) { trashSelection() }
+            RowActions(isEnabled: !navigation.selectedItemIDs.isEmpty) { trashSelection() }
         )
     }
 
@@ -116,8 +116,9 @@ struct RemindersWorkspaceView: View {
             .scrollContentBackground(.hidden)
             // Space completes the selected reminder — the same key Today already honours.
             .onKeyPress(.space) {
-                guard let reminder = selectedReminder else { return .ignored }
-                toggleCompletion(reminder)
+                let targets = selectedReminders
+                guard !targets.isEmpty else { return .ignored }
+                targets.forEach(toggleCompletion)
                 return .handled
             }
             .onDeleteCommand { trashSelection() }
@@ -135,11 +136,21 @@ struct RemindersWorkspaceView: View {
         return open == 1 ? "1 open" : "\(open) open"
     }
 
-    private var selectionBinding: Binding<UUID?> {
+    /// Multi-select, which no surface but the item list had: a batch of reminders can be
+    /// completed, flagged, moved to today, or trashed in one act. The reading pane follows the
+    /// primary selection, which the navigation model reconciles from the set.
+    private var selectionBinding: Binding<Set<UUID>> {
         Binding(
-            get: { navigation.selectedItemID },
-            set: { navigation.selectItem($0) }
+            get: { navigation.selectedItemIDs },
+            set: { navigation.selectedItemIDs = $0 }
         )
+    }
+
+    private var selectedReminders: [Item] {
+        guard let store = services?.reminderStore else { return [] }
+        let ids = navigation.selectedItemIDs
+        guard !ids.isEmpty else { return [] }
+        return store.reminders.filter { ids.contains($0.id) }
     }
 
     private var selectedReminder: Item? {
@@ -369,8 +380,12 @@ struct RemindersWorkspaceView: View {
     }
 
     private func trashSelection() {
-        guard let reminder = selectedReminder else { return }
-        trash(reminder)
+        let targets = selectedReminders
+        guard !targets.isEmpty, let services else { return }
+        // One undo step for the batch, because it was one act.
+        services.perform { try services.undo.moveToTrash(targets) }
+        navigation.selectedItemIDs = []
+        services.noteRemoval(of: targets.first?.id ?? UUID())
     }
 
     private func trash(_ reminder: Item) {
@@ -391,16 +406,28 @@ struct RemindersWorkspaceView: View {
     }
 
     private var workItemCommandActions: WorkItemCommandActions? {
-        guard let reminder = selectedReminder else { return nil }
+        let targets = selectedReminders
+        guard !targets.isEmpty else { return nil }
+        let allFlagged = targets.allSatisfy(\.isFlagged)
         return WorkItemCommandActions(
             isEnabled: true,
-            isFlagged: reminder.isFlagged,
-            complete: { toggleCompletion(reminder) },
+            isFlagged: allFlagged,
+            complete: { targets.forEach(toggleCompletion) },
             toggleFlag: {
-                perform { try $0.reminderLifecycle.setFlagged(!reminder.isFlagged, on: reminder) }
+                perform { services in
+                    for reminder in targets {
+                        try services.reminderLifecycle.setFlagged(!allFlagged, on: reminder)
+                    }
+                }
             },
             moveToToday: {
-                perform { try $0.reminderLifecycle.commit(reminder, to: $0.dateProvider.startOfToday) }
+                perform { services in
+                    for reminder in targets {
+                        try services.reminderLifecycle.commit(
+                            reminder, to: services.dateProvider.startOfToday
+                        )
+                    }
+                }
             }
         )
     }
