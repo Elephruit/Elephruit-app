@@ -6,7 +6,7 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.elephruit.Elephruit</string>
+		<string>$(ELEPHRUIT_APP_GROUP)</string>
 	</array>
 </dict>
 </plist>

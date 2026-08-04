@@ -19,7 +19,19 @@ public struct PendingWebClip: Sendable, Hashable, Identifiable {
 /// any point, an atomic write is either absent or complete and an unacknowledged clip remains for
 /// the next launch.
 public struct WebClipInbox: Sendable {
-    public static let applicationGroupIdentifier = "group.com.elephruit.Elephruit"
+    /// The group configured by the containing app or extension at build time.
+    ///
+    /// macOS development builds use the signing-team-prefixed form so the system can authorize the
+    /// shared container from the code signature without presenting per-process data-access consent
+    /// after every rebuild. The fallback keeps unsigned package tests and previews deterministic;
+    /// they cannot open an application-group container in either case.
+    public static var applicationGroupIdentifier: String {
+        let configured = Bundle.main.object(forInfoDictionaryKey: "ElephruitAppGroupIdentifier") as? String
+        guard let configured,
+              !configured.isEmpty,
+              !configured.hasPrefix(".") else { return "group.com.elephruit.Elephruit" }
+        return configured
+    }
 
     private let directory: URL
 

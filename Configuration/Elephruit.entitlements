@@ -20,7 +20,7 @@
 	<!-- Atomic handoff files shared only with the bundled Safari Web Extension. -->
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.elephruit.Elephruit</string>
+		<string>$(ELEPHRUIT_APP_GROUP)</string>
 	</array>
 
 	<!-- Open and save panels: import, export, and attaching files. -->

@@ -128,7 +128,9 @@ same clip resumes without duplicating the item or its attachments.
 To turn it on, run Elephruit, open **Settings → Web Clipper**, choose **Open Safari Extension
 Settings**, and enable Elephruit Web Clipper. Pin it to Safari's toolbar if you use it often. A signed
 development or
-distribution build must provision the `group.com.elephruit.Elephruit` App Group for both targets.
+distribution build must sign both targets with the same team. On macOS the build derives a
+team-prefixed App Group identifier, allowing the app and extension to share the clip inbox without a
+repeated “access data from other apps” prompt during development.
 
 See [the implementation record](docs/34-web-clipper-record.md) for the capture contract, privacy
 boundary, signing requirement, and verification commands.

@@ -78,14 +78,16 @@ the page being clipped; the extension operates on that active page.
 
 ## Enablement and signing
 
-1. Select a development team for both **Elephruit** and **Elephruit Web Clipper**.
-2. Register `group.com.elephruit.Elephruit` and include it in both provisioning profiles.
+1. Select the same development team for both **Elephruit** and **Elephruit Web Clipper**.
+2. The macOS build derives `<Team ID>.com.elephruit.Elephruit` for both targets. macOS authorizes
+   this group from the shared signing-team prefix, so development builds do not depend on an
+   explicit profile carrying an iOS-style `group.` entitlement.
 3. Build and run Elephruit once.
 4. Open **Settings → Web Clipper → Open Safari Extension Settings**.
 5. Enable Elephruit Web Clipper in Safari and optionally pin it to the toolbar.
 
 Unsigned builds verify compilation and embedding, but macOS does not provide a functioning shared App
-Group container until both targets are signed with the capability.
+Group container until both targets are signed with the capability and the same team.
 
 ## Verification
 
