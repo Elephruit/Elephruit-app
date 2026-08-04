@@ -5,8 +5,9 @@
 Elephruit ships a Safari Web Extension that captures the useful part of a page and saves it directly
 into the local Elephruit library. It supports six modes:
 
-- **Article** finds the page's primary readable region and removes navigation, advertising, forms,
-  scripts, and other page chrome.
+- **Article** finds the primary readable story. On a feed with several `<article>` regions, it uses
+  the substantial story nearest the current viewport instead of swallowing the entire feed. It
+  removes navigation, advertising, forms, scripts, and other page chrome.
 - **Simplified article** keeps the readable region while also stripping site-specific presentation.
 - **Selection** saves the current DOM selection with its source metadata.
 - **Full page** saves the cleaned body and a stitched visual capture of the page.
@@ -15,7 +16,8 @@ into the local Elephruit library. It supports six modes:
 
 The popup lets the user revise the title, preview the extracted text and a representative image, add
 a note and tags, and name an existing project for filing. Article images are downloaded into the
-local library and placed inline in the resulting note. Article, simplified-article, selection,
+local library and placed in their original reading order in the resulting note. Article,
+simplified-article, selection,
 full-page, and screenshot clips become notes; bookmark clips remain bookmarks with a visual preview.
 
 ## Architecture

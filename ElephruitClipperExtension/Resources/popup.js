@@ -8,14 +8,14 @@ async function activeTab() {
 
 async function extractPage(tabID) {
   try {
-    const page = await browser.tabs.sendMessage(tabID, { type: "elephruit.extract.v2" });
-    if (page?.schemaVersion === 2) return page;
+    const page = await browser.tabs.sendMessage(tabID, { type: "elephruit.extract.v3" });
+    if (page?.schemaVersion === 3) return page;
     throw new Error("This tab has an older page extractor.");
   } catch {
     // The tab may have been open before the extension was enabled or updated. Inject once so the
     // user does not have to reload; the guard in content.js makes this safe on already-prepared tabs.
     await browser.scripting.executeScript({ target: { tabId: tabID }, files: ["content.js"] });
-    return browser.tabs.sendMessage(tabID, { type: "elephruit.extract.v2" });
+    return browser.tabs.sendMessage(tabID, { type: "elephruit.extract.v3" });
   }
 }
 
@@ -152,7 +152,7 @@ function loadedImage(source) {
 }
 
 async function fullPageScreenshot() {
-  const metrics = await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.capture.start" });
+  const metrics = await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.capture.start.v3" });
   const maximumCaptures = 32;
   const pageHeight = Math.min(metrics.pageHeight, metrics.viewportHeight * maximumCaptures);
   const positions = [];
@@ -163,12 +163,12 @@ async function fullPageScreenshot() {
   const captures = [];
   try {
     for (const y of positions) {
-      const settled = await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.capture.scroll", y });
+      const settled = await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.capture.scroll.v3", y });
       const data = await browser.tabs.captureVisibleTab(state.tab.windowId, { format: "jpeg", quality: 90 });
       captures.push({ y: settled.scrollY, image: await loadedImage(data) });
     }
   } finally {
-    await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.capture.finish" }).catch(() => {});
+    await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.capture.finish.v3" }).catch(() => {});
   }
 
   const pixelRatio = captures[0].image.width / metrics.viewportWidth;

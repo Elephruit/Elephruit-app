@@ -1,6 +1,6 @@
 (() => {
-  if ((globalThis.__elephruitClipperVersion || 0) >= 2) return;
-  globalThis.__elephruitClipperVersion = 2;
+  if ((globalThis.__elephruitClipperVersion || 0) >= 3) return;
+  globalThis.__elephruitClipperVersion = 3;
 
   const REMOVE = [
     "script", "style", "noscript", "template", "nav", "form", "button", "input", "select",
@@ -32,6 +32,19 @@
 
   function clean(root, simplified = false) {
     const clone = root.cloneNode(true);
+    const sourceImages = [root, ...root.querySelectorAll("img")].filter((node) => node.tagName?.toLowerCase() === "img");
+    const clonedImages = [clone, ...clone.querySelectorAll("img")].filter((node) => node.tagName?.toLowerCase() === "img");
+    clonedImages.forEach((image, index) => {
+      const source = sourceImages[index];
+      const resolved = absoluteURL(
+        source?.currentSrc
+        || source?.getAttribute("data-src")
+        || source?.getAttribute("data-lazy-src")
+        || source?.getAttribute("data-original")
+        || source?.getAttribute("src")
+      );
+      if (resolved) image.setAttribute("src", resolved);
+    });
     clone.querySelectorAll(REMOVE).forEach((node) => node.remove());
     clone.querySelectorAll("*").forEach((element) => {
       for (const attribute of [...element.attributes]) {
@@ -56,7 +69,14 @@
   function imageCandidates(root) {
     const seen = new Set();
     return [...root.querySelectorAll("img")].flatMap((image) => {
-      const url = absoluteURL(image.currentSrc || image.src || image.getAttribute("src"));
+      const url = absoluteURL(
+        image.currentSrc
+        || image.getAttribute("data-src")
+        || image.getAttribute("data-lazy-src")
+        || image.getAttribute("data-original")
+        || image.src
+        || image.getAttribute("src")
+      );
       if (!url || seen.has(url)) return [];
       const width = Number(image.naturalWidth || image.width || 0);
       const height = Number(image.naturalHeight || image.height || 0);
@@ -68,7 +88,7 @@
         width,
         height
       }];
-    }).sort((left, right) => (right.width * right.height) - (left.width * left.height)).slice(0, 24);
+    }).slice(0, 24);
   }
 
   function linkDensity(element) {
@@ -79,6 +99,31 @@
   }
 
   function articleRoot() {
+    const viewportArticles = [...document.querySelectorAll("article")]
+      .filter((element) => {
+        const text = element.innerText?.trim() || "";
+        const identity = `${element.id} ${element.className}`;
+        return text.length >= 300
+          && (element.querySelectorAll("p").length >= 2 || text.length >= 800)
+          && !NEGATIVE.test(identity);
+      });
+
+    if (viewportArticles.length) {
+      const center = window.innerHeight / 2;
+      return viewportArticles.reduce((winner, element) => {
+        const rect = element.getBoundingClientRect();
+        const visible = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+        const distance = visible > 0
+          ? Math.abs(Math.max(0, Math.min(window.innerHeight, rect.top + rect.height / 2)) - center)
+          : Math.min(Math.abs(rect.top - center), Math.abs(rect.bottom - center));
+        const textLength = element.innerText?.trim().length || 0;
+        const paragraphs = element.querySelectorAll("p").length;
+        const quality = Math.min(textLength, 6_000) + Math.min(paragraphs, 30) * 100 - textLength * linkDensity(element);
+        const score = quality + Math.min(visible, window.innerHeight) * 8 - distance * 2;
+        return !winner || score > winner.score ? { element, score } : winner;
+      }, null).element;
+    }
+
     const semantic = [...document.querySelectorAll("article, main, [role='main']")];
     const broad = [...document.querySelectorAll("section, div")]
       .filter((element) => element.querySelectorAll(":scope > p, :scope > section > p").length >= 2);
@@ -92,7 +137,7 @@
       const paragraphs = element.querySelectorAll("p").length;
       const headings = element.querySelectorAll("h1, h2, h3").length;
       const identity = `${element.id} ${element.className}`;
-      let score = text.length + paragraphs * 90 + headings * 45 - text.length * linkDensity(element) * 1.5;
+      let score = Math.min(text.length, 12_000) + paragraphs * 90 + headings * 45 - text.length * linkDensity(element) * 1.5;
       if (POSITIVE.test(identity)) score *= 1.25;
       if (NEGATIVE.test(identity)) score *= 0.35;
       if (score > best) {
@@ -181,7 +226,7 @@
     const description = meta("meta[name='description']", "meta[property='og:description']", "meta[name='twitter:description']");
 
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       title: meta("meta[property='og:title']", "meta[name='twitter:title']") || document.title || location.hostname,
       sourceURL: location.href,
       canonicalURL: canonical,
@@ -258,10 +303,10 @@
   }
 
   browser.runtime.onMessage.addListener((message) => {
-    if (message?.type === "elephruit.extract.v2") return Promise.resolve(extract());
-    if (message?.type === "elephruit.capture.start") return Promise.resolve(beginCapture());
-    if (message?.type === "elephruit.capture.scroll") return scrollCapture(Number(message.y) || 0);
-    if (message?.type === "elephruit.capture.finish") return finishCapture();
+    if (message?.type === "elephruit.extract.v3") return Promise.resolve(extract());
+    if (message?.type === "elephruit.capture.start.v3") return Promise.resolve(beginCapture());
+    if (message?.type === "elephruit.capture.scroll.v3") return scrollCapture(Number(message.y) || 0);
+    if (message?.type === "elephruit.capture.finish.v3") return finishCapture();
     return undefined;
   });
 })();
