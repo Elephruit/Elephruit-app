@@ -7,9 +7,7 @@ import XCTest
 ///
 ///     xcodebuild test … -only-testing:ElephruitiOSUITests/ScreenshotWalkTests
 ///
-/// Extract with `xcrun xcresulttool export attachments`. The walk grows with the
-/// screens; today it photographs the shell — five tabs, the Library's leaves, and the
-/// capture sheet.
+/// Extract with `xcrun xcresulttool export attachments`.
 final class ScreenshotWalkTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = true
@@ -31,35 +29,39 @@ final class ScreenshotWalkTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
         snap(app, "01-today")
 
-        app.tabBars.buttons["Reminders"].tap()
-        _ = app.navigationBars["Reminders"].waitForExistence(timeout: 5)
-        snap(app, "02-reminders")
+        // The drawer itself is a screen worth photographing: it is now the app's table of
+        // contents, and a regression in it is a regression in every route.
+        openSidebar(app)
+        snap(app, "02-sidebar")
 
-        app.tabBars.buttons["Records"].tap()
-        _ = app.navigationBars["Records"].waitForExistence(timeout: 5)
-        snap(app, "03-records")
+        let walk = [
+            "calendar", "reminders", "records", "notes", "time",
+            "areas", "bookmarks", "inbox", "archive", "trash", "search", "settings",
+        ]
 
-        app.tabBars.buttons["Library"].tap()
-        _ = app.navigationBars["Library"].waitForExistence(timeout: 5)
-        snap(app, "04-library")
-
-        for (index, row) in ["Inbox", "Notes", "Calendar", "Time", "Settings"].enumerated() {
-            app.staticTexts[row].tap()
+        for (index, destination) in walk.enumerated() {
+            openSidebar(app)
+            app.buttons["mobile.sidebar.\(destination)"].tap()
             sleep(1)
-            snap(app, String(format: "%02d-%@", index + 5, row.lowercased()))
-            app.navigationBars.buttons.firstMatch.tap()
-            _ = app.navigationBars["Library"].waitForExistence(timeout: 5)
+            snap(app, String(format: "%02d-%@", index + 3, destination))
         }
 
-        app.tabBars.buttons["Search"].tap()
-        sleep(1)
-        snap(app, "10-search")
-
-        app.tabBars.buttons["Today"].tap()
+        openSidebar(app)
+        app.buttons["mobile.sidebar.today"].tap()
         _ = app.navigationBars["Today"].waitForExistence(timeout: 5)
         app.buttons["mobile.capture.button"].tap()
         _ = app.navigationBars["Capture"].waitForExistence(timeout: 5)
-        snap(app, "11-capture")
+        snap(app, "15-capture")
+    }
+
+    /// Opens the drawer if it is not already showing.
+    ///
+    /// The check matters: while the drawer is open the scrim covers where the chevron sits on
+    /// screen, so a second tap would close it instead of leaving it open.
+    private func openSidebar(_ app: XCUIApplication) {
+        guard !app.buttons["mobile.sidebar.today"].exists else { return }
+        app.buttons["mobile.sidebar.button"].tap()
+        _ = app.buttons["mobile.sidebar.today"].waitForExistence(timeout: 5)
     }
 
     private func snap(_ app: XCUIApplication, _ name: String) {

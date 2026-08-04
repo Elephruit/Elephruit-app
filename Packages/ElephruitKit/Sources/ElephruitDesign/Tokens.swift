@@ -370,6 +370,16 @@ extension Theme {
         /// their own opacity — the depth is the surface's decision, the hue is not.
         public static let shadow = Color.black
 
+        /// The dimming over a screen that a layer above it has taken charge of.
+        ///
+        /// Black for the same reason ``shadow`` is: a scrim is light being withheld, not a
+        /// colour being applied, and it has to darken a white list and a dark one alike.
+        /// Separate from ``shadow`` because they are retuned by different questions — a
+        /// shadow's job is depth under an edge, a scrim's is "this is not what you are
+        /// touching right now" across a whole screen. Callers apply their own opacity, so a
+        /// scrim can follow a gesture in progress.
+        public static let scrim = Color.black
+
         /// The quiet accent fill behind a selected or current row, chip, or mode.
         ///
         /// One alpha, defined once. Before this token the same "this is where you are" fill was

@@ -5,43 +5,109 @@ import Observation
 
 /// The iPhone's top-level places.
 ///
-/// Four tabs plus the system search position — five slots, which is all a tab bar honestly
-/// holds. The Mac sidebar lists every module because a 27-inch window can afford to; a
-/// thumb cannot, so the slots go to where sessions start: orienting to the day, working
-/// the reminders, looking a record up, finding anything. The calendar's most frequent
-/// use — *what is my day* — is already answered inline on Today, which is what lets the
-/// full calendar live one tap deep in Library beside notes, time, and settings without
-/// hiding the day. Capture is an action, not a place, so it is a button rather than a tab.
-enum MobileTab: String, Hashable, CaseIterable, Codable {
+/// ### Why a sidebar rather than a tab bar
+/// A tab bar holds five slots, and this app has thirteen places worth naming. The old shell
+/// paid for that shortfall twice: four modules got a tab, and everything else — the calendar,
+/// notes, time, bookmarks, the inbox, the archive, the trash — got filed behind a row called
+/// "Library", which is not a place but an apology for the tab bar's arithmetic. A drawer has
+/// no such ceiling, so the Mac's own module list can appear here unabridged, in the Mac's
+/// order, wearing the Mac's names. Two apps that disagree about how many places exist are two
+/// apps.
+///
+/// The drawer is also *behind* the screen rather than beside it, which gives back the one
+/// thing the tab bar was buying: a way home that costs nothing. Swiping right pops the stack
+/// until there is nothing left to pop and then reveals the drawer, and the chevron in the
+/// upper left says the same thing in a control. "Keep going back" is one gesture, one glyph,
+/// and one idea all the way to the top, instead of a stack gesture that stops one level short
+/// of a tab bar that then switches instantly.
+enum MobileDestination: String, Hashable, CaseIterable, Codable {
     case today
+    case calendar
     case reminders
     case records
-    case library
-    /// The system search position, separated from the other tabs by the platform itself.
+    case notes
+    case time
+    case areas
+    case bookmarks
+    case inbox
+    case archive
+    case trash
     case search
+    case settings
+
+    /// The drawer's rows, grouped as the Mac's sidebar groups them.
+    ///
+    /// Declared rather than sorted: the order is editorial. The day comes first because that is
+    /// where sessions start; the modules a day is worked in follow; the holding pens — inbox,
+    /// archive, trash — come after the work rather than among it; search and settings sit at the
+    /// foot where a utility belongs.
+    static let groups: [[MobileDestination]] = [
+        [.today],
+        [.calendar, .reminders, .records, .notes, .time, .areas, .bookmarks],
+        [.inbox, .archive, .trash],
+        [.search, .settings],
+    ]
 
     var title: String {
         switch self {
         case .today: "Today"
+        case .calendar: "Calendar"
         case .reminders: "Reminders"
         case .records: "Records"
-        case .library: "Library"
+        case .notes: "Notes"
+        case .time: "Time"
+        case .areas: "Areas"
+        case .bookmarks: "Bookmarks"
+        case .inbox: "Inbox"
+        case .archive: "Archive"
+        case .trash: "Trash"
         case .search: "Search"
+        case .settings: "Settings"
         }
     }
 
+    /// The Mac's symbols wherever the Mac names the same module, so the two shells cannot
+    /// drift into two vocabularies for one place.
     var symbolName: String {
         switch self {
         case .today: "sun.horizon"
-        case .reminders: "checkmark.circle"
-        case .records: "person.2"
-        case .library: "square.grid.2x2"
+        case .calendar: "calendar"
+        case .reminders: "bell"
+        case .records: "person.text.rectangle"
+        case .notes: "note.text"
+        case .time: "timer"
+        case .areas: "square.grid.2x2"
+        case .bookmarks: "bookmark"
+        case .inbox: "tray"
+        case .archive: "archivebox"
+        case .trash: "trash"
         case .search: "magnifyingglass"
+        case .settings: "gearshape"
+        }
+    }
+
+    /// What the place holds, for the accessibility hint — the Mac's `AppModule.hint` standard:
+    /// a rule about what belongs here, never the label spelled back.
+    var hint: String {
+        switch self {
+        case .today: "What today asks of you, most urgent first."
+        case .calendar: "Your days, laid out, and everything you know about them."
+        case .reminders: "Things to remember, when they matter, and what you chose for today."
+        case .records: "People and things, with their notes, history, and shared work."
+        case .notes: "Everything written down, with the tags that reach across it."
+        case .time: "Tracked time, and what it went on."
+        case .areas: "Standing responsibilities, which never finish."
+        case .bookmarks: "Links kept for later."
+        case .inbox: "Captured, and not yet given a home."
+        case .archive: "Finished, kept, and out of the way of today."
+        case .trash: "Deleted, and recoverable until you empty it."
+        case .search: "Everything, by any word in it."
+        case .settings: "How this app behaves, and what it is allowed to touch."
         }
     }
 }
 
-/// One step of drill-down, on any tab.
+/// One step of drill-down, from any destination.
 ///
 /// A closed value type for the same reasons `SidebarSelection` is one on the Mac: it can be
 /// encoded for state restoration, compared for equality, and reasoned about in a test. Every
@@ -70,8 +136,7 @@ enum MobileRoute: Hashable, Codable {
     case trash
     /// A calendar event, by its identity storage key.
     case event(String)
-    /// The full calendar — month plus agenda. Today's schedule is already on Today,
-    /// which is what lets the calendar live one tap deep without hiding the day.
+    /// The full calendar — month plus agenda.
     case calendar
     /// The time log and reports.
     case time
@@ -80,52 +145,87 @@ enum MobileRoute: Hashable, Codable {
 
 /// Where the shell is, and how it moves.
 ///
-/// One per app. Each tab keeps its own `NavigationStack` path, so switching tabs never
-/// throws away where you were — entering a project can never strand you, because Today,
-/// Search, and the tab bar are all still one tap away, holding their own state.
+/// One per app. Each destination keeps its own path, so opening the drawer and stepping
+/// somewhere else never throws away where you were — the promise the per-tab stacks used to
+/// make, kept by the same mechanism now that the drawer has replaced the tabs.
 @Observable
 @MainActor
 final class MobileShellModel {
-    var selectedTab: MobileTab = .today
+    var destination: MobileDestination = .today
 
-    /// Each tab's drill-down, kept when the user switches away.
-    var paths: [MobileTab: [MobileRoute]] = [:]
+    /// Each destination's drill-down, kept when the user steps away.
+    var paths: [MobileDestination: [MobileRoute]] = [:]
+
+    /// Whether the drawer is showing.
+    var isSidebarOpen = false
 
     /// Whether the quick-capture sheet is up.
     var isCaptureVisible = false
 
-    /// Whether search is front — bound to the system search tab's activation.
-    var isSearchActive = false
-
     /// The one search session, kept when the user leaves and returns.
     var searchText = ""
 
-    /// A path binding for one tab, for `NavigationStack`.
-    func path(for tab: MobileTab) -> [MobileRoute] {
-        paths[tab] ?? []
+    /// The current destination's drill-down.
+    var path: [MobileRoute] {
+        get { paths[destination] ?? [] }
+        set { paths[destination] = newValue }
     }
 
-    func setPath(_ path: [MobileRoute], for tab: MobileTab) {
-        paths[tab] = path
+    /// A path for one destination, for tests and restoration.
+    func path(for destination: MobileDestination) -> [MobileRoute] {
+        paths[destination] ?? []
     }
 
-    /// Pushes a route onto the current tab's stack.
+    func setPath(_ path: [MobileRoute], for destination: MobileDestination) {
+        paths[destination] = path
+    }
+
+    /// Whether going back means popping the stack rather than revealing the drawer.
     ///
-    /// Onto the *current* tab deliberately: a person opened from a search result or a
-    /// project's team list is context inside the journey the user is on, and back must
-    /// return to where they came from. Jumping tabs would answer "open Maya" by losing
-    /// the search that found her.
+    /// The single fact behind both the chevron and the swipe: one idea, read in one place, so
+    /// the control and the gesture cannot come to different conclusions.
+    var canPop: Bool { !path.isEmpty }
+
+    /// Pushes a route onto the current destination's stack.
+    ///
+    /// Onto the *current* destination deliberately: a person opened from a search result or a
+    /// project's team list is context inside the journey the user is on, and back must return
+    /// to where they came from. Jumping elsewhere would answer "open Maya" by losing the
+    /// search that found her.
     func push(_ route: MobileRoute) {
-        var path = paths[selectedTab] ?? []
+        var path = paths[destination] ?? []
         path.append(route)
-        paths[selectedTab] = path
+        paths[destination] = path
     }
 
-    /// Selects a tab and pushes, for arrivals that carry their own context — deep links
-    /// and intents, which start from outside the app and have no journey to preserve.
-    func open(_ route: MobileRoute, in tab: MobileTab) {
-        selectedTab = tab
-        paths[tab] = [route]
+    /// Steps to a destination and closes the drawer — what tapping a drawer row means.
+    ///
+    /// Re-selecting where you already are pops that destination to its root, which is the
+    /// re-tap gesture the tab bar used to own and the only way back out of a deep stack that
+    /// does not require walking it.
+    func select(_ destination: MobileDestination) {
+        if destination == self.destination {
+            paths[destination] = []
+        }
+        self.destination = destination
+        isSidebarOpen = false
+    }
+
+    /// Selects a destination and pushes, for arrivals that carry their own context — deep
+    /// links and intents, which start from outside the app and have no journey to preserve.
+    func open(_ route: MobileRoute, in destination: MobileDestination) {
+        self.destination = destination
+        paths[destination] = [route]
+        isSidebarOpen = false
+    }
+
+    /// One step back: out of the stack if there is stack, into the drawer if there is not.
+    func goBack() {
+        if canPop {
+            paths[destination]?.removeLast()
+        } else {
+            isSidebarOpen = true
+        }
     }
 
     /// The route an item opens on, given what it is.
@@ -137,21 +237,24 @@ final class MobileShellModel {
         }
     }
 
-    /// Pops the current tab to its root — the standard re-tap-the-tab gesture.
-    func popToRoot(of tab: MobileTab) {
-        paths[tab] = []
+    /// Pops one destination to its root.
+    func popToRoot(of destination: MobileDestination) {
+        paths[destination] = []
     }
 
     // MARK: - Restoration
 
-    /// What survives relaunch: the tab and each tab's stack.
+    /// What survives relaunch: the destination and each destination's stack.
+    ///
+    /// The drawer's own open/closed state is deliberately absent. Restoring a relaunch into an
+    /// open drawer would answer "put me back where I was" with a menu.
     struct Restoration: Codable, Hashable {
-        var tab: MobileTab
-        var paths: [MobileTab: [MobileRoute]]
+        var destination: MobileDestination
+        var paths: [MobileDestination: [MobileRoute]]
     }
 
     var restoration: Restoration {
-        Restoration(tab: selectedTab, paths: paths)
+        Restoration(destination: destination, paths: paths)
     }
 
     var encodedRestoration: String? {
@@ -162,7 +265,7 @@ final class MobileShellModel {
     func restore(from encoded: String) {
         guard let restored = try? JSONDecoder().decode(Restoration.self, from: Data(encoded.utf8))
         else { return }
-        selectedTab = restored.tab
+        destination = restored.destination
         paths = restored.paths
     }
 }
