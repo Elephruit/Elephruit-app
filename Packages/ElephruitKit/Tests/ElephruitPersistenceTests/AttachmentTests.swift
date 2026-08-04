@@ -88,6 +88,25 @@ struct AttachmentTests {
         #expect(try String(contentsOf: secondURL, encoding: .utf8) == "second")
     }
 
+    @Test("In-memory bytes become an ordinary managed attachment")
+    func dataAttachment() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+
+        let note = try fixture.items.create(ItemDraft(kind: .note, title: "Clipped page"))
+        let bytes = Data("<article>Saved</article>".utf8)
+        let attachment = try fixture.attachments.attach(
+            data: bytes,
+            filename: "../unsafe:name.html",
+            typeIdentifier: "public.html",
+            to: note
+        )
+
+        #expect(attachment.filename == "unsafe-name.html")
+        let stored = try #require(fixture.attachments.resolve(attachment))
+        #expect(try Data(contentsOf: stored) == bytes)
+    }
+
     @Test("The same bytes hash the same, so a duplicate is noticeable")
     func contentHashing() throws {
         let fixture = try Fixture()

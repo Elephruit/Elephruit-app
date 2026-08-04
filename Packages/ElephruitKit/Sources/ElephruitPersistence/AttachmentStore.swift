@@ -41,10 +41,6 @@ public final class AttachmentStore {
     /// cannot collide and removing one attachment is removing one directory.
     @discardableResult
     public func attachCopy(of url: URL, to item: Item) throws(AppError) -> Attachment {
-        guard let location else {
-            throw .writeFailed(path: url.lastPathComponent, reason: "This library has no file storage.")
-        }
-
         // A file chosen through an Open panel arrives with a scoped grant that has to be opened
         // before the bytes can be read, and balanced afterwards or the grant leaks.
         let scoped = url.startAccessingSecurityScopedResource()
@@ -57,9 +53,34 @@ public final class AttachmentStore {
             throw .fileAccessDenied(path: url.path(percentEncoded: false))
         }
 
-        let attachment = Attachment(
+        return try attach(
+            data: data,
             filename: url.lastPathComponent,
             typeIdentifier: Self.typeIdentifier(for: url),
+            to: item
+        )
+    }
+
+    /// Stores bytes that were produced in memory, without making the caller stage a temporary file.
+    ///
+    /// Web clips are the first caller: Safari supplies a PNG and a cleaned HTML snapshot as message
+    /// data. Treating those like every other managed attachment keeps export, reconciliation, and
+    /// deletion behavior identical to a file dragged in from Finder.
+    @discardableResult
+    public func attach(
+        data: Data,
+        filename: String,
+        typeIdentifier: String,
+        to item: Item
+    ) throws(AppError) -> Attachment {
+        guard let location else {
+            throw .writeFailed(path: filename, reason: "This library has no file storage.")
+        }
+
+        let safeFilename = Self.safeFilename(filename)
+        let attachment = Attachment(
+            filename: safeFilename,
+            typeIdentifier: typeIdentifier,
             byteCount: data.count
         )
         attachment.storageKind = .managedCopy
@@ -67,7 +88,7 @@ public final class AttachmentStore {
         attachment.createdAt = dateProvider.now
 
         let directory = location.attachmentDirectory(id: attachment.id)
-        let destination = directory.appending(path: url.lastPathComponent, directoryHint: .notDirectory)
+        let destination = directory.appending(path: safeFilename, directoryHint: .notDirectory)
 
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -79,7 +100,7 @@ public final class AttachmentStore {
             )
         }
 
-        attachment.relativePath = "\(attachment.id.uuidString)/\(url.lastPathComponent)"
+        attachment.relativePath = "\(attachment.id.uuidString)/\(safeFilename)"
         attachment.owner = item
         context.insert(attachment)
 
@@ -282,6 +303,12 @@ public final class AttachmentStore {
             return type.identifier
         }
         return UTType(filenameExtension: url.pathExtension)?.identifier ?? UTType.data.identifier
+    }
+
+    private static func safeFilename(_ proposed: String) -> String {
+        let lastComponent = URL(fileURLWithPath: proposed).lastPathComponent
+        let stripped = lastComponent.replacingOccurrences(of: ":", with: "-")
+        return stripped.isEmpty || stripped == "." ? "Attachment" : String(stripped.prefix(180))
     }
 
     /// SHA-256, hex-encoded. Used to notice the same file being attached twice.
