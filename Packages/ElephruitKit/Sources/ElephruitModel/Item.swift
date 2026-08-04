@@ -68,6 +68,13 @@ public final class Item {
     /// — rather than in a migration stage that rewrites everybody's library at once on the strength
     /// of a parser nobody has run against their notes yet. The legacy read path stays until that has
     /// been validated in the field, which is what ADR 0006's consequence 6 asks for.
+    ///
+    /// External storage because sync requires it, and this is the one payload with no cap: a
+    /// CKRecord holds about a megabyte, and mirroring maps externally-stored data to CKAsset,
+    /// which has no such ceiling. This is not the `.externalStorage` ADR 0003 rejected — that
+    /// decision was about *user files*, whose bytes belong in a folder the user can reach;
+    /// this is the app's own rich-text payload, which no one opens with another tool.
+    @Attribute(.externalStorage)
     public var noteDocumentData: Data?
 
     /// Denormalised projection of title, body, tag slugs, and person names.

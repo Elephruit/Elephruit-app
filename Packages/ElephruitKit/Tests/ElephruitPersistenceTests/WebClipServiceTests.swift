@@ -1,6 +1,6 @@
 import ElephruitCore
 import ElephruitModel
-import ElephruitPersistence
+@testable import ElephruitPersistence
 import Foundation
 import SwiftData
 import Testing
@@ -44,6 +44,54 @@ struct WebClipServiceTests {
             comment: "Use this in the architecture review.",
             tagSlugs: ["#Research", " research ", "local-first"]
         )
+    }
+
+
+    @Test("An oversized article is excerpted inline and attached whole")
+    func oversizedArticleIsExternalized() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+
+        let paragraph = "A sentence that repeats until the article outgrows a note. "
+        let article = String(
+            repeating: paragraph,
+            count: WebClipService.maximumInlineBodyLength / paragraph.count + 50
+        )
+        var clip = makeClip()
+        clip.contentMarkdown = article
+        clip.contentHTML = nil
+
+        let item = try fixture.service.save(clip)
+
+        // The body holds an excerpt and says so; the record it syncs in stays bounded.
+        #expect(item.body.count < WebClipService.maximumInlineBodyLength)
+        #expect(item.body.contains("the whole text is attached"))
+
+        // The whole article rides as a managed Markdown file, searchable by its extraction.
+        let markdown = item.attachments.first { $0.typeIdentifier == "net.daringfireball.markdown" }
+        let attached = try #require(markdown)
+        #expect(attached.byteCount == article.utf8.count)
+        #expect(attached.extractedText?.isEmpty == false)
+        #expect((attached.extractedText?.count ?? 0) <= WebClipService.externalizedSearchLength)
+
+        // The derived search column is bounded too — it is a stored field on the same record.
+        #expect(item.searchText.count < WebClipService.maximumInlineBodyLength * 2)
+
+        // Saving the same clip again does not stack a second copy.
+        _ = try fixture.service.save(clip)
+        let copies = item.attachments.filter { $0.typeIdentifier == "net.daringfireball.markdown" }
+        #expect(copies.count == 1)
+    }
+
+    @Test("The inline bound cuts at whitespace, never mid-word")
+    func inlineBoundRespectsWords() {
+        let word = "unbroken "
+        let long = String(repeating: word, count: WebClipService.maximumInlineBodyLength / word.count + 20)
+        let inline = WebClipService.inlineBody(for: long)
+        #expect(inline.count < long.count)
+        #expect(!inline.hasPrefix("unbrokenunbroken"))
+        let short = "A short article."
+        #expect(WebClipService.inlineBody(for: short) == short)
     }
 
     @Test("An article becomes a sourced, searchable note with a fidelity attachment")

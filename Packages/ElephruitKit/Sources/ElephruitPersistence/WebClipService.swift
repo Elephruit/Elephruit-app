@@ -12,6 +12,25 @@ public struct WebClipService {
     public static let maximumScreenshotBytes = 24_000_000
     public static let maximumImageBytes = 24_000_000
 
+    /// How much clipped markdown may live inline in ``Item/body``.
+    ///
+    /// A CKRecord holds about a megabyte across all its inline fields, and `body` is the one
+    /// column a clip could push past it — ``maximumTextLength`` allows eight million
+    /// characters. Past this bound the full article becomes a managed Markdown attachment
+    /// (bytes on disk, CKAsset in transit, searchable through its extracted text) and the
+    /// body carries an excerpt plus the fact of the attachment. Well under the record limit
+    /// on purpose: `searchText` re-folds the body into a second stored column, so the budget
+    /// is spent roughly twice.
+    public static let maximumInlineBodyLength = 64_000
+
+    /// The excerpt written inline when an article is externalized.
+    static let externalizedExcerptLength = 8_000
+
+    /// How much of an externalized article feeds search, through the attachment's
+    /// extracted text. Bounded for the same reason ``maximumInlineBodyLength`` is: the
+    /// extraction joins `searchText`, which is itself a stored column on the record.
+    static let externalizedSearchLength = 32_000
+
     private let items: any ItemRepository
     private let attachments: AttachmentStore
 
@@ -88,9 +107,29 @@ public struct WebClipService {
             }
             htmlAttachment = attachment
 
-            let searchableText = String(clip.contentMarkdown.prefix(1_000_000))
+            // Bounded because this extraction joins `searchText`, a stored column on the
+            // item's own record; the sync budget is the bound's reason and its size.
+            let searchableText = String(clip.contentMarkdown.prefix(Self.externalizedSearchLength))
             if attachment.extractedText != searchableText {
                 attachment.extractedText = searchableText
+                attachmentSearchChanged = true
+            }
+        }
+
+        // Past the inline bound the body carries an excerpt, so the whole article becomes a
+        // managed Markdown attachment: bytes on disk like every managed copy, a CKAsset in
+        // transit, openable with anything that reads text. Search rides the HTML attachment's
+        // extraction when there is one, and this file's own when there is not.
+        if clip.contentMarkdown.count > Self.maximumInlineBodyLength,
+           item.attachments.first(where: { $0.typeIdentifier == "net.daringfireball.markdown" }) == nil {
+            let article = try attachments.attach(
+                data: Data(clip.contentMarkdown.utf8),
+                filename: "\(filenameStem(for: item.title)).md",
+                typeIdentifier: "net.daringfireball.markdown",
+                to: item
+            )
+            if htmlAttachment == nil {
+                article.extractedText = String(clip.contentMarkdown.prefix(Self.externalizedSearchLength))
                 attachmentSearchChanged = true
             }
         }
@@ -179,12 +218,23 @@ public struct WebClipService {
         let markdown = clip.contentMarkdown.trimmingCharacters(in: .whitespacesAndNewlines)
         let summary = clip.excerpt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !markdown.isEmpty {
-            sections.append(markdown)
+            sections.append(Self.inlineBody(for: markdown))
         } else if !summary.isEmpty {
             sections.append(summary)
         }
 
         return sections
+    }
+
+    /// The markdown as the note carries it: whole when it fits, an excerpt when it does not.
+    ///
+    /// Pure, so the bound can be asserted without clipping a real page.
+    static func inlineBody(for markdown: String) -> String {
+        guard markdown.count > maximumInlineBodyLength else { return markdown }
+        let cut = markdown.prefix(externalizedExcerptLength)
+        // Back up to whitespace so the excerpt never ends mid-word.
+        let excerpt = cut.lastIndex(where: \.isWhitespace).map { String(cut[..<$0]) } ?? String(cut)
+        return excerpt + "\n\n*The article is longer than a note holds — the whole text is attached.*"
     }
 
     private func metadataSections(for clip: WebClip, sourceURL: URL) -> [String] {
