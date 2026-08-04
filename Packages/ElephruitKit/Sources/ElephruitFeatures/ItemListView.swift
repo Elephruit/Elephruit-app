@@ -5,6 +5,7 @@ import ElephruitPersistence
 import ElephruitSearch
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The middle column: whatever the sidebar selected.
 ///
@@ -171,15 +172,35 @@ public struct ItemListView: View {
         }
     }
 
+    /// The row's drag payload, hand-built: the same JSON bytes `CodableRepresentation`
+    /// would produce, under the same declared type.
+    static func dragProvider(for id: UUID) -> NSItemProvider {
+        let provider = NSItemProvider()
+        guard let data = try? JSONEncoder().encode(WorkItemTransfer(id: id)) else { return provider }
+        provider.registerDataRepresentation(
+            forTypeIdentifier: UTType.elephruitWorkItemDrag.identifier,
+            visibility: .all
+        ) { completion in
+            completion(data, nil)
+            return nil
+        }
+        return provider
+    }
+
     private var itemList: some View {
         List(selection: selectedItemBinding) {
             ForEach(displayedItems, id: \.id) { item in
                 NavigationLink(value: SidebarSelection.item(id: item.id)) {
                     row(for: item)
                 }
-                // Draggable, at last, in the app whose thesis is that everything links: a row
-                // dropped on a project in the sidebar files it there, undoably.
-                .draggable(WorkItemTransfer(id: item.id))
+                // Draggable via the classic provider API, deliberately: `.draggable` installs
+                // a SwiftUI drag gesture that competes with the table's own mouseDown, and
+                // clicking a row to select it became slow and intermittent while the arrow keys
+                // stayed instant. `.onDrag` hands the drag to the list's native row-drag
+                // session, which has carried drags without costing clicks since before SwiftUI
+                // existed. The payload is the same `CodableRepresentation` bytes, so the
+                // sidebar's `.dropDestination(for: WorkItemTransfer.self)` decodes it unchanged.
+                .onDrag { Self.dragProvider(for: item.id) }
                 .contextMenu { contextMenu(for: item) }
                 .modifier(ItemSwipeActions(item: item, navigation: navigation, onPermanentDeletion: { pendingPermanentDeletion = $0 }, onChange: { Task { await reload() } }))
             }
