@@ -252,6 +252,13 @@ extension Theme {
         /// size on top of that wrote it off for Dynamic Type too.
         public static let denseLabel: Font = .system(.caption2)
 
+        /// The glyph over an empty state or an onboarding page.
+        ///
+        /// A text style rather than a fixed size, so the one image on the page grows with the
+        /// user's text like everything under it. Light, because at this scale a regular stroke
+        /// reads as a poster rather than an accent.
+        public static let heroGlyph: Font = .system(.largeTitle, weight: .light)
+
         /// The note body editor.
         ///
         /// Proportional by default, because most notes are prose. The editor offers a

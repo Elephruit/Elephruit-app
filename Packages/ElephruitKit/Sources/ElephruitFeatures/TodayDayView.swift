@@ -356,6 +356,7 @@ struct TodayDayView: View {
 /// — until somebody asks for more, at which point it becomes the full day.
 struct TodayCompactDayView: View {
     @Environment(\.services) private var services
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let plan: DayPlan
     let model: TodayModel
@@ -400,7 +401,7 @@ struct TodayCompactDayView: View {
     /// The collapsed day, which is one control: the whole strip opens it.
     private var collapsed: some View {
         Button {
-            withAnimation(Theme.Motion.standard) { model.toggleExpanded(plan) }
+            withAnimation(Theme.Motion.respectingReduceMotion(Theme.Motion.standard, reduceMotion: reduceMotion)) { model.toggleExpanded(plan) }
         } label: {
             HStack(alignment: .top, spacing: 0) {
                 TodayDateRail(plan: plan, isEmphasised: false, isPast: isPast)
@@ -417,7 +418,7 @@ struct TodayCompactDayView: View {
 
     private var disclosure: some View {
         Button {
-            withAnimation(Theme.Motion.standard) { model.toggleExpanded(plan) }
+            withAnimation(Theme.Motion.respectingReduceMotion(Theme.Motion.standard, reduceMotion: reduceMotion)) { model.toggleExpanded(plan) }
         } label: {
             Label("Collapse", systemImage: "chevron.up")
                 .font(Theme.Text.metadata)

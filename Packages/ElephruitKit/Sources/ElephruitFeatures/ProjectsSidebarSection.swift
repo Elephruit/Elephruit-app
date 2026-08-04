@@ -86,7 +86,7 @@ struct ProjectsSidebarSection: View {
                 }
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(Theme.Text.sectionHeader)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -414,7 +414,7 @@ struct ProjectSidebarRowView: View {
 
             if let accessorySymbol {
                 Image(systemName: accessorySymbol)
-                    .font(.system(size: 9))
+                    .font(Theme.Text.denseLabel)
                     .foregroundStyle(Theme.Colors.tertiaryText)
                     .accessibilityHidden(true)
             }

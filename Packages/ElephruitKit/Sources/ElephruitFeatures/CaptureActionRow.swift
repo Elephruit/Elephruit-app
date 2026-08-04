@@ -126,7 +126,7 @@ struct CaptureActionGlyph: View {
 
     var body: some View {
         Image(systemName: isActive ? symbolName + ".fill" : symbolName)
-            .font(.system(size: 13))
+            .font(Theme.Text.rowTitle)
             .foregroundStyle(isActive ? Theme.CaptureToken.accent : Theme.Colors.tertiaryText)
             .frame(width: 22, height: 22)
             .contentShape(Rectangle())

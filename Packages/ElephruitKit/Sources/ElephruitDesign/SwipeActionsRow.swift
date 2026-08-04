@@ -201,7 +201,7 @@ struct SwipeActionButton: View {
         Button(action: perform) {
             VStack(spacing: Theme.Spacing.hairline) {
                 Image(systemName: symbolName)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(.title3, weight: .medium))
                     .contentTransition(.symbolEffect(.replace))
 
                 if width >= 56 {

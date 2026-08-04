@@ -147,7 +147,7 @@ struct ContactExplanationView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.section) {
             VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                 Image(systemName: "person.crop.rectangle.stack")
-                    .font(.system(size: 34))
+                    .font(Theme.Text.heroGlyph)
                     .foregroundStyle(Theme.Colors.selection)
 
                 Text("Start from the contacts you already know")
@@ -214,7 +214,7 @@ struct ContactExplanationView: View {
     private func factRow(_ symbol: String, _ title: String, _ detail: String) -> some View {
         HStack(alignment: .top, spacing: Theme.Spacing.medium) {
             Image(systemName: symbol)
-                .font(.system(size: 15))
+                .font(.system(.title3))
                 .foregroundStyle(Theme.Colors.selection)
                 .frame(width: 22)
                 .accessibilityHidden(true)
@@ -297,7 +297,7 @@ struct ContactAccessRefusedView: View {
             Spacer()
 
             Image(systemName: "lock.slash")
-                .font(.system(size: 30))
+                .font(Theme.Text.heroGlyph)
                 .foregroundStyle(Theme.Colors.secondaryText)
 
             Text(title).font(Theme.Text.title)
@@ -391,7 +391,7 @@ struct ContactImportFinishedView: View {
             Spacer()
 
             Image(systemName: report.isCompleteSuccess ? "checkmark.circle" : "exclamationmark.circle")
-                .font(.system(size: 30))
+                .font(Theme.Text.heroGlyph)
                 .foregroundStyle(report.isCompleteSuccess ? Theme.Colors.completed : Theme.Colors.warning)
 
             Text(report.wasCancelled ? "Stopped" : "Done")

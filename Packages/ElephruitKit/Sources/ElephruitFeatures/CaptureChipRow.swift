@@ -23,7 +23,7 @@ struct CaptureChip: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.hairline) {
             Image(systemName: symbolName)
-                .font(.system(size: 9))
+                .font(Theme.Text.denseLabel)
 
             Text(label)
                 .font(Theme.Text.chip)
@@ -32,7 +32,7 @@ struct CaptureChip: View {
             // Revealed on hover rather than always drawn. Five chips each wearing a permanent ✕ is
             // five invitations to undo something, sitting under a sentence somebody is still writing.
             Image(systemName: "xmark")
-                .font(.system(size: 7))
+                .font(Theme.Text.denseLabel)
                 .foregroundStyle(Theme.Colors.tertiaryText)
                 .opacity(isHovering ? 1 : 0)
         }

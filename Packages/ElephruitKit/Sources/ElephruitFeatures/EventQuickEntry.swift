@@ -436,7 +436,7 @@ private struct InterpretationChip: View {
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: token.kind.symbolName)
-                .font(.system(size: 8))
+                .font(Theme.Text.denseLabel)
                 .accessibilityHidden(true)
 
             Text(token.text)
@@ -446,7 +446,7 @@ private struct InterpretationChip: View {
             if isHovering {
                 Button(action: onRemove) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 7))
+                        .font(Theme.Text.denseLabel)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Ignore \(token.kind.displayLabel)")

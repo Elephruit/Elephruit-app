@@ -7,6 +7,15 @@ import SwiftUI
 /// Bugs need denser, more explicit information than a general work list: stable references,
 /// severity, workflow state, verification and regression markers all matter while triaging. This
 /// keeps those facts scannable without turning the screen into a spreadsheet.
+/// The reference column: wide enough for "BUG-999" without the row reflowing as keys grow.
+private let bugReferenceColumnWidth: CGFloat = 66
+
+/// Where a row's title starts: the card inset, the severity disc, the reference column, and the
+/// gaps between them. The divider hangs from it, so the discs read as one uninterrupted column
+/// down the card and the rule underlines only the text.
+private let bugRowTitleInset: CGFloat = Theme.Spacing.medium + Theme.Size.iconTileSmall
+    + Theme.Spacing.medium + bugReferenceColumnWidth + Theme.Spacing.medium
+
 struct BugTrackerView: View {
     let model: ProjectWorkspaceModel
 
@@ -138,7 +147,7 @@ struct BugTrackerSeveritySection: View {
 
                     if expandedBugID == facts.id, let item = model.item(facts.id) {
                         BugInlineDetailView(item: item, model: model) {
-                            withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) {
+                            withAnimation(Theme.Motion.respectingReduceMotion(Theme.Motion.standard, reduceMotion: reduceMotion)) {
                                 expandedBugID = nil
                             }
                         }
@@ -156,7 +165,7 @@ struct BugTrackerSeveritySection: View {
                 .id(WorkItemGroupRowID(groupKey: group.key, itemID: facts.id))
 
                 if index < group.items.count - 1 {
-                    Divider().padding(.leading, 118)
+                    Divider().padding(.leading, bugRowTitleInset)
                 }
             }
         }
@@ -170,7 +179,7 @@ struct BugTrackerSeveritySection: View {
     private func toggle(_ id: UUID) {
         guard model.rowGesturesAreActive(for: id) else { return }
         model.select(id)
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.26)) {
+        withAnimation(Theme.Motion.respectingReduceMotion(Theme.Motion.standard, reduceMotion: reduceMotion)) {
             expandedBugID = expandedBugID == id ? nil : id
         }
     }
@@ -243,9 +252,9 @@ struct BugTrackerRow: View {
 
             if let key = facts.referenceKey {
                 WorkItemReferenceLabel(reference: key)
-                    .frame(width: 66, alignment: .leading)
+                    .frame(width: bugReferenceColumnWidth, alignment: .leading)
             } else {
-                Color.clear.frame(width: 66, height: 1)
+                Color.clear.frame(width: bugReferenceColumnWidth, height: 1)
             }
 
             WorkItemTitleField(facts: facts, model: model)
@@ -286,7 +295,7 @@ struct BugTrackerRow: View {
 
             Button(action: toggleExpanded) {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(Theme.Text.rowSubtitle.weight(.semibold))
                     .foregroundStyle(isExpanded ? Theme.Colors.selection : Theme.Colors.secondaryText)
                     .frame(width: 22, height: 22)
                     .background(
@@ -320,10 +329,10 @@ struct BugTrackerRow: View {
     private var severityMarker: some View {
         Circle()
             .fill(tint.opacity(0.14))
-            .frame(width: 24, height: 24)
+            .frame(width: Theme.Size.iconTileSmall, height: Theme.Size.iconTileSmall)
             .overlay {
                 Image(systemName: severity?.symbolName ?? "ladybug")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(Theme.Text.rowSubtitle.weight(.semibold))
                     .foregroundStyle(tint)
             }
             .accessibilityLabel(severity.map { "\($0.displayName) severity" } ?? "No severity")

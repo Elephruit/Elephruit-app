@@ -286,7 +286,7 @@ public struct MiniMonthView: View {
                     onSelect(day)
                 } label: {
                     Text("\(calendar.component(.day, from: day))")
-                        .font(.system(size: 10))
+                        .font(Theme.Text.metadata)
                         .monospacedDigit()
                         .frame(width: 20, height: 18)
                         .background {

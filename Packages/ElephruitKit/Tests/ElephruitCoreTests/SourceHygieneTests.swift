@@ -577,15 +577,11 @@ struct SourceHygieneTests {
 
     @Test("Shadows come from the elevation scale")
     func shadowsComeFromElevation() {
-        let allowlisted: Set<String> = [
-            "FloatingTimerView.swift", "KanbanBoardView.swift", "KindDetailViews.swift",
-            "NoteWorkspacePanels.swift",
-            "SectionIndexBar.swift",
-        ]
-
+        // The ledger is paid. Every shadow in the tree is an `.elevation(_:)` now; the only raw
+        // `.shadow(` left is the one inside Tokens.swift that the modifier itself is made of.
         let (offenders, stale) = metricScan(
             exempt: ["Tokens.swift"],
-            allowlisted: allowlisted
+            allowlisted: []
         ) { line in
             line.contains(".shadow(") ? ".shadow(" : nil
         }
@@ -599,21 +595,11 @@ struct SourceHygieneTests {
 
     @Test("Fonts come from the type scale")
     func fontsComeFromTheTypeScale() {
-        let allowlisted: Set<String> = [
-            "BugTrackerView.swift", "CalendarMenuBar.swift", "CalendarMonthView.swift",
-            "CalendarOverviewViews.swift", "CalendarTimeGrid.swift", "CaptureActionRow.swift",
-            "CaptureChipRow.swift", "Components.swift", "ContactOnboardingView.swift",
-            "EventQuickEntry.swift", "KanbanBoardView.swift", "LinkedContactViews.swift",
-            "MonthGrid.swift",
-            "ProjectsSidebarSection.swift", "ReminderMonthPicker.swift", "SectionIndexBar.swift", "SwipeActionsRow.swift",
-            "TodayComponents.swift", "TodayPeopleViews.swift", "TodayRows.swift",
-            "WorkItemCompletionControl.swift", "WorkItemDetailView.swift",
-            "WorkItemViews.swift",
-        ]
-
+        // The ledger is paid. Every piece of text and every glyph is set from the type scale or
+        // a text style, so Dynamic Type reaches all of it.
         let (offenders, stale) = metricScan(
             exempt: ["Tokens.swift", "AppKitTokens.swift"],
-            allowlisted: allowlisted
+            allowlisted: []
         ) { line in
             if line.contains(".font(.system(size:") { return ".font(.system(size:" }
             if line.contains("Font.system(size:") { return "Font.system(size:" }
@@ -632,19 +618,15 @@ struct SourceHygieneTests {
 
     @Test("Corner radii come from the four-step scale")
     func radiiComeFromTheScale() throws {
-        let allowlisted: Set<String> = [
-            "CalendarAgendaView.swift", "CalendarMonthView.swift", "CalendarOverviewViews.swift",
-            "CalendarSearchView.swift", "Components.swift", "EventInspectorView.swift",
-            "TodayRows.swift",
-        ]
-
         // 4, 6, 10, 16 — `Theme.Radius`. Zero is "no radius", which is a statement, not a value.
+        // The ledger is paid: the sub-scale radii on thin accent bars became `Capsule`, which is
+        // the statement they were approximating.
         let allowed: Set<Int> = [0, 4, 6, 10, 16]
         let literal = /cornerRadius: *(\d+)/
 
         let (offenders, stale) = metricScan(
             exempt: ["Tokens.swift"],
-            allowlisted: allowlisted
+            allowlisted: []
         ) { line in
             for match in line.matches(of: literal) {
                 guard let value = Int(match.1), !allowed.contains(value) else { continue }
@@ -662,21 +644,15 @@ struct SourceHygieneTests {
 
     @Test("Padding stays on the grid")
     func paddingStaysOnTheGrid() throws {
-        let allowlisted: Set<String> = [
-            "BugTrackerView.swift", "CalendarAgendaView.swift", "CalendarMonthView.swift",
-            "CalendarSearchView.swift", "CalendarTimeGrid.swift", "CaptureSuggestionSource.swift",
-            "Components.swift", "ContactImportReviewView.swift", "MapPlaceSearchField.swift",
-            "ProjectCalendarView.swift", "TimeEntryEditing.swift",
-            "TimePickers.swift", "TodayRows.swift", "WorkItemDetailView.swift",
-        ]
-
         // The grid: eight-major, four-half-step, two as the glyph gap. `Theme.Spacing`, as numbers.
+        // The ledger is paid; alignment offsets that were never spacing (a divider inset, a label
+        // column) are now named and derived where they are used.
         let allowed: Set<Int> = [0, 2, 4, 8, 12, 16, 24, 32, 40]
         let literal = /\.padding\((?:\.[a-zA-Z]+, *)?(\d+)\)/
 
         let (offenders, stale) = metricScan(
             exempt: ["Tokens.swift"],
-            allowlisted: allowlisted
+            allowlisted: []
         ) { line in
             for match in line.matches(of: literal) {
                 guard let value = Int(match.1), !allowed.contains(value) else { continue }
@@ -697,11 +673,9 @@ struct SourceHygieneTests {
 
     @Test("Animation honours Reduce Motion by construction")
     func animationsHonourReduceMotion() {
-        let allowlisted: Set<String> = [
-            "BugTrackerView.swift", "EventEditorView.swift", "FloatingTimerView.swift", "TodayComponents.swift",
-            "TodayDayView.swift", "TodayPeopleViews.swift", "TodayView.swift",
-            "WorkItemDetailView.swift",
-        ]
+        // The ledger is paid. Every animation is either a `calmAnimation` or wrapped in
+        // `respectingReduceMotion` at the call, so the setting is honoured by construction.
+        let allowlisted: Set<String> = []
 
         // `.calmAnimation` reads Reduce Motion itself, and an imperative `withAnimation` wrapped
         // in `respectingReduceMotion` has made the same promise by hand. The wrap legitimately

@@ -14,6 +14,7 @@ import SwiftUI
 struct EventEditorView: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// The event being changed, or `nil` when this is a new one.
     let existing: CalendarEventSummary?
@@ -166,7 +167,7 @@ struct EventEditorView: View {
     /// The disclosure control, which says what it is hiding.
     private var disclosure: some View {
         Button {
-            withAnimation(Theme.Motion.standard) { isShowingDetails.toggle() }
+            withAnimation(Theme.Motion.respectingReduceMotion(Theme.Motion.standard, reduceMotion: reduceMotion)) { isShowingDetails.toggle() }
         } label: {
             HStack(spacing: Theme.Spacing.small) {
                 Image(systemName: isShowingDetails ? "chevron.down" : "chevron.right")

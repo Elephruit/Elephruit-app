@@ -82,7 +82,7 @@ public struct EventInspectorView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
             HStack(spacing: Theme.Spacing.small) {
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                Capsule()
                     .fill(Theme.EventStyle.accent(colorName: event.calendarColorName))
                     .frame(width: 4, height: 30)
 

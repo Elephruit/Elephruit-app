@@ -28,6 +28,7 @@ import SwiftUI
 /// single sentence is constrained by ``Theme/Size/todayContentWidth`` instead.
 public struct TodayView: View {
     @Environment(\.services) private var services
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let navigation: NavigationModel
 
@@ -213,7 +214,7 @@ public struct TodayView: View {
         if model.isOnToday {
             HStack {
                 Button {
-                    withAnimation(Theme.Motion.standard) {
+                    withAnimation(Theme.Motion.respectingReduceMotion(Theme.Motion.standard, reduceMotion: reduceMotion)) {
                         model.isShowingPreviousDays ? model.hidePreviousDays() : model.showPreviousDays()
                     }
                 } label: {

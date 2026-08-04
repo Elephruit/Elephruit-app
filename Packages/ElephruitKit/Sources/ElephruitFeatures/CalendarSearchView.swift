@@ -75,7 +75,7 @@ struct CalendarSearchView: View {
                             .font(Theme.Text.keyHint)
                     }
                     .padding(.horizontal, Theme.Spacing.tight)
-                    .padding(.vertical, 1)
+                    .padding(.vertical, Theme.Spacing.hairline)
                     .background { Capsule().fill(Theme.Colors.subtleFill) }
                 }
 
@@ -245,7 +245,7 @@ struct CalendarSearchRow: View {
             }
             .frame(width: 74, alignment: .trailing)
 
-            RoundedRectangle(cornerRadius: 1, style: .continuous)
+            Capsule()
                 .fill(Theme.EventStyle.accent(colorName: event.calendarColorName))
                 .frame(width: 3)
                 .padding(.vertical, 2)

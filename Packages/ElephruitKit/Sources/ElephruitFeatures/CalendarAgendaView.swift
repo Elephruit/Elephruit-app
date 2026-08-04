@@ -216,10 +216,10 @@ struct AgendaEventRow: View {
         HStack(alignment: .top, spacing: Theme.Spacing.small) {
             timeColumn
 
-            RoundedRectangle(cornerRadius: 1, style: .continuous)
+            Capsule()
                 .fill(Theme.EventStyle.accent(colorName: event.calendarColorName))
                 .frame(width: 3)
-                .padding(.vertical, 1)
+                .padding(.vertical, Theme.Spacing.hairline)
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: Theme.Spacing.tight) {
@@ -287,7 +287,7 @@ struct AgendaEventRow: View {
                 .font(Theme.Text.keyHint)
                 .rowForeground(.secondary)
                 .padding(.horizontal, Theme.Spacing.tight)
-                .padding(.vertical, 1)
+                .padding(.vertical, Theme.Spacing.hairline)
                 .background {
                     RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
                         .fill(Theme.Colors.subtleFill)

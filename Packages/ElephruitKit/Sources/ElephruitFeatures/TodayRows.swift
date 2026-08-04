@@ -58,7 +58,7 @@ struct TodayEventRow: View {
         HStack(alignment: .top, spacing: Theme.Spacing.small) {
             timeColumn
 
-            RoundedRectangle(cornerRadius: 1, style: .continuous)
+            Capsule()
                 .fill(Theme.Palette.color(named: event.event.calendarColorName))
                 .frame(width: 2)
                 .opacity(event.event.isCancelled ? 0.4 : 1)
@@ -130,7 +130,7 @@ struct TodayEventRow: View {
     private var titleLine: some View {
         HStack(spacing: Theme.Spacing.tight) {
             Image(systemName: event.kind.symbolName)
-                .font(.system(size: 10))
+                .font(Theme.Text.metadata)
                 .foregroundStyle(Theme.Colors.tertiaryText)
                 .accessibilityHidden(true)
 
@@ -142,7 +142,7 @@ struct TodayEventRow: View {
 
             if event.event.isRecurring {
                 Image(systemName: "repeat")
-                    .font(.system(size: 9))
+                    .font(Theme.Text.denseLabel)
                     .foregroundStyle(Theme.Colors.tertiaryText)
                     .accessibilityHidden(true)
             }
@@ -152,7 +152,7 @@ struct TodayEventRow: View {
             if event.hasConflict, !event.event.isCancelled {
                 Label("Clash", systemImage: "exclamationmark.triangle.fill")
                     .labelStyle(.iconOnly)
-                    .font(.system(size: 9))
+                    .font(Theme.Text.denseLabel)
                     .foregroundStyle(Theme.Colors.warning)
                     .help(conflictDescription)
             }
@@ -207,7 +207,7 @@ struct TodayEventRow: View {
                     .padding(.leading, Theme.Spacing.small + 6)
             }
         }
-        .padding(.top, 1)
+        .padding(.top, Theme.Spacing.hairline)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(participantsLabel)
     }
@@ -229,7 +229,7 @@ struct TodayEventRow: View {
                 Image(systemName: event.preparation.openPreparationTaskIDs.isEmpty
                     ? "checkmark.circle"
                     : "list.bullet.clipboard")
-                    .font(.system(size: 9))
+                    .font(Theme.Text.denseLabel)
                     .accessibilityHidden(true)
 
                 Text(summary)
@@ -529,7 +529,10 @@ struct TodayParticipantChip: View {
             .fill(fill)
             .overlay {
                 Text(participant.initials)
-                    .font(.system(size: 8, weight: .medium, design: .rounded))
+                    .font(Theme.Text.keyHint)
+                    // Scaling down only, as in `Avatar`: the monogram belongs to the circle, and
+                    // large accessibility sizes shrink it inward rather than overflowing the disc.
+                    .minimumScaleFactor(0.5)
                     .foregroundStyle(foreground)
             }
             .overlay {
@@ -755,14 +758,14 @@ struct TodayTaskRow: View {
 
             if item.isFlagged {
                 Image(systemName: "flag.fill")
-                    .font(.system(size: 8))
+                    .font(Theme.Text.denseLabel)
                     .rowTint(Theme.Colors.dueToday)
                     .accessibilityHidden(true)
             }
 
             if let symbol = item.priority.symbolName {
                 Image(systemName: symbol)
-                    .font(.system(size: 8))
+                    .font(Theme.Text.denseLabel)
                     .rowForeground(.secondary)
                     .accessibilityHidden(true)
             }
@@ -774,7 +777,7 @@ struct TodayTaskRow: View {
             ForEach(pieces) { piece in
                 HStack(spacing: Theme.Spacing.hairline) {
                     Image(systemName: piece.symbolName)
-                        .font(.system(size: 9))
+                        .font(Theme.Text.denseLabel)
                     Text(piece.text)
                         .font(Theme.Text.metadata)
                         .lineLimit(1)
@@ -1048,7 +1051,7 @@ struct TodayCompactTaskLine: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.small) {
             Image(systemName: task.primaryReason?.symbolName ?? "circle")
-                .font(.system(size: 9))
+                .font(Theme.Text.denseLabel)
                 .foregroundStyle(Theme.Colors.tertiaryText)
                 .frame(width: TodayMetrics.timeGutterWidth, alignment: .leading)
 

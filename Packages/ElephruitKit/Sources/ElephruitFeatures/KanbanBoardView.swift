@@ -106,7 +106,7 @@ struct KanbanColumnView: View {
                     .draggable(WorkItemTransfer(id: facts.id)) {
                         KanbanCardView(facts: facts, model: model)
                             .frame(width: 248)
-                            .shadow(color: Theme.Colors.shadow.opacity(0.18), radius: 10, y: 4)
+                            .elevation(.floating)
                     }
                     .onDragSessionUpdated { session in
                         switch session.phase {
@@ -175,7 +175,7 @@ struct KanbanColumnView: View {
             }
             Button(action: beginAdding) {
                 Image(systemName: "plus")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(Theme.Text.rowSubtitle.weight(.semibold))
                     .frame(width: 22, height: 22)
                     .background(Theme.Colors.contentBackground, in: Circle())
             }
@@ -208,7 +208,7 @@ struct KanbanColumnView: View {
         .background(
             RoundedRectangle(cornerRadius: Theme.Radius.medium)
                 .fill(Theme.Colors.contentBackground.opacity(isQuickAddFocused ? 0.96 : 0.62))
-                .shadow(color: Theme.Colors.shadow.opacity(isQuickAddFocused ? 0.18 : 0.06), radius: 8, y: 3)
+                .elevation(isQuickAddFocused ? .floating : .raised)
         )
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.medium)

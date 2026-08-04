@@ -374,7 +374,7 @@ struct LinkCompletionList: View {
             RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                 .strokeBorder(Theme.Colors.separator)
         )
-        .shadow(radius: 8, y: 2)
+        .elevation(.floating)
         .accessibilityLabel("Link suggestions")
     }
 }

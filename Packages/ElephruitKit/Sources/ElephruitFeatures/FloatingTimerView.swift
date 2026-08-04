@@ -299,24 +299,10 @@ struct FloatingCard: ViewModifier {
         /// A window of its own, with only its padding to cast into.
         case panel
 
-        var radius: CGFloat {
+        var elevation: Theme.Elevation {
             switch self {
-            case .overlay: 10
-            case .panel: 3
-            }
-        }
-
-        var offset: CGFloat {
-            switch self {
-            case .overlay: 4
-            case .panel: 1
-            }
-        }
-
-        var opacity: Double {
-            switch self {
-            case .overlay: 0.18
-            case .panel: 0.12
+            case .overlay: .floating
+            case .panel: .raised
             }
         }
     }
@@ -344,7 +330,7 @@ struct FloatingCard: ViewModifier {
                     RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
                         .strokeBorder(tint.opacity(0.35))
                 }
-                .shadow(color: Theme.Colors.shadow.opacity(depth.opacity), radius: depth.radius, y: depth.offset)
+                .elevation(depth.elevation)
         } else {
             content
         }
@@ -364,6 +350,7 @@ struct FloatingCard: ViewModifier {
 /// timer stopped would take the only way back to the app with it.
 struct MiniTimerView: View {
     @Environment(\.services) private var services
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let controller: MiniTimerController
 
@@ -432,7 +419,7 @@ struct MiniTimerView: View {
                 // either way the size is already right. The one thing this surface cannot afford is
                 // to be uncertain about how wide it is.
                 windowControls
-                    .transition(.opacity.animation(Theme.Motion.appearance))
+                    .transition(.opacity.animation(Theme.Motion.respectingReduceMotion(Theme.Motion.appearance, reduceMotion: reduceMotion)))
             }
 
             menuButton

@@ -368,7 +368,7 @@ public struct TagChip: View {
             .font(Theme.Text.chip)
             .foregroundStyle(foreground)
             .padding(.horizontal, Theme.Spacing.small)
-            .padding(.vertical, 1)
+            .padding(.vertical, Theme.Spacing.hairline)
             .background(
                 RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
                     .fill(background)
@@ -546,7 +546,7 @@ public struct EmptyStateView: View {
     public var body: some View {
         VStack(spacing: Theme.Spacing.medium) {
             Image(systemName: symbolName)
-                .font(.system(size: 34, weight: .light))
+                .font(Theme.Text.heroGlyph)
                 .foregroundStyle(symbolColor)
                 .accessibilityHidden(true)
 
@@ -651,9 +651,9 @@ public struct KeyHint: View {
                     .foregroundStyle(Theme.Colors.secondaryText)
                     .frame(minWidth: 14)
                     .padding(.horizontal, Theme.Spacing.tight)
-                    .padding(.vertical, 1)
+                    .padding(.vertical, Theme.Spacing.hairline)
                     .background(
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
                             .fill(Theme.Colors.subtleFill)
                     )
             }
@@ -756,7 +756,7 @@ public struct FailureStateView: View {
     public var body: some View {
         VStack(spacing: Theme.Spacing.large) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 38, weight: .light))
+                .font(Theme.Text.heroGlyph)
                 .foregroundStyle(Theme.Colors.dueToday)
                 .accessibilityHidden(true)
 

@@ -94,6 +94,10 @@ private final class MapPlaceSearchModel {
     }
 }
 
+/// The label column: results and errors hang from the field, not the label, so the eye that
+/// just typed is already where the answer appears.
+private let mapFieldLabelColumnWidth: CGFloat = 150
+
 struct MapPlaceSearchField: View {
     let label: String
     @Binding var text: String
@@ -109,7 +113,7 @@ struct MapPlaceSearchField: View {
             HStack(spacing: Theme.Spacing.large) {
                 Text(label)
                     .foregroundStyle(Theme.Colors.secondaryText)
-                    .frame(width: 150, alignment: .leading)
+                    .frame(width: mapFieldLabelColumnWidth, alignment: .leading)
 
                 TextField(label, text: $text)
                     .textFieldStyle(.plain)
@@ -133,7 +137,7 @@ struct MapPlaceSearchField: View {
                 Text(errorMessage)
                     .font(Theme.Text.rowSubtitle)
                     .foregroundStyle(Theme.Colors.secondaryText)
-                    .padding(.leading, 174)
+                    .marginLeadingForEditorField()
                     .padding(.bottom, Theme.Spacing.medium)
             }
         }
@@ -215,6 +219,7 @@ struct MapPlaceSearchField: View {
 
 private extension View {
     func marginLeadingForEditorField() -> some View {
-        padding(.leading, 174)
+        // One section step past the label column, so hanging content starts under the field.
+        padding(.leading, mapFieldLabelColumnWidth + Theme.Spacing.section)
     }
 }
