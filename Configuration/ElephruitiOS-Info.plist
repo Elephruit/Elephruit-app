@@ -52,7 +52,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>CFBundleURLName</key>
-			<string>com.elephruit.Elephruit.iOS</string>
+			<string>com.elephruit.ElephruitMemory.iOS</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>elephruit</string>

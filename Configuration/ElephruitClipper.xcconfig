@@ -1,9 +1,9 @@
 // Build settings for the Safari Web Extension target.
 
 PRODUCT_NAME = Elephruit Web Clipper
-PRODUCT_BUNDLE_IDENTIFIER = com.elephruit.Elephruit.Clipper
+PRODUCT_BUNDLE_IDENTIFIER = com.elephruit.ElephruitMemory.Clipper
 PRODUCT_MODULE_NAME = ElephruitClipperExtension
-ELEPHRUIT_APP_GROUP = $(DEVELOPMENT_TEAM).com.elephruit.Elephruit
+ELEPHRUIT_APP_GROUP = $(DEVELOPMENT_TEAM).com.elephruit.ElephruitMemory
 
 MARKETING_VERSION = 0.1.0
 CURRENT_PROJECT_VERSION = 11

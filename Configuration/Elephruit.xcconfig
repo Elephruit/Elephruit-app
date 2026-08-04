@@ -9,11 +9,11 @@
 // Placeholders until a real team is chosen. Changing them is this one line plus the matching
 // entitlement value. See docs/05-cloudkit-and-migrations.md.
 PRODUCT_NAME = Elephruit
-PRODUCT_BUNDLE_IDENTIFIER = com.elephruit.Elephruit
+PRODUCT_BUNDLE_IDENTIFIER = com.elephruit.ElephruitMemory
 PRODUCT_MODULE_NAME = ElephruitApp
 // macOS validates this style directly against the signing team. Unlike an unprovisioned `group.`
 // identifier, it does not ask for per-process consent every time a development build is replaced.
-ELEPHRUIT_APP_GROUP = $(DEVELOPMENT_TEAM).com.elephruit.Elephruit
+ELEPHRUIT_APP_GROUP = $(DEVELOPMENT_TEAM).com.elephruit.ElephruitMemory
 
 MARKETING_VERSION = 0.1.0
 CURRENT_PROJECT_VERSION = 11

@@ -3,19 +3,41 @@
 <plist version="1.0">
 <dict>
 	<!--
-	  Milestone 1 entitlements. Three, and only three.
-
-	  Deliberately ABSENT: network client, network server, iCloud, CloudKit, Contacts,
-	  Reminders, Photos, Camera, Microphone, Location, Bluetooth, USB, Downloads folder, Apple Events,
-	  JIT, and every temporary exception.
-
-	  Without the network-client entitlement the sandbox refuses outbound connections at the kernel
-	  boundary, which is what makes "this app makes no network requests" verifiable rather than a
-	  promise. An entitlement is added in the same commit as the feature that needs it and no earlier.
+	  An entitlement is added in the same commit as the feature that needs it and no earlier.
 	  See docs/06-privacy-and-entitlements.md.
+
+	  Deliberately ABSENT: network server, Photos, Camera, Microphone, Location, Bluetooth,
+	  USB, Downloads folder, Apple Events, JIT, and every temporary exception.
+
+	  **The no-network guarantee changed shape when sync arrived.** For its first year this
+	  file held no network-client entitlement, so the sandbox refused outbound connections at
+	  the kernel boundary — "this app makes no network requests" was verifiable, not a
+	  promise. iCloud sync is a network feature; the kernel-enforced version of the guarantee
+	  ends with it. What remains true, and what Settings says in the same words: the only
+	  endpoint is Apple's CloudKit, the only payload is the user's own library in the user's
+	  own private database, sync is off until turned on, and no analytics, telemetry, or
+	  third-party service exists in the binary.
 	-->
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
+
+	<!-- CloudKit, and nothing else on the network. Added in the same commit as sync. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+
+	<!-- The user's own private database, in this app's own container. -->
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.com.elephruit.Elephruit</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+
+	<!-- Silent pushes: how a change on the iPhone reaches an open Mac without polling. -->
+	<key>com.apple.developer.aps-environment</key>
+	<string>development</string>
 
 	<!-- Atomic handoff files shared only with the bundled Safari Web Extension. -->
 	<key>com.apple.security.application-groups</key>

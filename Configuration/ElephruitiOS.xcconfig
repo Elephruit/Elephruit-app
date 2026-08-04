@@ -12,7 +12,7 @@ PRODUCT_NAME = Elephruit
 // A distinct identifier, because these are two applications that happen to share a brain.
 // Installing both on one Mac (Designed for iPad, Catalyst, or a future shared App Group)
 // must never make the system confuse their containers.
-PRODUCT_BUNDLE_IDENTIFIER = com.elephruit.Elephruit.iOS
+PRODUCT_BUNDLE_IDENTIFIER = com.elephruit.ElephruitMemory.iOS
 PRODUCT_MODULE_NAME = ElephruitMobileApp
 MARKETING_VERSION = 0.1.0
 CURRENT_PROJECT_VERSION = 1
