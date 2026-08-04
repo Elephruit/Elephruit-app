@@ -93,7 +93,9 @@ struct TodayToolbar: View {
                 Button("Today") { model.returnToToday() }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .keyboardShortcut("t", modifiers: [.command, .shift])
+                    // No shortcut: the ⇧⌘T this used to bind belongs to the registry's Move to
+                    // Today, and a literal beside the registry is how the two ended up fighting
+                    // over one key. ⌘0 re-selects Today, which is the keyboard way back.
                     .help("Back to today")
                     .accessibilityIdentifier(AccessibilityID.Today.returnToToday)
             }

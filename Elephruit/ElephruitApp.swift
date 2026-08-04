@@ -167,6 +167,8 @@ struct ElephruitCommands: Commands {
     @FocusedValue(\.navigationModel) private var navigation
     @FocusedValue(\.transferActions) private var transfer
     @FocusedValue(\.rowActions) private var rowActions
+    @FocusedValue(\.workItemActions) private var workItem
+    @FocusedValue(\.newItemCommand) private var newItem
 
     /// The services, for the few commands that act on the app rather than on a window.
     ///
@@ -186,8 +188,17 @@ struct ElephruitCommands: Commands {
         // MARK: File
 
         CommandGroup(replacing: .newItem) {
-            Button("New Note") { create(.note) }
-                .shortcut(.newItem, in: shortcuts)
+            // The focused surface says what creating means there — a reminder in Reminders, a note
+            // in Notes — and the menu owns the key. The two toolbar buttons that used to bind ⌘N
+            // behind the registry's back are wired through this instead.
+            Button(newItem?.title ?? "New Note") {
+                if let newItem {
+                    newItem.run()
+                } else {
+                    create(.note)
+                }
+            }
+            .shortcut(.newItem, in: shortcuts)
 
             Button("New Reminder") { navigation?.requestNewReminder() }
                 .shortcut(.newReminder, in: shortcuts)
@@ -254,6 +265,23 @@ struct ElephruitCommands: Commands {
             Button("Move to Trash") { rowActions?.moveToTrash() }
                 .shortcut(.moveToTrash, in: shortcuts)
                 .disabled(rowActions?.isEnabled != true)
+
+            Divider()
+
+            // The three work-item verbs the registry has carried since the module shipped — bound,
+            // shown in Settings, and wired to nothing until the surfaces below published what they
+            // mean. The focused surface decides; the menu only carries the keys.
+            Button("Mark Complete") { workItem?.complete() }
+                .shortcut(.completeReminder, in: shortcuts)
+                .disabled(workItem?.isEnabled != true)
+
+            Button(workItem?.isFlagged == true ? "Unflag" : "Flag") { workItem?.toggleFlag() }
+                .shortcut(.flagReminder, in: shortcuts)
+                .disabled(workItem?.isEnabled != true)
+
+            Button("Move to Today") { workItem?.moveToToday() }
+                .shortcut(.moveToToday, in: shortcuts)
+                .disabled(workItem?.isEnabled != true)
         }
 
         // MARK: Find
@@ -275,6 +303,13 @@ struct ElephruitCommands: Commands {
             }
             .shortcut(.searchCalendar, in: shortcuts)
             .disabled(navigation == nil)
+
+            // The natural-language command bar for records. Its binding existed in the registry
+            // and in Settings from the day it shipped, and fired nothing — reachable only by name
+            // inside the other palette.
+            Button("Records Command Bar…") { navigation?.isRecordsCommandBarVisible = true }
+                .shortcut(.recordsCommandBar, in: shortcuts)
+                .disabled(navigation == nil)
         }
 
         // MARK: View
@@ -286,21 +321,21 @@ struct ElephruitCommands: Commands {
             // control you can only reach with a pointer is one a keyboard user cannot reach at all.
             if services?.miniTimer.isCollapsed == true {
                 Button("Back to Elephruit") { services?.miniTimer.expand() }
-                    .keyboardShortcut(KeyEquivalent("m"), modifiers: [.command, .control])
+                    .shortcut(.collapseToTimer, in: shortcuts)
             } else {
                 Button("Collapse to Timer") { services?.miniTimer.collapse() }
-                    .keyboardShortcut(KeyEquivalent("m"), modifiers: [.command, .control])
+                    .shortcut(.collapseToTimer, in: shortcuts)
                     .disabled(services == nil)
             }
 
             Divider()
 
             Button("Back") { navigation?.goBack() }
-                .keyboardShortcut(KeyEquivalent("["), modifiers: .command)
+                .shortcut(.goBack, in: shortcuts)
                 .disabled(navigation?.canGoBack != true)
 
             Button("Forward") { navigation?.goForward() }
-                .keyboardShortcut(KeyEquivalent("]"), modifiers: .command)
+                .shortcut(.goForward, in: shortcuts)
                 .disabled(navigation?.canGoForward != true)
 
             Divider()

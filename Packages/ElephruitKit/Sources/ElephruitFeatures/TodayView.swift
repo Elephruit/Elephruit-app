@@ -67,7 +67,29 @@ public struct TodayView: View {
             guard model == nil, let services else { return }
             model = TodayModel(services: services)
         }
+        // ⌘0 while already on Today: the page may be browsing another day, and re-selecting the
+        // destination is the keyboard route back to the day itself.
+        .onChange(of: navigation.todayReturnRequest) { _, _ in model?.returnToToday() }
+        // The Edit menu's work-item verbs, meaning what they mean here: acting on the selected row.
+        .focusedSceneValue(\.workItemActions, workItemCommandActions)
         .accessibilityIdentifier(AccessibilityID.Today.root)
+    }
+
+    /// The selected row's verbs for the Edit menu — complete, flag, move to today.
+    private var workItemCommandActions: WorkItemCommandActions? {
+        guard let model, let services,
+              let id = navigation.selectedItemID,
+              let task = model.task(id)
+        else { return nil }
+
+        let actions = TodayActions(services: services, navigation: navigation, model: model)
+        return WorkItemCommandActions(
+            isEnabled: true,
+            isFlagged: task.isFlagged,
+            complete: { actions.toggleCompletion(task) },
+            toggleFlag: { actions.setFlagged(!task.isFlagged, on: task) },
+            moveToToday: { actions.reschedule(task, to: services.dateProvider.startOfToday) }
+        )
     }
 
     // MARK: - The page

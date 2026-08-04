@@ -87,6 +87,11 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
     case searchCalendar
     case switchCalendarSet
 
+    // MARK: The window
+    case goBack
+    case goForward
+    case collapseToTimer
+
     public var title: String {
         switch self {
         case .newItem: "New Item"
@@ -120,6 +125,9 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .completeReminder: "Complete Reminder"
         case .flagReminder: "Flag Reminder"
         case .moveToToday: "Move to Today"
+        case .goBack: "Back"
+        case .goForward: "Forward"
+        case .collapseToTimer: "Collapse to Timer"
         }
     }
 
@@ -181,17 +189,32 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         // ⌘⇧E for an event: memorable, reachable, and global. Export moves to ⌥⇧⌘E so the action
         // somebody uses throughout the day owns the simpler binding.
         case .newEvent: KeyBinding("e", [.command, .shift])
-        case .searchCalendar: KeyBinding("f", [.command, .control])
+        // ⌥⌘E — beside ⇧⌘E, which creates an event, so the two calendar verbs share a letter and
+        // differ by modifier. This was ⌃⌘F, which is the *system's* Enter Full Screen binding,
+        // present in the View menu of every application: a default that shadows a system-wide key
+        // is a default that was never pressable.
+        case .searchCalendar: KeyBinding("e", [.command, .option])
         case .switchCalendarSet: KeyBinding("s", [.command, .option])
 
         // Preserve the historical raw values so existing shortcut preferences keep working.
-        case .quickReminderEntry: KeyBinding(" ", [.command, .control])
+        //
+        // ⌃⌘R — R for reminder. This was ⌃⌘Space, which macOS owns for Emoji & Symbols on every
+        // text field in every application; a binding the system takes first is one this registry
+        // only appeared to own.
+        case .quickReminderEntry: KeyBinding("r", [.command, .control])
         case .goReminders: KeyBinding("7")
         // Return-adjacent, because completing is what you do most and ⌘Return is free here: the
         // lists are not text fields, and the text fields that exist handle their own Return.
         case .completeReminder: KeyBinding("\r", .command)
         case .flagReminder: KeyBinding("f", [.command, .shift])
         case .moveToToday: KeyBinding("t", [.command, .shift])
+
+        // In the registry rather than hard-coded in the View menu, so the collision test covers
+        // them and the Settings editor can offer them. The keys are the ones the menu always
+        // claimed.
+        case .goBack: KeyBinding("[", .command)
+        case .goForward: KeyBinding("]", .command)
+        case .collapseToTimer: KeyBinding("m", [.command, .control])
         }
     }
 }

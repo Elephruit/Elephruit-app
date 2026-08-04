@@ -27,6 +27,12 @@ struct RemindersWorkspaceView: View {
         .onAppear(perform: openLinkedReminderIfNeeded)
         .onChange(of: navigation.selectedItemID) { _, _ in openLinkedReminderIfNeeded() }
         .onChange(of: navigation.reminderComposerRequest) { _, _ in openComposer() }
+        // ⌘N, through the File menu — which reads this to say "New Reminder" rather than
+        // "New Note" while this surface has focus.
+        .focusedSceneValue(
+            \.newItemCommand,
+            isComposing ? nil : NewItemCommand(title: "New Reminder") { openComposer() }
+        )
     }
 
     private var header: some View {
@@ -91,7 +97,8 @@ struct RemindersWorkspaceView: View {
             }
             .buttonStyle(.plain)
             .disabled(isComposing)
-            .keyboardShortcut("n")
+            // ⌘N reaches this through the File menu and the published `NewItemCommand` below —
+            // a literal binding here was a second copy of a fact the registry owns.
 
             Spacer()
 

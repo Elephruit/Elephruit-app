@@ -987,6 +987,66 @@ public struct RowActions: Sendable, Equatable {
     }
 }
 
+/// What the focused surface can do to its selected work items, exposed to the Edit menu.
+///
+/// The registry has carried bindings for Complete, Flag and Move to Today since the Reminders
+/// module shipped — shown in Settings, wired to nothing. This is the channel that wires them: a
+/// surface with a work-item selection publishes what those verbs mean *there*, and the menu calls
+/// through it.
+public struct WorkItemCommandActions: Sendable, Equatable {
+    public var isEnabled: Bool
+
+    /// Whether the whole selection is flagged, so the menu can read "Unflag" when it would.
+    public var isFlagged: Bool
+
+    public var complete: @MainActor () -> Void
+    public var toggleFlag: @MainActor () -> Void
+    public var moveToToday: @MainActor () -> Void
+
+    public init(
+        isEnabled: Bool,
+        isFlagged: Bool,
+        complete: @escaping @MainActor () -> Void,
+        toggleFlag: @escaping @MainActor () -> Void,
+        moveToToday: @escaping @MainActor () -> Void
+    ) {
+        self.isEnabled = isEnabled
+        self.isFlagged = isFlagged
+        self.complete = complete
+        self.toggleFlag = toggleFlag
+        self.moveToToday = moveToToday
+    }
+
+    /// Equal when the menu would look the same — closures excluded, for the reason ``RowActions``
+    /// documents: a fresh closure per body evaluation would otherwise be a new focused value per
+    /// frame.
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.isEnabled == rhs.isEnabled && lhs.isFlagged == rhs.isFlagged
+    }
+}
+
+/// The focused surface's own "new item", for the File menu's first slot.
+///
+/// ⌘N had three owners: the File menu's New Note (which only *navigated*), and two literal
+/// `.keyboardShortcut("n")` toolbar buttons that bypassed the registry. Now the menu owns the key
+/// and asks the focused surface what creating means there — a reminder in Reminders, a note in
+/// Notes — falling back to New Note when nothing has said.
+public struct NewItemCommand: Sendable, Equatable {
+    /// What the menu item reads — "New Reminder", "New Note".
+    public var title: String
+
+    public var run: @MainActor () -> Void
+
+    public init(title: String, run: @escaping @MainActor () -> Void) {
+        self.title = title
+        self.run = run
+    }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.title == rhs.title
+    }
+}
+
 /// Export and import, exposed to the menu bar through the focused scene.
 public struct TransferActions: Sendable {
     public var export: @MainActor () -> Void
@@ -1006,6 +1066,12 @@ extension FocusedValues {
 
     /// What the focused list can do to its selection.
     @Entry public var rowActions: RowActions?
+
+    /// What the focused surface can do to its selected work items.
+    @Entry public var workItemActions: WorkItemCommandActions?
+
+    /// What creating something means on the focused surface.
+    @Entry public var newItemCommand: NewItemCommand?
 }
 
 #Preview("Root", traits: .fixedLayout(width: 1180, height: 720)) {

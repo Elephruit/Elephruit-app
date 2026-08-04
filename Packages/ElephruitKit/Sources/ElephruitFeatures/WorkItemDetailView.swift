@@ -502,7 +502,7 @@ struct WorkItemDetailView: View {
             // Named for what it does. It said "Delete" while the dialog said "Move to Trash", and
             // the two disagreeing about whether the action is recoverable is worse than either.
             Button("Move to Trash", role: .destructive) { showsDeleteConfirmation = true }
-                .keyboardShortcut(.delete, modifiers: .command)
+                .shortcut(.moveToTrash, in: services?.shortcuts ?? ShortcutRegistry())
             Spacer()
             Label("Changes save automatically", systemImage: "checkmark.circle")
                 .font(Theme.Text.metadata)

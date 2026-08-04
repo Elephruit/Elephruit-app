@@ -551,7 +551,13 @@ public final class NavigationModel {
         // makes "Home and Upcoming still work" true everywhere rather than at the call sites
         // somebody remembered.
         let selection = requested.canonical
-        guard self.selection != selection else { return }
+        guard self.selection != selection else {
+            // Re-selecting Today while standing on it means "take me back to today" — the page
+            // may be browsing another day, and ⌘0 is its keyboard route home now that the
+            // toolbar's return button no longer claims a key of its own.
+            if selection == .today { todayReturnRequest &+= 1 }
+            return
+        }
 
         recordNavigation(currentLocation)
 
@@ -903,6 +909,9 @@ public final class NavigationModel {
 
         focusedPane = .list
     }
+
+    /// Bumped when Today is selected while already showing, so the page can return to the day.
+    public private(set) var todayReturnRequest = 0
 
     /// Leaves search, restoring the previous list and selection.
     ///

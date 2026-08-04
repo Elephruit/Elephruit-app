@@ -56,6 +56,8 @@ public struct ItemListView: View {
                         && !navigation.selection.showsTrashedItems
                 ) { trashSelection() }
             )
+            .focusedSceneValue(\.workItemActions, workItemCommandActions)
+            .focusedSceneValue(\.newItemCommand, newItemCommand)
             .navigationTitle(navigation.isSearchActive ? "Search" : navigation.windowTitle)
             .navigationSubtitle(subtitle)
             .searchable(text: searchBinding, placement: .toolbar, prompt: searchPrompt)
@@ -200,10 +202,60 @@ public struct ItemListView: View {
     }
 
 
+    /// The work-item verbs the Edit menu carries, meaning what they mean in this list.
+    private var workItemCommandActions: WorkItemCommandActions {
+        let workItems = selectedItems.filter(\.kind.isWorkItem)
+        return WorkItemCommandActions(
+            isEnabled: !workItems.isEmpty && !navigation.selection.showsTrashedItems,
+            isFlagged: !workItems.isEmpty && workItems.allSatisfy(\.isFlagged),
+            complete: { batchToggleCompletion() },
+            toggleFlag: { batchToggleFlag() },
+            moveToToday: { batchMoveToToday() }
+        )
+    }
+
+    /// What ⌘N creates here — the same action as the toolbar's `+`, owned by the File menu.
+    private var newItemCommand: NewItemCommand? {
+        guard navigation.selection != .trash else { return nil }
+        let kind = navigation.selection.defaultNewItemKind
+        return NewItemCommand(title: "New \(kind.displayName)") {
+            createItem(kind: kind)
+        }
+    }
+
     /// Each is one undo step, because each is one thing the user did.
     private func batchToggleCompletion() {
         runBatch { undo, targets in
             try undo.toggleCompletion(targets.filter { $0.kind.supportsStatus })
+        }
+    }
+
+    /// Flags the selection when any of it is unflagged; unflags when all of it is.
+    private func batchToggleFlag() {
+        guard let services else { return }
+        let targets = selectedItems.filter(\.kind.isWorkItem)
+        guard !targets.isEmpty else { return }
+
+        let newValue = !targets.allSatisfy(\.isFlagged)
+        services.perform {
+            for item in targets {
+                try services.reminderLifecycle.setFlagged(newValue, on: item)
+                services.noteChange(to: item)
+            }
+        }
+    }
+
+    /// Commits the selection to today — the same write the Today page's reschedule makes.
+    private func batchMoveToToday() {
+        guard let services else { return }
+        let targets = selectedItems.filter(\.kind.isWorkItem)
+        guard !targets.isEmpty else { return }
+
+        services.perform {
+            for item in targets {
+                try services.reminderLifecycle.commit(item, to: services.dateProvider.startOfToday)
+                services.noteChange(to: item)
+            }
         }
     }
 
@@ -400,7 +452,9 @@ public struct ItemListView: View {
                     Label("New \(navigation.selection.defaultNewItemKind.displayName)", systemImage: "plus")
                 }
                 .accessibilityIdentifier(AccessibilityID.ItemList.newItemButton)
-                .keyboardShortcut("n")
+                // No literal ⌘N here: the File menu owns the key and calls this surface's
+                // published `NewItemCommand` — a second binding beside the registry's is exactly
+                // the drift the registry exists to prevent.
             }
         }
     }
