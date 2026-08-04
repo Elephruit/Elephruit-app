@@ -23,6 +23,7 @@ struct RemindersWorkspaceView: View {
     @State private var vocabulary = CaptureVocabulary.empty
     @State private var showsCompleted = false
     @FocusState private var isComposerFocused: Bool
+    @FocusState private var isListFocused: Bool
 
     var body: some View {
         content
@@ -80,40 +81,55 @@ struct RemindersWorkspaceView: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            List(selection: selectionBinding) {
-                if isComposing {
-                    Section {
-                        composer
-                    }
-                }
-
-                ForEach(groups) { group in
-                    Section {
-                        ForEach(group.reminders) { reminder in
-                            row(reminder, in: group.section)
-                                .tag(reminder.id)
+            // A `ScrollView` rather than a `List`, and the choice is visual before it is
+            // structural: rows sit plainly on the page with room around them — no rule under
+            // every line, no table chrome. `List` on this platform paints its own opaque table
+            // behind everything (`scrollContentBackground(.hidden)` does not reach a plain-style
+            // list), which is exactly the look this module exists to avoid. A scroll view draws
+            // nothing it is not asked to. The selection and keyboard behaviour the list provided
+            // lives on below, by hand.
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                        if isComposing {
+                            composerCard
                         }
-                    } header: {
-                        SectionHeader(group.section.title, count: group.reminders.count)
-                    }
-                }
 
-                if showsCompleted {
-                    let done = services?.reminderStore.completed ?? []
-                    if !done.isEmpty {
-                        Section {
-                            ForEach(done) { reminder in
-                                row(reminder, in: nil)
-                                    .tag(reminder.id)
+                        ForEach(groups) { group in
+                            SectionHeader(group.section.title, count: group.reminders.count)
+                                .padding(.top, Theme.Spacing.medium)
+                                .padding(.horizontal, Theme.Spacing.tight)
+
+                            ForEach(group.reminders) { reminder in
+                                card(reminder, in: group.section)
                             }
-                        } header: {
-                            SectionHeader("Completed", count: done.count)
+                        }
+
+                        if showsCompleted {
+                            let done = services?.reminderStore.completed ?? []
+                            if !done.isEmpty {
+                                SectionHeader("Completed", count: done.count)
+                                    .padding(.top, Theme.Spacing.medium)
+                                    .padding(.horizontal, Theme.Spacing.tight)
+
+                                ForEach(done) { reminder in
+                                    card(reminder, in: nil)
+                                }
+                            }
                         }
                     }
+                    .padding(Theme.Spacing.large)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .onChange(of: navigation.selectedItemID) { _, id in
+                    guard let id else { return }
+                    proxy.scrollTo(id)
                 }
             }
-            .listStyle(.inset)
-            .scrollContentBackground(.hidden)
+            .focusable()
+            .focusEffectDisabled()
+            .focused($isListFocused)
+            .onMoveCommand(perform: moveSelection)
             // Space completes the selected reminder — the same key Today already honours.
             .onKeyPress(.space) {
                 let targets = selectedReminders
@@ -122,6 +138,90 @@ struct RemindersWorkspaceView: View {
                 return .handled
             }
             .onDeleteCommand { trashSelection() }
+        }
+    }
+
+    // MARK: - Rows on the page
+
+    /// One reminder, plainly on the page: no box, no rule, just the row and room around it.
+    ///
+    /// The only background a row ever draws is selection — a tinted rounded fill, quiet enough
+    /// that an overdue date keeps its red while it is looked at.
+    private func card(_ reminder: Item, in section: ReminderStore.Section?) -> some View {
+        let isSelected = navigation.selectedItemIDs.contains(reminder.id)
+        return row(reminder, in: section)
+            .padding(.horizontal, Theme.Spacing.medium)
+            .padding(.vertical, Theme.Spacing.small)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                    .fill(isSelected ? Theme.Colors.selectionFill : Color.clear)
+            )
+            .contentShape(.rect)
+            .onTapGesture { select(reminder) }
+            .id(reminder.id)
+    }
+
+    /// The one exception: the live input draws a hairline, because a field needs an edge.
+    private var composerCard: some View {
+        composer
+            .padding(.horizontal, Theme.Spacing.medium)
+            .padding(.vertical, Theme.Spacing.small)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                    .fill(Theme.Colors.contentBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                    .strokeBorder(Theme.Colors.selection.opacity(0.35))
+            )
+    }
+
+    // MARK: - Selection, by hand
+
+    /// Click selects; ⌘-click toggles membership; ⇧-click extends from the primary selection —
+    /// the platform's grammar, reimplemented because the container is no longer a `List`.
+    private func select(_ reminder: Item) {
+        isListFocused = true
+        let flags = NSApp.currentEvent?.modifierFlags ?? []
+        if flags.contains(.command) {
+            navigation.selectedItemIDs.formSymmetricDifference([reminder.id])
+        } else if flags.contains(.shift), let anchor = navigation.selectedItemID {
+            let order = visibleOrder.map(\.id)
+            if let from = order.firstIndex(of: anchor),
+               let to = order.firstIndex(of: reminder.id) {
+                navigation.selectedItemIDs.formUnion(order[min(from, to)...max(from, to)])
+            }
+        } else {
+            navigation.selectedItemIDs = [reminder.id]
+        }
+    }
+
+    /// Every reminder on screen, top to bottom — the order the arrow keys travel.
+    private var visibleOrder: [Item] {
+        var items = sections.flatMap(\.reminders)
+        if showsCompleted {
+            items += services?.reminderStore.completed ?? []
+        }
+        return items
+    }
+
+    private func moveSelection(_ direction: MoveCommandDirection) {
+        let order = visibleOrder
+        guard !order.isEmpty else { return }
+
+        let step: Int
+        switch direction {
+        case .up: step = -1
+        case .down: step = 1
+        default: return
+        }
+
+        if let current = navigation.selectedItemID,
+           let index = order.firstIndex(where: { $0.id == current }) {
+            let next = min(max(index + step, 0), order.count - 1)
+            navigation.selectedItemIDs = [order[next].id]
+        } else if let entry = step > 0 ? order.first : order.last {
+            navigation.selectedItemIDs = [entry.id]
         }
     }
 
@@ -134,16 +234,6 @@ struct RemindersWorkspaceView: View {
         let overdue = sections.first { $0.section == .overdue }?.reminders.count ?? 0
         if overdue > 0 { return "\(open) open · \(overdue) overdue" }
         return open == 1 ? "1 open" : "\(open) open"
-    }
-
-    /// Multi-select, which no surface but the item list had: a batch of reminders can be
-    /// completed, flagged, moved to today, or trashed in one act. The reading pane follows the
-    /// primary selection, which the navigation model reconciles from the set.
-    private var selectionBinding: Binding<Set<UUID>> {
-        Binding(
-            get: { navigation.selectedItemIDs },
-            set: { navigation.selectedItemIDs = $0 }
-        )
     }
 
     private var selectedReminders: [Item] {
@@ -198,7 +288,6 @@ struct RemindersWorkspaceView: View {
                     .fixedSize()
             }
         }
-        .padding(.vertical, Theme.Spacing.tight)
         .frame(minHeight: Theme.Size.rowHeight)
         .contextMenu {
             Button(reminder.isCompleted ? "Mark Incomplete" : "Mark Complete") {
