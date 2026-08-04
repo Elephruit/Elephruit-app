@@ -241,7 +241,9 @@ private struct SelectableWebClipView: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+        // Capture removes every script before persistence and CSP blocks page-authored script.
+        // Keep WebKit execution available solely for the one post-load size measurement below.
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.userContentController.add(context.coordinator, name: "elephruitSize")
 
@@ -291,7 +293,30 @@ private struct SelectableWebClipView: NSViewRepresentable {
                   );
                 })));
                 """
-            )
+            ) { [weak self] _, error in
+                // A failed measurement must never leave a permanently blank, short viewport.
+                // The document itself is still static and scrollable, so expose a useful height
+                // while retaining the saved HTML rather than replacing it with an error page.
+                guard error != nil, self?.didMeasure == false else { return }
+                self?.didMeasure = true
+                self?.height.wrappedValue = 1_200
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            didFail navigation: WKNavigation?,
+            withError error: any Error
+        ) {
+            didFailToRender(in: webView)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            didFailProvisionalNavigation navigation: WKNavigation?,
+            withError error: any Error
+        ) {
+            didFailToRender(in: webView)
         }
 
         func userContentController(
@@ -303,6 +328,20 @@ private struct SelectableWebClipView: NSViewRepresentable {
             else { return }
             didMeasure = true
             height.wrappedValue = min(max(CGFloat(truncating: number), 120), 30_000)
+        }
+
+        private func didFailToRender(in webView: WKWebView) {
+            guard !didMeasure else { return }
+            didMeasure = true
+            height.wrappedValue = 1_200
+            webView.loadHTMLString(
+                """
+                <!doctype html><meta charset="utf-8">
+                <style>body{font:15px -apple-system;margin:24px;color:#555}</style>
+                <p>This saved page could not be displayed. Its original HTML and searchable attachments are still preserved.</p>
+                """,
+                baseURL: nil
+            )
         }
 
         func webView(

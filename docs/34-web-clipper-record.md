@@ -122,10 +122,14 @@ promise pending. Boundary choices preserve the heading's structural ancestor lad
 performing text or computed-style analysis for each level.
 The Safari action has no popup: a toolbar click receives `activeTab` and injects the page-side panel
 directly, so a redundant preparation dialog cannot remain over an already-open clipper. Saved rich
-clips render as static, script-disabled HTML with local images inlined. The browser engine retains
+clips render as static HTML with page-authored scripts removed and local images inlined. The browser engine retains
 floats, tables, typography, and selectable text; the view reports its final height once after images
 settle instead of repeatedly resizing while it loads. Wikipedia editing and appearance chrome is
 removed from article captures while its title, infobox, and article layout remain intact.
+Wikipedia's outer Vector grid is normalized to document flow while its article tables and floats
+remain intact, preventing named grid areas from replaying as a blank implicit track. WebKit permits
+only Elephruit's post-load size measurement; saved scripts are removed and the document CSP
+continues to block page-authored JavaScript.
 
 The main app still has no network entitlement. Safari itself naturally has network access to display
 the page being clipped; the extension operates on that active page.

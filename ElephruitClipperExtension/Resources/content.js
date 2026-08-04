@@ -1,6 +1,6 @@
 (() => {
-  if ((globalThis.__elephruitClipperVersion || 0) >= 15) return;
-  globalThis.__elephruitClipperVersion = 15;
+  if ((globalThis.__elephruitClipperVersion || 0) >= 16) return;
+  globalThis.__elephruitClipperVersion = 16;
 
   // An already-open tab can retain the previous isolated-world script after an extension update.
   // Remove its detached UI before installing the new API so the next toolbar click cannot produce
@@ -22,7 +22,7 @@
   const REMOVE_WIKIPEDIA_CHROME = [
     ".vector-page-toolbar", ".vector-column-end", ".mw-indicators", ".mw-editsection",
     ".mw-jump-link", ".printfooter", ".catlinks", ".navbox", ".vertical-navbox",
-    "[role='navigation']"
+    ".vector-toc-landmark", ".mw-portlet-lang", "[role='navigation']"
   ].join(",");
 
   const POSITIVE = /article|body|content|entry|main|page|post|story|text/i;
@@ -79,7 +79,12 @@
 
   function clean(root, simplified = false) {
     const clone = root.cloneNode(true);
-    const capturedWidth = root.getBoundingClientRect().width;
+    const isWikipedia = /(^|\.)wikipedia\.org$/i.test(location.hostname);
+    const wikipediaBody = isWikipedia
+      ? root.querySelector("#bodyContent, .mw-body-content")
+      : null;
+    const capturedWidth = wikipediaBody?.getBoundingClientRect().width
+      || root.getBoundingClientRect().width;
     const sourceElements = [root, ...root.querySelectorAll("*")];
     const clonedElements = [clone, ...clone.querySelectorAll("*")];
     const fidelityStyles = new Map();
@@ -104,8 +109,9 @@
     });
     clone.querySelectorAll(REMOVE_UNSAFE).forEach((node) => node.remove());
     if (simplified) clone.querySelectorAll(REMOVE_SIMPLIFIED).forEach((node) => node.remove());
-    if (/(^|\.)wikipedia\.org$/i.test(location.hostname)) {
+    if (isWikipedia) {
       clone.querySelectorAll(REMOVE_WIKIPEDIA_CHROME).forEach((node) => node.remove());
+      clone.querySelectorAll(".mw-body-header > :not(#firstHeading)").forEach((node) => node.remove());
     }
     [clone, ...clone.querySelectorAll("*")].forEach((element) => {
       for (const attribute of [...element.attributes]) {
@@ -126,6 +132,30 @@
       const generatedStyle = fidelityStyles.get(element);
       if (generatedStyle) element.setAttribute("style", generatedStyle);
     });
+    if (isWikipedia) {
+      // Vector lays the page shell out with named CSS grid areas. Computed-style capture cannot
+      // retain those names, so replaying the shell as a grid can place the actual article well
+      // below an empty implicit track. Keep the article's own floats and tables intact while
+      // making only Wikipedia's outer shell a straightforward document flow.
+      clone.style.cssText = [
+        "display:block", "box-sizing:border-box", `width:${capturedWidth}px`,
+        "min-width:0", "max-width:none", "margin:0", "padding:0",
+        "background-color:transparent", "color:rgb(32, 33, 34)",
+        "font-family:sans-serif", "font-size:16px", "line-height:normal"
+      ].join(";");
+      const header = clone.querySelector(".mw-body-header");
+      if (header) {
+        header.style.display = "block";
+        header.style.width = "100%";
+        header.style.margin = "0 0 16px";
+      }
+      const body = clone.querySelector("#bodyContent, .mw-body-content");
+      if (body) {
+        body.style.display = "flow-root";
+        body.style.width = "100%";
+        body.style.margin = "0";
+      }
+    }
     if (capturedWidth > 0) clone.dataset.elephruitCapturedWidth = String(Math.round(capturedWidth * 100) / 100);
     return clone;
   }
@@ -640,7 +670,7 @@
   // that listener's empty response before the new listener answers. `scripting.executeScript` calls
   // this newest API explicitly, so upgrading never requires the user to reload their page.
   globalThis.__elephruitClipperAPI = {
-    version: 15,
+    version: 16,
     extract,
     captureContent,
     showArticleSelection,
