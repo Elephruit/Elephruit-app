@@ -3,90 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Clip to Elephruit</title>
+  <title>Open Elephruit Web Clipper</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <main class="shell">
-    <header class="brandbar">
-      <div class="brand">
-        <img src="elephruit-icon.png" alt="">
-        <span>Elephruit</span>
-      </div>
-      <div class="brand-actions">
-        <span class="local-badge"><i></i> Local</span>
-        <button id="close-panel" class="close-panel" type="button" aria-label="Close Elephruit Web Clipper" title="Close">×</button>
-      </div>
-    </header>
-
-    <section id="loading" class="loading-state">
-      <div class="spinner"></div>
-      <p>Reading this page…</p>
-    </section>
-
-    <form id="clip-form" hidden>
-      <section class="page-card">
-        <div class="favicon" id="site-letter">E</div>
-        <div class="page-copy">
-          <input id="title" class="title-input" aria-label="Clip title" maxlength="500">
-          <div id="source" class="source-line"></div>
-        </div>
-      </section>
-
-      <fieldset class="mode-picker">
-        <legend>Clip format</legend>
-        <div class="mode-grid">
-          <button type="button" class="mode active" data-mode="article"><span>▤</span>Article</button>
-          <button type="button" class="mode" data-mode="simplifiedArticle"><span>☰</span>Simplified</button>
-          <button type="button" class="mode" data-mode="selection"><span>◩</span>Selection</button>
-          <button type="button" class="mode" data-mode="fullPage"><span>▥</span>Full page</button>
-          <button type="button" class="mode" data-mode="bookmark"><span>↗</span>Bookmark</button>
-          <button type="button" class="mode" data-mode="screenshot"><span>⌗</span>Screenshot</button>
-        </div>
-      </fieldset>
-
-      <section id="article-boundary" class="article-boundary" hidden>
-        <button id="article-narrow" type="button" aria-label="Narrow article boundary" title="Narrow article boundary">−</button>
-        <div>
-          <strong id="article-boundary-count">Best article boundary</strong>
-          <span id="article-boundary-detail">Green outline shows what will be clipped</span>
-        </div>
-        <button id="article-expand" type="button" aria-label="Expand article boundary" title="Expand article boundary">+</button>
-      </section>
-
-      <section class="preview-card" aria-live="polite">
-        <div class="preview-label"><span>Preview</span><span id="preview-count"></span></div>
-        <div class="preview-content">
-          <img id="preview-image" class="preview-image" alt="" hidden>
-          <div id="preview" class="preview-copy"></div>
-        </div>
-      </section>
-
-      <label class="field">
-        <span>Add a note</span>
-        <textarea id="comment" rows="2" maxlength="4000" placeholder="Why are you keeping this?"></textarea>
-      </label>
-
-      <div class="field-row">
-        <label class="field">
-          <span>Tags</span>
-          <input id="tags" placeholder="research, design">
-        </label>
-        <label class="field">
-          <span>File under</span>
-          <input id="project" placeholder="Inbox">
-        </label>
-      </div>
-
-      <div id="status" class="status" role="status"></div>
-      <button id="save" class="save-button" type="submit"><span>Save clip</span><kbd>⌘↵</kbd></button>
-    </form>
-
-    <section id="error" class="error-state" hidden>
-      <div class="error-icon">!</div>
-      <h1>This page can’t be clipped</h1>
-      <p id="error-message">Open a regular web page and try again.</p>
-    </section>
+  <main>
+    <img src="elephruit-icon.png" alt="">
+    <div>
+      <strong id="title">Opening Elephruit…</strong>
+      <p id="detail">Preparing the clipper on this page.</p>
+    </div>
+    <div class="spinner" id="spinner" aria-hidden="true"></div>
+    <button id="retry" type="button" hidden>Try again</button>
   </main>
   <script src="popup.js"></script>
 </body>

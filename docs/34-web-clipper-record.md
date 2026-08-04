@@ -41,12 +41,14 @@ panel belongs to the page instead of Safari's transient toolbar popover, clicks 
 reach their target and several adjustments can be made in one pass. Changing to a non-article mode
 removes the page overlay, as does closing the panel or completing the clip.
 
-The toolbar action has no popup document. Its nonpersistent Manifest V3 background worker sends a
-toggle command directly to the active tab, eliminating an intermediate “Reading this page” popover
-that could remain visible while Safari waited for page scripting. The right-side panel is ordinary
-isolated-world content rendered into a closed Shadow DOM; it is not an extension iframe embedded in
-the website. Screenshot and native-messaging operations are proxied through the background worker,
-so privileged extension APIs never run from Safari's website WebContent process. This avoids WebKit
+The toolbar action opens a tiny launcher popup that injects or invokes the newest page API, closes
+itself immediately, and hands the interaction to the right-side panel. Keeping this handshake in the
+toolbar popup gives Safari a durable user gesture for per-site “Ask” access and avoids depending on a
+nonpersistent Manifest V3 background worker waking in time for the click. The popup never extracts
+the page and never becomes the clipper UI. The right-side panel is ordinary isolated-world content
+rendered into a closed Shadow DOM; it is not an extension iframe embedded in the website. Screenshot,
+image-download, and native-messaging operations are proxied through the background worker, so
+privileged extension APIs never run from Safari's website WebContent process. This avoids WebKit
 rejecting an invalid extension IPC message and terminating the tab.
 
 Panel-to-page commands call a versioned API in the extension's isolated world. This is more than
