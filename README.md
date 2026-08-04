@@ -44,7 +44,8 @@ in the app at all.
 
 <div align="center">
 
-**[Capture](#capture-in-under-four-seconds)** · **[Search](#search-that-actually-narrows)** ·
+**[Capture](#capture-in-under-four-seconds)** · **[Web Clipper](#save-the-web-without-sending-it-away)** ·
+**[Search](#search-that-actually-narrows)** ·
 **[Today](#a-today-that-has-seen-your-whole-day)** · **[Reminders](#reminders-with-the-parts-real-work-needs)** ·
 **[People](#people-who-remember-themselves)** · **[Calendar](#a-calendar-that-knows-the-rest-of-your-life)** ·
 **[Time](#time-tracking-that-survives-an-audit)** · **[Export](#your-data-leaves-whenever-you-want)**
@@ -101,6 +102,29 @@ start date instead
 
 The field shows you what it understood **before** you commit, so nothing is ever filed somewhere you
 didn't intend. Then it lands in the Inbox and you get back to what you were doing.
+
+<br>
+
+## Save the web without sending it away
+
+> *A Safari web clipper with a local destination.*
+
+The bundled Safari extension can save a cleaned article, the current selection, the full page, a
+bookmark, or a visible screenshot. Before saving, you can edit the title, add a note and tags, and
+file the result under an existing project. Article and page clips become searchable Markdown notes;
+cleaned HTML is retained as a managed attachment for fidelity. Screenshots are copied into the same
+attachment store as your other files.
+
+Nothing is uploaded. The extension reads only the page on which you invoke it, places an atomic clip
+envelope in the app-group inbox, and wakes Elephruit to import it. If importing is interrupted, the
+same clip resumes without duplicating the item or its attachments.
+
+To turn it on, run Elephruit, open **Settings → Web Clipper**, choose **Enable in Safari…**, and enable
+Elephruit Web Clipper. Pin it to Safari's toolbar if you use it often. A signed development or
+distribution build must provision the `group.com.elephruit.Elephruit` App Group for both targets.
+
+See [the implementation record](docs/34-web-clipper-record.md) for the capture contract, privacy
+boundary, signing requirement, and verification commands.
 
 <br>
 
