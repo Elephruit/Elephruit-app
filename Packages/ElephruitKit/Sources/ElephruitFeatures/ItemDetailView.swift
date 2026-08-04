@@ -102,8 +102,12 @@ public struct ItemDetailView: View {
                 brief: bodyBinding
             )
 
-        // Linked reminders open in Reminders. Project-specific work opens on its project board.
-        case .task, .reminder, .bug, .feature, .milestone, .release:
+        // A reminder reads and edits in place — the pane the module used to lack, which made
+        // every route to a reminder a dead end. Project-specific work still opens on its board.
+        case .task, .reminder:
+            ReminderDetailPane(reminder: item)
+
+        case .bug, .feature, .milestone, .release:
             WorkItemRedirect(item: item, navigation: navigation)
 
         case .bookmark:

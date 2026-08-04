@@ -580,7 +580,7 @@ struct SourceHygieneTests {
         let allowlisted: Set<String> = [
             "FloatingTimerView.swift", "KanbanBoardView.swift", "KindDetailViews.swift",
             "NoteWorkspacePanels.swift",
-            "ReminderComposer.swift", "SectionIndexBar.swift",
+            "SectionIndexBar.swift",
         ]
 
         let (offenders, stale) = metricScan(
@@ -605,8 +605,7 @@ struct SourceHygieneTests {
             "CaptureChipRow.swift", "Components.swift", "ContactOnboardingView.swift",
             "EventQuickEntry.swift", "KanbanBoardView.swift", "LinkedContactViews.swift",
             "MonthGrid.swift",
-            "ProjectsSidebarSection.swift", "ReminderComposer.swift",
-            "ReminderMonthPicker.swift", "SectionIndexBar.swift", "SwipeActionsRow.swift",
+            "ProjectsSidebarSection.swift", "ReminderMonthPicker.swift", "SectionIndexBar.swift", "SwipeActionsRow.swift",
             "TodayComponents.swift", "TodayPeopleViews.swift", "TodayRows.swift",
             "WorkItemCompletionControl.swift", "WorkItemDetailView.swift",
             "WorkItemViews.swift",
@@ -667,7 +666,7 @@ struct SourceHygieneTests {
             "BugTrackerView.swift", "CalendarAgendaView.swift", "CalendarMonthView.swift",
             "CalendarSearchView.swift", "CalendarTimeGrid.swift", "CaptureSuggestionSource.swift",
             "Components.swift", "ContactImportReviewView.swift", "MapPlaceSearchField.swift",
-            "ProjectCalendarView.swift", "ReminderComposer.swift", "TimeEntryEditing.swift",
+            "ProjectCalendarView.swift", "TimeEntryEditing.swift",
             "TimePickers.swift", "TodayRows.swift", "WorkItemDetailView.swift",
         ]
 
@@ -701,7 +700,6 @@ struct SourceHygieneTests {
         let allowlisted: Set<String> = [
             "BugTrackerView.swift", "EventEditorView.swift", "EventInspectorView.swift",
             "FloatingTimerView.swift", "KanbanBoardView.swift",
-            "ReminderComposer.swift",
             "RootView.swift", "TodayComponents.swift",
             "TodayDayView.swift", "TodayPeopleViews.swift", "TodayRows.swift", "TodayView.swift",
             "WorkItemDetailView.swift",

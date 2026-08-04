@@ -33,6 +33,104 @@ final class ReminderStore {
         return (try? items.items(matching: query)) ?? []
     }
 
+    /// The scheduling buckets the whole module rests on, in reading order.
+    ///
+    /// The list was one flat query in creation order — every reminder ever made, newest first,
+    /// with the overdue and the someday interleaved. These are the five answers the scheduling
+    /// model already distinguishes: a deadline that has passed, work that belongs to today, work
+    /// with a future date, work with no date, and work deliberately parked.
+    enum Section: String, CaseIterable, Identifiable {
+        case overdue, today, upcoming, anytime, someday
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .overdue: "Overdue"
+            case .today: "Today"
+            case .upcoming: "Upcoming"
+            case .anytime: "Anytime"
+            case .someday: "Someday"
+            }
+        }
+    }
+
+    struct SectionGroup: Identifiable {
+        let section: Section
+        let reminders: [Item]
+        var id: String { section.id }
+    }
+
+    /// The open reminders, bucketed and ordered. Absent sections are absent, not empty.
+    var sections: [SectionGroup] {
+        var query = ItemQuery()
+        query.kinds = [.reminder, .task]
+        query.scope = .active
+        query.statuses = [.open]
+        query.sort = .dueSoonestFirst
+        let open = (try? items.items(matching: query)) ?? []
+
+        var buckets: [Section: [Item]] = [:]
+        for reminder in open {
+            buckets[section(for: reminder), default: []].append(reminder)
+        }
+
+        return Section.allCases.compactMap { section in
+            guard var bucket = buckets[section], !bucket.isEmpty else { return nil }
+            switch section {
+            case .overdue:
+                // Oldest first — the thing most needing an answer is the one avoided longest.
+                bucket.sort { ($0.dueAt ?? .distantPast) < ($1.dueAt ?? .distantPast) }
+            case .today, .upcoming:
+                bucket.sort { relevantDate(of: $0) < relevantDate(of: $1) }
+            case .anytime, .someday:
+                bucket.sort { $0.createdAt > $1.createdAt }
+            }
+            return SectionGroup(section: section, reminders: bucket)
+        }
+    }
+
+    /// Completed reminders, newest completion first — behind the toolbar toggle.
+    var completed: [Item] {
+        var query = ItemQuery()
+        query.kinds = [.reminder, .task]
+        query.scope = .active
+        query.statuses = [.completed]
+        query.sort = .createdNewestFirst
+        let done = (try? items.items(matching: query)) ?? []
+        return done.sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
+    }
+
+    /// Which bucket one reminder belongs to.
+    ///
+    /// A deadline decides ahead of a start date, because only a deadline can make anything late;
+    /// a past start date without a deadline is *available*, which is what Anytime means.
+    func section(for reminder: Item) -> Section {
+        if reminder.isSomeday { return .someday }
+
+        let calendar = dateProvider.calendar
+        let today = dateProvider.startOfToday
+
+        if let due = reminder.dueAt {
+            if due < today { return .overdue }
+            if calendar.isDate(due, inSameDayAs: today) { return .today }
+            return .upcoming
+        }
+
+        if let start = reminder.startAt {
+            if start <= today || calendar.isDate(start, inSameDayAs: today) {
+                return calendar.isDate(start, inSameDayAs: today) ? .today : .anytime
+            }
+            return .upcoming
+        }
+
+        return .anytime
+    }
+
+    private func relevantDate(of reminder: Item) -> Date {
+        reminder.dueAt ?? reminder.startAt ?? .distantFuture
+    }
+
     @discardableResult
     func create(
         from draft: ReminderComposerDraft,
