@@ -92,7 +92,29 @@ public struct ItemListView: View {
                 guard navigation.isSearchActive else { return }
                 focusSearchField(selectingContents: !(session?.text.isEmpty ?? true))
             }
+            // Type-to-select — the baseline list behaviour of Finder and every NSTableView. The
+            // buffer existed, fully tested, wired to nothing.
+            .onKeyPress(characters: .alphanumerics, phases: .down) { press in
+                handleTypeToSelect(press.characters)
+            }
             .accessibilityIdentifier(AccessibilityID.ItemList.root)
+    }
+
+    /// Accumulated keystrokes, jumping the selection to the first title with that prefix.
+    @State private var typeToSelect = TypeToSelectBuffer()
+
+    private func handleTypeToSelect(_ characters: String) -> KeyPress.Result {
+        // Not while searching (typing is the query) and not while a field has the keyboard.
+        guard !navigation.isSearchActive, !isSearchFieldFocused else { return .ignored }
+        guard let first = characters.first else { return .ignored }
+
+        let now = services?.dateProvider.now ?? Date()
+        let prefix = typeToSelect.append(first, at: now).lowercased()
+
+        guard let match = items.first(where: { $0.displayTitle.lowercased().hasPrefix(prefix) })
+        else { return .ignored }
+        navigation.selectItem(match.id)
+        return .handled
     }
 
     /// The one search field.

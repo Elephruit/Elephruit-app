@@ -478,6 +478,11 @@ private struct HoverHighlightModifier: ViewModifier {
 
     @State private var isHovering = false
 
+    /// Keyboard focus, from the nearest focusable ancestor. The highlight answers "what would I
+    /// hit if I acted here", and Tab asks that question as legitimately as the pointer does —
+    /// without this, keyboard users got no fill where mouse users got one.
+    @Environment(\.isFocused) private var isFocused
+
     func body(content: Content) -> some View {
         content
             .background {
@@ -495,7 +500,7 @@ private struct HoverHighlightModifier: ViewModifier {
 
     /// Selection wins. A row cannot usefully be both the thing you are looking at and the thing
     /// you might click next.
-    private var isVisible: Bool { isEnabled && isHovering }
+    private var isVisible: Bool { isEnabled && (isHovering || isFocused) }
 }
 
 // MARK: - Empty state

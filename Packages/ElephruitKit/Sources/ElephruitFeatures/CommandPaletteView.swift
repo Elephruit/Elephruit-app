@@ -104,6 +104,10 @@ public struct CommandPaletteView: View {
         }
         .frame(width: 560, height: 420)
         .background(.regularMaterial)
+        // Declarative rather than an onAppear write alone: `defaultFocus` is what tells the
+        // focus system where a fresh presentation starts, and it survives the representation
+        // timing the appearance write used to race against.
+        .defaultFocus($isFieldFocused, true)
         .onAppear {
             isFieldFocused = true
             refreshItemMatches()
