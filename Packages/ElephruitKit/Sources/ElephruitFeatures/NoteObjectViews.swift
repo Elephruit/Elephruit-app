@@ -149,7 +149,7 @@ private struct NoteWebClipFace: View {
 
             if let html {
                 SelectableWebClipView(html: html, capturedWidth: capturedWidth)
-                    .frame(maxWidth: capturedWidth)
+                    .frame(width: capturedWidth)
                     .frame(maxWidth: .infinity)
             } else if resolved {
                 HStack(spacing: Theme.Spacing.small) {
@@ -232,7 +232,9 @@ private struct SelectableWebClipView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSTextView {
-        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 800, height: 120))
+        let textView = NSTextView(
+            frame: NSRect(x: 0, y: 0, width: capturedWidth, height: 120)
+        )
         textView.isEditable = false
         textView.isSelectable = true
         textView.isRichText = true
@@ -245,6 +247,9 @@ private struct SelectableWebClipView: NSViewRepresentable {
         textView.textContainer?.heightTracksTextView = false
         textView.isHorizontallyResizable = false
         textView.isVerticallyResizable = true
+        // NSTextView otherwise paints every link with the system accent color, overriding the
+        // foreground colors captured from the page (for example, a white linked headline).
+        textView.linkTextAttributes = [.cursor: NSCursor.pointingHand]
         return textView
     }
 
@@ -268,21 +273,42 @@ private struct SelectableWebClipView: NSViewRepresentable {
 
     private func prepareForDisplay(_ rendered: NSMutableAttributedString) {
         let mediaWidth = max(capturedWidth - 30, 1)
+        var mediaReplacements: [(range: NSRange, content: NSAttributedString)] = []
         rendered.enumerateAttribute(
             .attachment,
             in: NSRange(location: 0, length: rendered.length)
-        ) { value, _, _ in
+        ) { value, range, _ in
             guard let attachment = value as? NSTextAttachment,
-                  let image = attachment.image,
+                  let image = attachment.image
+                    ?? attachment.contents.flatMap(NSImage.init(data:))
+                    ?? attachment.fileWrapper?.regularFileContents.flatMap(NSImage.init(data:)),
                   image.size.width > mediaWidth
             else { return }
             let scale = mediaWidth / image.size.width
-            attachment.bounds = NSRect(
-                x: 0,
-                y: 0,
-                width: mediaWidth,
-                height: image.size.height * scale
-            )
+            let displaySize = NSSize(width: mediaWidth, height: image.size.height * scale)
+            let displayImage = NSImage(
+                size: displaySize,
+                flipped: false
+            ) { destination in
+                NSGraphicsContext.current?.imageInterpolation = .high
+                image.draw(
+                    in: destination,
+                    from: NSRect(origin: .zero, size: image.size),
+                    operation: .copy,
+                    fraction: 1
+                )
+                return true
+            }
+            let replacement = NSTextAttachment()
+            replacement.image = displayImage
+            replacement.bounds = NSRect(origin: .zero, size: displaySize)
+            mediaReplacements.append((range, NSAttributedString(attachment: replacement)))
+        }
+        // Replacing the glyph discards the HTML importer's original attachment cell. Merely
+        // changing its bounds leaves that cell's source-size drawing behavior in place, which
+        // crops large images to a black sliver when the clip is displayed at its saved width.
+        for replacement in mediaReplacements.reversed() {
+            rendered.replaceCharacters(in: replacement.range, with: replacement.content)
         }
 
         // AppKit applies its standard blue link color even when the captured page explicitly
@@ -300,7 +326,10 @@ private struct SelectableWebClipView: NSViewRepresentable {
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextView, context: Context) -> CGSize? {
-        guard let width = proposal.width, width > 0 else { return nil }
+        // The surrounding SwiftUI frame can offer the representable its compressed ideal width
+        // before expanding the wrapper. Laying out at that proposal clips a desktop capture to
+        // roughly half its saved width. Fidelity clips deliberately retain their capture measure.
+        let width = capturedWidth
         if abs(nsView.frame.width - width) > 0.5 {
             nsView.setFrameSize(NSSize(width: width, height: nsView.frame.height))
         }
