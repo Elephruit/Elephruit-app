@@ -91,6 +91,12 @@ struct PersonWorkspaceView: View {
                         onOpenSource: { navigation.selectItem($0) }
                     )
 
+                    // Promoted from the inspector, where a 1,280-point threshold once made it
+                    // unreachable at the default window: "what do we owe each other" is one of
+                    // the two questions a person's page exists to answer, and it was the one
+                    // hidden behind ⌥⌘I. The inspector keeps its fuller version.
+                    PersonOpenThreadsSection(person: person, navigation: navigation)
+
                     PersonContactSection(
                         person: person,
                         onAction: { pendingAction = $0 },
