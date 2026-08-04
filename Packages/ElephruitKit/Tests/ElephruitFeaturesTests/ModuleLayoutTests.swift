@@ -134,11 +134,16 @@ struct ModuleLayoutTests {
         #expect(inspector.opensAfterSelection == false)
         #expect(inspector.shouldOpenAfterSelection() == false)
 
-        // And it is not offered at all until the profile already has room. Below this the
-        // arithmetic can satisfy every minimum and still leave the main content the narrowest
-        // thing on the screen.
+        // And it is not offered until every column's minimum fits beside it — but it *must* be
+        // reachable at the app's own default window, because a pane whose threshold sits above
+        // `.defaultSize` is a pane ⌥⌘I cannot open in the window most people actually have. The
+        // threshold is the sum of the minimums: sidebar 240 + list 220 + profile 450 + its own 260.
         #expect(
-            inspector.isVisible(userWants: true, hasSelection: true, windowWidth: 1200) == false
+            inspector.isVisible(userWants: true, hasSelection: true, windowWidth: 1100) == false
+        )
+        #expect(
+            inspector.isVisible(userWants: true, hasSelection: true, windowWidth: 1180),
+            "reachable at the default window size"
         )
         #expect(inspector.isVisible(userWants: true, hasSelection: true, windowWidth: 1400))
     }

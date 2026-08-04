@@ -108,10 +108,14 @@ extension AppModule {
                     opensAfterSelection: false,
                     hidesWhenNothingSelected: true,
                     width: PaneWidth(minimum: 260, ideal: 300, maximum: 360),
-                    // Higher than it was. The inspector may only appear once the profile already has
-                    // the room it needs; below this the arithmetic can satisfy every minimum and
-                    // still leave the main content the narrowest thing on screen.
-                    compactWindowWidth: 1280
+                    // Derived from the minimums rather than picked: sidebar 240 + list 220 +
+                    // profile 450 + inspector 260 = 1,170, which the app's own 1,180-point default
+                    // window clears. This was 1,280 — a threshold above the default size, which
+                    // made ⌥⌘I a no-op in every window nobody had widened, and the pane that
+                    // answers "what do I owe this person" unreachable in exactly the window most
+                    // people use. The proportional-slack arithmetic already guarantees no column
+                    // goes below its minimum on the way down.
+                    compactWindowWidth: 1170
                 )
             )
 

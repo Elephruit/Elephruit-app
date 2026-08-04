@@ -333,6 +333,46 @@ struct ModuleNavigationTests {
         #expect(NavigationModel.RestorationState(encoded: "{\"module\":\"telepathy\"}") == nil)
     }
 
+    @Test("The item being read, the layout mode, and the inspector come back with the window")
+    func restorationCarriesTheReadingState() throws {
+        // The single biggest cause of the empty-pane relaunch: everything about the window came
+        // back except the one thing being read, so every launch opened onto "Nothing selected".
+        let navigation = NavigationModel()
+        let itemID = UUID()
+
+        navigation.enterModule(.notes)
+        navigation.select(.kind(.note))
+        navigation.selectItem(itemID)
+        navigation.isInspectorVisible = false
+        navigation.setLayoutMode(.twoPane)
+
+        let encoded = try #require(navigation.restorationState.encoded)
+        let restored = NavigationModel()
+        restored.restore(try #require(NavigationModel.RestorationState(encoded: encoded)))
+
+        #expect(restored.selectedItemID == itemID, "the item being read comes back")
+        #expect(restored.layoutMode == .twoPane, "a collapsed sidebar stays collapsed")
+        restored.enterModule(.notes)
+        #expect(restored.isInspectorVisible == false, "a closed inspector stays closed")
+    }
+
+    @Test("A scene written before the reading state existed still decodes")
+    func olderSceneStringsStillDecode() throws {
+        // A state with none of the new fields encodes without their keys — which makes the string
+        // byte-for-byte what an earlier build wrote, and decoding it is the compatibility claim.
+        // Losing the whole scene over an absent key would trade one empty pane for a window that
+        // forgot where it was.
+        let older = try #require(
+            NavigationModel.RestorationState(module: .notes, selection: .kind(.note)).encoded
+        )
+        #expect(!older.contains("selectedItemID"), "nil optionals must stay absent, not null")
+        #expect(!older.contains("layoutMode"))
+
+        let state = try #require(NavigationModel.RestorationState(encoded: older))
+        #expect(state.selectedItemID == nil)
+        #expect(state.layoutMode == nil)
+    }
+
     // MARK: - Deep links
 
     @Test("A calendar deep link enters the Calendar module")

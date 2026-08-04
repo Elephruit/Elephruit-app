@@ -423,9 +423,11 @@ public final class NavigationModel {
     /// said it in. Opening the event inspector to check a meeting's guest list should not mean that
     /// every note you open for the rest of the session arrives with a field editor beside it.
     ///
-    /// Per *window*, not persisted, unlike the widths: a width is an opinion about the module and a
-    /// window's open panes are the shape of this window's session. Two windows in People are
-    /// entitled to disagree about whether the context sidebar is showing.
+    /// Per *window*: a width is an opinion about the module, but a window's open panes are the
+    /// shape of this window's session, and two windows in People are entitled to disagree about
+    /// whether the context sidebar is showing. It restores with the window all the same — through
+    /// ``RestorationState``, which is scene storage and therefore per window too — so each window
+    /// keeps its own shape rather than forgetting it.
     ///
     /// A module absent from the dictionary uses its own policy's answer, so a module whose
     /// inspector is the point of it does not start closed.
@@ -721,16 +723,45 @@ public final class NavigationModel {
         /// build — which never recorded it — still decodes; `nil` restores to the log.
         public var timeSurface: TimeSurface?
 
+        /// The item the detail pane was showing.
+        ///
+        /// The single biggest cause of the empty-pane relaunch: everything else about the window
+        /// came back and the one thing being read did not, so every launch opened onto
+        /// "Nothing selected". Optional twice over — an older scene never wrote it, and the item
+        /// may since have been deleted, in which case the detail pane's own empty state is the
+        /// honest answer.
+        public var selectedItemID: UUID?
+
+        /// The window's layout mode, so a sidebar someone collapsed stays collapsed.
+        public var layoutMode: LayoutMode?
+
+        /// Which modules had their inspector open or closed, and the same for primary navigation.
+        ///
+        /// Per window like the live dictionary it mirrors — `@SceneStorage` is per scene, so two
+        /// windows still get to disagree; what stops is one window forgetting its own shape.
+        /// Split into two fields because a dictionary keyed by an *optional* module does not
+        /// round-trip through `Codable`.
+        public var moduleInspectorVisibility: [AppModule: Bool]?
+        public var primaryInspectorVisible: Bool?
+
         public init(
             module: AppModule?,
             selection: SidebarSelection,
             moduleSelections: [AppModule: SidebarSelection] = [:],
-            timeSurface: TimeSurface? = nil
+            timeSurface: TimeSurface? = nil,
+            selectedItemID: UUID? = nil,
+            layoutMode: LayoutMode? = nil,
+            moduleInspectorVisibility: [AppModule: Bool]? = nil,
+            primaryInspectorVisible: Bool? = nil
         ) {
             self.module = module
             self.selection = selection
             self.moduleSelections = moduleSelections
             self.timeSurface = timeSurface
+            self.selectedItemID = selectedItemID
+            self.layoutMode = layoutMode
+            self.moduleInspectorVisibility = moduleInspectorVisibility
+            self.primaryInspectorVisible = primaryInspectorVisible
         }
 
         /// Encoded for `@SceneStorage`, which stores strings.
@@ -752,11 +783,25 @@ public final class NavigationModel {
     }
 
     public var restorationState: RestorationState {
-        RestorationState(
+        var moduleVisibility: [AppModule: Bool] = [:]
+        var primaryVisibility: Bool?
+        for (module, isOpen) in inspectorVisibility {
+            if let module {
+                moduleVisibility[module] = isOpen
+            } else {
+                primaryVisibility = isOpen
+            }
+        }
+
+        return RestorationState(
             module: activeModule,
             selection: selection,
             moduleSelections: moduleSelections,
-            timeSurface: timeSurface
+            timeSurface: timeSurface,
+            selectedItemID: selectedItemID,
+            layoutMode: layoutMode,
+            moduleInspectorVisibility: moduleVisibility.isEmpty ? nil : moduleVisibility,
+            primaryInspectorVisible: primaryVisibility
         )
     }
 
@@ -777,6 +822,23 @@ public final class NavigationModel {
                 // A tag or a pinned item, which belongs to no module of its own but was being read
                 // inside one.
                 activeModule = module
+            }
+
+            // After `select`, which clears the selection as part of changing destination — the
+            // order is the difference between restoring the item being read and wiping it.
+            if let id = state.selectedItemID {
+                selectItem(id)
+            }
+
+            if let mode = state.layoutMode {
+                layoutMode = mode
+            }
+
+            for (module, isOpen) in state.moduleInspectorVisibility ?? [:] {
+                inspectorVisibility[module] = isOpen
+            }
+            if let primaryVisibility = state.primaryInspectorVisible {
+                inspectorVisibility[AppModule?.none] = primaryVisibility
             }
         }
     }
