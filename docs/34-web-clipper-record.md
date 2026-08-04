@@ -7,7 +7,9 @@ into the local Elephruit library. It supports six modes:
 
 - **Article** finds the primary readable story. On a feed with several `<article>` regions, it uses
   the substantial story nearest the current viewport instead of swallowing the entire feed. It
-  removes navigation, advertising, forms, scripts, and other page chrome.
+  removes navigation, advertising, forms, scripts, and other page chrome. When selected, the live
+  page dims outside a green article boundary. Paired − / + controls walk through meaningful DOM
+  ancestors so the user can narrow or expand exactly what the preview and saved clip contain.
 - **Simplified article** keeps the readable region while also stripping site-specific presentation.
 - **Selection** saves the current DOM selection with its source metadata.
 - **Full page** saves a sequence of readable, full-width visual panels. The note renders adjacent
@@ -24,6 +26,11 @@ simplified-article, selection,
 full-page, and screenshot clips become notes; bookmark clips remain bookmarks with a visual preview.
 Every clipped PNG and JPEG is passed through macOS Vision locally, and its recognized text joins the
 item's search projection without becoming visible note content.
+
+The boundary adjustment appears in both the popup and a floating control on the page. The duplicated
+control is intentional: Safari may dismiss a toolbar popover when focus moves back to page content,
+while the popup controls remain a reliable way to make several adjustments in one pass. Changing to
+a non-article mode removes the page overlay, as does closing the popup or completing the clip.
 
 ## Architecture
 

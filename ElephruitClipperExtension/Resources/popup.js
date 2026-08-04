@@ -1,4 +1,4 @@
-const state = { tab: null, page: null, mode: "article", busy: false };
+const state = { tab: null, page: null, mode: "article", busy: false, boundaryPromise: Promise.resolve() };
 const byID = (id) => document.getElementById(id);
 
 async function activeTab() {
@@ -8,14 +8,14 @@ async function activeTab() {
 
 async function extractPage(tabID) {
   try {
-    const page = await browser.tabs.sendMessage(tabID, { type: "elephruit.extract.v3" });
-    if (page?.schemaVersion === 3) return page;
+    const page = await browser.tabs.sendMessage(tabID, { type: "elephruit.extract.v4" });
+    if (page?.schemaVersion === 4) return page;
     throw new Error("This tab has an older page extractor.");
   } catch {
     // The tab may have been open before the extension was enabled or updated. Inject once so the
     // user does not have to reload; the guard in content.js makes this safe on already-prepared tabs.
     await browser.scripting.executeScript({ target: { tabId: tabID }, files: ["content.js"] });
-    return browser.tabs.sendMessage(tabID, { type: "elephruit.extract.v3" });
+    return browser.tabs.sendMessage(tabID, { type: "elephruit.extract.v4" });
   }
 }
 
@@ -38,7 +38,7 @@ async function loadPage() {
     document.querySelector("[data-mode='selection']").disabled = !state.page.selection;
     const saved = await browser.storage.local.get(["elephruitClipMode", "elephruitClipTags"]);
     const preferred = saved.elephruitClipMode;
-    selectMode(preferred === "selection" && !state.page.selection ? "article" : preferred || "article");
+    await selectMode(preferred === "selection" && !state.page.selection ? "article" : preferred || "article");
     byID("tags").value = saved.elephruitClipTags || "";
     byID("loading").hidden = true;
     byID("clip-form").hidden = false;
@@ -61,11 +61,7 @@ function contentFor(mode) {
   return { markdown: "", html: null, text: state.page.excerpt || state.page.article.text.slice(0, 500) };
 }
 
-function selectMode(mode) {
-  const button = document.querySelector(`[data-mode='${mode}']`);
-  if (!button || button.disabled) return;
-  state.mode = mode;
-  document.querySelectorAll(".mode").forEach((item) => item.classList.toggle("active", item === button));
+function renderPreview(mode) {
   const content = contentFor(mode);
   byID("preview").textContent = content.text || "This clip will keep the page title and original link.";
   const image = content.images?.[0] || state.page.article?.images?.[0];
@@ -79,6 +75,53 @@ function selectMode(mode) {
   }
   const count = content.text?.length || 0;
   byID("preview-count").textContent = mode === "screenshot" ? "Visible area" : mode === "fullPage" ? "Page + searchable text" : count ? `${count.toLocaleString()} characters` : "Link + preview";
+}
+
+function applyArticleBoundary(payload) {
+  if (!payload?.article) return;
+  state.page.article = payload.article;
+  state.page.simplifiedArticle = payload.simplifiedArticle || payload.article;
+  const boundary = payload.boundary || {};
+  byID("article-boundary-count").textContent = boundary.levelCount > 1
+    ? `Boundary ${boundary.level || 1} of ${boundary.levelCount}`
+    : "Best article boundary";
+  byID("article-narrow").disabled = !boundary.canNarrow;
+  byID("article-expand").disabled = !boundary.canExpand;
+  byID("article-boundary-detail").textContent = `${Number(boundary.characterCount || 0).toLocaleString()} characters selected`;
+  if (["article", "simplifiedArticle"].includes(state.mode)) renderPreview(state.mode);
+}
+
+async function syncArticleBoundary(mode) {
+  const showsBoundary = ["article", "simplifiedArticle"].includes(mode);
+  byID("article-boundary").hidden = !showsBoundary;
+  if (showsBoundary) {
+    applyArticleBoundary(await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.article.show.v4" }));
+  } else {
+    await browser.tabs.sendMessage(state.tab.id, { type: "elephruit.article.hide.v4" }).catch(() => {});
+  }
+}
+
+async function selectMode(mode) {
+  const button = document.querySelector(`[data-mode='${mode}']`);
+  if (!button || button.disabled) return;
+  state.mode = mode;
+  document.querySelectorAll(".mode").forEach((item) => item.classList.toggle("active", item === button));
+  renderPreview(mode);
+  const operation = syncArticleBoundary(mode);
+  state.boundaryPromise = operation;
+  await operation;
+}
+
+async function adjustArticleBoundary(delta) {
+  if (state.busy) return;
+  byID("article-narrow").disabled = true;
+  byID("article-expand").disabled = true;
+  const operation = browser.tabs.sendMessage(state.tab.id, {
+    type: "elephruit.article.adjust.v4",
+    delta
+  }).then(applyArticleBoundary);
+  state.boundaryPromise = operation;
+  await operation;
 }
 
 function tagSlugs() {
@@ -245,6 +288,7 @@ async function save(event) {
   setStatus("");
 
   try {
+    await state.boundaryPromise;
     const content = contentFor(state.mode);
     const tags = tagSlugs();
     setStatus(state.mode === "fullPage" ? "Capturing the full page…" : "Preserving the page…");
@@ -297,9 +341,27 @@ function showFatal(message) {
   byID("error-message").textContent = message;
 }
 
-document.querySelectorAll(".mode").forEach((button) => button.addEventListener("click", () => selectMode(button.dataset.mode)));
+document.querySelectorAll(".mode").forEach((button) => button.addEventListener("click", () => {
+  selectMode(button.dataset.mode).catch((error) => setStatus(readableError(error)));
+}));
+byID("article-narrow").addEventListener("click", () => {
+  adjustArticleBoundary(-1).catch((error) => setStatus(readableError(error)));
+});
+byID("article-expand").addEventListener("click", () => {
+  adjustArticleBoundary(1).catch((error) => setStatus(readableError(error)));
+});
+browser.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type === "elephruit.article.changed.v4"
+      && sender?.tab?.id === state.tab?.id
+      && ["article", "simplifiedArticle"].includes(state.mode)) {
+    applyArticleBoundary(message.payload);
+  }
+});
 byID("clip-form").addEventListener("submit", save);
 document.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && event.metaKey) byID("clip-form").requestSubmit();
+});
+window.addEventListener("pagehide", () => {
+  if (state.tab?.id) browser.tabs.sendMessage(state.tab.id, { type: "elephruit.article.hide.v4" }).catch(() => {});
 });
 loadPage();

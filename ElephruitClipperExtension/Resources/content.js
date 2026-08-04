@@ -1,12 +1,13 @@
 (() => {
-  if ((globalThis.__elephruitClipperVersion || 0) >= 3) return;
-  globalThis.__elephruitClipperVersion = 3;
+  if ((globalThis.__elephruitClipperVersion || 0) >= 4) return;
+  globalThis.__elephruitClipperVersion = 4;
 
   const REMOVE = [
     "script", "style", "noscript", "template", "nav", "form", "button", "input", "select",
     "textarea", "dialog", "iframe", "canvas", "svg", "video", "audio", "object", "embed",
     "[aria-hidden='true']", "[hidden]", ".advertisement", ".advert", ".ads", ".cookie-banner",
-    ".newsletter", ".paywall", ".social-share", ".related", ".comments"
+    ".newsletter", ".paywall", ".social-share", ".related", ".comments",
+    "[data-elephruit-clipper-ui]"
   ].join(",");
 
   const POSITIVE = /article|body|content|entry|main|page|post|story|text/i;
@@ -148,6 +149,179 @@
     return winner;
   }
 
+  let articleSelection = null;
+  let articleOverlay = null;
+
+  function articleSelectionLevels(root) {
+    const levels = [root];
+    const originalTextLength = Math.max(root.innerText?.trim().length || 0, 1);
+    let previous = root;
+    let candidate = root.parentElement;
+
+    while (candidate && candidate !== document.body && candidate !== document.documentElement && levels.length < 7) {
+      const textLength = candidate.innerText?.trim().length || 0;
+      const identity = `${candidate.tagName} ${candidate.id} ${candidate.className}`;
+      const rect = candidate.getBoundingClientRect();
+      const previousRect = previous.getBoundingClientRect();
+      const visualGrowth = Math.abs(rect.width - previousRect.width) >= 36
+        || Math.abs(rect.height - previousRect.height) >= 48;
+      const textGrowth = textLength >= (previous.innerText?.trim().length || 0) * 1.05;
+      const isMeaningful = rect.width >= 180
+        && rect.height >= 120
+        && textLength >= originalTextLength
+        && textLength <= originalTextLength * 3.5
+        && linkDensity(candidate) < 0.72
+        && !NEGATIVE.test(identity)
+        && (visualGrowth || textGrowth || /article|main|content|entry|page|post|story/i.test(identity));
+      if (isMeaningful) {
+        levels.push(candidate);
+        previous = candidate;
+      }
+      candidate = candidate.parentElement;
+    }
+    return levels;
+  }
+
+  function ensureArticleSelection() {
+    if (articleSelection?.levels?.[0]?.isConnected) return articleSelection;
+    const root = articleRoot();
+    articleSelection = { levels: articleSelectionLevels(root), index: 0 };
+    return articleSelection;
+  }
+
+  function selectedArticleRoot() {
+    const selection = ensureArticleSelection();
+    return selection.levels[selection.index] || selection.levels[0];
+  }
+
+  function makeOverlay() {
+    if (articleOverlay?.host?.isConnected) return articleOverlay;
+    const host = document.createElement("div");
+    host.dataset.elephruitClipperUi = "article-boundary";
+    host.style.cssText = "position:fixed;inset:0;z-index:2147483647;pointer-events:none;";
+    const shadow = host.attachShadow({ mode: "closed" });
+    const style = document.createElement("style");
+    style.textContent = `
+      :host { all: initial; }
+      .shade { position: fixed; background: rgba(24, 31, 26, .58); pointer-events: none; }
+      .outline { position: fixed; border: 3px solid #24a148; box-sizing: border-box;
+        box-shadow: 0 0 0 1px rgba(255,255,255,.82), 0 3px 18px rgba(0,0,0,.26);
+        pointer-events: none; }
+      .controls { position: fixed; display: flex; overflow: hidden; border: 1px solid rgba(255,255,255,.2);
+        border-radius: 7px; background: #25302a; box-shadow: 0 3px 12px rgba(0,0,0,.3);
+        pointer-events: auto; transform: translate(-50%, -50%); }
+      button { width: 38px; height: 30px; padding: 0; border: 0; background: transparent; color: white;
+        font: 700 20px/30px -apple-system, BlinkMacSystemFont, sans-serif; cursor: pointer; }
+      button + button { border-left: 1px solid rgba(255,255,255,.18); }
+      button:hover:not(:disabled) { background: #347244; }
+      button:disabled { color: rgba(255,255,255,.28); cursor: default; }
+    `;
+    const shades = Array.from({ length: 4 }, () => {
+      const shade = document.createElement("div");
+      shade.className = "shade";
+      shadow.append(shade);
+      return shade;
+    });
+    const outline = document.createElement("div");
+    outline.className = "outline";
+    const controls = document.createElement("div");
+    controls.className = "controls";
+    const narrower = document.createElement("button");
+    narrower.type = "button";
+    narrower.textContent = "−";
+    narrower.title = "Narrow article boundary";
+    narrower.setAttribute("aria-label", narrower.title);
+    const broader = document.createElement("button");
+    broader.type = "button";
+    broader.textContent = "+";
+    broader.title = "Expand article boundary";
+    broader.setAttribute("aria-label", broader.title);
+    narrower.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      adjustArticleSelection(-1, true);
+    });
+    broader.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      adjustArticleSelection(1, true);
+    });
+    controls.append(narrower, broader);
+    shadow.append(style, outline, controls);
+    document.documentElement.append(host);
+    articleOverlay = { host, shades, outline, controls, narrower, broader };
+    return articleOverlay;
+  }
+
+  function renderArticleOverlay() {
+    if (!articleOverlay?.host?.isConnected) return;
+    const selection = ensureArticleSelection();
+    const rect = selectedArticleRoot().getBoundingClientRect();
+    const left = Math.max(0, Math.min(window.innerWidth, rect.left));
+    const right = Math.max(left, Math.min(window.innerWidth, rect.right));
+    const top = Math.max(0, Math.min(window.innerHeight, rect.top));
+    const bottom = Math.max(top, Math.min(window.innerHeight, rect.bottom));
+    const width = Math.max(0, right - left);
+    const height = Math.max(0, bottom - top);
+    const [above, below, before, after] = articleOverlay.shades;
+    above.style.cssText = `left:0;top:0;width:100vw;height:${top}px`;
+    below.style.cssText = `left:0;top:${bottom}px;width:100vw;height:${Math.max(0, window.innerHeight - bottom)}px`;
+    before.style.cssText = `left:0;top:${top}px;width:${left}px;height:${height}px`;
+    after.style.cssText = `left:${right}px;top:${top}px;width:${Math.max(0, window.innerWidth - right)}px;height:${height}px`;
+    articleOverlay.outline.style.cssText = `left:${left}px;top:${top}px;width:${width}px;height:${height}px`;
+    articleOverlay.controls.style.left = `${left + width / 2}px`;
+    articleOverlay.controls.style.top = `${Math.max(17, Math.min(window.innerHeight - 17, top))}px`;
+    articleOverlay.narrower.disabled = selection.index === 0;
+    articleOverlay.broader.disabled = selection.index >= selection.levels.length - 1;
+  }
+
+  function articleSelectionPayload() {
+    const selection = ensureArticleSelection();
+    const root = selectedArticleRoot();
+    return {
+      article: snapshot(root),
+      simplifiedArticle: snapshot(root, true),
+      boundary: {
+        level: selection.index + 1,
+        levelCount: selection.levels.length,
+        canNarrow: selection.index > 0,
+        canExpand: selection.index < selection.levels.length - 1,
+        characterCount: root.innerText?.trim().length || 0
+      }
+    };
+  }
+
+  function showArticleSelection() {
+    const root = selectedArticleRoot();
+    const overlay = makeOverlay();
+    overlay.host.hidden = false;
+    if (root.getBoundingClientRect().bottom < 80 || root.getBoundingClientRect().top > window.innerHeight - 80) {
+      root.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    renderArticleOverlay();
+    return articleSelectionPayload();
+  }
+
+  function hideArticleSelection() {
+    if (articleOverlay?.host) articleOverlay.host.remove();
+    articleOverlay = null;
+    return true;
+  }
+
+  function adjustArticleSelection(delta, announce = false) {
+    const selection = ensureArticleSelection();
+    selection.index = Math.max(0, Math.min(selection.levels.length - 1, selection.index + delta));
+    renderArticleOverlay();
+    const payload = articleSelectionPayload();
+    if (announce) {
+      browser.runtime.sendMessage({ type: "elephruit.article.changed.v4", payload }).catch(() => {});
+    }
+    return payload;
+  }
+
+  window.addEventListener("scroll", renderArticleOverlay, { passive: true });
+  window.addEventListener("resize", renderArticleOverlay, { passive: true });
+
   function selectedRoot() {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !selection.toString().trim()) return null;
@@ -216,7 +390,7 @@
   }
 
   function extract() {
-    const root = articleRoot();
+    const root = selectedArticleRoot();
     const article = snapshot(root);
     const simplifiedArticle = snapshot(root, true);
     const fullPage = snapshot(document.body);
@@ -226,7 +400,7 @@
     const description = meta("meta[name='description']", "meta[property='og:description']", "meta[name='twitter:description']");
 
     return {
-      schemaVersion: 3,
+      schemaVersion: 4,
       title: meta("meta[property='og:title']", "meta[name='twitter:title']") || document.title || location.hostname,
       sourceURL: location.href,
       canonicalURL: canonical,
@@ -303,7 +477,12 @@
   }
 
   browser.runtime.onMessage.addListener((message) => {
-    if (message?.type === "elephruit.extract.v3") return Promise.resolve(extract());
+    if (message?.type === "elephruit.extract.v4") return Promise.resolve(extract());
+    if (message?.type === "elephruit.article.show.v4") return Promise.resolve(showArticleSelection());
+    if (message?.type === "elephruit.article.adjust.v4") {
+      return Promise.resolve(adjustArticleSelection(Number(message.delta) || 0));
+    }
+    if (message?.type === "elephruit.article.hide.v4") return Promise.resolve(hideArticleSelection());
     if (message?.type === "elephruit.capture.start.v3") return Promise.resolve(beginCapture());
     if (message?.type === "elephruit.capture.scroll.v3") return scrollCapture(Number(message.y) || 0);
     if (message?.type === "elephruit.capture.finish.v3") return finishCapture();

@@ -45,6 +45,15 @@ legend, .field > span { display: block; margin-bottom: 7px; color: #4c544d; font
 .mode.active { border-color: rgba(61, 111, 75, .65); background: var(--accent-soft); color: #285c38; box-shadow: inset 0 0 0 1px rgba(61, 111, 75, .12); }
 .mode:disabled { opacity: .38; cursor: not-allowed; }
 
+.article-boundary { display: grid; grid-template-columns: 34px 1fr 34px; align-items: center; gap: 9px; margin: -4px 0 13px; padding: 8px; border: 1px solid rgba(61, 111, 75, .28); border-radius: 10px; background: var(--accent-soft); }
+.article-boundary div { min-width: 0; }
+.article-boundary strong, .article-boundary span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.article-boundary strong { color: #285c38; font-size: 11px; line-height: 15px; }
+.article-boundary span { color: var(--muted); font-size: 9.5px; line-height: 14px; }
+.article-boundary button { width: 34px; height: 30px; padding: 0; border: 1px solid rgba(61, 111, 75, .35); border-radius: 7px; background: var(--surface); color: var(--accent); font-size: 20px; font-weight: 650; line-height: 27px; cursor: pointer; }
+.article-boundary button:hover:not(:disabled) { border-color: var(--accent); background: #f6faf5; }
+.article-boundary button:disabled { opacity: .28; cursor: default; }
+
 .preview-card { height: 116px; margin-bottom: 13px; padding: 10px 11px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #fafbf9; }
 .preview-label { display: flex; justify-content: space-between; margin-bottom: 6px; color: #788078; font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .preview-content { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
@@ -78,6 +87,8 @@ kbd { padding: 2px 5px; border: 1px solid rgba(255,255,255,.25); border-radius: 
   .brandbar { background: linear-gradient(180deg, #292d29, #242824); }
   .mode:hover, .preview-card { background: #272c27; }
   .mode.active { color: #a9d7b3; }
+  .article-boundary strong { color: #a9d7b3; }
+  .article-boundary button:hover:not(:disabled) { background: #314336; }
   .field > span, legend { color: #b5bcb5; }
   .preview-copy { color: #d1d5d1; }
 }
