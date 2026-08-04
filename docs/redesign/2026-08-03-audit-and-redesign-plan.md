@@ -873,6 +873,13 @@ the app building warning-free with all seven test targets green (~2,430 tests).
   so the hygiene scans read them as decisions; its fonts/shadow/animation moved to
   value-identical tokens. **Standing rule: no visual changes to this module without explicit
   direction** (see memory: reminders-module-is-owner-polished).
+- **E4 narrowed after live testing.** Drag modifiers on `List` rows — `.draggable` or
+  `.onDrag` alike — suppress click-to-select on this OS (proven with the dev-gated click
+  diagnostics now living in `RootView`). List rows therefore carry no drag; filing under a
+  project keeps its context-menu path, kanban card drag is unaffected, and the sidebar's
+  drop target stays for any future source. Row-drag, if it returns, returns as a dedicated
+  grab handle. The same session removed the rows' inert `NavigationLink(value:)` wrappers,
+  which the split-view migration had turned into click-swallowing buttons with nowhere to go.
 - Deferred small items, folded into later work: swipe-action sets on their declared lists,
   `forSelectionType:` context menus, the project tab-bar-to-toolbar move, module-scoped
   search default.
