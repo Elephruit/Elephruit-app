@@ -10,9 +10,10 @@ into the local Elephruit library. It supports six modes:
   removes navigation, advertising, forms, scripts, and other page chrome. When selected, the live
   page dims outside a green article boundary. Paired − / + controls walk through meaningful DOM
   ancestors so the user can narrow or expand exactly what the preview and saved clip contain. The
-  initial boundary is the broadest of as many as three visually distinct regions: the story, its
-  article column, and the surrounding content grid. Repeated − clicks contract through those levels;
-  + expands through them again. Large feed ancestors are accepted based on their geometry rather
+  initial boundary is the detected story. Repeated − clicks contract through useful inner regions
+  such as the title and title bar; + expands through the article, feed, content grid, application
+  wrapper, and page body. Visually identical wrapper divs are collapsed, with as many as ten real
+  containment levels retained. Large feed ancestors are accepted based on their geometry rather
   than rejected merely because they contain substantially more text than the focused story.
 - **Simplified article** keeps the readable region while also stripping site-specific presentation.
 - **Selection** saves the current DOM selection with its source metadata.
@@ -26,9 +27,12 @@ into the local Elephruit library. It supports six modes:
 The toolbar item toggles a fixed panel at the page's right edge. The panel lets the user revise the
 title, preview the extracted text and a representative image, add a note and tags, and name an
 existing project for filing without covering the primary reading column. Article images are
-downloaded into the local library and placed in their original reading order in the resulting note. Article,
-simplified-article, selection,
-full-page, and screenshot clips become notes; bookmark clips remain bookmarks with a visual preview.
+downloaded into the local library and retain their original position in the resulting document.
+Article and selection clips preserve their sanitized DOM with computed styles, so typography,
+colors, spacing, borders, tables, and columns remain recognizable while the text stays live and
+selectable. The app does not repeat a flattened Markdown copy beneath that document. Article,
+simplified-article, selection, full-page, and screenshot clips become notes; bookmark clips remain
+bookmarks with a visual preview.
 Every clipped PNG and JPEG is passed through macOS Vision locally, and its recognized text joins the
 item's search projection without becoming visible note content.
 
@@ -65,12 +69,13 @@ is idempotent: a retry reuses the stable clip identifier and completes any missi
 
 ```text
 Safari page
-  → content extractor (Markdown, cleaned HTML, metadata, image candidates)
+  → content extractor (Markdown, styled sanitized HTML, metadata, image candidates)
   → right-side extension panel (review and filing)
   → native extension handler
   → App Group inbox (atomic JSON)
   → Elephruit importer
-  → item + provenance + tags + managed attachments
+  → item + provenance + tags + managed HTML/image attachments
+  → inert selectable document view backed only by local attachments
   → on-device image OCR → attachment search metadata
 ```
 
@@ -83,7 +88,9 @@ Safari page
 - It does not upload, synchronize, or call a remote API.
 - Only HTTP and HTTPS source URLs are accepted.
 - Text, screenshot, and downloaded-image payloads have explicit size limits before persistence.
-- Extracted HTML removes executable and distracting elements before it enters the app.
+- Extracted HTML removes executable and distracting elements before it enters the app. The saved
+  document adds a restrictive Content Security Policy, disables page JavaScript in WebKit, blocks
+  network resources, and resolves images only through an identifier-checked local attachment scheme.
 - The queue uses an App Group rather than exposing the main data store to the extension.
 
 The main app still has no network entitlement. Safari itself naturally has network access to display
