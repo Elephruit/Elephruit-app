@@ -59,6 +59,7 @@ public struct RootView: View {
     @State private var reminderRefresh: ReminderRefreshCoordinator?
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// This window's own undo manager — the one `⌘Z` and the Edit menu actually reach.
     @Environment(\.undoManager) private var windowUndoManager
@@ -189,7 +190,9 @@ public struct RootView: View {
             // sidebar. The weak capture avoids joining the two window-scoped coordinators into a
             // retain cycle: navigation already owns the callback that closes row actions above.
             swipes.onSidebarSwipe = { [weak navigation = navigation] direction in
-                withAnimation(.easeOut(duration: 0.2)) {
+                withAnimation(
+                    Theme.Motion.respectingReduceMotion(Theme.Motion.standard, reduceMotion: reduceMotion)
+                ) {
                     navigation?.setSidebarVisible(direction == .show)
                 }
             }

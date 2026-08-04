@@ -794,6 +794,7 @@ private struct LinkedItemRow: View {
 struct EventRecordPicker: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let event: CalendarEventSummary
     let linkedRecordIDs: Set<UUID>
@@ -902,7 +903,11 @@ struct EventRecordPicker: View {
                         }
                         .onChange(of: highlightedIndex) { _, index in
                             guard candidates.indices.contains(index) else { return }
-                            withAnimation(.easeOut(duration: 0.1)) {
+                            withAnimation(
+                                Theme.Motion.respectingReduceMotion(
+                                    Theme.Motion.appearance, reduceMotion: reduceMotion
+                                )
+                            ) {
                                 proxy.scrollTo(candidates[index].id, anchor: .center)
                             }
                         }

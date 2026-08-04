@@ -92,8 +92,8 @@ struct KanbanColumnView: View {
                     .accessibilityIdentifier("kanban.dropTarget.\(column.key)")
             }
         }
-        .animation(.easeOut(duration: 0.16), value: isDropTargeted)
-        .animation(.snappy(duration: 0.12), value: displayedItems.map(\.id))
+        .calmAnimation(Theme.Motion.appearance, value: isDropTargeted)
+        .calmAnimation(Theme.Motion.standard, value: displayedItems.map(\.id))
     }
 
     private var columnContents: some View {

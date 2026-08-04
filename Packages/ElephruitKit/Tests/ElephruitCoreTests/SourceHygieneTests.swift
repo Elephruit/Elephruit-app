@@ -698,10 +698,8 @@ struct SourceHygieneTests {
     @Test("Animation honours Reduce Motion by construction")
     func animationsHonourReduceMotion() {
         let allowlisted: Set<String> = [
-            "BugTrackerView.swift", "EventEditorView.swift", "EventInspectorView.swift",
-            "FloatingTimerView.swift", "KanbanBoardView.swift",
-            "RootView.swift", "TodayComponents.swift",
-            "TodayDayView.swift", "TodayPeopleViews.swift", "TodayRows.swift", "TodayView.swift",
+            "BugTrackerView.swift", "EventEditorView.swift", "FloatingTimerView.swift", "TodayComponents.swift",
+            "TodayDayView.swift", "TodayPeopleViews.swift", "TodayView.swift",
             "WorkItemDetailView.swift",
         ]
 

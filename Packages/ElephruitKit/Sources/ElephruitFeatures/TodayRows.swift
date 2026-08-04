@@ -15,6 +15,7 @@ import SwiftUI
 /// leave) is carried by a glyph and by whether there is a guest list, never by the colour alone.
 struct TodayEventRow: View {
     @Environment(\.services) private var services
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let event: DayEvent
     let plan: DayPlan
@@ -32,7 +33,11 @@ struct TodayEventRow: View {
 
             if isExpanded {
                 TodayEventInlineDetail(event: event, actions: actions) {
-                    withAnimation(.easeInOut(duration: 0.16)) { model.collapseEventDetails() }
+                    withAnimation(
+                        Theme.Motion.respectingReduceMotion(
+                            Theme.Motion.standard, reduceMotion: reduceMotion
+                        )
+                    ) { model.collapseEventDetails() }
                 }
                 // The panel belongs beneath this row. Moving it in from `.top` made it cross the
                 // event summary (and sometimes the rows above it) before reaching that position.
@@ -273,7 +278,9 @@ struct TodayEventRow: View {
     }
 
     private func toggleDetails() {
-        withAnimation(.easeInOut(duration: 0.16)) { model.toggleEventDetails(event.id) }
+        withAnimation(
+            Theme.Motion.respectingReduceMotion(Theme.Motion.standard, reduceMotion: reduceMotion)
+        ) { model.toggleEventDetails(event.id) }
     }
 
     // MARK: Descriptions
