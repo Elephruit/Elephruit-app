@@ -23,7 +23,7 @@ async function activeTab() {
 
 async function messagePanel(tabID) {
   return withTimeout(
-    browser.tabs.sendMessage(tabID, { type: "elephruit.panel.open.v1" }),
+    browser.tabs.sendMessage(tabID, { type: "elephruit.panel.open.v1" }, { frameId: 0 }),
     700,
     "Safari did not answer the clipper."
   );
@@ -31,16 +31,6 @@ async function messagePanel(tabID) {
 
 function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
-
-async function waitForInjectedPanel(tabID, milliseconds) {
-  const deadline = Date.now() + milliseconds;
-  while (Date.now() < deadline) {
-    const response = await messagePanel(tabID).catch(() => null);
-    if (typeof response?.open === "boolean") return response;
-    await delay(500);
-  }
-  return null;
 }
 
 function siteAccess(tab) {
@@ -51,26 +41,32 @@ function siteAccess(tab) {
   };
 }
 
-function contentScriptID(pattern) {
-  let hash = 2166136261;
-  for (const character of pattern) {
-    hash ^= character.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `elephruit-site-${(hash >>> 0).toString(16)}`;
-}
+async function injectAndOpenPanel(tabID, milliseconds = 15_000) {
+  const deadline = Date.now() + milliseconds;
+  let lastError = null;
 
-async function ensureContentScript(site) {
-  const id = contentScriptID(site.pattern);
-  const scripts = await browser.scripting.getRegisteredContentScripts();
-  if (scripts.some((script) => script.id === id)) return;
-  await browser.scripting.registerContentScripts([{
-    id,
-    matches: [site.pattern],
-    js: ["panel.js", "content.js"],
-    runAt: "document_start",
-    persistAcrossSessions: true
-  }]);
+  while (Date.now() < deadline) {
+    try {
+      // The target defaults to the top frame. Retrying here handles pages that replace their main
+      // document during redirects without sending messages to unrelated advertising frames.
+      await browser.scripting.executeScript({
+        target: { tabId: tabID },
+        files: ["panel.js", "content.js"]
+      });
+      const results = await browser.scripting.executeScript({
+        target: { tabId: tabID },
+        func: () => globalThis.__elephruitClipperAPI?.openPanel?.() || null
+      });
+      const response = results.find((result) => result.frameId === 0)?.result || results[0]?.result;
+      if (typeof response?.open === "boolean") return response;
+      lastError = new Error("The clipper script loaded, but its page API was unavailable.");
+    } catch (error) {
+      lastError = error;
+    }
+    await delay(500);
+  }
+
+  throw new Error(`Safari could not attach the clipper to this page. ${readableError(lastError)}`);
 }
 
 function showAccessRequest(tab, site) {
@@ -108,19 +104,14 @@ async function openOnTab(tab) {
     return;
   }
 
-  await ensureContentScript(site);
-
-  // Direct execution is unreliable while a site is redirecting or its main document is still
-  // provisional. Register the content script for this approved site, reload once, and let Safari
-  // install it at document_start instead of racing the navigation.
+  // Safari's persisted content-script registration can be unavailable in local development builds.
+  // Inject into the approved top frame directly and retry through any provisional navigation.
   title.textContent = "Preparing the clipper…";
-  detail.textContent = "Reloading this page once to finish website access.";
-  await browser.tabs.reload(tab.id);
-  await delay(500);
-  response = await waitForInjectedPanel(tab.id, 15_000);
+  detail.textContent = "Connecting securely to this page.";
+  response = await injectAndOpenPanel(tab.id);
 
   if (typeof response?.open !== "boolean") {
-    throw new Error("Safari did not load the clipper after reloading this page. Check website access, then try again.");
+    throw new Error("Safari did not attach the clipper to this page. Check website access, then try again.");
   }
   window.close();
 }

@@ -109,11 +109,10 @@ web manifest version is insufficient to guarantee that a rebuilt local test exte
 Panel activation uses an idempotent open command so Safari timeouts and retries cannot accidentally
 close a panel that the page already received and began loading.
 Host access remains optional and is requested only from a direct user gesture. After the user
-approves a host, the extension dynamically registers its document-start content scripts for that
-exact origin and persists the registration through Safari's scripting API. When a permitted page
-has no active listener, the popup ensures that registration, reloads the tab once, and waits for the
-listener. This avoids unreliable direct execution while redirecting and continuously loading sites
-have a provisional main document without requesting blanket access to every website.
+approves a host, the popup injects the clipper into that tab's top frame and invokes its page API
+directly. Injection retries briefly when a redirect replaces a provisional document. It does not
+depend on Safari's persistent registered-content-script database, reload the page, or broadcast
+messages to unrelated embedded frames, and it does not request blanket access to every website.
 
 The main app still has no network entitlement. Safari itself naturally has network access to display
 the page being clipped; the extension operates on that active page.
