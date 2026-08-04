@@ -151,6 +151,7 @@ private struct NoteWebClipFace: View {
 
             if let html {
                 SelectableWebClipView(html: html, resources: resources, height: $height)
+                    .frame(maxWidth: .infinity)
                     .frame(height: height)
             } else if resolved {
                 HStack(spacing: Theme.Spacing.small) {
@@ -223,7 +224,6 @@ private struct SelectableWebClipView: NSViewRepresentable {
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
-        webView.setValue(false, forKey: "drawsBackground")
         return webView
     }
 
@@ -233,6 +233,11 @@ private struct SelectableWebClipView: NSViewRepresentable {
         guard context.coordinator.loadedHTML != html else { return }
         context.coordinator.loadedHTML = html
         webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: WKWebView, context: Context) -> CGSize? {
+        guard let width = proposal.width, width > 0 else { return nil }
+        return CGSize(width: width, height: height)
     }
 
     @MainActor

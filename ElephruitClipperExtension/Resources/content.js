@@ -1,6 +1,6 @@
 (() => {
-  if ((globalThis.__elephruitClipperVersion || 0) >= 9) return;
-  globalThis.__elephruitClipperVersion = 9;
+  if ((globalThis.__elephruitClipperVersion || 0) >= 10) return;
+  globalThis.__elephruitClipperVersion = 10;
 
   // An already-open tab can retain the previous isolated-world script after an extension update.
   // Remove its detached UI before installing the new API so the next toolbar click cannot produce
@@ -21,7 +21,7 @@
   const NEGATIVE = /ad|banner|breadcrumb|comment|cookie|footer|header|menu|modal|nav|promo|related|share|sidebar|subscribe|widget/i;
   const FIDELITY_STYLE_PROPERTIES = [
     "display", "box-sizing", "float", "clear", "position", "top", "right", "bottom", "left", "z-index",
-    "width", "min-width", "max-width", "height", "min-height", "max-height",
+    "width", "min-width", "max-width",
     "margin-top", "margin-right", "margin-bottom", "margin-left",
     "padding-top", "padding-right", "padding-bottom", "padding-left",
     "border-top-width", "border-right-width", "border-bottom-width", "border-left-width",
@@ -566,7 +566,7 @@
   // that listener's empty response before the new listener answers. `scripting.executeScript` calls
   // this newest API explicitly, so upgrading never requires the user to reload their page.
   globalThis.__elephruitClipperAPI = {
-    version: 9,
+    version: 10,
     extract,
     showArticleSelection,
     hideArticleSelection,
@@ -580,7 +580,7 @@
   };
 
   browser.runtime.onMessage.addListener((message) => {
-    if (message?.type === "elephruit.panel.toggle.v4") return Promise.resolve(togglePanel());
+    if (message?.type === "elephruit.panel.toggle.v5") return Promise.resolve(togglePanel());
     if (message?.type === "elephruit.extract.v4") return Promise.resolve(extract());
     if (message?.type === "elephruit.article.show.v4") return Promise.resolve(showArticleSelection());
     if (message?.type === "elephruit.article.adjust.v4") {

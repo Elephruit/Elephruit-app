@@ -1,6 +1,6 @@
 (() => {
-  if ((globalThis.__elephruitClipperPanelVersion || 0) >= 2) return;
-  globalThis.__elephruitClipperPanelVersion = 2;
+  if ((globalThis.__elephruitClipperPanelVersion || 0) >= 3) return;
+  globalThis.__elephruitClipperPanelVersion = 3;
 
   let activeCleanup = null;
   let activeApplyBoundary = null;
@@ -309,16 +309,18 @@
       let total = 0;
       for (const candidate of (content.images || []).slice(0, 12)) {
         try {
-          const response = await fetch(candidate.url, { credentials: "include", cache: "force-cache" });
-          if (!response.ok) continue;
-          const blob = await response.blob();
-          const format = inferredImageType(blob, candidate.url);
-          if (!format || blob.size > 6_000_000 || total + blob.size > 18_000_000) continue;
-          total += blob.size;
+          const downloaded = await browser.runtime.sendMessage({
+            type: "elephruit.image.download.v1",
+            url: candidate.url
+          });
+          if (!downloaded?.data || !downloaded?.mimeType || !downloaded?.byteCount) continue;
+          const format = inferredImageType({ type: downloaded.mimeType }, candidate.url);
+          if (!format || downloaded.byteCount > 6_000_000 || total + downloaded.byteCount > 18_000_000) continue;
+          total += downloaded.byteCount;
           images.push({
             id: crypto.randomUUID(), sourceURL: candidate.url, altText: candidate.alt || "",
             filename: `web-image-${String(images.length + 1).padStart(2, "0")}.${format.extension}`,
-            typeIdentifier: format.typeIdentifier, data: await dataURLFor(blob)
+            typeIdentifier: format.typeIdentifier, data: downloaded.data
           });
         } catch {
           // Keep the rest of the clip when a page denies access to one image.
@@ -428,7 +430,7 @@
         }
         const image = source ? imagesBySource.get(source) : null;
         if (image) element.setAttribute("src", `elephruit-attachment://${image.id}`);
-        else element.removeAttribute("src");
+        else element.remove();
         element.removeAttribute("srcset");
       });
       return template.innerHTML;
@@ -540,7 +542,7 @@
   }
 
   globalThis.__elephruitClipperPanelUI = {
-    version: 2,
+    version: 3,
     mount,
     unmount() { activeCleanup?.(); },
     articleChanged(payload) { activeApplyBoundary?.(payload); }
