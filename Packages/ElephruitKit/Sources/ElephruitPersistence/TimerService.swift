@@ -1,4 +1,8 @@
-import AppKit
+#if canImport(AppKit)
+    import AppKit
+#elseif canImport(UIKit)
+    import UIKit
+#endif
 import ElephruitCore
 import ElephruitModel
 import Foundation
@@ -193,7 +197,7 @@ public final class TimerService {
             activityAssertion = nil
         }
 
-        let center = NSWorkspace.shared.notificationCenter
+        let center = Self.suspensionNotificationCenter
         if let sleepObserver { center.removeObserver(sleepObserver) }
         if let wakeObserver { center.removeObserver(wakeObserver) }
         sleepObserver = nil
@@ -704,8 +708,14 @@ public final class TimerService {
     /// that matters, and the banner in the Time view says what happened when they come back.
     private func announce(_ phase: PomodoroPhase) {
         finishedPhase = phase
-        if playsPomodoroSound { NSSound.beep() }
-        NSApp?.requestUserAttention(.informationalRequest)
+        #if os(macOS)
+            if playsPomodoroSound { NSSound.beep() }
+            NSApp?.requestUserAttention(.informationalRequest)
+        #endif
+        // On iOS there is nothing honest to do beyond `finishedPhase` until notification
+        // permission exists: there is no beep-without-permission, no icon to bounce, and a
+        // suspended app cannot make noise anyway. The Time surfaces read `finishedPhase`
+        // and say what happened when the person comes back — same contract, same words.
     }
 
     // MARK: - Recovery
@@ -866,16 +876,48 @@ public final class TimerService {
 
     // MARK: - Sleep
 
+    /// Where "the app stopped observing time" is announced on this platform.
+    ///
+    /// macOS says it through `NSWorkspace` (the machine sleeps); iOS says it through
+    /// `UIApplication` on the default centre (the process is backgrounded and may be
+    /// suspended or killed without further notice). Both are the same event as far as a
+    /// running timer is concerned: a gap is about to open that nobody was watching.
+    private static var suspensionNotificationCenter: NotificationCenter {
+        #if os(macOS)
+            NSWorkspace.shared.notificationCenter
+        #else
+            NotificationCenter.default
+        #endif
+    }
+
+    private static var suspensionNotificationName: Notification.Name {
+        #if os(macOS)
+            NSWorkspace.willSleepNotification
+        #else
+            UIApplication.didEnterBackgroundNotification
+        #endif
+    }
+
+    private static var resumptionNotificationName: Notification.Name {
+        #if os(macOS)
+            NSWorkspace.didWakeNotification
+        #else
+            UIApplication.willEnterForegroundNotification
+        #endif
+    }
+
     /// Writes a heartbeat as the machine goes to sleep, and re-reads on waking.
     ///
     /// Sleep is the ordinary case this has to get right — far more common than a crash. Closing the
     /// lid at 18:00 and opening it at 09:00 should offer the fifteen-hour gap for a decision, not
-    /// quietly bill it.
+    /// quietly bill it. On iOS the same pair of moments is backgrounding and returning: a
+    /// backgrounded app may be quietly killed, so the heartbeat written on the way down is
+    /// what makes the overnight gap a question rather than a charge.
     private func observeSleep() {
-        let center = NSWorkspace.shared.notificationCenter
+        let center = Self.suspensionNotificationCenter
 
         sleepObserver = center.addObserver(
-            forName: NSWorkspace.willSleepNotification,
+            forName: Self.suspensionNotificationName,
             object: nil,
             queue: .main
         ) { [weak self] _ in
@@ -886,7 +928,7 @@ public final class TimerService {
         }
 
         wakeObserver = center.addObserver(
-            forName: NSWorkspace.didWakeNotification,
+            forName: Self.resumptionNotificationName,
             object: nil,
             queue: .main
         ) { [weak self] _ in

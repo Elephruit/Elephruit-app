@@ -25,7 +25,22 @@ let package = Package(
                 "ElephruitIntegrations",
                 "ElephruitFeatures",
             ]
-        )
+        ),
+        // The same package as the iPhone sees it: everything except the macOS views.
+        // Building this product for an iOS destination is the compile-time proof that
+        // no AppKit leak has crept below the view layer — the gate exists from the
+        // first platform seam, and grows targets as they earn iOS membership.
+        .library(
+            name: "ElephruitMobileKit",
+            targets: [
+                "ElephruitCore",
+                "ElephruitModel",
+                "ElephruitPersistence",
+                "ElephruitSearch",
+                "ElephruitTransfer",
+                "ElephruitIntegrations",
+            ]
+        ),
     ],
     targets: [
         // MARK: - Foundation

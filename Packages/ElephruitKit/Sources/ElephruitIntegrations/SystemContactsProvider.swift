@@ -57,6 +57,14 @@ public actor SystemContactsProvider: ContactsProviding {
         case .restricted: .restricted
         case .denied: .denied
         case .authorized: .authorized
+        #if os(iOS)
+            case .limited:
+                // The user chose a subset of their contacts, and the subset is the library as far
+                // as this app is concerned: reads work, and the system keeps the boundary. Mapping
+                // this to `.denied` would show a limited-access user an empty address book and a
+                // prompt to grant what they already granted.
+                .authorized
+        #endif
         @unknown default:
             // A status this build has never heard of — `.limited`, if it ever reaches macOS — is not
             // assumed to grant anything. Treating an unknown status as permission is precisely the

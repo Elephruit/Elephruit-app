@@ -13,20 +13,32 @@ public protocol IdleClock: Sendable {
 
 /// The real one.
 ///
-/// ### Why this needs no permission
+/// ### Why this needs no permission (macOS)
 /// `CGEventSource` will report *when* the last input event happened without any entitlement, an
 /// accessibility grant, or an event tap — it is a timestamp, not a keystroke. Nothing here can see
 /// what was typed, and nothing here would be allowed to. That is the whole reason idle detection
 /// can exist in a sandboxed app that asks the user for nothing.
+///
+/// ### Why iOS reports zero
+/// iOS has no system-wide input clock and no concept of "at the machine but not in this app" —
+/// an iPhone with no input is an iPhone that is locked or in another app, and both of those are
+/// the *backgrounded* case, which the heartbeat and stale-timer recovery already handle. So on
+/// iOS this clock always says "somebody is here", the detector never opens a gap, and the idle
+/// question is never asked — the honest answer, not a stub.
 public struct SystemIdleClock: IdleClock {
     public init() {}
 
     public var secondsSinceLastInput: TimeInterval {
-        // `kCGAnyInputEventType` is `~0`, which Swift imports as a failable initialiser rather than
-        // a constant. The fallback is unreachable in practice and is here because a force unwrap in
-        // shipping code is banned, on the grounds that "unreachable" is what everybody says.
-        let anyInput = CGEventType(rawValue: ~0) ?? .null
-        return CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyInput)
+        #if os(macOS)
+            // `kCGAnyInputEventType` is `~0`, which Swift imports as a failable initialiser rather
+            // than a constant. The fallback is unreachable in practice and is here because a force
+            // unwrap in shipping code is banned, on the grounds that "unreachable" is what
+            // everybody says.
+            let anyInput = CGEventType(rawValue: ~0) ?? .null
+            return CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyInput)
+        #else
+            return 0
+        #endif
     }
 }
 

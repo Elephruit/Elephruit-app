@@ -120,6 +120,27 @@ public final class AttachmentStore {
         return attachment
     }
 
+    /// The bookmark flavour each platform issues.
+    ///
+    /// macOS wants `.withSecurityScope` said explicitly; iOS has no such option because every
+    /// bookmark made from a document-picker URL is implicitly security-scoped. Same capability,
+    /// two spellings — resolved here once so the four call sites stay identical.
+    private static var bookmarkCreationOptions: URL.BookmarkCreationOptions {
+        #if os(macOS)
+            .withSecurityScope
+        #else
+            []
+        #endif
+    }
+
+    private static var bookmarkResolutionOptions: URL.BookmarkResolutionOptions {
+        #if os(macOS)
+            .withSecurityScope
+        #else
+            []
+        #endif
+    }
+
     /// Records a pointer to a file the user keeps elsewhere.
     ///
     /// The bookmark is *not* a secret — it is an OS-issued capability for a file the user already
@@ -132,7 +153,7 @@ public final class AttachmentStore {
         let bookmark: Data
         do {
             bookmark = try url.bookmarkData(
-                options: .withSecurityScope,
+                options: Self.bookmarkCreationOptions,
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
@@ -190,7 +211,7 @@ public final class AttachmentStore {
         var isStale = false
         guard let url = try? URL(
             resolvingBookmarkData: data,
-            options: .withSecurityScope,
+            options: Self.bookmarkResolutionOptions,
             relativeTo: nil,
             bookmarkDataIsStale: &isStale
         ) else {
@@ -203,7 +224,7 @@ public final class AttachmentStore {
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
 
             if let refreshed = try? url.bookmarkData(
-                options: .withSecurityScope,
+                options: Self.bookmarkCreationOptions,
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             ) {
@@ -229,7 +250,7 @@ public final class AttachmentStore {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
 
         guard let bookmark = try? url.bookmarkData(
-            options: .withSecurityScope,
+            options: Self.bookmarkCreationOptions,
             includingResourceValuesForKeys: nil,
             relativeTo: nil
         ) else {
