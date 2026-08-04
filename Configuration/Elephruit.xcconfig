@@ -49,7 +49,7 @@ LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/../Frameworks
 
 // MARK: - Signing
 //
-// Automatic, with no team pinned, so the project opens and builds on any machine with a development
-// certificate. A real distribution build sets DEVELOPMENT_TEAM.
+// Automatic style; the team itself lives in Signing.xcconfig so the per-machine fact is one line
+// shared by every target.
+#include "Signing.xcconfig"
 CODE_SIGN_STYLE = Automatic
-DEVELOPMENT_TEAM =
