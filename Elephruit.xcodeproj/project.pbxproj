@@ -19,6 +19,7 @@
 		E7C100000000000000000009 /* popup.js in Resources */ = {isa = PBXBuildFile; fileRef = E7C100000000000000000019 /* popup.js */; };
 		E7C10000000000000000000A /* elephruit-icon.png in Resources */ = {isa = PBXBuildFile; fileRef = E7C10000000000000000001A /* elephruit-icon.png */; };
 		E7C10000000000000000000B /* SafariServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E7C10000000000000000001B /* SafariServices.framework */; };
+		E7C10000000000000000000C /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = E7C10000000000000000001C /* background.js */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -62,6 +63,7 @@
 		E7C100000000000000000019 /* popup.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = popup.js; sourceTree = "<group>"; };
 		E7C10000000000000000001A /* elephruit-icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Assets/elephruit-icon.png; sourceTree = SOURCE_ROOT; };
 		E7C10000000000000000001B /* SafariServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SafariServices.framework; path = System/Library/Frameworks/SafariServices.framework; sourceTree = SDKROOT; };
+		E7C10000000000000000001C /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = background.js; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -140,6 +142,7 @@
 			children = (
 				E7C100000000000000000015 /* manifest.json */,
 				E7C100000000000000000016 /* content.js */,
+				E7C10000000000000000001C /* background.js */,
 				E7C100000000000000000017 /* popup.html */,
 				E7C100000000000000000018 /* popup.css */,
 				E7C100000000000000000019 /* popup.js */,
@@ -251,6 +254,7 @@
 			files = (
 				E7C100000000000000000005 /* manifest.json in Resources */,
 				E7C100000000000000000006 /* content.js in Resources */,
+				E7C10000000000000000000C /* background.js in Resources */,
 				E7C100000000000000000007 /* popup.html in Resources */,
 				E7C100000000000000000008 /* popup.css in Resources */,
 				E7C100000000000000000009 /* popup.js in Resources */,

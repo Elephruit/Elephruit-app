@@ -33,6 +33,10 @@ panel belongs to the page instead of Safari's transient toolbar popover, clicks 
 reach their target and several adjustments can be made in one pass. Changing to a non-article mode
 removes the page overlay, as does closing the panel or completing the clip.
 
+The toolbar action has no popup document. Its nonpersistent Manifest V3 background worker sends a
+toggle command directly to the active tab, eliminating an intermediate “Reading this page” popover
+that could remain visible while Safari waited for page scripting.
+
 Panel-to-page commands call a versioned API in the extension's isolated page world. This is more than
 an implementation detail: a tab that was open during an extension upgrade can retain the previous
 message listener, and Safari may accept that listener's empty response before the new one answers.

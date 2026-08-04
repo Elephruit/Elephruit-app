@@ -1,43 +1,4 @@
-const panelMode = new URLSearchParams(window.location.search).get("panel") === "1";
-
-if (panelMode) initializePanel();
-else launchPanel();
-
-async function launchPanel() {
-  try {
-    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-    const tab = tabs[0];
-    if (!tab?.id || !/^https?:/i.test(tab.url || "")) {
-      throw new Error("Open an HTTP or HTTPS page and try again.");
-    }
-
-    const toggle = async () => {
-      const results = await browser.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => {
-          const api = globalThis.__elephruitClipperAPI;
-          return api?.version >= 6 && typeof api.togglePanel === "function" ? api.togglePanel() : null;
-        }
-      });
-      return results?.[0]?.result ?? null;
-    };
-
-    let result = await toggle();
-    if (!result) {
-      await browser.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
-      result = await toggle();
-    }
-    if (!result) throw new Error("Safari couldn’t open the clipper on this page.");
-    window.close();
-  } catch (error) {
-    document.getElementById("loading").hidden = true;
-    document.getElementById("error").hidden = false;
-    const message = typeof error === "string"
-      ? error
-      : error?.message || error?.localizedDescription || error?.description || "Safari denied access to this page.";
-    document.getElementById("error-message").textContent = `${message} In Safari Settings → Extensions → Elephruit Web Clipper, allow website access, then reload the page.`;
-  }
-}
+initializePanel();
 
 function initializePanel() {
 document.documentElement.classList.add("panel");

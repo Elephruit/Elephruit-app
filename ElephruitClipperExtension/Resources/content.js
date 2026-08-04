@@ -535,6 +535,7 @@
   };
 
   browser.runtime.onMessage.addListener((message) => {
+    if (message?.type === "elephruit.panel.toggle.v1") return Promise.resolve(togglePanel());
     if (message?.type === "elephruit.extract.v4") return Promise.resolve(extract());
     if (message?.type === "elephruit.article.show.v4") return Promise.resolve(showArticleSelection());
     if (message?.type === "elephruit.article.adjust.v4") {
