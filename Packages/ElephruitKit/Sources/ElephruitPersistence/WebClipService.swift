@@ -173,9 +173,14 @@ public struct WebClipService {
         if !byline.isEmpty { source += "  \n\(byline)" }
         sections.append(source)
 
+        // A full-page clip is the visual capture. Its DOM text belongs in attachment search
+        // metadata, not in the editor beneath the image. Page-provided excerpts are especially
+        // unreliable here: some sites expose their entire flattened home page as an "excerpt".
+        guard clip.mode != .fullPage else { return sections }
+
         let markdown = clip.contentMarkdown.trimmingCharacters(in: .whitespacesAndNewlines)
         let summary = clip.excerpt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let content = clip.mode == .fullPage ? summary : markdown
+        let content = markdown
         if !content.isEmpty {
             sections.append(content)
         } else if !summary.isEmpty {
@@ -195,8 +200,8 @@ public struct WebClipService {
         inlineImages: [InlineImage]
     ) -> NoteDocument {
         let sections = noteSections(for: clip, sourceURL: sourceURL)
-        let content = sections.last ?? ""
-        let prefix = sections.dropLast()
+        let content = clip.mode == .fullPage ? "" : sections.last ?? ""
+        let prefix = clip.mode == .fullPage ? sections[...] : sections.dropLast()
         var pieces: [NotePiece] = []
 
         for section in prefix {

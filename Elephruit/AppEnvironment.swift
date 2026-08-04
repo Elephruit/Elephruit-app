@@ -215,7 +215,7 @@ final class AppEnvironment {
         webClipMonitor?.cancel()
         webClipMonitor = Task { [weak self] in
             while !Task.isCancelled {
-                self?.importPendingWebClips()
+                await self?.importPendingWebClips()
                 try? await Task.sleep(for: .seconds(1))
             }
         }
@@ -224,14 +224,14 @@ final class AppEnvironment {
     /// Imports only complete envelopes and acknowledges each after the item and its attachments are
     /// committed. Saving is idempotent, so a launch interrupted between those writes resumes the
     /// same clip rather than acknowledging a partial one or creating a duplicate.
-    func importPendingWebClips() {
+    func importPendingWebClips() async {
         guard case .ready(let services) = state else { return }
 
         do {
             let inbox = try WebClipInbox.applicationGroup()
             for pending in try inbox.pending() {
                 do {
-                    _ = try services.saveWebClip(pending.clip)
+                    _ = try await services.saveWebClip(pending.clip)
                     try inbox.acknowledge(pending)
                     Diagnostics.shell.info("Imported Safari web clip \(pending.id, privacy: .public)")
                 } catch {

@@ -111,9 +111,11 @@ didn't intend. Then it lands in the Inbox and you get back to what you were doin
 
 The bundled Safari extension can save a cleaned article, the current selection, the full page, a
 bookmark, or a visible screenshot. Before saving, you can edit the title, add a note and tags, and
-file the result under an existing project. Article and page clips become searchable Markdown notes;
-cleaned HTML is retained as a managed attachment for fidelity. Screenshots are copied into the same
-attachment store as your other files.
+file the result under an existing project. Article clips become searchable Markdown notes. Full-page
+clips keep the continuous visual capture in the editor while indexing the extracted DOM and
+on-device OCR behind it, so searches find text in the page without appending a transcription below
+the image. Cleaned HTML is retained as a managed attachment for fidelity. Screenshots are copied
+into the same attachment store as your other files and OCR-indexed locally.
 
 Nothing is uploaded. The extension reads only the page on which you invoke it, places an atomic clip
 envelope in the app-group inbox, and wakes Elephruit to import it. If importing is interrupted, the

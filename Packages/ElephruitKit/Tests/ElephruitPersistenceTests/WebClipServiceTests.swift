@@ -105,8 +105,8 @@ struct WebClipServiceTests {
         })
     }
 
-    @Test("A full-page capture appears before the copied page text")
-    func placesFullPageCaptureFirst() throws {
+    @Test("A full-page capture keeps extracted page text out of the editor")
+    func keepsFullPageTextOutOfEditor() throws {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
 
@@ -119,12 +119,13 @@ struct WebClipServiceTests {
             if case .object(.image) = piece { return true }
             return false
         })
-        let contentIndex = try #require(item.noteDocument.pieces.firstIndex { piece in
-            piece.paragraph?.plainText.contains("A fallback excerpt") == true
-        })
-
-        #expect(imageIndex < contentIndex)
         #expect(!item.body.contains("Page introduction"))
+        #expect(!item.body.contains("A fallback excerpt"))
+        let trailingText = item.noteDocument.pieces.dropFirst(imageIndex + 1)
+            .compactMap(\.paragraph?.plainText)
+            .joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(trailingText.isEmpty)
         #expect(item.searchText.contains("page introduction"))
     }
 
@@ -149,12 +150,7 @@ struct WebClipServiceTests {
             if case .object(.image) = item.noteDocument.pieces[index] { return true }
             return false
         }
-        let contentIndex = try #require(item.noteDocument.pieces.firstIndex {
-            $0.paragraph?.plainText.contains("A fallback excerpt") == true
-        })
-
         #expect(imageIndices.count == 2)
-        #expect(imageIndices.allSatisfy { $0 < contentIndex })
         #expect(imageIndices.allSatisfy { index in
             guard case .object(.image(_, let caption)) = item.noteDocument.pieces[index] else {
                 return false
@@ -162,6 +158,12 @@ struct WebClipServiceTests {
             return caption.isEmpty
         })
         #expect(!item.body.contains("Searchable page text"))
+        #expect(!item.body.contains("A fallback excerpt"))
+        let trailingText = item.noteDocument.pieces.dropFirst(try #require(imageIndices.last) + 1)
+            .compactMap(\.paragraph?.plainText)
+            .joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(trailingText.isEmpty)
         #expect(item.searchText.contains("searchable page text"))
     }
 

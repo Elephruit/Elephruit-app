@@ -12,8 +12,8 @@ into the local Elephruit library. It supports six modes:
 - **Selection** saves the current DOM selection with its source metadata.
 - **Full page** saves a sequence of readable, full-width visual panels. The note renders adjacent
   panels edge-to-edge without captions or attachment-card chrome, so they read as one continuous
-  page instead of separate screenshots. A short source summary stays visible; the complete extracted
-  text is indexed from the HTML attachment instead of being dumped into the editor below the page.
+  page instead of separate screenshots. No extracted page copy is appended beneath the capture. The
+  complete DOM text and on-device OCR for every panel are indexed as attachment metadata instead.
 - **Bookmark** stores the canonical URL, page excerpt, and a local visual thumbnail.
 - **Screenshot** captures the visible Safari tab and stores a PNG attachment.
 
@@ -22,6 +22,8 @@ a note and tags, and name an existing project for filing. Article images are dow
 local library and placed in their original reading order in the resulting note. Article,
 simplified-article, selection,
 full-page, and screenshot clips become notes; bookmark clips remain bookmarks with a visual preview.
+Every clipped PNG and JPEG is passed through macOS Vision locally, and its recognized text joins the
+item's search projection without becoming visible note content.
 
 ## Architecture
 
@@ -43,6 +45,7 @@ Safari page
   → App Group inbox (atomic JSON)
   → Elephruit importer
   → item + provenance + tags + managed attachments
+  → on-device image OCR → attachment search metadata
 ```
 
 ## Privacy and safety boundary
@@ -97,5 +100,6 @@ metadata, absolute links, readable Markdown, and removal of navigation and ads.
 
 The screenshot mode captures the visible viewport. **Full page** scrolls across as many as 32
 viewports, composes the result into panels no taller than three viewports, and keeps the cleaned
-document as searchable Markdown plus an HTML fidelity attachment. Screenshot annotation, direct PDF
-capture, multi-select, site-specific recipes, and a Chromium package remain follow-on slices.
+document as searchable attachment metadata plus an HTML fidelity attachment. Each panel is also
+OCR-indexed on device. Screenshot annotation, direct PDF capture, multi-select, site-specific
+recipes, and a Chromium package remain follow-on slices.
