@@ -1072,6 +1072,9 @@ extension FocusedValues {
 
     /// What creating something means on the focused surface.
     @Entry public var newItemCommand: NewItemCommand?
+
+    /// The note editor open in the focused scene, for the Format menu and find-in-note.
+    @Entry public var noteEditor: NoteEditorModel?
 }
 
 #Preview("Root", traits: .fixedLayout(width: 1180, height: 720)) {

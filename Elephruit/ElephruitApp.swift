@@ -173,6 +173,7 @@ struct ElephruitCommands: Commands {
     @FocusedValue(\.rowActions) private var rowActions
     @FocusedValue(\.workItemActions) private var workItem
     @FocusedValue(\.newItemCommand) private var newItem
+    @FocusedValue(\.noteEditor) private var noteEditor
 
     @Environment(\.openWindow) private var openWindow
 
@@ -291,11 +292,18 @@ struct ElephruitCommands: Commands {
         // MARK: Find
 
         CommandGroup(replacing: .textEditing) {
-            // ⌘F, not ⌘⇧F. Search is no longer a separate place with its own shortcut — it is what
-            // the list becomes — so it takes the shortcut everyone already reaches for.
-            Button("Search Everything") { navigation?.beginSearch() }
-                .shortcut(.search, in: shortcuts)
-                .disabled(navigation == nil)
+            // ⌘F, and the focused context wins: with a note open the key finds *in the note* —
+            // Mail's rule, where ⌘F searches the message being read — and everywhere else it is
+            // the app-wide search it has always been. One key, titled for what it will do.
+            Button(noteEditor != nil ? "Find in Note" : "Search Everything") {
+                if let noteEditor {
+                    noteEditor.showFindBar()
+                } else {
+                    navigation?.beginSearch()
+                }
+            }
+            .shortcut(.search, in: shortcuts)
+            .disabled(navigation == nil)
 
             Button("Command Palette…") { navigation?.isCommandPaletteVisible = true }
                 .shortcut(.commandPalette, in: shortcuts)
@@ -425,6 +433,52 @@ struct ElephruitCommands: Commands {
             Button("Focus Sidebar") { navigation?.focus(.sidebar) }
                 .shortcut(.clearSelection, in: shortcuts)
                 .disabled(navigation == nil)
+        }
+
+        // MARK: Format
+
+        // The menu a rich-text editor owes the menu bar: every operation the in-window Format
+        // popover offers was reachable only by mouse, and none appeared where macOS users look
+        // for formatting. Enabled exactly while a note's editor is open.
+        CommandMenu("Format") {
+            Button("Bold") { noteEditor?.toggleInlineMark(.bold) }
+                .keyboardShortcut("b")
+                .disabled(noteEditor == nil)
+            Button("Italic") { noteEditor?.toggleInlineMark(.italic) }
+                .keyboardShortcut("i")
+                .disabled(noteEditor == nil)
+            Button("Strikethrough") { noteEditor?.toggleInlineMark(.strikethrough) }
+                .disabled(noteEditor == nil)
+            Button("Code") { noteEditor?.toggleInlineMark(.code) }
+                .disabled(noteEditor == nil)
+
+            Divider()
+
+            Menu("Paragraph") {
+                Button("Body") { noteEditor?.applyParagraph(.paragraph) }
+                    .keyboardShortcut("0", modifiers: [.command, .option])
+                Button("Heading 1") { noteEditor?.applyParagraph(.heading1) }
+                    .keyboardShortcut("1", modifiers: [.command, .option])
+                Button("Heading 2") { noteEditor?.applyParagraph(.heading2) }
+                    .keyboardShortcut("2", modifiers: [.command, .option])
+                Button("Heading 3") { noteEditor?.applyParagraph(.heading3) }
+                    .keyboardShortcut("3", modifiers: [.command, .option])
+                Divider()
+                Button("Quote") { noteEditor?.applyParagraph(.quote) }
+                Button("Code Block") { noteEditor?.applyParagraph(.code) }
+            }
+            .disabled(noteEditor == nil)
+
+            Menu("Lists") {
+                // Apple Notes' own keys, because fingers already know them.
+                Button("Numbered List") { noteEditor?.applyParagraph(.numbered) }
+                    .keyboardShortcut("7", modifiers: [.command, .shift])
+                Button("Bulleted List") { noteEditor?.applyParagraph(.bulleted) }
+                    .keyboardShortcut("8", modifiers: [.command, .shift])
+                Button("Checklist") { noteEditor?.applyParagraph(.checklist) }
+                    .keyboardShortcut("9", modifiers: [.command, .shift])
+            }
+            .disabled(noteEditor == nil)
         }
 
         // MARK: Help
