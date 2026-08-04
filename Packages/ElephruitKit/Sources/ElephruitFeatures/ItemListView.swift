@@ -5,7 +5,6 @@ import ElephruitPersistence
 import ElephruitSearch
 import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// The middle column: whatever the sidebar selected.
 ///
@@ -172,21 +171,6 @@ public struct ItemListView: View {
         }
     }
 
-    /// The row's drag payload, hand-built: the same JSON bytes `CodableRepresentation`
-    /// would produce, under the same declared type.
-    static func dragProvider(for id: UUID) -> NSItemProvider {
-        let provider = NSItemProvider()
-        guard let data = try? JSONEncoder().encode(WorkItemTransfer(id: id)) else { return provider }
-        provider.registerDataRepresentation(
-            forTypeIdentifier: UTType.elephruitWorkItemDrag.identifier,
-            visibility: .all
-        ) { completion in
-            completion(data, nil)
-            return nil
-        }
-        return provider
-    }
-
     private var itemList: some View {
         List(selection: selectedItemBinding) {
             ForEach(displayedItems, id: \.id) { item in
@@ -198,12 +182,12 @@ public struct ItemListView: View {
                 // a note selected nothing. Selection is the model here; the row says only that.
                 row(for: item)
                     .tag(item.id)
-                // Draggable via the classic provider API, deliberately: `.draggable` installs
-                // a SwiftUI drag gesture that competes with the table's own mouseDown for the
-                // click. `.onDrag` hands the drag to the list's native row-drag session. The
-                // payload is the same `CodableRepresentation` bytes, so the sidebar's
-                // `.dropDestination(for: WorkItemTransfer.self)` decodes it unchanged.
-                .onDrag { Self.dragProvider(for: item.id) }
+                // No drag modifier on the row — deliberately, and the diagnostics prove why:
+                // with one attached (either `.draggable` or `.onDrag`), a mouseDown reaches the
+                // row's cell and the list still refuses to change selection, on this OS. A drag
+                // affordance that costs click-to-select is a bad trade on a list whose whole job
+                // is being clicked. Filing under a project still works from the context menu;
+                // if row-drag returns, it returns as a dedicated grab area, not a row-wide claim.
                 .contextMenu { contextMenu(for: item) }
                 .modifier(ItemSwipeActions(item: item, navigation: navigation, onPermanentDeletion: { pendingPermanentDeletion = $0 }, onChange: { Task { await reload() } }))
             }

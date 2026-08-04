@@ -388,6 +388,9 @@ public final class NavigationModel {
         didSet {
             let previousPrimary = selectedItemID
             reconcilePrimarySelection()
+            Diagnostics.shell.info(
+                "selection: \(self.selectedItemIDs.count, privacy: .public) items, primary \(self.selectedItemID?.uuidString.prefix(8) ?? "none", privacy: .public)"
+            )
             guard !isApplyingHistory, previousPrimary != selectedItemID else { return }
             recordNavigation(
                 NavigationLocation(

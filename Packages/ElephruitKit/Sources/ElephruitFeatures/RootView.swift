@@ -42,6 +42,9 @@ public struct RootView: View {
     /// The split view owns the sidebar now — its material, its divider, its width autosave, its
     /// toggle — which is the whole point of the change: the hand-rolled `HStack` bought a width
     /// policy at the price of everything the platform draws for free.
+    /// Development-only: the mouseDown observer behind `installClickDiagnosticsIfNeeded`.
+    @State private var clickDiagnosticsMonitor: Any?
+
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     /// The window's own width, so a restored column width can be clamped to what there is.
@@ -390,6 +393,7 @@ public struct RootView: View {
         .onChange(of: columnVisibility) { _, visibility in
             navigation.setSidebarVisible(visibility != .detailOnly)
         }
+        .onAppear { installClickDiagnosticsIfNeeded() }
         .inspector(isPresented: inspectorBinding) {
             // SwiftUI retains the inspector content even while its binding is false. Building the
             // real inspector for a module whose policy says it is unavailable gave AppKit both the
@@ -480,6 +484,28 @@ public struct RootView: View {
     /// with nothing ever writing it. The drag writes through ``ModuleLayoutStore/setWidth``, which
     /// is exactly the pipeline built for it: raw record on the way in, policy-clamped on the way
     /// out, per module, shared across windows and launches.
+    /// Logs which view actually receives each left mouseDown, so a click that dies can say
+    /// where it died. Development mode only, observation only: the event always passes through.
+    private func installClickDiagnosticsIfNeeded() {
+        guard DesignReviewLaunch.isDevelopmentMode, clickDiagnosticsMonitor == nil else { return }
+        clickDiagnosticsMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+            if let root = event.window?.contentView?.superview,
+               let hit = root.hitTest(event.locationInWindow) {
+                var chain: [String] = []
+                var view: NSView? = hit
+                for _ in 0..<5 {
+                    guard let current = view else { break }
+                    chain.append(String(describing: type(of: current)))
+                    view = current.superview
+                }
+                Diagnostics.shell.info(
+                    "clickDiag at \(Int(event.locationInWindow.x), privacy: .public),\(Int(event.locationInWindow.y), privacy: .public): \(chain.joined(separator: " < "), privacy: .public)"
+                )
+            }
+            return event
+        }
+    }
+
     private var paneDivider: some View {
         Rectangle()
             .fill(Theme.Colors.separator)
