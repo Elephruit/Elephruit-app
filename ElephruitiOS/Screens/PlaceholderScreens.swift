@@ -163,30 +163,6 @@ struct TimeScreen: View {
 
 // MARK: - Shell furniture stubs
 
-/// The quick-capture sheet. The real draft-preserving composer with grammar chips is the
-/// Capture pass; the sheet exists now so the button's promise is never a dead tap.
-struct CaptureSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            EmptyStateView(
-                symbolName: "plus.circle",
-                headline: "Capture",
-                message: "The capture composer arrives in its own reviewed pass."
-            )
-            .navigationTitle("Capture")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-    }
-}
-
 /// The running timer above the tab bar. The full control set is the Time pass.
 struct TimerAccessoryView: View {
     @Environment(\.services) private var services

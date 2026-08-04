@@ -32,8 +32,8 @@ import SwiftUI
 /// which is the property that matters most here: a picker offering "Q3 Launch" beside a grammar that
 /// files under "Q3" would be two answers to one question.
 @MainActor
-struct CaptureSuggestionSource {
-    var services: AppServices?
+public struct CaptureSuggestionSource {
+    public var services: AppServices?
 
     /// The project and person names the parser is working from. Refreshed with the library.
     ///
@@ -43,25 +43,30 @@ struct CaptureSuggestionSource {
     /// answered every question truthfully about the names it had been given, which were none. A
     /// default value here is a way of saying "not knowing which people exist is a reasonable state
     /// for this to be in", and it never is: this type's entire purpose is knowing.
-    var vocabulary: CaptureVocabulary
+    public var vocabulary: CaptureVocabulary
+
+    public init(services: AppServices?, vocabulary: CaptureVocabulary) {
+        self.services = services
+        self.vocabulary = vocabulary
+    }
 
     /// Existing tag slugs, whole or matching.
     ///
     /// Reads them all, which is right here and would be wrong for items: the tag table is small by
     /// construction — it is the vocabulary one person has invented for themselves — and it is the
     /// only one of the three lists that is not already in memory.
-    func tagSlugs(matching query: String, limit: Int = 8) -> [String] {
+    public func tagSlugs(matching query: String, limit: Int = 8) -> [String] {
         let slugs = ((try? services?.tags.allTags()) ?? []).map(\.slug)
         return matches(for: query, in: slugs, limit: limit)
     }
 
-    func people(matching query: String, limit: Int = 8) -> [String] {
+    public func people(matching query: String, limit: Int = 8) -> [String] {
         matches(for: query, in: vocabulary.people, limit: limit)
     }
 
     /// Projects, areas and goals — everything `>` and the destination button mean by a place to file
     /// something.
-    func containers(matching query: String, limit: Int = 8) -> [String] {
+    public func containers(matching query: String, limit: Int = 8) -> [String] {
         matches(for: query, in: vocabulary.projects, limit: limit)
     }
 
@@ -86,104 +91,5 @@ struct CaptureSuggestionSource {
         }
 
         return Array((prefixed + contained).prefix(limit))
-    }
-}
-
-/// The shared keyboard-oriented completion list used by both global capture panels.
-struct CaptureSuggestionList: View {
-    let prefix: String
-    let suggestions: [String]
-    let selection: Int
-    let onSelect: (Int) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(suggestions.enumerated()), id: \.offset) { index, value in
-                HStack {
-                    Text(prefix)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(Theme.CaptureToken.accent)
-                    Text(value)
-                        .font(Theme.Text.metadata)
-                    Spacer()
-                }
-                .padding(.vertical, Theme.Spacing.tight)
-                .padding(.horizontal, Theme.Spacing.small)
-                .background(
-                    index == selection ? Theme.Colors.selectionFill : Color.clear,
-                    in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                )
-                .contentShape(Rectangle())
-                .onTapGesture { onSelect(index) }
-            }
-        }
-        .accessibilityLabel(
-            "\(suggestions.count) suggestions. Use the arrow keys, then Tab to accept."
-        )
-    }
-}
-
-/// A search field and the list of what it found.
-///
-/// ### Why a popover here and a menu for tags
-/// Not an inconsistency. A tag list is a closed vocabulary of a few dozen that somebody invented and
-/// will recognise on sight, which is what a menu is for. People and projects are an open list that
-/// grows past what anybody can scan, and needs a search field — which is a thing you cannot put in a
-/// menu without the result being worse than either.
-///
-/// It opens with the list already showing. A picker that starts by asking what you are looking for is
-/// no better than the field you clicked it from.
-struct CaptureSearchPicker: View {
-    let prompt: String
-    let symbolName: String
-    /// What to say when the library holds none of these at all — a different situation from a search
-    /// that found nothing, and one that deserves a sentence about how to make the first one.
-    let emptyLibraryMessage: String
-    let search: (String) -> [String]
-    let choose: (String) -> Void
-
-    @State private var query = ""
-    @FocusState private var isSearching: Bool
-
-    private var results: [String] { search(query) }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            TextField(prompt, text: $query)
-                .textFieldStyle(.roundedBorder)
-                .focused($isSearching)
-                .onSubmit { if let first = results.first { choose(first) } }
-
-            if results.isEmpty {
-                Text(query.isEmpty ? emptyLibraryMessage : "Nothing by that name")
-                    .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.tertiaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.vertical, Theme.Spacing.tight)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(results, id: \.self) { title in
-                            Button {
-                                choose(title)
-                            } label: {
-                                Label(title, systemImage: symbolName)
-                                    .font(Theme.Text.metadata)
-                                    .lineLimit(1)
-                                    .padding(.vertical, Theme.Spacing.tight)
-                                    .padding(.horizontal, Theme.Spacing.tight)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                .frame(maxHeight: 180)
-            }
-        }
-        .padding(Theme.Spacing.medium)
-        .frame(width: 240)
-        .onAppear { isSearching = true }
     }
 }
