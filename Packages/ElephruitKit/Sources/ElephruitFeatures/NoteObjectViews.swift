@@ -5,7 +5,6 @@ import ElephruitModel
 import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
-import WebKit
 
 /// One object piece on the page: the thing a prose run flows around.
 ///
@@ -132,8 +131,6 @@ private struct NoteWebClipFace: View {
     let attachmentID: UUID
 
     @State private var html: String?
-    @State private var resources: [UUID: WebClipResource] = [:]
-    @State private var height: CGFloat = 240
     @State private var resolved = false
 
     var body: some View {
@@ -150,9 +147,8 @@ private struct NoteWebClipFace: View {
             .background(Theme.Colors.subtleFill)
 
             if let html {
-                SelectableWebClipView(html: html, resources: resources, height: $height)
+                SelectableWebClipView(html: html)
                     .frame(maxWidth: .infinity)
-                    .frame(height: height)
             } else if resolved {
                 HStack(spacing: Theme.Spacing.small) {
                     Image(systemName: "doc.badge.exclamationmark")
@@ -185,143 +181,97 @@ private struct NoteWebClipFace: View {
               let loadedHTML = try? String(contentsOf: htmlURL, encoding: .utf8)
         else { return }
 
-        var loadedResources: [UUID: WebClipResource] = [:]
+        var displayHTML = loadedHTML
         for candidate in item.attachments where candidate.id != attachmentID {
             guard let url = services.attachments.resolve(candidate) else { continue }
-            loadedResources[candidate.id] = WebClipResource(
-                url: url,
-                mimeType: UTType(candidate.typeIdentifier)?.preferredMIMEType ?? "application/octet-stream"
-            )
-        }
-        resources = loadedResources
-        html = loadedHTML
-    }
-}
+            let mimeType = UTType(candidate.typeIdentifier)?.preferredMIMEType
+                ?? "application/octet-stream"
 
-private struct WebClipResource {
-    var url: URL
-    var mimeType: String
+            // A custom WKURLSchemeHandler can leave a static HTML navigation waiting forever for
+            // an attachment subresource inside an embedded SwiftUI WebView. The attachment remains
+            // a first-class file on the item for OCR and search; only the display copy is inlined.
+            if let data = try? Data(contentsOf: url) {
+                let source = "elephruit-attachment://\(candidate.id.uuidString.lowercased())"
+                let inline = "data:\(mimeType);base64,\(data.base64EncodedString())"
+                displayHTML = displayHTML.replacingOccurrences(of: source, with: inline)
+            }
+        }
+        // A missing image must not hold the document navigation open. Its searchable attachment
+        // metadata is still intact, and the rest of the clipped document remains readable.
+        displayHTML = displayHTML.replacingOccurrences(
+            of: #"elephruit-attachment://[0-9a-fA-F-]{36}"#,
+            with: "data:,",
+            options: .regularExpression
+        )
+        html = displayHTML
+    }
 }
 
 private struct SelectableWebClipView: NSViewRepresentable {
     let html: String
-    let resources: [UUID: WebClipResource]
-    @Binding var height: CGFloat
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(height: $height)
+        Coordinator()
     }
 
-    func makeNSView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
-        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
-
-        let schemeHandler = LocalAttachmentSchemeHandler(resources: resources)
-        context.coordinator.schemeHandler = schemeHandler
-        configuration.setURLSchemeHandler(schemeHandler, forURLScheme: "elephruit-attachment")
-
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.navigationDelegate = context.coordinator
-        return webView
+    func makeNSView(context: Context) -> NSTextView {
+        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 800, height: 120))
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isRichText = true
+        textView.importsGraphics = true
+        textView.drawsBackground = true
+        textView.backgroundColor = .textBackgroundColor
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.heightTracksTextView = false
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        return textView
     }
 
-    func updateNSView(_ webView: WKWebView, context: Context) {
-        context.coordinator.height = $height
-        context.coordinator.schemeHandler?.resources = resources
+    func updateNSView(_ textView: NSTextView, context: Context) {
         guard context.coordinator.loadedHTML != html else { return }
         context.coordinator.loadedHTML = html
-        webView.loadHTMLString(html, baseURL: nil)
+
+        let options: [NSAttributedString.DocumentReadingOptionKey: Any] = [
+            .documentType: NSAttributedString.DocumentType.html,
+            .characterEncoding: String.Encoding.utf8.rawValue,
+        ]
+        guard let rendered = try? NSAttributedString(
+            data: Data(html.utf8),
+            options: options,
+            documentAttributes: nil
+        ) else { return }
+        textView.textStorage?.setAttributedString(rendered)
+        textView.invalidateIntrinsicContentSize()
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: WKWebView, context: Context) -> CGSize? {
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextView, context: Context) -> CGSize? {
         guard let width = proposal.width, width > 0 else { return nil }
-        return CGSize(width: width, height: height)
+        if abs(nsView.frame.width - width) > 0.5 {
+            nsView.setFrameSize(NSSize(width: width, height: nsView.frame.height))
+        }
+        let measuredHeight = context.coordinator.measuredHeight(for: nsView, width: width)
+        return CGSize(width: width, height: measuredHeight)
     }
 
     @MainActor
-    final class Coordinator: NSObject, WKNavigationDelegate {
-        var height: Binding<CGFloat>
+    final class Coordinator {
         var loadedHTML: String?
-        var schemeHandler: LocalAttachmentSchemeHandler?
 
-        init(height: Binding<CGFloat>) {
-            self.height = height
-        }
+        func measuredHeight(for textView: NSTextView, width: CGFloat) -> CGFloat {
+            guard let textContainer = textView.textContainer,
+                  let layoutManager = textView.layoutManager
+            else { return 120 }
 
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
-            measure(webView)
-            for delay in [0.15, 0.6] {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak webView] in
-                    guard let self, let webView else { return }
-                    self.measure(webView)
-                }
-            }
-        }
-
-        func webView(
-            _ webView: WKWebView,
-            decidePolicyFor navigationAction: WKNavigationAction,
-            decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
-        ) {
-            guard navigationAction.navigationType == .linkActivated,
-                  let url = navigationAction.request.url,
-                  ["http", "https"].contains(url.scheme?.lowercased() ?? "")
-            else {
-                decisionHandler(navigationAction.navigationType == .linkActivated ? .cancel : .allow)
-                return
-            }
-            NSWorkspace.shared.open(url)
-            decisionHandler(.cancel)
-        }
-
-        private func measure(_ webView: WKWebView) {
-            webView.evaluateJavaScript(
-                "Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)"
-            ) { [weak self] result, _ in
-                guard let self, let number = result as? NSNumber else { return }
-                self.height.wrappedValue = min(max(CGFloat(truncating: number), 120), 30_000)
-            }
+            textContainer.containerSize.height = .greatestFiniteMagnitude
+            layoutManager.ensureLayout(for: textContainer)
+            let content = layoutManager.usedRect(for: textContainer)
+            return min(max(ceil(content.height + textView.textContainerInset.height * 2), 120), 30_000)
         }
     }
-}
-
-@MainActor
-private final class LocalAttachmentSchemeHandler: NSObject, WKURLSchemeHandler {
-    var resources: [UUID: WebClipResource]
-
-    init(resources: [UUID: WebClipResource]) {
-        self.resources = resources
-    }
-
-    func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
-        guard let source = urlSchemeTask.request.url,
-              let host = source.host,
-              let id = UUID(uuidString: host),
-              let resource = resources[id]
-        else {
-            urlSchemeTask.didFailWithError(URLError(.fileDoesNotExist))
-            return
-        }
-
-        do {
-            let data = try Data(contentsOf: resource.url)
-            let response = URLResponse(
-                url: source,
-                mimeType: resource.mimeType,
-                expectedContentLength: data.count,
-                textEncodingName: nil
-            )
-            urlSchemeTask.didReceive(response)
-            urlSchemeTask.didReceive(data)
-            urlSchemeTask.didFinish()
-        } catch {
-            urlSchemeTask.didFailWithError(error)
-        }
-    }
-
-    func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {}
 }
 
 // MARK: - Divider
