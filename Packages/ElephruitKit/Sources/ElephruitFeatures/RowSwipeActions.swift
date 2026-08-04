@@ -40,9 +40,9 @@ enum RowSwipeActions {
             ) {
                 services.perform {
                     if task.status == .completed {
-                        try services.tasks.reopen(task)
+                        try services.reminderLifecycle.reopen(task)
                     } else {
-                        let outcome = try services.tasks.complete(task)
+                        let outcome = try services.reminderLifecycle.complete(task)
                         if outcome.needsReminderPush {
                             Task { await services.reminders.sync(using: services.reminderSync) }
                         }
@@ -63,9 +63,9 @@ enum RowSwipeActions {
             ) {
                 services.perform {
                     if isOnToday {
-                        try services.tasks.removeFromToday(task)
+                        try services.reminderLifecycle.removeFromToday(task)
                     } else {
-                        try services.tasks.commitToToday(task)
+                        try services.reminderLifecycle.commitToToday(task)
                     }
                     services.noteChange(to: task)
                 }
@@ -81,7 +81,7 @@ enum RowSwipeActions {
                 tint: Theme.Colors.favorite
             ) {
                 services.perform {
-                    try services.tasks.setFlagged(!task.isFlagged, on: task)
+                    try services.reminderLifecycle.setFlagged(!task.isFlagged, on: task)
                     services.noteChange(to: task)
                 }
                 onChange()

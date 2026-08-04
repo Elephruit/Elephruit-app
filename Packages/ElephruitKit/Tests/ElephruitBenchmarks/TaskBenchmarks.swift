@@ -8,7 +8,7 @@ import Testing
 /// The Tasks module's timing target: assembling a system view over a large library.
 ///
 /// ### The design decision this exists to check
-/// `TaskViewService` does **one fetch and then Swift**. None of the scheduling rules translate to
+/// `ReminderQueryService` does **one fetch and then Swift**. None of the scheduling rules translate to
 /// SQL — they compare against today in the user's calendar, read a commitment made on an earlier day,
 /// and consult a lifecycle derived from four columns and a traversal — so the predicate carries kind
 /// and status and the rules run over what comes back.
@@ -43,14 +43,14 @@ struct TaskBenchmarks {
     ///
     /// The mix matters. A corpus of five thousand identical tasks would measure the fetch and nothing
     /// else; the branches in `todaySection` only run when the states that reach them exist.
-    private func makeLibrary() throws -> (fixture: StoreFixture, views: TaskViewService) {
+    private func makeLibrary() throws -> (fixture: StoreFixture, views: ReminderQueryService) {
         let fixture = try StoreFixture()
-        let tasks = TaskService(
+        let tasks = ReminderLifecycleService(
             items: fixture.items,
             context: fixture.context,
             dateProvider: fixture.dateProvider
         )
-        let views = TaskViewService(
+        let views = ReminderQueryService(
             items: fixture.items,
             context: fixture.context,
             dateProvider: fixture.dateProvider
@@ -211,7 +211,7 @@ struct TaskBenchmarks {
     @Test("Deeply nested subtasks do not make the container walk quadratic")
     func deepNesting() throws {
         let fixture = try StoreFixture()
-        let views = TaskViewService(
+        let views = ReminderQueryService(
             items: fixture.items,
             context: fixture.context,
             dateProvider: fixture.dateProvider

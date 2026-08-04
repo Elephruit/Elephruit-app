@@ -274,13 +274,13 @@ struct LogInteractionSheet: View {
                     discussionField
 
                     actionList(
-                        title: "Tasks",
+                        title: "Reminders",
                         detail: "Next steps from this interaction",
                         symbol: "checkmark.circle.fill",
                         tint: Theme.Palette.blue.color,
                         text: $draft.followUps,
                         field: .followUps,
-                        prompt: "One task per line"
+                        prompt: "One reminder per line"
                     )
                 }
                 .padding(Theme.Spacing.section)
@@ -585,7 +585,7 @@ struct LogInteractionSheet: View {
 
     private var footer: some View {
         HStack {
-            Text("The interaction and its tasks are linked to every attendee.")
+            Text("The interaction and its reminders are linked to every attendee.")
                 .font(Theme.Text.metadata)
                 .foregroundStyle(Theme.Colors.tertiaryText)
 

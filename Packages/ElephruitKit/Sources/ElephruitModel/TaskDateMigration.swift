@@ -55,7 +55,7 @@ public struct TaskDateMigrationReport: Codable, Sendable, Hashable {
     public var summary: String {
         var lines: [String] = []
         lines.append(isDryRun ? "Dry run — nothing was written." : "Dates brought up to date.")
-        lines.append("Examined \(tasksExamined) task\(tasksExamined == 1 ? "" : "s").")
+        lines.append("Examined \(tasksExamined) reminder\(tasksExamined == 1 ? "" : "s").")
 
         if folds.isEmpty {
             lines.append("No start dates needed moving.")
@@ -64,7 +64,7 @@ public struct TaskDateMigrationReport: Codable, Sendable, Hashable {
         }
 
         if !flags.isEmpty {
-            lines.append("Marked \(flags.count) task\(flags.count == 1 ? "" : "s") for you to check:")
+            lines.append("Marked \(flags.count) reminder\(flags.count == 1 ? "" : "s") for you to check:")
             for flag in flags.prefix(20) {
                 lines.append("  · “\(flag.itemTitle)” — \(flag.reason.summary)")
             }

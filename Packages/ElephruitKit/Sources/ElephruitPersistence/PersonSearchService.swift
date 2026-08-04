@@ -209,7 +209,7 @@ public final class PersonSearchService {
         guard !open.isEmpty else { return nil }
 
         return PersonMatchReason(
-            text: open.count == 1 ? "1 open task" : "\(open.count) open tasks",
+            text: open.count == 1 ? "1 open reminder" : "\(open.count) open reminders",
             strength: .structural
         )
     }

@@ -16,10 +16,10 @@ struct CaptureParserTests {
 
     @Test("A leading dash or checkbox makes it a task")
     func taskPrefixes() {
-        #expect(CaptureParser.parse("- Call the bank").kind == .task)
-        #expect(CaptureParser.parse("[] Call the bank").kind == .task)
-        #expect(CaptureParser.parse("[ ] Call the bank").kind == .task)
-        #expect(CaptureParser.parse("- [ ] Call the bank").kind == .task)
+        #expect(CaptureParser.parse("- Call the bank").kind == .reminder)
+        #expect(CaptureParser.parse("[] Call the bank").kind == .reminder)
+        #expect(CaptureParser.parse("[ ] Call the bank").kind == .reminder)
+        #expect(CaptureParser.parse("- [ ] Call the bank").kind == .reminder)
         #expect(CaptureParser.parse("- Call the bank").title == "Call the bank")
     }
 
@@ -51,7 +51,7 @@ struct CaptureParserTests {
     func dueDateImpliesTask() {
         let draft = CaptureParser.parse("Send the invoice !tomorrow")
 
-        #expect(draft.kind == .task)
+        #expect(draft.kind == .reminder)
         #expect(draft.dueDate == .tomorrow)
         #expect(draft.title == "Send the invoice")
     }

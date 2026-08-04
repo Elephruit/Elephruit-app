@@ -9,17 +9,17 @@ import Testing
 @MainActor
 private struct TaskFixture {
     let store: StoreFixture
-    let tasks: TaskService
-    let views: TaskViewService
+    let tasks: ReminderLifecycleService
+    let views: ReminderQueryService
 
     init() throws {
         store = try StoreFixture()
-        tasks = TaskService(
+        tasks = ReminderLifecycleService(
             items: store.items,
             context: store.context,
             dateProvider: store.dateProvider
         )
-        views = TaskViewService(
+        views = ReminderQueryService(
             items: store.items,
             context: store.context,
             dateProvider: store.dateProvider
@@ -694,7 +694,7 @@ struct SystemViewTests {
     }
 }
 
-/// ``TaskViewService/contents(of:)`` exists to stop the workspace traversing the library twice for
+/// ``ReminderQueryService/contents(of:)`` exists to stop the workspace traversing the library twice for
 /// one destination, and the only way that is worth having is if it gives the same answer as the two
 /// calls it replaced. This is that check, over a library with a task in each of the states the views
 /// distinguish — because an agreement that only holds for an empty store is not an agreement.

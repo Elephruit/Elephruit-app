@@ -1,7 +1,7 @@
 import Foundation
 
-/// A date phrase, resolved.
-public struct TaskDateSuggestion: Sendable, Hashable {
+/// A natural-language date resolved for the Reminders composer.
+public struct ReminderDateInterpretation: Sendable, Hashable {
     /// The day itself.
     public var date: Date
 
@@ -18,14 +18,14 @@ public struct TaskDateSuggestion: Sendable, Hashable {
     public static func resolving(
         _ text: String,
         using dateProvider: any DateProvider
-    ) -> TaskDateSuggestion? {
+    ) -> ReminderDateInterpretation? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               let interpretation = NaturalDateParser.interpret(trimmed),
               let date = interpretation.resolve(using: dateProvider)
         else { return nil }
 
-        return TaskDateSuggestion(
+        return ReminderDateInterpretation(
             date: date,
             title: date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)),
             detail: relativeDescription(of: date, using: dateProvider)

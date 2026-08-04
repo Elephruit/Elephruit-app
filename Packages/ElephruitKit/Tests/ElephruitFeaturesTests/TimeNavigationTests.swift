@@ -16,7 +16,6 @@ struct TimeNavigationTests {
     @Test("Only the modules with real navigation bring their own sidebar")
     func sidebarIsEarnedByNavigation() {
         #expect(AppModule.calendar.hasOwnSidebar)
-        #expect(AppModule.tasks.hasOwnSidebar)
         #expect(AppModule.records.hasOwnSidebar)
         #expect(AppModule.notes.hasOwnSidebar)
         #expect(AppModule.areas.hasOwnSidebar)

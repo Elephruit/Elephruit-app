@@ -48,14 +48,14 @@ public enum MeetingSampleData {
         }
 
         let prepare = try items.create(
-            ItemDraft(kind: .task, title: "Print the pricing comparison")
+            ItemDraft(kind: .reminder, title: "Print the pricing comparison")
         )
         try items.link(prepare, to: review, kind: .related)
-        try services.tasks.commit(prepare, to: clock.startOfToday)
+        try services.reminderLifecycle.commit(prepare, to: clock.startOfToday)
 
-        let done = try items.create(ItemDraft(kind: .task, title: "Book Room 2"))
+        let done = try items.create(ItemDraft(kind: .reminder, title: "Book Room 2"))
         try items.link(done, to: review, kind: .related)
-        _ = try services.tasks.complete(done)
+        _ = try services.reminderLifecycle.complete(done)
 
         // MARK: A meeting with somebody the library knows well
 

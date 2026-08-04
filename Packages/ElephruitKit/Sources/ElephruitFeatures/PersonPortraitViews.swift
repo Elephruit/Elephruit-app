@@ -890,7 +890,7 @@ struct PersonTimelineSection: View {
                     symbolName: "clock",
                     headline: entries.isEmpty ? "Nothing yet" : "Nothing of that kind",
                     message: entries.isEmpty
-                        ? "Notes, meetings, and tasks that mention this person appear here automatically."
+                        ? "Notes, meetings, and reminders that mention this person appear here automatically."
                         : "Try a different filter."
                 )
                 .frame(maxWidth: .infinity)
@@ -945,7 +945,7 @@ struct TimelineEntryRow: View {
                             .lineLimit(1)
 
                         if entry.isPromise {
-                            Label("task", systemImage: "checkmark.circle")
+                            Label("reminder", systemImage: "bell")
                                 .font(Theme.Text.chip)
                                 .foregroundStyle(Theme.Colors.selection)
                                 .labelStyle(.titleAndIcon)

@@ -5,7 +5,7 @@ import Foundation
 ///
 /// ### Why a module rather than another band
 /// The sidebar had grown to hold every destination of every feature at once — the day's work, the
-/// task system's nine views, the Records module's scopes, the library's kinds, tags, saved
+/// Records module's scopes, the library's kinds, tags, saved
 /// searches, and the Trash — all visible simultaneously. That is not a navigation hierarchy; it is
 /// an index. Nobody reads an index to find out where they are.
 ///
@@ -15,7 +15,7 @@ import Foundation
 ///
 /// ### Why this is not a second navigation system
 /// A module owns no destinations of its own. It names an ordered slice of ``SidebarSelection`` that
-/// already existed — Tasks *is* `.taskView`, `.smartList` and `.builtInSmartList`; Notes *is*
+/// already existed — Notes *is*
 /// `.kind(.note)` — so entering a module changes which rows are drawn and nothing about what a
 /// selection means. ``AppModule/module(for:)`` is the inverse, which is what lets a deep link, a
 /// menu command, or a restored scene put the user inside the right module without anybody having to
@@ -23,7 +23,6 @@ import Foundation
 public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identifiable {
     case calendar
     case reminders
-    case tasks
     case records
     case notes
     case time
@@ -56,15 +55,15 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     /// Whether this module draws its own second-level sidebar when you are inside it.
     ///
     /// The rule: a module swaps the sidebar only when it has real navigation to put there.
-    /// Calendar brings its views, calendars and sets; Tasks its system views and containers;
-    /// Records its scopes and groups; Notes and Areas their kind rows. The rest were paying a
+    /// Calendar brings its views, calendars and sets; Records its scopes and groups; Notes and
+    /// Areas their kind rows. The rest were paying a
     /// whole column swap for almost nothing — Time for a two-button mode toggle whose job the
     /// toolbar already does, and Bookmarks, Archive and Trash for a single front-door row naming
     /// the module the header had just named. Projects is the founding case: its tree lives at the
     /// top level of the primary sidebar, and swapping that away was taking the navigation with it.
     public var hasOwnSidebar: Bool {
         switch self {
-        case .calendar, .tasks, .records, .notes, .areas: true
+        case .calendar, .records, .notes, .areas: true
         case .reminders, .projects, .time, .bookmarks, .archive, .trash: false
         }
     }
@@ -73,7 +72,6 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         switch self {
         case .calendar: "Calendar"
         case .reminders: "Reminders"
-        case .tasks: "Tasks"
         case .records: "Records"
         case .notes: "Notes"
         case .time: "Time"
@@ -89,7 +87,6 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         switch self {
         case .calendar: "calendar"
         case .reminders: "bell"
-        case .tasks: "checkmark.circle"
         case .records: "circle.grid.2x2"
         case .notes: "note.text"
         case .time: "timer"
@@ -109,8 +106,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     public var hint: String {
         switch self {
         case .calendar: "Your days, laid out, and everything you know about them."
-        case .reminders: "Small things to remember, captured without becoming tasks."
-        case .tasks: "What needs doing, when it becomes workable, and what you chose for today."
+        case .reminders: "Things to remember, when they matter, and what you chose for today."
         case .records: "People and things, with their notes, history, relationships, and shared work."
         case .notes: "Everything written down, with the tags and searches that reach across it."
         case .time: "Tracked time, and what it went on."
@@ -127,7 +123,6 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         switch self {
         case .calendar: .calendar
         case .reminders: .reminders
-        case .tasks: .taskView(.today)
         case .records: .records(.all)
         case .notes: .kind(.note)
         case .time: .time
@@ -144,7 +139,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     /// Whether this module's sidebar holds navigation beyond its own front door.
     ///
     /// Calendar offers six views, every calendar it can read, and the sets composed from them; Time
-    /// offers two surfaces, a period and a grouping; Tasks and Records build their columns from the
+    /// offers two surfaces, a period and a grouping; Records builds its column from the
     /// store. None of them needs a row naming the module underneath a header naming the module —
     /// see ``SidebarRegistry/sidebarRows(in:)``, which is where the consequence is applied.
     ///
@@ -153,7 +148,7 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     /// rows that are not declared destinations at all.
     public var hasNavigationOfItsOwn: Bool {
         switch self {
-        case .calendar, .time, .tasks, .records: true
+        case .calendar, .time, .records: true
         case .reminders, .notes, .projects, .areas, .bookmarks, .archive, .trash: false
         }
     }
@@ -172,7 +167,8 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
         case .reminders:
             .reminders
         case .taskView, .smartList, .builtInSmartList:
-            .tasks
+            // Legacy restored destinations and links land in Reminders.
+            .reminders
         case .records:
             .records
         case .time:
@@ -199,11 +195,10 @@ public enum AppModule: String, Hashable, Sendable, Codable, CaseIterable, Identi
     /// belong to Records even though their kind rows are not the browser entry points.
     private static func module(for kind: ItemKind) -> AppModule? {
         switch kind {
-        case .task: .tasks
+        case .task, .reminder: .reminders
         case .project, .goal: .projects
         // A bug, a feature, a milestone and a release only ever exist inside a project, so the
-        // module that owns their list is the one that owns the project — not Tasks, even though a
-        // bug and a feature are work by every other measure in this app.
+        // module that owns their list is the one that owns the project.
         case .bug, .feature, .milestone, .release: .projects
         case .area: .areas
         case .person, .organization: .records

@@ -62,7 +62,7 @@ public struct PersonActionAvailability: Sendable, Hashable, Identifiable {
         case .contact(let channel): channel.displayName
         case .addNote: "Add Note"
         case .logInteraction: "Log Interaction"
-        case .addTask: "Add Task"
+        case .addTask: "Add Reminder"
         case .meetingBrief: "Brief"
         case .addRelationship: "Add Relationship"
         }

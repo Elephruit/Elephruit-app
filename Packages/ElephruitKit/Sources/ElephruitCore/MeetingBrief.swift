@@ -21,7 +21,7 @@ public struct BriefEntry: Sendable, Hashable, Identifiable {
             case .lastInteraction: "Last time"
             case .lifeContext: "What's going on"
             case .recentChanges: "Since you last spoke"
-            case .openPromises: "Tasks"
+            case .openPromises: "Reminders"
             case .upcomingDates: "Coming up"
             case .family: "Family"
             case .conversationStarters: "Worth asking about"

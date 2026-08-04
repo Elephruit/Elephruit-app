@@ -364,7 +364,7 @@ private struct TodayEventInlineDetail: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
 
-                Button("Add Preparation Task", systemImage: "checklist") {
+                Button("Add Preparation Reminder", systemImage: "checklist") {
                     actions.addPreparationTask(
                         titled: "Prepare for \(event.event.displayTitle)",
                         for: event
@@ -583,7 +583,7 @@ struct TodayEventMenu: View {
 
         Divider()
 
-        Button("Add Preparation Task", systemImage: "checklist") {
+        Button("Add Preparation Reminder", systemImage: "checklist") {
             actions.addPreparationTask(titled: "Prepare for \(event.event.displayTitle)", for: event)
         }
 
@@ -708,10 +708,9 @@ struct TodayTaskRow: View {
             .frame(width: TodayMetrics.timeGutterWidth, alignment: .leading)
     }
 
-    /// The same control the Tasks list and the open card draw. Three copies of one circle is three
-    /// chances for a flagged task to look different depending on which screen it is on.
+    /// The same completion language used by other work-item surfaces.
     private var completionControl: some View {
-        TaskCompletionControl(task: item) { actions.toggleCompletion(item) }
+        WorkItemCompletionControl(item: item) { actions.toggleCompletion(item) }
     }
 
     private var titleLine: some View {
@@ -908,7 +907,7 @@ struct TodayTaskMenu: View {
         }
 
         Button("Open", systemImage: "sidebar.trailing") { actions.select(item.id) }
-        Button("Open in Tasks", systemImage: "checkmark.circle") { actions.openInModule(item) }
+        Button("Open in Reminders", systemImage: "bell") { actions.openInModule(item) }
 
         Divider()
 

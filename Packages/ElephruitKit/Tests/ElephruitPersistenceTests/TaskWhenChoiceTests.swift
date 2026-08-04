@@ -9,11 +9,11 @@ import Testing
 @MainActor
 private struct WhenFixture {
     let store: StoreFixture
-    let tasks: TaskService
+    let tasks: ReminderLifecycleService
 
     init() throws {
         store = try StoreFixture()
-        tasks = TaskService(items: store.items, context: store.context, dateProvider: store.dateProvider)
+        tasks = ReminderLifecycleService(items: store.items, context: store.context, dateProvider: store.dateProvider)
     }
 
     var calendar: Calendar { store.dateProvider.calendar }
@@ -188,7 +188,7 @@ struct ConvertToProjectTests {
         #expect(task.checklist.isEmpty)
         let titles = task.children.map(\.title).sorted()
         #expect(titles == ["Book the van", "Change the address"])
-        #expect(task.children.allSatisfy { $0.kind == .task })
+        #expect(task.children.allSatisfy { $0.kind == .reminder })
     }
 
     @Test("A task inside a heading becomes a project somewhere a project may live")

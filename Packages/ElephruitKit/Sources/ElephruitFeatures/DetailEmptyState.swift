@@ -80,13 +80,12 @@ public struct DetailEmptyState: Sendable, Hashable {
                 message: "Choose a capture to file it, or press ⌘N to add one."
             )
 
-        // The Tasks module's own destinations, which share a vocabulary with each other and not with
-        // the library's kinds.
+        // Legacy Tasks destinations remain decodable and redirect into Reminders.
         case .taskView, .smartList, .builtInSmartList:
             DetailEmptyState(
                 symbolName: "checkmark.circle",
-                headline: "No task selected",
-                message: "Choose a task to see its dates, its project, and what it is waiting on."
+                headline: "No reminder selected",
+                message: "Choose a reminder to see its dates, its project, and what it is waiting on."
             )
 
         case .kind(let kind):
@@ -126,11 +125,11 @@ public struct DetailEmptyState: Sendable, Hashable {
                 message: "Choose a note to read it, or press ⌘N to write one."
             )
 
-        case .task, .goal, .decision:
+        case .task, .reminder, .goal, .decision:
             DetailEmptyState(
-                symbolName: "checkmark.circle",
-                headline: "No task selected",
-                message: "Choose a task to see its dates and where it belongs, or press ⌘N to add one."
+                symbolName: "bell",
+                headline: "No reminder selected",
+                message: "Choose a reminder to see its dates and where it belongs, or press ⌘N to add one."
             )
 
         case .bug:

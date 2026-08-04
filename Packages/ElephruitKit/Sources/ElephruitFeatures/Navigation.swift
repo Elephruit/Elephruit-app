@@ -47,14 +47,14 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
     case reminders
     case time
 
-    /// One of the Tasks module's system views.
+    /// A system view written by the retired Tasks module.
     ///
     /// One case carrying a ``TaskSystemView`` rather than nine cases, on the same terms as
     /// ``people(_:)``: adding a view does not widen this enum, and a scene restored from a newer
     /// version still decodes.
     case taskView(TaskSystemView)
 
-    /// A saved task smart list.
+    /// A saved smart list written by the retired Tasks module.
     case smartList(id: UUID)
 
     /// A built-in smart list, named by its stable identifier rather than by an index.
@@ -167,7 +167,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
             // asked to see.
             ItemQuery()
         case .taskView, .smartList, .builtInSmartList:
-            // Every task view is assembled by `TaskViewService`, whose rules compare against today
+            // Every task view is assembled by `ReminderQueryService`, whose rules compare against today
             // in the user's calendar and read a lifecycle derived from four columns and a traversal.
             // None of that is a predicate, and an empty query is the honest answer rather than a
             // half-right one that a view might use by mistake.
@@ -177,7 +177,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
 
     private static func defaultSort(for kind: ItemKind) -> ItemQuery.Sort {
         switch kind {
-        case .task: .dueSoonestFirst
+        case .task, .reminder: .dueSoonestFirst
         case .project, .area: .manual
         default: .updatedNewestFirst
         }
@@ -186,22 +186,22 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
     /// The kind a "New Item" action should create here, so `⌘N` does the obvious thing.
     public var defaultNewItemKind: ItemKind {
         switch self {
-        case .today, .home, .upcoming: .task
+        case .today, .home, .upcoming: .reminder
         case .inbox: .note
         case .kind(let kind): kind
         case .tag, .savedSearch, .item, .archive, .trash: .note
         // Inside a project, the obvious new thing is work. Which *kind* of work depends on the view
         // you are on — a bug view makes a bug — and the workspace intercepts the command before this
         // is reached; this is the fallback for a project opened with no view resolved yet.
-        case .project: .task
-        case .projectInbox: .task
+        case .project: .reminder
+        case .projectInbox: .reminder
         // A meeting, in the calendar. `⌘N` there means an event rather than a note, and the
         // workspace intercepts it before this is consulted — this is the honest fallback.
         case .calendar: .meeting
-        case .reminders: .note
+        case .reminders: .reminder
         case .time: .note
         case .records: .reference
-        case .taskView, .smartList, .builtInSmartList: .task
+        case .taskView, .smartList, .builtInSmartList: .reminder
         }
     }
 
@@ -271,7 +271,7 @@ public enum SidebarSelection: Hashable, Sendable, Codable {
         }
     }
 
-    /// Whether this selection is one the Tasks workspace draws.
+    /// The system view encoded by a legacy Tasks destination, if any.
     public var taskSystemView: TaskSystemView? {
         if case .taskView(let view) = self { return view }
         return nil
@@ -445,7 +445,6 @@ public final class NavigationModel {
     /// a thought and files it as a note; this one reads a sentence about a *task* and shows what it
     /// understood — dates, a repeat, a destination — before anything is created. Merging them would
     /// mean one field whose behaviour changed depending on what the first word turned out to be.
-    public var isTaskEntryVisible = false
     public var isCommandPaletteVisible = false
 
     /// The Records command bar, which is a different surface from the general ⌘K palette.
@@ -468,6 +467,9 @@ public final class NavigationModel {
     /// Searching the calendar, which is a different question from searching the library and so has
     /// its own surface rather than a scope switch on the general field.
     public var isCalendarSearchVisible = false
+
+    /// Incremented whenever an app-level command asks Reminders to open a fresh composer.
+    public private(set) var reminderComposerRequest = 0
 
     /// The calendar's own state, once the workspace has built it.
     ///
@@ -568,7 +570,7 @@ public final class NavigationModel {
     ///
     /// Re-entering the module you are already in is deliberately *not* a no-op at the sidebar level
     /// — it is how the header's module menu confirms a choice — but it does not disturb the
-    /// selection, so choosing "Tasks" while inside Tasks does not throw away where you were.
+    /// selection, so confirming the current module does not throw away where you were.
     public func enterModule(_ module: AppModule) {
         let resumed = moduleSelections[module] ?? module.defaultSelection
         // Guard against a remembered selection that has since stopped belonging to the module —
@@ -777,8 +779,8 @@ public final class NavigationModel {
     /// What the window is called.
     ///
     /// The selection's own name, except at a module's front door, where the module's name is the
-    /// more useful of the two: "Tasks" says where you are, and "Today" — which is also a global
-    /// destination — does not.
+    /// more useful of the two: the module says where you are, while a title shared with another
+    /// destination does not.
     public var windowTitle: String {
         guard let activeModule, selection == activeModule.defaultSelection else {
             return selection.title
@@ -789,6 +791,12 @@ public final class NavigationModel {
     /// Selects exactly one item.
     public func selectItem(_ id: UUID?) {
         selectedItemIDs = id.map { [$0] } ?? []
+    }
+
+    /// Opens Reminders and asks its workspace for a fresh composer.
+    public func requestNewReminder() {
+        select(.reminders)
+        reminderComposerRequest &+= 1
     }
 
     /// Selects a new item and puts its title field into the typing path.
@@ -819,20 +827,12 @@ public final class NavigationModel {
     ///
     /// Cleared by the workspace on the way through, so a second click on the same task opens it
     /// again rather than being swallowed as a duplicate.
-    public var taskToOpen: UUID?
-
     /// Goes to a task, wherever it lives.
     ///
     /// - Parameters:
     ///   - id: the task.
     ///   - destination: the list it lives in — its project, its list, or the system view it falls
     ///     into. The caller resolves this because it has the store and this does not.
-    public func openTask(_ id: UUID, in destination: SidebarSelection) {
-        select(destination)
-        selectItem(id)
-        taskToOpen = id
-    }
-
     /// Whether a batch action bar should appear.
     public var hasMultipleSelection: Bool {
         selectedItemIDs.count > 1
@@ -908,8 +908,7 @@ public final class NavigationModel {
 
     public var shellState: ShellState {
         ShellState(
-            hasOverlay: isQuickCaptureVisible || isCommandPaletteVisible || isTagBrowserVisible
-                || isTaskEntryVisible,
+            hasOverlay: isQuickCaptureVisible || isCommandPaletteVisible || isTagBrowserVisible,
             hasRevealedRowActions: hasRevealedRowActions,
             isSearchActive: isSearchActive,
             focusedPane: focusedPane,
@@ -928,7 +927,6 @@ public final class NavigationModel {
             isQuickCaptureVisible = false
             isCommandPaletteVisible = false
             isTagBrowserVisible = false
-            isTaskEntryVisible = false
 
         case .closeRowActions:
             onCloseRowActions?()

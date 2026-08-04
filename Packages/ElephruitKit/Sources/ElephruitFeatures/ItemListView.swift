@@ -311,7 +311,7 @@ public struct ItemListView: View {
             EmptyStateView(
                 symbolName: "square.stack.3d.up",
                 headline: "Nothing inside yet",
-                message: "Add tasks to this project."
+                message: "Add reminders, bugs, or features to this project."
             )
         case .archive:
             EmptyStateView(
@@ -527,7 +527,7 @@ public struct ItemListView: View {
     /// Kinds this item could reasonably become. Areas and projects are excluded from casual
     /// conversion because they carry children whose containment would break.
     private func convertibleKinds(from kind: ItemKind) -> [ItemKind] {
-        [.note, .task, .idea, .reference, .bookmark].filter { $0 != kind }
+        [.note, .reminder, .idea, .reference, .bookmark].filter { $0 != kind }
     }
 
     // MARK: - Data
@@ -785,7 +785,7 @@ import SwiftData
 #Preview("Item list", traits: .fixedLayout(width: 420, height: 600)) {
     let services = AppServices.inMemory()
     let navigation = NavigationModel()
-    navigation.select(.kind(.task))
+    navigation.select(.reminders)
 
     return NavigationStack {
         ItemListView(navigation: navigation)

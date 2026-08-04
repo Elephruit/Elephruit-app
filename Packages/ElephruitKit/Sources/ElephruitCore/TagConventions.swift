@@ -34,7 +34,7 @@ public enum CaptureKindWords {
     public static let words: [String: ItemKind] = [
         "bug": .bug,
         "feature": .feature,
-        "task": .task,
+        "task": .reminder,
         "milestone": .milestone,
         "release": .release,
     ]

@@ -1062,7 +1062,7 @@ extension DayBriefing {
                 BriefingFigure(
                     id: "tasks",
                     value: "\(taskCount)",
-                    label: taskCount == 1 ? "task" : "tasks",
+                    label: taskCount == 1 ? "reminder" : "reminders",
                     symbolName: "checkmark.circle"
                 )
             )
@@ -1263,7 +1263,7 @@ public struct TodayFilters: Sendable, Hashable, Codable {
     public var summary: String? {
         guard isFiltering else { return nil }
         var hidden: [String] = []
-        if !showsTasks { hidden.append("tasks") }
+        if !showsTasks { hidden.append("reminders") }
         if !showsMeetings { hidden.append("meetings") }
         if !showsPeople { hidden.append("people") }
         if !hiddenCalendarIdentifiers.isEmpty {

@@ -69,7 +69,7 @@ public struct ProjectDetailView: View {
         ) { pending in
             // The non-destructive option is offered first, and is not the destructive role.
             if pending.taskCount > 0 {
-                Button("Move \(pending.taskCount) Tasks Out First") {
+                Button("Move \(pending.taskCount) Work Items Out First") {
                     perform { try $0.moveTasksOut(of: pending.heading) }
                 }
             }
@@ -196,7 +196,7 @@ public struct ProjectDetailView: View {
                 Spacer()
 
                 Menu {
-                    Button("Move Tasks Out") { perform { try $0.moveTasksOut(of: heading) } }
+                    Button("Move Work Items Out") { perform { try $0.moveTasksOut(of: heading) } }
                         .disabled(heading.children.isEmpty)
                     Divider()
                     Button("Archive…") { confirm(.archive, for: heading) }
@@ -249,11 +249,11 @@ public struct ProjectDetailView: View {
         HStack(spacing: Theme.Spacing.medium) {
             Button {
                 perform { repository in
-                    let task = try repository.create(ItemDraft(kind: .task, parentID: project.id))
+                    let task = try repository.create(ItemDraft(kind: .reminder, parentID: project.id))
                     navigation.selectItem(task.id)
                 }
             } label: {
-                Label("New Task", systemImage: "plus")
+                Label("New Reminder", systemImage: "plus")
             }
             .buttonStyle(.borderless)
 

@@ -5,7 +5,7 @@ import SwiftData
 
 /// What moving a card across a board actually did.
 ///
-/// Returned rather than inferred, for the reason ``TaskCompletionOutcome`` is: a drag can change the
+/// Returned rather than inferred, for the reason ``WorkItemCompletionOutcome`` is: a drag can change the
 /// column, the lifecycle status, both, or — most often — only the column. A caller that re-reads the
 /// store to work out which will announce "marked complete" for a drag between two open columns.
 public struct BoardMove: Sendable, Hashable {

@@ -184,17 +184,17 @@ struct SearchSessionTests {
     func groupsOrderByRelevance() async throws {
         let engine = ScriptedSearchEngine()
         engine.responses["launch"] = [
-            result("Best task", kind: .task, score: 90),
+            result("Best reminder", kind: .reminder, score: 90),
             result("Good note", kind: .note, score: 40),
-            result("Weaker task", kind: .task, score: 10),
+            result("Weaker reminder", kind: .reminder, score: 10),
         ]
         let session = makeSession(engine)
 
         session.text = "launch"
         await settle(session)
 
-        #expect(session.groups.map(\.kind) == [.task, .note])
-        #expect(session.orderedResults.map(\.item.title) == ["Best task", "Weaker task", "Good note"])
+        #expect(session.groups.map(\.kind) == [.reminder, .note])
+        #expect(session.orderedResults.map(\.item.title) == ["Best reminder", "Weaker reminder", "Good note"])
     }
 
     @Test("An unreadable fragment is reported rather than dropped")
@@ -229,7 +229,7 @@ struct SearchSessionTests {
         engine.responses["launch"] = [
             result("Launch plan", kind: .note, score: 3),
             result("Launch checklist", kind: .note, score: 2),
-            result("Launch the thing", kind: .task, score: 1),
+            result("Launch the thing", kind: .reminder, score: 1),
         ]
         let session = makeSession(engine)
         session.text = "launch"
@@ -267,10 +267,10 @@ struct SearchSessionTests {
         session.moveHighlight(by: 1)
         session.moveHighlight(by: 1)
 
-        // The third result is a task and the first two are notes, so arriving there at all means the
+        // The third result is a reminder and the first two are notes, so arriving there at all means the
         // traversal crossed a section header rather than stopping at the end of the first group.
         #expect(session.highlightedID == ordered[2].id)
-        #expect(ordered[2].item.kind == .task)
+        #expect(ordered[2].item.kind == .reminder)
     }
 
     @Test("The highlight clamps at both ends rather than wrapping and losing the user's place")

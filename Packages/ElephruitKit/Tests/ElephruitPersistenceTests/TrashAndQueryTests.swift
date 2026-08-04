@@ -193,10 +193,10 @@ struct ItemQueryTests {
         let fixture = try StoreFixture()
         let clock = fixture.dateProvider
 
-        let overdue = try fixture.makeTask(title: "Overdue", dueAt: clock.startOfDay(daysFromToday: -3))
-        let dueToday = try fixture.makeTask(title: "Due today", dueAt: clock.startOfToday)
-        _ = try fixture.makeTask(title: "Due next week", dueAt: clock.startOfDay(daysFromToday: 7))
-        let deferred = try fixture.makeTask(title: "Deferred", dueAt: clock.startOfToday)
+        let overdue = try fixture.makeReminder(title: "Overdue", dueAt: clock.startOfDay(daysFromToday: -3))
+        let dueToday = try fixture.makeReminder(title: "Due today", dueAt: clock.startOfToday)
+        _ = try fixture.makeReminder(title: "Due next week", dueAt: clock.startOfDay(daysFromToday: 7))
+        let deferred = try fixture.makeReminder(title: "Deferred", dueAt: clock.startOfToday)
         try fixture.items.update(deferred) { $0.deferUntil = clock.startOfDay(daysFromToday: 5) }
 
         let today = try fixture.items.items(matching: .today(using: clock))
@@ -217,9 +217,9 @@ struct ItemQueryTests {
         let fixture = try StoreFixture()
         let clock = fixture.dateProvider
 
-        _ = try fixture.makeTask(title: "Today", dueAt: clock.startOfToday)
-        _ = try fixture.makeTask(title: "Tomorrow", dueAt: clock.startOfDay(daysFromToday: 1))
-        _ = try fixture.makeTask(title: "Far future", dueAt: clock.startOfDay(daysFromToday: 30))
+        _ = try fixture.makeReminder(title: "Today", dueAt: clock.startOfToday)
+        _ = try fixture.makeReminder(title: "Tomorrow", dueAt: clock.startOfDay(daysFromToday: 1))
+        _ = try fixture.makeReminder(title: "Far future", dueAt: clock.startOfDay(daysFromToday: 30))
 
         let upcoming = try fixture.items.items(matching: .upcoming(days: 7, using: clock))
         let titles = Set(upcoming.map(\.title))

@@ -19,7 +19,7 @@ import Foundation
 /// truth rather than a copy of it.
 ///
 /// ### One fetch, rules in Swift
-/// The same split ``TaskViewService`` established, for the same reason: none of the relevance rules
+/// The same split ``ReminderQueryService`` established, for the same reason: none of the relevance rules
 /// translate to a predicate. They compare against *today* in the user's calendar, read a commitment
 /// made on an earlier day, and consult a lifecycle derived from four columns and a traversal.
 @MainActor

@@ -30,19 +30,19 @@ struct TodayActions {
     func toggleCompletion(_ task: Item) {
         act(on: task) { services in
             if task.status == .completed {
-                try services.tasks.reopen(task)
+                try services.reminderLifecycle.reopen(task)
             } else {
-                _ = try services.tasks.complete(task)
+                _ = try services.reminderLifecycle.complete(task)
             }
         }
     }
 
     func setFlagged(_ isFlagged: Bool, on task: Item) {
-        act(on: task) { try $0.tasks.setFlagged(isFlagged, on: task) }
+        act(on: task) { try $0.reminderLifecycle.setFlagged(isFlagged, on: task) }
     }
 
     func setPriority(_ priority: Priority, on task: Item) {
-        act(on: task) { try $0.tasks.setPriority(priority, on: task) }
+        act(on: task) { try $0.reminderLifecycle.setPriority(priority, on: task) }
     }
 
     /// Moves a task to a day.
@@ -56,19 +56,19 @@ struct TodayActions {
     func reschedule(_ task: Item, to day: Date?) {
         act(on: task) { services in
             guard let day else {
-                try services.tasks.removeFromToday(task)
+                try services.reminderLifecycle.removeFromToday(task)
                 return
             }
-            try services.tasks.commit(task, to: day)
+            try services.reminderLifecycle.commit(task, to: day)
         }
     }
 
     func moveToLaterToday(_ task: Item) {
-        act(on: task) { try $0.tasks.moveToLaterToday(task) }
+        act(on: task) { try $0.reminderLifecycle.moveToLaterToday(task) }
     }
 
     func setDeadline(_ date: Date?, on task: Item) {
-        act(on: task) { try $0.tasks.setDeadline(date, on: task) }
+        act(on: task) { try $0.reminderLifecycle.setDeadline(date, on: task) }
     }
 
     func file(_ task: Item, under container: Item?) {
@@ -111,8 +111,8 @@ struct TodayActions {
     /// Opens the record in the module that owns it, for when the inspector is not enough.
     func openInModule(_ item: Item) {
         switch item.kind {
-        case .task:
-            navigation.select(.taskView(.today))
+        case .task, .reminder:
+            navigation.select(.reminders)
         case .person:
             navigation.select(.records(.people))
         default:
@@ -133,10 +133,10 @@ struct TodayActions {
 
         var created: Item?
         services.perform {
-            var draft = ItemDraft(kind: .task, title: trimmed)
+            var draft = ItemDraft(kind: .reminder, title: trimmed)
             draft.parentID = container?.id
             let task = try services.items.create(draft)
-            try services.tasks.commit(task, to: day)
+            try services.reminderLifecycle.commit(task, to: day)
             services.noteChange(to: task)
             created = task
         }
@@ -199,7 +199,7 @@ struct TodayActions {
             )
             // Committed to the meeting's own day, so preparation for Thursday's review appears on
             // Thursday rather than in a pile with no date on it.
-            try services.tasks.commit(task, to: clock.calendar.startOfDay(for: event.event.startAt))
+            try services.reminderLifecycle.commit(task, to: clock.calendar.startOfDay(for: event.event.startAt))
             services.noteChange(to: task)
         }
     }
@@ -216,7 +216,7 @@ struct TodayActions {
                 for: event.event,
                 aboutPeople: event.participants.compactMap { model.person($0.personID) }
             )
-            try services.tasks.commit(task, to: clock.startOfTomorrow)
+            try services.reminderLifecycle.commit(task, to: clock.startOfTomorrow)
             services.noteChange(to: task)
         }
     }
@@ -225,7 +225,7 @@ struct TodayActions {
         services.perform {
             for id in event.preparation.openPreparationTaskIDs {
                 guard let task = model.task(id) else { continue }
-                _ = try services.tasks.complete(task)
+                _ = try services.reminderLifecycle.complete(task)
                 services.noteChange(to: task)
             }
         }
@@ -291,9 +291,9 @@ struct TodayActions {
         guard !trimmed.isEmpty else { return }
 
         services.perform {
-            let task = try services.items.create(ItemDraft(kind: .task, title: trimmed))
+            let task = try services.items.create(ItemDraft(kind: .reminder, title: trimmed))
             try services.items.link(task, to: person, kind: .mentions)
-            try services.tasks.commit(task, to: day)
+            try services.reminderLifecycle.commit(task, to: day)
             services.noteChange(to: task)
         }
     }

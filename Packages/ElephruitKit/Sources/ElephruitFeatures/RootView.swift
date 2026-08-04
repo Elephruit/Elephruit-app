@@ -128,12 +128,6 @@ public struct RootView: View {
                 navigation.selectItem(id)
             }
         }
-        .sheet(isPresented: taskEntryBinding) {
-            TaskQuickEntryView { created in
-                navigation.select(.taskView(.inbox))
-                navigation.selectItem(created.id)
-            }
-        }
         .sheet(isPresented: commandPaletteBinding) {
             CommandPaletteView(navigation: navigation, commands: paletteCommands)
         }
@@ -493,10 +487,8 @@ public struct RootView: View {
     private var primaryPane: some View {
         if case .project(let id, let viewID) = navigation.selection {
             ProjectWorkspaceView(navigation: navigation, projectID: id, viewID: viewID)
-        } else if navigation.selection.isTaskDestination {
-            TaskWorkspaceView(navigation: navigation)
-        } else if navigation.selection == .reminders {
-            RemindersWorkspaceView()
+        } else if navigation.selection.isTaskDestination || navigation.selection == .reminders {
+            RemindersWorkspaceView(navigation: navigation)
         } else if navigation.selection == .time {
             switch navigation.timeSurface {
             case .log:
@@ -763,10 +755,6 @@ public struct RootView: View {
 
     private var commandPaletteBinding: Binding<Bool> {
         Binding(get: { navigation.isCommandPaletteVisible }, set: { navigation.isCommandPaletteVisible = $0 })
-    }
-
-    private var taskEntryBinding: Binding<Bool> {
-        Binding(get: { navigation.isTaskEntryVisible }, set: { navigation.isTaskEntryVisible = $0 })
     }
 
     private var tagBrowserBinding: Binding<Bool> {

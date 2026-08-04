@@ -319,7 +319,7 @@ struct TodayQuickAddField: View {
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.Colors.tertiaryText)
 
-            TextField("New task", text: $title)
+            TextField("New reminder", text: $title)
                 .textFieldStyle(.plain)
                 .font(Theme.Text.rowTitle)
                 .focused(isFocused)
@@ -526,7 +526,7 @@ struct TodayClearDayView: View {
                 .foregroundStyle(Theme.Colors.secondaryText)
 
             ElephruitDesign.FlowLayout(spacing: Theme.Spacing.small, lineSpacing: Theme.Spacing.small) {
-                Button("Add a Task", systemImage: "plus.circle", action: onAddTask)
+                Button("Add a Reminder", systemImage: "plus.circle", action: onAddTask)
 
                 Button("Write Today's Note", systemImage: "note.text") {
                     actions?.openDailyNote(for: plan.date, creatingIfNeeded: true)

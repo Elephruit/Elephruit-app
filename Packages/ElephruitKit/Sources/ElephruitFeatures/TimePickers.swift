@@ -120,7 +120,7 @@ struct TimeSubjectPicker: View {
         .accessibilityIdentifier(AccessibilityID.Time.subjectPicker)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             ItemSearchPopover(
-                prompt: "Search tasks, projects, notes…",
+                prompt: "Search reminders, projects, notes…",
                 emptyHint: "Type two letters to search.",
                 current: subject,
                 clearTitle: subject.map { "Clear “\($0.title)”" },

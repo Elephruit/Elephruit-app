@@ -34,11 +34,11 @@ the design system and export codecs, and `Item` is the single persisted node.
 
 ### The cost, stated honestly
 
-`Item` is a wide, sparse row: a note carries `dueAt`, a task carries `body`. The
+`Item` is a wide, sparse row: a note carries `dueAt`, a reminder carries `body`. The
 mitigations are:
 
 - **`ItemKind` declares what it uses.** `ItemKind.supportedFields` is the single
-  place that says "tasks have due dates, notes do not", and `ItemValidator` enforces
+  place that says "reminders have due dates, notes do not", and `ItemValidator` enforces
   it on save. Violations are caught by tests, not by convention.
 - **Sparse columns are cheap.** SQLite stores `NULL` in ~1 byte; the width is a
   modelling wart, not a performance one.
@@ -75,7 +75,7 @@ Relationships (all optional or defaulted, all with inverses, no `.deny` rules):
 
 | Relationship | Type | Delete rule | Meaning |
 |---|---|---|---|
-| `parent` / `children` | `Item?` / `[Item]` | `.cascade` on children | The one containment hierarchy: Area ▸ Project ▸ Task ▸ Subtask; Note/Bookmark ▸ any of the above. Legal pairs enforced by `ItemKind.canContain(_:)`. |
+| `parent` / `children` | `Item?` / `[Item]` | `.cascade` on children | The one containment hierarchy: Area ▸ Project ▸ Reminder ▸ Sub-reminder; Note/Bookmark ▸ any of the above. Legal pairs enforced by `ItemKind.canContain(_:)`. |
 | `tags` / `Tag.items` | `[Tag]` | `.nullify` | Many-to-many. |
 | `outgoingLinks` / `ItemLink.source` | `[ItemLink]` | `.cascade` | |
 | `incomingLinks` / `ItemLink.target` | `[ItemLink]` | `.cascade` | Backlinks are a query over this, never stored twice. |
@@ -92,15 +92,18 @@ Relationships (all optional or defaulted, all with inverses, no `.deny` rules):
 
 ### `ItemKind`
 
-`note`, `task`, `project`, `area`, `person`, `organization`, `interaction`,
+`note`, `reminder`, `project`, `area`, `person`, `organization`, `interaction`,
 `meeting`, `bookmark`, `dailyEntry`, `idea`, `goal`, `decision`, `reference`.
 
 Declared in `ElephruitCore` as a `String`-backed enum with an
 `unknown(String)`-style tolerant decoder, so an archive written by a newer version
 imports without data loss.
 
-**v1 ships UI for:** `note`, `task`, `project`, `area`, `bookmark`, `dailyEntry`.
-The remaining kinds exist in the schema so that Phase 3 adds views, not migrations.
+The persisted `task` value remains readable only for migration and archive compatibility. Current
+ingestion converts it to `reminder` while preserving the record's stable identifier and graph edges.
+
+**Current UI:** `note`, `reminder`, `project`, `area`, `bookmark`, `dailyEntry`, plus the later
+records, calendar, and project-specific work surfaces.
 
 ### `Tag`
 `id`, `name`, `slug` (normalised, case-folded, used for matching), `colorName`,

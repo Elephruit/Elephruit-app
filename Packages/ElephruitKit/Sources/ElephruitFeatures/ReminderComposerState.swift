@@ -1,4 +1,5 @@
 import ElephruitCore
+import ElephruitModel
 import Foundation
 
 /// The keyboard stops in the reminder composer, in their deliberate traversal order.
@@ -177,7 +178,7 @@ enum ReminderDateSearch {
         }
         if !named.isEmpty { return Array(named.prefix(limit)) }
 
-        guard let parsed = TaskDateSuggestion.resolving(normalized, using: dateProvider) else {
+        guard let parsed = ReminderDateInterpretation.resolving(normalized, using: dateProvider) else {
             return []
         }
         return [
@@ -414,21 +415,28 @@ struct ReminderComposerDraft: Sendable, Hashable {
     var tagSlugs: [String] = []
     var personNames: [String] = []
     var projectTitle: String?
-    var checklist: [ReminderChecklistItem] = []
+    var checklist: [ChecklistItem] = []
     var pendingStep = ""
 
     init() {}
 
-    init(reminder: LightweightReminder) {
+    init(reminder: Item) {
         title = reminder.title
-        notes = reminder.notes
+        notes = reminder.body
         startAt = reminder.startAt
         dueAt = reminder.dueAt
         isSomeday = reminder.isSomeday
         tagSlugs = reminder.tagSlugs
-        personNames = reminder.personNames
-        projectTitle = reminder.projectTitle
-        checklist = reminder.checklist
+        personNames = reminder.outgoingLinks.compactMap { link in
+            guard link.kind == .mentions,
+                  let target = link.target,
+                  target.kind == .person || target.kind == .organization
+            else { return nil }
+            return target.displayTitle
+        }
+        .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        projectTitle = reminder.parent?.kind == .project ? reminder.parent?.title : nil
+        checklist = reminder.checklist.items
     }
 
     var hasChecklistContent: Bool {
@@ -443,7 +451,7 @@ struct ReminderComposerDraft: Sendable, Hashable {
 
     mutating func commitPendingStep() {
         let title = pendingStep.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !title.isEmpty { checklist.append(ReminderChecklistItem(title: title)) }
+        if !title.isEmpty { checklist.append(ChecklistItem(title: title)) }
         pendingStep = ""
     }
 

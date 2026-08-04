@@ -63,7 +63,7 @@ public struct ProjectTemplate: Sendable, Hashable, Identifiable {
 
         public init(
             _ title: String,
-            kind: ItemKind = .task,
+            kind: ItemKind = .reminder,
             stageIndex: Int? = nil,
             severity: BugSeverity? = nil,
             body: String? = nil
@@ -277,7 +277,7 @@ extension ProjectTemplate {
 
     public static let generalTasks = ProjectTemplate(
         id: "general",
-        name: "General tasks",
+        name: "General reminders",
         summary: "A plain list of work, grouped into sections",
         symbolName: "checklist",
         stages: [

@@ -539,7 +539,7 @@ public struct DeterministicPersonCommandParser: PersonCommandParsing {
 
         guard !text.isEmpty else { return nil }
 
-        var summary = "New task: “\(text)”"
+        var summary = "New reminder: “\(text)”"
         if let when { summary += " \(when.summary)" }
 
         return state.command(

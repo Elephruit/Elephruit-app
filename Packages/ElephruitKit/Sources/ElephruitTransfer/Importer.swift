@@ -380,7 +380,8 @@ public struct Importer {
 
             let identifier = fields["id"].flatMap(UUID.init(uuidString:)) ?? UUID()
             let kindRaw = fields["kind"] ?? ItemKind.note.rawValue
-            let kind = ItemKind(rawValue: kindRaw) ?? .note
+            let importedKind = ItemKind(rawValue: kindRaw) ?? .note
+            let kind: ItemKind = importedKind == .task ? .reminder : importedKind
 
             let title = fields["title"] ?? Self.inferTitle(fromBody: body, filename: file.filename)
             let tagNames = fields["tags"].map(MarkdownFrontMatter.parseList) ?? []
@@ -520,10 +521,13 @@ public struct Importer {
     /// Copies a record onto a model object.
     ///
     /// Writes `kindRaw` rather than `kind`, so an unknown future kind survives the round trip
-    /// instead of being flattened. Fields the kind does not support are dropped rather than
-    /// written and then rejected by validation.
+    /// instead of being flattened. The one exception is the retired task kind, which is promoted
+    /// to a reminder as it enters the library. Fields the kind does not support are dropped rather
+    /// than written and then rejected by validation.
     private func apply(_ record: ArchiveItem, to item: Item, tagsByArchiveID: [UUID: ElephruitModel.Tag]) {
-        item.kindRaw = record.kind
+        item.kindRaw = record.kind == ItemKind.task.rawValue
+            ? ItemKind.reminder.rawValue
+            : record.kind
         item.title = record.title
         item.body = record.body
         item.createdAt = record.createdAt

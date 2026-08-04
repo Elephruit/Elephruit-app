@@ -110,7 +110,7 @@ struct ReminderComposer: View {
             focusRouter.onHorizontalMove = nil
             focusRouter.onTextInput = nil
         }
-        .accessibilityIdentifier("tasks.reminderComposer")
+        .accessibilityIdentifier("reminders.composer")
     }
 
     private var titleLine: some View {
@@ -135,7 +135,7 @@ struct ReminderComposer: View {
                 onFocus: { activate(.title) }
             )
             .frame(height: 26)
-            .accessibilityIdentifier("tasks.reminderComposer.title")
+            .accessibilityIdentifier("reminders.composer.title")
         }
     }
 
@@ -157,7 +157,7 @@ struct ReminderComposer: View {
         )
         .frame(minHeight: 42, maxHeight: 88)
         .padding(.leading, 21)
-        .accessibilityIdentifier("tasks.reminderComposer.notes")
+        .accessibilityIdentifier("reminders.composer.notes")
     }
 
     private var inlineCompletion: CaptureCompletion? {
@@ -249,7 +249,7 @@ struct ReminderComposer: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("tasks.reminderComposer.tagSummary")
+                    .accessibilityIdentifier("reminders.composer.tagSummary")
                 }
 
                 if !draft.personNames.isEmpty {
@@ -265,7 +265,7 @@ struct ReminderComposer: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("tasks.reminderComposer.peopleSummary")
+                    .accessibilityIdentifier("reminders.composer.peopleSummary")
                 }
 
                 if draft.startAt != nil || draft.dueAt != nil || draft.isSomeday {
@@ -300,7 +300,7 @@ struct ReminderComposer: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("tasks.reminderComposer.dateSummary")
+                    .accessibilityIdentifier("reminders.composer.dateSummary")
                 }
             }
             .padding(.leading, 21)
@@ -357,7 +357,7 @@ struct ReminderComposer: View {
                             onFocus: { activate(.checklist) }
                         )
                         .frame(height: 24)
-                        .accessibilityIdentifier("tasks.reminderComposer.checklistField")
+                        .accessibilityIdentifier("reminders.composer.checklistField")
                     }
                     .padding(.horizontal, Theme.Spacing.small)
                     .frame(minHeight: Theme.Size.rowHeight)
@@ -909,7 +909,7 @@ struct ReminderComposer: View {
 
             Divider()
 
-            TaskMonthPicker(
+            ReminderMonthPicker(
                 calendar: clock.calendar,
                 today: clock.now,
                 selected: dateNavigation.day ?? selected,
@@ -1360,7 +1360,7 @@ struct ReminderComposer: View {
     }
 
     private func commitWhenQuery() {
-        guard let suggestion = services.flatMap({ TaskDateSuggestion.resolving(whenQuery, using: $0.dateProvider) })
+        guard let suggestion = services.flatMap({ ReminderDateInterpretation.resolving(whenQuery, using: $0.dateProvider) })
         else { return }
         draft.startAt = suggestion.date
         draft.isSomeday = false
@@ -1368,7 +1368,7 @@ struct ReminderComposer: View {
     }
 
     private func commitDeadlineQuery() {
-        guard let suggestion = services.flatMap({ TaskDateSuggestion.resolving(deadlineQuery, using: $0.dateProvider) })
+        guard let suggestion = services.flatMap({ ReminderDateInterpretation.resolving(deadlineQuery, using: $0.dateProvider) })
         else { return }
         draft.dueAt = suggestion.date
         deadlineQuery = ""

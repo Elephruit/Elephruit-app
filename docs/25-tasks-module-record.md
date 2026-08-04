@@ -1,5 +1,10 @@
 # 25 — Tasks module record
 
+> **Historical record.** The Tasks product surface was removed on 2026-08-03. Its ordinary work
+> records migrate to reminders without changing identity, links, dates, recurrence, completion,
+> hierarchy, or provenance. Bugs and features remain project-specific work records. See
+> `docs/33-reminders-unification.md` for the current design.
+
 What was built, the decisions behind it, and what was deliberately left.
 
 ## The product in one paragraph

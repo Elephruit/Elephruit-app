@@ -160,12 +160,12 @@ struct CaptureKindToggle: View {
     var displayedKind: ItemKind? = nil
 
     private var shownKind: ItemKind { displayedKind ?? draft.kind }
-    private var isTask: Bool { shownKind == .task }
+    private var isTask: Bool { shownKind == .reminder }
     private var isNote: Bool { shownKind == .note }
 
     var body: some View {
         Button {
-            draft.choose(isTask ? .note : .task)
+            draft.choose(isTask ? .note : .reminder)
         } label: {
             Label(kindName, systemImage: kindSymbol)
                 .font(Theme.Text.metadata)
@@ -191,8 +191,8 @@ struct CaptureKindToggle: View {
     }
 
     private var helpText: String {
-        if isTask { return "A task. Click to make it a note." }
-        if isNote { return "A note. Click to make it a task." }
-        return "A \(kindName.lowercased()). Click to make it a task."
+        if isTask { return "A reminder. Click to make it a note." }
+        if isNote { return "A note. Click to make it a reminder." }
+        return "A \(kindName.lowercased()). Click to make it a reminder."
     }
 }

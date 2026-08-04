@@ -261,7 +261,7 @@ struct PersonTimelineDetailSheet: View {
     }
 
     private var eyebrow: String {
-        if entry.isPromise { return "Task" }
+        if entry.isPromise { return "Reminder" }
         if entry.kind == .interaction { return "Interaction" }
         return entry.kind.displayName
     }
@@ -275,7 +275,7 @@ struct PersonTimelineDetailSheet: View {
         switch entry.kind {
         case .note: return Theme.Palette.blue.color
         case .interaction, .meeting: return Theme.Palette.purple.color
-        case .task: return Theme.Palette.green.color
+        case .task, .reminder: return Theme.Palette.green.color
         default: return Theme.Colors.selection
         }
     }
@@ -294,7 +294,7 @@ struct PersonTimelineDetailSheet: View {
     private func complete() {
         guard let services, let item else { return }
         do {
-            _ = try services.tasks.complete(item)
+            _ = try services.reminderLifecycle.complete(item)
             status = .completed
             services.noteChange(to: item)
         } catch {

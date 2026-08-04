@@ -9,7 +9,7 @@ import Foundation
 /// is a property worth being able to state and assert — and a property spread across five button
 /// actions inside a `body` is one that can only be checked by reading them all and hoping.
 ///
-/// Named here, applied by ``ElephruitPersistence/TaskService/apply(_:to:)``, and walked case by case
+/// Named here, applied by ``ElephruitPersistence/ReminderLifecycleService/apply(_:to:)``, and walked case by case
 /// in `TaskWhenChoiceTests`.
 public enum TaskWhenChoice: Sendable, Hashable {
     /// On today's plan.
@@ -75,7 +75,7 @@ public enum TaskAttributes {
             case .deadline: "The date this must be finished by. The only date that can make it overdue."
             case .people: "Who this involves. It appears on their page too."
             case .priority: "How much this matters relative to everything else you could do instead."
-            case .reminder: "A time this shows on the task."
+            case .reminder: "A time this reminder appears."
             case .waiting: "Somebody else has the next move."
             }
         }

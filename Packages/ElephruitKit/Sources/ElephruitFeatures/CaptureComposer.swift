@@ -178,7 +178,7 @@ struct CaptureComposer: View {
                 composition: $composition,
                 caret: $caret,
                 vocabulary: vocabulary,
-                placeholder: composition.draft.kind == .task ? "New To-Do" : "New Note",
+                placeholder: composition.draft.kind == .reminder ? "New To-Do" : "New Note",
                 onSubmit: onSave,
                 onCancel: onCancel,
                 onMoveToNotes: { focus = .notes },

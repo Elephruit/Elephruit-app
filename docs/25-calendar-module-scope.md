@@ -172,7 +172,7 @@ Per the specification, and enforced by their absence rather than by a flag:
 - Weather
 - Scheduling links, public booking pages, availability publishing
 - Conference creation or joining (an event's `URL` field is displayed and is otherwise ordinary)
-- Tasks or reminders inside any calendar view — a follow-up creates a task in Tasks and says so
+- Reminders inside any calendar view — a follow-up creates a linked reminder in Reminders and says so
 - Meeting proposals, voting, registration
 - Free/busy coordination between invitees
 

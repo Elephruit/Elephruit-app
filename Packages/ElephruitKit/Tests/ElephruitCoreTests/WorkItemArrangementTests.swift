@@ -30,7 +30,7 @@ struct WorkItemArrangementTests {
 
     static func work(
         _ title: String,
-        kind: ItemKind = .task,
+        kind: ItemKind = .feature,
         status: ItemStatus = .open,
         stage: UUID? = nil,
         category: WorkflowStageCategory? = nil,
@@ -196,7 +196,7 @@ struct WorkItemArrangementTests {
         var configuration = ProjectViewConfiguration.default(for: .bugs)
         configuration.kinds = ItemKind.workItemKindSet
         let groups = WorkItemArrangement.arrange(
-            [Self.work("Plain task"), Self.work("Crash", kind: .bug, severity: .critical)],
+            [Self.work("Plain feature"), Self.work("Crash", kind: .bug, severity: .critical)],
             configuration: configuration,
             vocabulary: Self.vocabulary
         )

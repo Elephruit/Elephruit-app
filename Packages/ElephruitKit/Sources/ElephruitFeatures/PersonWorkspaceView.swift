@@ -802,7 +802,7 @@ struct PersonQuickActions: View {
         guard let services else { return }
         services.perform {
             let task = try services.items.create(
-                ItemDraft(kind: .task, title: "Follow up with \(person.displayTitle)")
+                ItemDraft(kind: .reminder, title: "Follow up with \(person.displayTitle)")
             )
             try services.items.link(task, to: person, kind: .mentions)
             services.noteChange(to: task)

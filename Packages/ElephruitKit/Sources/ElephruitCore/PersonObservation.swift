@@ -88,7 +88,7 @@ public struct FactAttribute: RawRepresentable, Codable, Sendable, Hashable {
         case .lookingFor: "Looking for"
         case .significance: "Why they matter"
         case .reflection: "Private notes"
-        case .promise: "Tasks"
+        case .promise: "Reminders"
         default: rawValue.capitalized
         }
     }

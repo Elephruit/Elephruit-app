@@ -13,7 +13,7 @@ import Testing
 @MainActor
 private struct SyncFixture {
     let store: StoreFixture
-    let tasks: TaskService
+    let tasks: ReminderLifecycleService
     let reminders: FixtureRemindersProvider
     let engine: ReminderSyncEngine
 
@@ -23,11 +23,11 @@ private struct SyncFixture {
 
     init(authorization: IntegrationAuthorization = .authorized) throws {
         store = try StoreFixture(dateProvider: clock)
-        tasks = TaskService(items: store.items, context: store.context, dateProvider: store.dateProvider)
+        tasks = ReminderLifecycleService(items: store.items, context: store.context, dateProvider: store.dateProvider)
         reminders = FixtureRemindersProvider(authorization: authorization)
         engine = ReminderSyncEngine(
             items: store.items,
-            tasks: tasks,
+            lifecycle: tasks,
             context: store.context,
             dateProvider: store.dateProvider,
             provider: reminders
@@ -38,7 +38,7 @@ private struct SyncFixture {
 
     @discardableResult
     func task(_ title: String) throws -> Item {
-        try store.items.create(ItemDraft(kind: .task, title: title))
+        try store.items.create(ItemDraft(kind: .reminder, title: title))
     }
 
     func snapshot(_ id: String) async throws -> ReminderSnapshot {
@@ -218,7 +218,7 @@ struct ReminderReconcileTests {
 
         let tasks = try fixture.store.items.items(matching: {
             var query = ItemQuery()
-            query.kinds = [.task]
+            query.kinds = [.reminder]
             return query
         }())
         #expect(tasks.count == 1)
@@ -335,7 +335,7 @@ struct ReminderConflictTests {
 
         // …and the local version survives beside it, linked so neither is orphaned.
         var query = ItemQuery()
-        query.kinds = [.task]
+        query.kinds = [.reminder]
         let all = try fixture.store.items.items(matching: query)
         #expect(all.count == 2)
 
@@ -534,12 +534,12 @@ struct ReminderProviderResolutionTests {
     @Test("An adapter linked after the engine was built is the one the engine uses")
     func adapterSwappedAfterConstructionIsUsed() async throws {
         let store = try StoreFixture(dateProvider: TickingDateProvider())
-        let tasks = TaskService(items: store.items, context: store.context, dateProvider: store.dateProvider)
+        let tasks = ReminderLifecycleService(items: store.items, context: store.context, dateProvider: store.dateProvider)
         let box = SwappableProvider()
 
         let engine = ReminderSyncEngine(
             items: store.items,
-            tasks: tasks,
+            lifecycle: tasks,
             context: store.context,
             dateProvider: store.dateProvider,
             provider: { box.current }
@@ -600,7 +600,7 @@ struct ReminderInitialImportTests {
         #expect(report.failures.isEmpty)
 
         let tasks = try fixture.store.items.items(matching: {
-            var query = ItemQuery(); query.kinds = [.task]; query.scope = .all; return query
+            var query = ItemQuery(); query.kinds = [.reminder]; query.scope = .all; return query
         }())
         #expect(tasks.contains { $0.externalIdentifier != nil })
     }
@@ -640,7 +640,7 @@ struct ReminderInitialImportTests {
         #expect(report.imported > 0)
 
         let imported = try fixture.store.items.items(matching: {
-            var query = ItemQuery(); query.kinds = [.task]; query.scope = .all; return query
+            var query = ItemQuery(); query.kinds = [.reminder]; query.scope = .all; return query
         }()).filter { $0.externalIdentifier != nil }
 
         // Every task that arrived came from the one list that was ticked.
@@ -698,11 +698,11 @@ struct ReminderSyncSettlingTests {
     func repeatedPassesSettle() async throws {
         let clock = WallClock()
         let store = try StoreFixture(dateProvider: clock)
-        let tasks = TaskService(items: store.items, context: store.context, dateProvider: clock)
+        let tasks = ReminderLifecycleService(items: store.items, context: store.context, dateProvider: clock)
         let provider = FixtureRemindersProvider(authorization: .authorized)
         let engine = ReminderSyncEngine(
             items: store.items,
-            tasks: tasks,
+            lifecycle: tasks,
             context: store.context,
             dateProvider: clock,
             provider: provider
@@ -730,11 +730,11 @@ struct ReminderSyncSettlingTests {
     func lossyRemindersSettle() async throws {
         let clock = WallClock()
         let store = try StoreFixture(dateProvider: clock)
-        let tasks = TaskService(items: store.items, context: store.context, dateProvider: clock)
+        let tasks = ReminderLifecycleService(items: store.items, context: store.context, dateProvider: clock)
         let provider = FixtureRemindersProvider(authorization: .authorized)
         let engine = ReminderSyncEngine(
             items: store.items,
-            tasks: tasks,
+            lifecycle: tasks,
             context: store.context,
             dateProvider: clock,
             provider: provider
@@ -753,11 +753,11 @@ struct ReminderSyncSettlingTests {
     func localEditPushesOnceAndThenSettles() async throws {
         let clock = WallClock()
         let store = try StoreFixture(dateProvider: clock)
-        let tasks = TaskService(items: store.items, context: store.context, dateProvider: clock)
+        let tasks = ReminderLifecycleService(items: store.items, context: store.context, dateProvider: clock)
         let provider = FixtureRemindersProvider(authorization: .authorized)
         let engine = ReminderSyncEngine(
             items: store.items,
-            tasks: tasks,
+            lifecycle: tasks,
             context: store.context,
             dateProvider: clock,
             provider: provider
@@ -768,7 +768,7 @@ struct ReminderSyncSettlingTests {
         _ = await engine.reconcile(importingFrom: lists)
 
         let linked = try store.items.items(matching: {
-            var query = ItemQuery(); query.kinds = [.task]; query.scope = .all; return query
+            var query = ItemQuery(); query.kinds = [.reminder]; query.scope = .all; return query
         }()).filter { $0.externalIdentifier != nil && !$0.isCompleted }
         let task = try #require(linked.first)
 

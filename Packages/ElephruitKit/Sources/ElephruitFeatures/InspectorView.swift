@@ -420,7 +420,7 @@ public struct InspectorView: View {
         }
 
         var query = ItemQuery()
-        query.kinds = [.area, .project, .task, .goal, .meeting, .dailyEntry]
+        query.kinds = [.area, .project, .reminder, .goal, .meeting, .dailyEntry]
         query.sort = .titleAscending
 
         let candidates = (try? services.items.items(matching: query)) ?? []
@@ -550,7 +550,7 @@ public struct InspectorView: View {
 #Preview("Inspector", traits: .fixedLayout(width: 300, height: 700)) {
     let services = AppServices.inMemory()
     let navigation = NavigationModel()
-    navigation.selectItem((try? services.items.items(matching: .kind(.task)))?.first?.id)
+    navigation.selectItem((try? services.items.items(matching: .kind(.reminder)))?.first?.id)
 
     return InspectorView(navigation: navigation)
         .appServices(services)

@@ -20,7 +20,7 @@ struct BrowserNavigationHistoryTests {
     @Test("Beginning a project reveals Projects and leaves creation pending until its field appears")
     func beginCreatingProject() throws {
         let navigation = NavigationModel()
-        navigation.enterModule(.tasks)
+        navigation.enterModule(.reminders)
 
         navigation.beginCreatingProject()
 

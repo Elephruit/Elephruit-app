@@ -301,7 +301,7 @@ struct QuickJotControllerTests {
 
         let item = try #require(try services.items.items(matching: .everything()).first)
         #expect(item.title == "Call the framer")
-        #expect(item.kind == .task)
+        #expect(item.kind == .reminder)
         #expect(item.dueAt != nil)
         #expect(item.priority == .high)
         #expect(item.tags.contains { $0.slug == "errand" })

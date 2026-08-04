@@ -127,7 +127,7 @@ struct TodayToolbar: View {
 
     private var filterChips: some View {
         HStack(spacing: Theme.Spacing.tight) {
-            chip("Tasks", systemImage: "checkmark.circle", isOn: filters.showsTasks) {
+            chip("Reminders", systemImage: "bell", isOn: filters.showsTasks) {
                 preferences?.toggleTasks()
             }
             chip("Meetings", systemImage: "person.2", isOn: filters.showsMeetings) {
@@ -180,7 +180,7 @@ struct TodayToolbar: View {
         Menu {
             if !showsChips {
                 Section("Show") {
-                    toggle("Tasks", isOn: filters.showsTasks) { preferences?.toggleTasks() }
+                    toggle("Reminders", isOn: filters.showsTasks) { preferences?.toggleTasks() }
                     toggle("Meetings", isOn: filters.showsMeetings) { preferences?.toggleMeetings() }
                     toggle("People", isOn: filters.showsPeople) { preferences?.togglePeople() }
                 }

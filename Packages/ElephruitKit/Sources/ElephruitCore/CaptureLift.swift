@@ -10,7 +10,7 @@ import Foundation
 ///
 /// ### Why a field that rewrites itself is normally a mistake, and why this is not one
 /// Two other quick-entry surfaces in this app argue, at length, that the field must never be
-/// rewritten — see ``TaskEntryParser`` and the event composer. They are right about what they are
+/// rewritten — the event composer is right about what it is
 /// describing, and the distinction is worth stating because otherwise this file reads as somebody
 /// ignoring them.
 ///
@@ -93,7 +93,7 @@ public enum CaptureLift {
         // The task prefix first, and separately, because it is the one instruction with no token
         // behind it — the parser consumes it before tokenizing and reports only its effect.
         if let prefix = taskPrefixes.first(where: { text.hasPrefix($0) }) {
-            lifted.kind = .task
+            lifted.kind = .reminder
             spans.append(0..<prefix.count)
         }
 

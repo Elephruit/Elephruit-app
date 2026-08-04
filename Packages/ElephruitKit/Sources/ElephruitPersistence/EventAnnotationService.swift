@@ -229,7 +229,7 @@ public final class EventAnnotationService {
             for link in meeting.incomingLinks {
                 guard let source = link.source, source.deletedAt == nil else { continue }
                 switch source.kind {
-                case .task:
+                case .task, .reminder:
                     if source.status == .open {
                         openTaskIDs.append(source.id)
                     } else {
@@ -450,9 +450,9 @@ public final class EventAnnotationService {
 
     // MARK: - Follow-ups
 
-    /// Creates a task in the Tasks module about this meeting.
+    /// Creates a reminder about this meeting.
     ///
-    /// **The task never appears in a calendar view.** It is an ordinary task in the ordinary place,
+    /// **The reminder never appears in a calendar view.** It is an ordinary reminder in Reminders,
     /// linked to the meeting so that opening either shows the other. A calendar that lists its own
     /// follow-ups turns into a to-do list with dates, which is a different and worse product.
     @discardableResult
@@ -462,7 +462,7 @@ public final class EventAnnotationService {
         for event: CalendarEventSummary,
         aboutPeople people: [Item] = []
     ) throws(AppError) -> Item {
-        let task = try items.create(ItemDraft(kind: .task, title: title))
+        let task = try items.create(ItemDraft(kind: .reminder, title: title))
 
         try items.update(task) { item in
             item.dueAt = dueAt

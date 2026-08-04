@@ -526,10 +526,10 @@ private struct RecordDetail: View {
         detailCard(title: "Assigned and owed", symbol: "checklist") {
             let tasks = (record.outgoingLinks + record.incomingLinks).compactMap { link in
                 let other = link.source?.id == record.id ? link.target : link.source
-                return other?.kind == .task ? other : nil
+                return other?.kind == .reminder ? other : nil
             }
             if tasks.isEmpty {
-                Text("Tasks linked to this record appear here, including work assigned to them and things you owe them.")
+                Text("Reminders linked to this record appear here, including things assigned to them and things you owe them.")
                     .foregroundStyle(Theme.Colors.tertiaryText)
             } else {
                 ForEach(tasks) { task in Label(task.displayTitle, systemImage: "circle") }

@@ -74,7 +74,7 @@ struct TodayBenchmarks {
         _ = await services.calendar.enable()
 
         let items = services.items
-        let tasks = services.tasks
+        let tasks = services.reminderLifecycle
 
         let projects = try (0..<40).map { index in
             try items.create(ItemDraft(kind: .project, title: "Project \(index)"))

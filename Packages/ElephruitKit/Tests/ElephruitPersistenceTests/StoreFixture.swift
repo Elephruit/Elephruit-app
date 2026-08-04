@@ -122,6 +122,18 @@ struct StoreFixture {
     }
 
     @discardableResult
+    func makeReminder(
+        title: String,
+        dueAt: Date? = nil,
+        parentID: UUID? = nil,
+        priority: Priority = .normal
+    ) throws -> Item {
+        try items.create(
+            ItemDraft(kind: .reminder, title: title, parentID: parentID, dueAt: dueAt, priority: priority)
+        )
+    }
+
+    @discardableResult
     func makeProject(title: String, parentID: UUID? = nil) throws -> Item {
         try items.create(ItemDraft(kind: .project, title: title, parentID: parentID))
     }
