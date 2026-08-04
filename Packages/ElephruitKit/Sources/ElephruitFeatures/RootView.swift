@@ -37,17 +37,23 @@ public struct RootView: View {
     /// in this window is where the next window and the next launch find it. See ``ModuleLayoutStore``.
     @State private var moduleLayout = ModuleLayoutStore()
 
-    /// The sidebar changes width through one path only: the user dragging its handle.
+    /// Which columns the native split view is showing, kept in step with ``LayoutMode``.
     ///
-    /// The root `HStack` gives the sidebar this exact width, so destinations, empty states, module
-    /// policies and sibling panes cannot negotiate it. Scene storage preserves the user's choice
-    /// for this window without measuring the rendered sidebar and feeding layout back into itself.
-    @SceneStorage("layout.sidebar.width") private var storedSidebarWidth = Double(SidebarMetrics.defaultWidth)
-    @State private var sidebarDragStart: CGFloat?
-    @State private var isWindowFullScreen = false
+    /// The split view owns the sidebar now — its material, its divider, its width autosave, its
+    /// toggle — which is the whole point of the change: the hand-rolled `HStack` bought a width
+    /// policy at the price of everything the platform draws for free.
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     /// The window's own width, so a restored column width can be clamped to what there is.
     @State private var windowWidth: CGFloat = 0
+
+    /// The content area's width — everything trailing the sidebar — so the interior arithmetic
+    /// can keep reasoning in full-window terms by deriving what the sidebar actually takes.
+    @State private var contentAreaWidth: CGFloat = 0
+
+    /// The interior divider's drag anchor. One divider left, between the list and the reading
+    /// pane; the sidebar's belongs to AppKit again.
+    @State private var paneDragStart: CGFloat?
 
     @State private var isExportPresented = false
     @State private var isImportPresented = false
@@ -201,6 +207,10 @@ public struct RootView: View {
             // window was last left rather than being overwritten by it.
             restoreNavigation()
 
+            // The split view starts in the shape the restored layout mode says, not in its own
+            // default — a window left in focus mode comes back without its sidebar.
+            columnVisibility = navigation.layoutMode.showsSidebar ? .all : .detailOnly
+
             // Everything the sidebar reads is computed on change and never during a render, so the
             // *first* computation has to come from somewhere — and at launch this is the only
             // somewhere there is. Without it the Projects tree stayed empty until the user created a
@@ -296,33 +306,17 @@ public struct RootView: View {
     /// The column widths whatever this window is showing has asked for.
     private var shellLayout: ModuleShellLayout { navigation.shellLayout }
 
-    /// The user's sidebar width, bounded only to keep the column usable.
-    private var sidebarWidth: CGFloat {
-        let stored = storedSidebarWidth.isFinite
-            ? CGFloat(storedSidebarWidth)
-            : SidebarMetrics.defaultWidth
-        return min(max(stored, SidebarMetrics.floorWidth), SidebarMetrics.maximumWidth)
-    }
-
-    /// A deliberate replacement for the split view's automatic divider negotiation.
+    /// What the sidebar is actually taking, derived rather than owned.
     ///
-    /// The start is captured once so every update uses the gesture's total translation rather than
-    /// accumulating deltas. Nothing outside this gesture writes `storedSidebarWidth`.
-    private var sidebarResizeGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                let start = sidebarDragStart ?? sidebarWidth
-                if sidebarDragStart == nil { sidebarDragStart = start }
-
-                let proposed = start + value.translation.width
-                storedSidebarWidth = Double(min(
-                    max(proposed, SidebarMetrics.floorWidth),
-                    SidebarMetrics.maximumWidth
-                ))
-            }
-            .onEnded { _ in
-                sidebarDragStart = nil
-            }
+    /// AppKit owns the sidebar's width now — the user drags the native divider, the system
+    /// autosaves it — so the interior arithmetic, which reasons in full-window terms, derives the
+    /// footprint from the two measurements it already has. Before the first layout pass the
+    /// default is the honest guess.
+    private var sidebarWidth: CGFloat {
+        guard windowWidth > 0, contentAreaWidth > 0, windowWidth > contentAreaWidth else {
+            return SidebarMetrics.defaultWidth
+        }
+        return windowWidth - contentAreaWidth
     }
 
     /// Every column's width, decided together.
@@ -351,80 +345,46 @@ public struct RootView: View {
         )
     }
 
+    /// The shell, on the platform's own split view at last.
+    ///
+    /// ### What the hand-rolled `HStack` cost, now recovered
+    /// The sidebar gets its material, its desktop tint, its native divider with a cursor and an
+    /// autosaved width, its own toolbar section — which retires the `Color.clear` shim that faked
+    /// the boundary with a magic number tied to the traffic-light width — and the system's own
+    /// toggle behaviour. What stays ours, deliberately, is the interior: the list-and-reading-pane
+    /// arithmetic in ``ModuleShellLayout`` is tested to the point of being the most trustworthy
+    /// layout code in the app, and the fight this codebase lost twice was over AppKit's divider
+    /// *restoration* fighting per-module widths — a fight that only existed when AppKit owned
+    /// those columns. One column each: AppKit takes the sidebar, the policy keeps the interior.
     private var splitView: some View {
-        HStack(spacing: 0) {
-            if navigation.layoutMode.showsSidebar {
-                SidebarView(navigation: navigation)
-                    .frame(width: sidebarWidth, alignment: .topLeading)
-                    .frame(maxHeight: .infinity, alignment: .topLeading)
-                    .background(Theme.Colors.windowBackground)
-                    .overlay(alignment: .trailing) {
-                        Rectangle()
-                            .fill(.clear)
-                            .frame(width: 8)
-                            .contentShape(Rectangle())
-                            .gesture(sidebarResizeGesture)
-                            .help("Drag to resize the sidebar")
-                            .accessibilityLabel("Resize sidebar")
-                    }
-
-            }
-
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            SidebarView(navigation: navigation)
+                .navigationSplitViewColumnWidth(
+                    min: SidebarMetrics.floorWidth,
+                    ideal: SidebarMetrics.defaultWidth,
+                    max: SidebarMetrics.maximumWidth
+                )
+        } detail: {
             NavigationStack {
                 contentPanes
                     // Every destination supplies a nearer title. This keeps the unified toolbar
                     // present during the loading frames between destinations.
                     .navigationTitle(navigation.windowTitle)
-                    .toolbar {
-                        ToolbarItem(placement: .navigation) {
-                            Button {
-                                navigation.toggleSidebar()
-                            } label: {
-                                Label("Toggle Sidebar", systemImage: "sidebar.leading")
-                            }
-                            .help("Toggle Sidebar")
-                        }
-
-                        // Keep this outside the button's toolbar item. Putting the invisible
-                        // alignment space beside the button made macOS draw one enormous rounded
-                        // control background around both views.
-                        ToolbarItem(placement: .navigation) {
-                            Color.clear
-                                .frame(
-                                    width: max(
-                                        0,
-                                        sidebarWidth - (isWindowFullScreen ? 40 : 128)
-                                    ),
-                                    height: 1
-                                )
-                                .accessibilityHidden(true)
-                        }
-                        .sharedBackgroundVisibility(.hidden)
-                    }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                guard width > 0 else { return }
+                contentAreaWidth = width
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        // The content begins below the unified toolbar, but the sidebar is a window region rather
-        // than page content. Paint its surface and boundary through the title bar as well.
-        .background(alignment: .leading) {
-            Theme.Colors.windowBackground
-                .frame(width: navigation.layoutMode.showsSidebar ? sidebarWidth : 0)
-                .ignoresSafeArea()
+        .navigationSplitViewStyle(.balanced)
+        // Two owners of "is the sidebar showing" — the layout mode, which the Escape ladder,
+        // focus mode and the swipe write; and the split view, which the native toggle and the
+        // user's divider write. Synced both ways, with the mode as the source of truth.
+        .onChange(of: navigation.layoutMode.showsSidebar) { _, shows in
+            columnVisibility = shows ? .all : .detailOnly
         }
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(Theme.Colors.separator)
-                .frame(width: 1)
-                // Follow the collapsing column instead of fading at its old edge while content
-                // moves through it. Opacity finishes the disappearance at the window edge.
-                .offset(x: navigation.layoutMode.showsSidebar ? sidebarWidth : 0)
-                .opacity(navigation.layoutMode.showsSidebar ? 1 : 0)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-        }
-        .background {
-            WindowFullScreenReader(isFullScreen: $isWindowFullScreen)
+        .onChange(of: columnVisibility) { _, visibility in
+            navigation.setSidebarVisible(visibility != .detailOnly)
         }
         .inspector(isPresented: inspectorBinding) {
             // SwiftUI retains the inspector content even while its binding is false. Building the
@@ -492,7 +452,7 @@ public struct RootView: View {
 
             if shellWidths.detail != nil {
                 if navigation.layoutMode.showsList {
-                    Divider()
+                    paneDivider
                 }
 
                 ItemDetailView(navigation: navigation)
@@ -507,6 +467,49 @@ public struct RootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
+    }
+
+    /// The one divider still ours: between the list and the reading pane.
+    ///
+    /// Draggable at last — it was a plain `Divider()` for the whole life of the custom shell, so
+    /// the list column could not be resized at all and the per-module width store sat orphaned
+    /// with nothing ever writing it. The drag writes through ``ModuleLayoutStore/setWidth``, which
+    /// is exactly the pipeline built for it: raw record on the way in, policy-clamped on the way
+    /// out, per module, shared across windows and launches.
+    private var paneDivider: some View {
+        Rectangle()
+            .fill(Theme.Colors.separator)
+            .frame(width: 1)
+            .overlay {
+                Color.clear
+                    .frame(width: 9)
+                    .contentShape(Rectangle())
+                    .gesture(paneDragGesture)
+                    .onHover { hovering in
+                        if hovering {
+                            NSCursor.resizeLeftRight.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                    .help("Drag to resize the list")
+                    .accessibilityLabel("Resize the list")
+            }
+    }
+
+    private var paneDragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let start = paneDragStart ?? shellWidths.primary
+                if paneDragStart == nil { paneDragStart = start }
+                moduleLayout.setWidth(
+                    start + value.translation.width,
+                    of: .primary,
+                    in: navigation.activeModule,
+                    available: windowWidth > 0 ? windowWidth : Theme.Size.assumedWindowWidth
+                )
+            }
+            .onEnded { _ in paneDragStart = nil }
     }
 
     @ViewBuilder

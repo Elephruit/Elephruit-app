@@ -228,7 +228,17 @@ struct RemindersWorkspaceView: View {
 
         if let due = reminder.dueAt {
             if due < clock.startOfToday {
-                let days = clock.calendar.dateComponents([.day], from: due, to: clock.startOfToday).day ?? 0
+                // Whole calendar days between the due *day* and today, so a deadline missed late
+                // yesterday evening reads "1 day late" rather than the "0 days late" the raw
+                // interval arithmetic produced.
+                let days = max(
+                    1,
+                    clock.calendar.dateComponents(
+                        [.day],
+                        from: clock.calendar.startOfDay(for: due),
+                        to: clock.startOfToday
+                    ).day ?? 1
+                )
                 // Amber, and phrased as a fact — "a red row is an accusation"; red stays
                 // reserved for due-today-and-not-done, the one state still actionable in time.
                 return ("\(days == 1 ? "1 day" : "\(days) days") late", Theme.Colors.dueToday)

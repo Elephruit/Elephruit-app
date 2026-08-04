@@ -97,9 +97,9 @@ public struct SidebarView: View {
             libraryEdgesBand
         }
         .listStyle(.sidebar)
-        // The fixed root container supplies the sidebar surface. Let it show through instead of
-        // letting AppKit's sidebar list add a second, darker material over the whole column.
-        .scrollContentBackground(.hidden)
+        // No background suppression any more: the shell is a real split view, so this column
+        // finally wears the sidebar material — vibrancy, desktop tint, the lot — that the
+        // hand-rolled shell had been painting over with flat window background.
         .accessibilityIdentifier("sidebar.primary")
     }
 
