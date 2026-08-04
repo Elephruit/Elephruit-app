@@ -297,8 +297,12 @@ public final class AppServices {
     /// change already announced, and bumping there would turn one write into two rounds of reloads.
     public private(set) var changeToken = 0
 
-    /// Reported to the sidebar's status line. ``SyncStatus/disabled`` until Phase 4.
-    public var syncStatus: SyncStatus = .disabled
+    /// Reported to the sidebar's status line. Truth lives on the monitor; this is the read.
+    public var syncStatus: SyncStatus { syncMonitor.status }
+
+    /// Watches the mirroring machinery. Constructed disabled when the store is local-only,
+    /// so the status line never claims what the container is not doing.
+    public let syncMonitor: SyncMonitor
 
     /// The most recent recoverable failure, surfaced as an alert and then cleared.
     ///
@@ -352,6 +356,7 @@ public final class AppServices {
         self.isDevelopmentMode = isDevelopmentMode
         self.defaults = defaults
         self.shortcuts = ShortcutRegistry.load(from: .standard)
+        self.syncMonitor = SyncMonitor(enabled: stack.isSyncEnabled)
 
         // The main-actor context. Background work creates its own from the container.
         let context = ModelContext(stack.container)
@@ -681,6 +686,24 @@ public final class AppServices {
                 return (try? context.fetch(descriptor)) ?? []
             }
         )
+
+        // The moment another device's changes land is the moment everything derived from
+        // the store is stale — same cue, same pass, no polling.
+        syncMonitor.onImportCompleted = { [weak self] in
+            self?.absorbRemoteChanges()
+        }
+    }
+
+    /// Recomputes what a remote import made stale: badges, trees, snapshots, the index.
+    ///
+    /// The counterpart of a local mutation's announce-and-refresh, for mutations announced
+    /// by iCloud instead of a view. Derived date keys that arrive stale from another device
+    /// converge on each row's next local save — the fetch over-reads until then, which
+    /// costs milliseconds and never work (the `dayRelevanceKey` argument, applied to sync).
+    public func absorbRemoteChanges() {
+        changeToken &+= 1
+        refreshDerivedState()
+        Task { await warmSearchIndex() }
     }
 
     /// An isolated in-memory instance, for previews and tests.

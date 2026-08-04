@@ -10,11 +10,14 @@ import SwiftUI
 struct SettingsScreen: View {
     @Environment(\.services) private var services
 
+    @AppStorage(SyncSetting.enabledKey) private var syncEnabled = false
+
     @State private var exportedArchive: URL?
     @State private var exportError: String?
 
     var body: some View {
         List {
+            syncSection
             integrationsSection
             remindersListsSection
             exportSection
@@ -23,6 +26,50 @@ struct SettingsScreen: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    // MARK: - Sync
+
+    /// The same switch, the same words, as the Mac's Sync settings — one behavior,
+    /// promised in two places.
+    private var syncSection: some View {
+        Section {
+            Toggle(isOn: $syncEnabled) {
+                Label("Sync with iCloud", systemImage: "arrow.triangle.2.circlepath.icloud")
+            }
+
+            if needsRelaunch {
+                Label(
+                    syncEnabled
+                        ? "Takes effect the next time Elephruit opens."
+                        : "Stops at the next launch. Nothing is deleted, here or in iCloud.",
+                    systemImage: "arrow.counterclockwise"
+                )
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.secondaryText)
+            }
+
+            LabeledContent("Status") {
+                Text(services?.syncStatus.summary ?? SyncStatus.disabled.summary)
+            }
+        } header: {
+            Text("iCloud")
+        } footer: {
+            Text(
+                """
+                Sync keeps this iPhone and your Mac looking at one library, through your \
+                own private iCloud database. Apple's CloudKit is the only thing this app \
+                talks to on the network — no account with us, no analytics, no third-party \
+                service.
+                """
+            )
+        }
+    }
+
+    /// The toggle and the running container disagree — the launch boundary is between them.
+    private var needsRelaunch: Bool {
+        guard let services else { return false }
+        return syncEnabled != services.stack.isSyncEnabled
     }
 
     // MARK: - Integrations
@@ -193,7 +240,7 @@ struct SettingsScreen: View {
         } header: {
             Text("About")
         } footer: {
-            Text("Elephruit keeps everything on this device. No account, no analytics, no network. The iPhone and Mac libraries are separate for now — move data between them with Export and Import.")
+            Text("Your library is yours: no account with us, no analytics, no third-party service. With sync off, the network is never used at all; with it on, your own iCloud is the only place anything goes.")
         }
     }
 }

@@ -607,17 +607,31 @@ struct SettingsView: View {
                 webClipper
             }
 
-            Tab("Privacy", systemImage: "lock.shield") {
-                privacy.accessibilityIdentifier(AccessibilityID.Settings.privacyTab)
-            }
-
-            Tab("Advanced", systemImage: "wrench.and.screwdriver") {
-                advanced.accessibilityIdentifier(AccessibilityID.Settings.advancedTab)
-            }
+            trailingTabs
         }
         .tabViewStyle(.sidebarAdaptable)
         .frame(width: 720, height: 520)
         .accessibilityIdentifier(AccessibilityID.Settings.root)
+    }
+
+    /// The last three tabs, folded through one builder property.
+    ///
+    /// Not an organisational statement — the result builder counts statements, eleven tabs
+    /// exceeded its arity, and this property makes three of them count as one. The window
+    /// looks exactly as it would if they were inline.
+    @TabContentBuilder<Never>
+    private var trailingTabs: some TabContent<Never> {
+        Tab("Sync", systemImage: "arrow.triangle.2.circlepath.icloud") {
+            SyncSettingsSection()
+        }
+
+        Tab("Privacy", systemImage: "lock.shield") {
+            privacy.accessibilityIdentifier(AccessibilityID.Settings.privacyTab)
+        }
+
+        Tab("Advanced", systemImage: "wrench.and.screwdriver") {
+            advanced.accessibilityIdentifier(AccessibilityID.Settings.advancedTab)
+        }
     }
 
     /// A form whose contents need the library, and which says so plainly when it is not open yet.

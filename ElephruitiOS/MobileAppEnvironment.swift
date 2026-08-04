@@ -61,7 +61,11 @@ final class MobileAppEnvironment {
                 stack = try PersistenceStack.open(mode: .onDisk(location))
             } else {
                 let location = try StoreLocation.application()
-                stack = try PersistenceStack.open(mode: .onDisk(location))
+                // The setting asks; the stack decides — same line, same rule as the Mac.
+                stack = try PersistenceStack.open(
+                    mode: .onDisk(location),
+                    syncEnabled: SyncSetting.isEnabled()
+                )
             }
 
             let fixturesAuthorized = isDevelopmentMode && arguments.contains("-ElephruitFixturesAuthorized")

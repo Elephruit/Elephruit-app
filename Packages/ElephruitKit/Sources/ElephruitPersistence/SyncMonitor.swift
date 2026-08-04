@@ -131,3 +131,15 @@ public final class SyncMonitor {
         status = .failed(reason: event.failureDescription ?? "Sync failed")
     }
 }
+
+/// Where the sync switch is remembered.
+///
+/// One key, both platforms, read once at boot — the container decision is made before
+/// the first fetch, so flipping it applies at the next launch and the toggle says so.
+public enum SyncSetting {
+    public static let enabledKey = "sync.enabled"
+
+    public static func isEnabled(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: enabledKey)
+    }
+}

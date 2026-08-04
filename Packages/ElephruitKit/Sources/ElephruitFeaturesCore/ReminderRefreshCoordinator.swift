@@ -69,6 +69,7 @@ public final class ReminderRefreshCoordinator {
         observationTask?.cancel()
         observationTask = nil
 
+        guard ReminderDeviceGate.isActive() else { return }
         guard services.reminders.isEnabled else { return }
 
         let stream = services.reminders.changes
@@ -92,6 +93,7 @@ public final class ReminderRefreshCoordinator {
     /// The app came back to the front. Anything that happened on another device while it was away
     /// arrives now.
     public func applicationDidBecomeActive() {
+        guard ReminderDeviceGate.isActive() else { return }
         guard services.reminders.isEnabled else { return }
         Task { [weak self] in await self?.sync(reason: "activation") }
     }
@@ -114,6 +116,7 @@ public final class ReminderRefreshCoordinator {
     /// safe and are what a support question actually needs.
     @discardableResult
     public func sync(reason: String) async -> ReminderSyncReport? {
+        guard ReminderDeviceGate.isActive() else { return nil }
         guard services.reminders.isEnabled else { return nil }
 
         await services.reminders.refresh()
@@ -158,5 +161,29 @@ public final class ReminderRefreshCoordinator {
         }
 
         return report
+    }
+}
+
+/// Which device runs the Apple Reminders reconciliation.
+///
+/// Library sync puts the same linked reminder — external identifier, fingerprint, local
+/// stamp — on every device, but the reconciliation against EventKit must run on exactly
+/// one of them: two engines racing the same iCloud Reminders account over synced
+/// fingerprints would each treat the other's progress as drift. The gate is a per-device
+/// setting that deliberately never syncs. Its default is the platform's history: on until
+/// told otherwise on the Mac, where the integration has always lived; off until asked for
+/// on the phone, which arrived after library sync and must not silently join the race.
+public enum ReminderDeviceGate {
+    public static let key = "reminders.syncsAppleRemindersOnThisDevice"
+
+    public static func isActive(in defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.object(forKey: key) != nil else {
+            #if os(macOS)
+                return true
+            #else
+                return false
+            #endif
+        }
+        return defaults.bool(forKey: key)
     }
 }
