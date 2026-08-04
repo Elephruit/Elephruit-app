@@ -10,12 +10,12 @@ import Observation
 /// People, search, time tracking, backlinks, and the Apple Reminders bridge use.
 @Observable
 @MainActor
-final class ReminderStore {
+public final class ReminderStore {
     private let items: any ItemRepository
     private let lifecycle: ReminderLifecycleService
     private let dateProvider: any DateProvider
 
-    init(
+    public init(
         items: any ItemRepository,
         lifecycle: ReminderLifecycleService,
         dateProvider: any DateProvider
@@ -25,7 +25,7 @@ final class ReminderStore {
         self.dateProvider = dateProvider
     }
 
-    var reminders: [Item] {
+    public var reminders: [Item] {
         var query = ItemQuery()
         query.kinds = [.reminder, .task]
         query.scope = .active
@@ -39,12 +39,12 @@ final class ReminderStore {
     /// with the overdue and the someday interleaved. These are the five answers the scheduling
     /// model already distinguishes: a deadline that has passed, work that belongs to today, work
     /// with a future date, work with no date, and work deliberately parked.
-    enum Section: String, CaseIterable, Identifiable {
+    public enum Section: String, CaseIterable, Identifiable {
         case overdue, today, upcoming, anytime, someday
 
-        var id: String { rawValue }
+        public var id: String { rawValue }
 
-        var title: String {
+        public var title: String {
             switch self {
             case .overdue: "Overdue"
             case .today: "Today"
@@ -55,14 +55,14 @@ final class ReminderStore {
         }
     }
 
-    struct SectionGroup: Identifiable {
-        let section: Section
-        let reminders: [Item]
-        var id: String { section.id }
+    public struct SectionGroup: Identifiable {
+        public let section: Section
+        public let reminders: [Item]
+        public var id: String { section.id }
     }
 
     /// The open reminders, bucketed and ordered. Absent sections are absent, not empty.
-    var sections: [SectionGroup] {
+    public var sections: [SectionGroup] {
         var query = ItemQuery()
         query.kinds = [.reminder, .task]
         query.scope = .active
@@ -91,7 +91,7 @@ final class ReminderStore {
     }
 
     /// Completed reminders, newest completion first — behind the toolbar toggle.
-    var completed: [Item] {
+    public var completed: [Item] {
         var query = ItemQuery()
         query.kinds = [.reminder, .task]
         query.scope = .active
@@ -105,7 +105,7 @@ final class ReminderStore {
     ///
     /// A deadline decides ahead of a start date, because only a deadline can make anything late;
     /// a past start date without a deadline is *available*, which is what Anytime means.
-    func section(for reminder: Item) -> Section {
+    public func section(for reminder: Item) -> Section {
         if reminder.isSomeday { return .someday }
 
         let calendar = dateProvider.calendar
@@ -132,7 +132,7 @@ final class ReminderStore {
     }
 
     @discardableResult
-    func create(
+    public func create(
         from draft: ReminderComposerDraft,
         id: UUID = UUID(),
         source: ItemSource = .manual
@@ -167,7 +167,7 @@ final class ReminderStore {
         return reminder
     }
 
-    func update(_ reminder: Item, from draft: ReminderComposerDraft) throws(AppError) {
+    public func update(_ reminder: Item, from draft: ReminderComposerDraft) throws(AppError) {
         let project = try uniquelyNamedItem(draft.projectTitle, kinds: [.project])
 
         try lifecycle.mutate(reminder) { subject in
@@ -183,7 +183,7 @@ final class ReminderStore {
         try lifecycle.setRelatedPeople(try people(named: draft.personNames), on: reminder)
     }
 
-    func toggleCompletion(of reminder: Item) throws(AppError) {
+    public func toggleCompletion(of reminder: Item) throws(AppError) {
         if reminder.status == .completed {
             try lifecycle.reopen(reminder)
         } else {
@@ -191,12 +191,12 @@ final class ReminderStore {
         }
     }
 
-    func delete(_ reminder: Item) throws(AppError) {
+    public func delete(_ reminder: Item) throws(AppError) {
         try items.moveToTrash(reminder)
     }
 
     /// Applies state the old JSON store could hold but `ItemDraft` cannot express.
-    func finishLegacyImport(
+    public func finishLegacyImport(
         _ reminder: Item,
         createdAt: Date,
         isCompleted: Bool
@@ -215,14 +215,14 @@ final class ReminderStore {
         }
     }
 
-    func hasImportedLegacyReminder(id: UUID) throws(AppError) -> Bool {
+    public func hasImportedLegacyReminder(id: UUID) throws(AppError) -> Bool {
         var query = ItemQuery()
         query.scope = .all
         let identifier = Self.legacySourceIdentifier(id)
         return try items.items(matching: query).contains { $0.sourceIdentifier == identifier }
     }
 
-    static func legacySourceIdentifier(_ id: UUID) -> String {
+    public static func legacySourceIdentifier(_ id: UUID) -> String {
         "lightweight-reminder:\(id.uuidString)"
     }
 

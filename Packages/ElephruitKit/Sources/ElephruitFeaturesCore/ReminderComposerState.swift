@@ -7,7 +7,7 @@ import Foundation
 /// Kept as a small state machine rather than relying on AppKit's incidental key-view order: some
 /// stops live in popovers and the checklist rows are created on demand, so the view hierarchy is
 /// not the product's focus order.
-enum ReminderComposerField: Int, CaseIterable, Sendable, Hashable {
+public enum ReminderComposerField: Int, CaseIterable, Sendable, Hashable {
     case title
     case notes
     case project
@@ -17,7 +17,7 @@ enum ReminderComposerField: Int, CaseIterable, Sendable, Hashable {
     case checklist
     case deadline
 
-    func advanced(reverse: Bool = false) -> Self {
+    public func advanced(reverse: Bool = false) -> Self {
         let fields = Self.allCases
         guard let index = fields.firstIndex(of: self) else { return .title }
         let offset = reverse ? -1 : 1
@@ -30,8 +30,8 @@ enum ReminderComposerField: Int, CaseIterable, Sendable, Hashable {
 /// The row keeps its presentation alongside the resolved day so a keystroke can select the exact
 /// same result the user sees. `kind` deliberately participates in identity: the query `8` can mean
 /// both "August 8" and "in 8 days", even on the rare date where those land on the same day.
-struct ReminderDateSuggestion: Identifiable, Sendable, Hashable {
-    enum Kind: String, Sendable, Hashable {
+public struct ReminderDateSuggestion: Identifiable, Sendable, Hashable {
+    public enum Kind: String, Sendable, Hashable {
         case named
         case weekday
         case dayOfMonth
@@ -39,12 +39,12 @@ struct ReminderDateSuggestion: Identifiable, Sendable, Hashable {
         case parsed
     }
 
-    var kind: Kind
-    var date: Date
-    var title: String
-    var detail: String
+    public var kind: Kind
+    public var date: Date
+    public var title: String
+    public var detail: String
 
-    var id: String { "\(kind.rawValue):\(date.timeIntervalSinceReferenceDate)" }
+    public var id: String { "\(kind.rawValue):\(date.timeIntervalSinceReferenceDate)" }
 }
 
 /// Fast, deterministic date completion for the compact reminder editor.
@@ -52,7 +52,7 @@ struct ReminderDateSuggestion: Identifiable, Sendable, Hashable {
 /// This supplements `NaturalDateParser` rather than changing its grammar. Capture still only acts
 /// on complete date phrases; this search surface can additionally show useful partial matches such
 /// as `we`, `su`, or the two meanings of `8` without guessing silently.
-enum ReminderDateSearch {
+public enum ReminderDateSearch {
     private static let weekdays: [(name: String, aliases: [String], value: Int)] = [
         ("Sunday", ["sun"], 1),
         ("Monday", ["mon"], 2),
@@ -72,7 +72,7 @@ enum ReminderDateSearch {
         ("December", ["dec"], 12),
     ]
 
-    static func suggestions(
+    public static func suggestions(
         for query: String,
         using dateProvider: any DateProvider,
         limit: Int = 8
@@ -306,22 +306,24 @@ enum ReminderDateSearch {
 }
 
 /// Keyboard highlight within a reminder date popover.
-enum ReminderDateNavigationTarget: Sendable, Hashable {
+public enum ReminderDateNavigationTarget: Sendable, Hashable {
     case quick(Int)
     case search(Int)
     case day(Date)
 }
 
 /// Arrow-key movement shared by When and Deadline.
-struct ReminderDateNavigationState: Sendable, Hashable {
-    var target: ReminderDateNavigationTarget?
+public struct ReminderDateNavigationState: Sendable, Hashable {
+    public var target: ReminderDateNavigationTarget?
 
-    mutating func reset() {
+    public init() {}
+
+    public mutating func reset() {
         target = nil
     }
 
     @discardableResult
-    mutating func moveSearch(_ direction: Int, count: Int) -> Bool {
+    public mutating func moveSearch(_ direction: Int, count: Int) -> Bool {
         guard count > 0, direction != 0 else { return false }
         let current: Int
         if case .search(let index) = target {
@@ -336,7 +338,7 @@ struct ReminderDateNavigationState: Sendable, Hashable {
     }
 
     @discardableResult
-    mutating func moveVertical(
+    public mutating func moveVertical(
         _ direction: Int,
         selected: Date?,
         today: Date,
@@ -366,7 +368,7 @@ struct ReminderDateNavigationState: Sendable, Hashable {
     }
 
     @discardableResult
-    mutating func moveHorizontal(
+    public mutating func moveHorizontal(
         _ direction: Int,
         selected: Date?,
         today: Date,
@@ -386,17 +388,17 @@ struct ReminderDateNavigationState: Sendable, Hashable {
         return true
     }
 
-    var searchIndex: Int? {
+    public var searchIndex: Int? {
         guard case .search(let index) = target else { return nil }
         return index
     }
 
-    var quickIndex: Int? {
+    public var quickIndex: Int? {
         guard case .quick(let index) = target else { return nil }
         return index
     }
 
-    var day: Date? {
+    public var day: Date? {
         guard case .day(let date) = target else { return nil }
         return date
     }
@@ -406,21 +408,21 @@ struct ReminderDateNavigationState: Sendable, Hashable {
 ///
 /// A value type is the performance boundary: keystrokes only mutate this value. Store validation,
 /// tag creation, search indexing and list reconciliation happen once, when the draft is committed.
-struct ReminderComposerDraft: Sendable, Hashable {
-    var title = ""
-    var notes = ""
-    var startAt: Date?
-    var dueAt: Date?
-    var isSomeday = false
-    var tagSlugs: [String] = []
-    var personNames: [String] = []
-    var projectTitle: String?
-    var checklist: [ChecklistItem] = []
-    var pendingStep = ""
+public struct ReminderComposerDraft: Sendable, Hashable {
+    public var title = ""
+    public var notes = ""
+    public var startAt: Date?
+    public var dueAt: Date?
+    public var isSomeday = false
+    public var tagSlugs: [String] = []
+    public var personNames: [String] = []
+    public var projectTitle: String?
+    public var checklist: [ChecklistItem] = []
+    public var pendingStep = ""
 
-    init() {}
+    public init() {}
 
-    init(reminder: Item) {
+    public init(reminder: Item) {
         title = reminder.title
         notes = reminder.body
         startAt = reminder.startAt
@@ -439,23 +441,23 @@ struct ReminderComposerDraft: Sendable, Hashable {
         checklist = reminder.checklist.items
     }
 
-    var hasChecklistContent: Bool {
+    public var hasChecklistContent: Bool {
         !pendingStep.isEmpty || !checklist.isEmpty
     }
 
-    var isEmpty: Bool {
+    public var isEmpty: Bool {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && pendingStep.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    mutating func commitPendingStep() {
+    public mutating func commitPendingStep() {
         let title = pendingStep.trimmingCharacters(in: .whitespacesAndNewlines)
         if !title.isEmpty { checklist.append(ChecklistItem(title: title)) }
         pendingStep = ""
     }
 
-    mutating func reset() {
+    public mutating func reset() {
         self = ReminderComposerDraft()
     }
 }
@@ -465,15 +467,15 @@ struct ReminderComposerDraft: Sendable, Hashable {
 /// Parsing is shared with Quick Jot so multi-word people and projects have exactly the same
 /// boundaries. Only reminder metadata is extracted: this never changes item kind or sends the
 /// reminder through capture, filing, or task services.
-struct ReminderShortcutExtraction: Sendable, Hashable {
-    var text: String
-    var tagSlugs: [String]
-    var personNames: [String]
-    var projectTitle: String?
+public struct ReminderShortcutExtraction: Sendable, Hashable {
+    public var text: String
+    public var tagSlugs: [String]
+    public var personNames: [String]
+    public var projectTitle: String?
 }
 
-enum ReminderShortcutParser {
-    static func extract(
+public enum ReminderShortcutParser {
+    public static func extract(
         from text: String,
         knowing vocabulary: CaptureVocabulary
     ) -> ReminderShortcutExtraction {

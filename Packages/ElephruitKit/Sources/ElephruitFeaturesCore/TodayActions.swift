@@ -1,4 +1,8 @@
-import AppKit
+#if canImport(AppKit)
+    import AppKit
+#elseif canImport(UIKit)
+    import UIKit
+#endif
 import ElephruitCore
 import ElephruitDesign
 import ElephruitModel
@@ -18,16 +22,22 @@ import SwiftUI
 /// announcing the change so that the search index, the sidebar counts and this page all hear about
 /// it once.
 @MainActor
-struct TodayActions {
+public struct TodayActions {
     let services: AppServices
     let navigation: NavigationModel
-    let model: TodayModel
+    public let model: TodayModel
+
+    public init(services: AppServices, navigation: NavigationModel, model: TodayModel) {
+        self.services = services
+        self.navigation = navigation
+        self.model = model
+    }
 
     private var clock: any DateProvider { services.dateProvider }
 
     // MARK: - Tasks
 
-    func toggleCompletion(_ task: Item) {
+    public func toggleCompletion(_ task: Item) {
         act(on: task) { services in
             if task.status == .completed {
                 try services.reminderLifecycle.reopen(task)
@@ -37,11 +47,11 @@ struct TodayActions {
         }
     }
 
-    func setFlagged(_ isFlagged: Bool, on task: Item) {
+    public func setFlagged(_ isFlagged: Bool, on task: Item) {
         act(on: task) { try $0.reminderLifecycle.setFlagged(isFlagged, on: task) }
     }
 
-    func setPriority(_ priority: Priority, on task: Item) {
+    public func setPriority(_ priority: Priority, on task: Item) {
         act(on: task) { try $0.reminderLifecycle.setPriority(priority, on: task) }
     }
 
@@ -53,7 +63,7 @@ struct TodayActions {
     /// day's plan is the user saying which day they intend to do it, so it writes the commitment.
     /// A start date is still reachable from the task's own editor, where the distinction is
     /// explained rather than implied.
-    func reschedule(_ task: Item, to day: Date?) {
+    public func reschedule(_ task: Item, to day: Date?) {
         act(on: task) { services in
             guard let day else {
                 try services.reminderLifecycle.removeFromToday(task)
@@ -63,33 +73,33 @@ struct TodayActions {
         }
     }
 
-    func moveToLaterToday(_ task: Item) {
+    public func moveToLaterToday(_ task: Item) {
         act(on: task) { try $0.reminderLifecycle.moveToLaterToday(task) }
     }
 
     /// Opens the calendar popover for one task — the route to an arbitrary day.
-    func beginPickingDate(for task: Item) {
+    public func beginPickingDate(for task: Item) {
         model.datePickerTaskID = task.id
     }
 
-    func setDeadline(_ date: Date?, on task: Item) {
+    public func setDeadline(_ date: Date?, on task: Item) {
         act(on: task) { try $0.reminderLifecycle.setDeadline(date, on: task) }
     }
 
-    func file(_ task: Item, under container: Item?) {
+    public func file(_ task: Item, under container: Item?) {
         act(on: task) { services in
             try services.items.update(task) { $0.parent = container }
         }
     }
 
-    func startTimer(on task: Item) {
+    public func startTimer(on task: Item) {
         services.timer.switchTo(item: task)
     }
 
     /// Sends a task to the Trash, undoably — the canonical deletion every list already offers,
     /// which Today alone did not: a task could be completed, rescheduled, reprioritised and
     /// flagged from the day it was planned on, but never deleted from there.
-    func moveToTrash(_ task: Item) {
+    public func moveToTrash(_ task: Item) {
         services.perform { try services.undo.moveToTrash([task]) }
         services.refreshDerivedState()
         services.noteRemoval(of: task.id)
@@ -97,7 +107,7 @@ struct TodayActions {
 
     /// Removes a Reminders-linked task, here alone or in both places. Mirrors the task list's
     /// two-command pattern — see `TaskRowMenu` for why this is never a dialog.
-    func deleteLinked(_ task: Item, choice: LinkedDeletionChoice) {
+    public func deleteLinked(_ task: Item, choice: LinkedDeletionChoice) {
         Task {
             _ = await services.reminderSync.delete(task, choice: choice)
             services.noteRemoval(of: task.id)
@@ -108,13 +118,13 @@ struct TodayActions {
     ///
     /// Selecting rather than navigating: leaving Today to read one task's fields is a round trip out
     /// of the page somebody is planning in, and the inspector is the right size for a task anyway.
-    func select(_ id: UUID) {
+    public func select(_ id: UUID) {
         navigation.selectItem(id)
         navigation.isInspectorVisible = true
     }
 
     /// Opens the record in the module that owns it, for when the inspector is not enough.
-    func openInModule(_ item: Item) {
+    public func openInModule(_ item: Item) {
         switch item.kind {
         case .task, .reminder:
             navigation.select(.reminders)
@@ -138,7 +148,7 @@ struct TodayActions {
     /// It parses now, with one addition to the rule: a date the grammar names wins over the day
     /// being looked at, because typing `!friday` *is* choosing a day.
     @discardableResult
-    func createTask(titled title: String, on day: Date, under container: Item? = nil) -> Item? {
+    public func createTask(titled title: String, on day: Date, under container: Item? = nil) -> Item? {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
@@ -170,17 +180,17 @@ struct TodayActions {
     // MARK: - Meetings
 
     /// The link to join, if the organiser left one anywhere findable.
-    func joinLink(for event: DayEvent) -> URL? {
+    public func joinLink(for event: DayEvent) -> URL? {
         MeetingLink.url(in: event.event)
     }
 
-    func join(_ event: DayEvent) {
+    public func join(_ event: DayEvent) {
         guard let url = joinLink(for: event) else { return }
-        NSWorkspace.shared.open(url)
+        Self.openExternally(url)
     }
 
     /// Shows the event in the calendar, on its own day.
-    func openInCalendar(_ event: DayEvent) {
+    public func openInCalendar(_ event: DayEvent) {
         navigation.requestedCalendarDay = event.event.startAt
         navigation.select(.calendar)
     }
@@ -190,7 +200,7 @@ struct TodayActions {
     /// Deliberately not "create a two-hour focus block at ten": where the block goes depends on what
     /// else is on the day and on what the person is trying to protect, and an app that guesses both
     /// has written an appointment somebody now has to delete.
-    func openInCalendarForFocus(on day: Date) {
+    public func openInCalendarForFocus(on day: Date) {
         navigation.requestedCalendarDay = day
         navigation.select(.calendar)
         navigation.isCalendarQuickEntryVisible = true
@@ -201,7 +211,7 @@ struct TodayActions {
     /// Created lazily and only here, which is the rule ``EventAnnotationService`` already keeps: a
     /// year of somebody's calendar is thousands of events, and writing a record for each so that
     /// eleven can have notes would make the store larger than the library.
-    func openNotes(for event: DayEvent) {
+    public func openNotes(for event: DayEvent) {
         services.perform {
             guard let meeting = try services.eventLinks.meetingItem(for: event.event) else { return }
             services.noteChange(to: meeting)
@@ -210,7 +220,7 @@ struct TodayActions {
     }
 
     /// Adds something to do before the meeting, linked to it.
-    func addPreparationTask(titled title: String, for event: DayEvent) {
+    public func addPreparationTask(titled title: String, for event: DayEvent) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
@@ -229,7 +239,7 @@ struct TodayActions {
     }
 
     /// Records something that came out of the meeting, due tomorrow unless changed.
-    func logFollowUp(titled title: String, for event: DayEvent) {
+    public func logFollowUp(titled title: String, for event: DayEvent) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
@@ -245,7 +255,7 @@ struct TodayActions {
         }
     }
 
-    func markPreparationComplete(for event: DayEvent) {
+    public func markPreparationComplete(for event: DayEvent) {
         services.perform {
             for id in event.preparation.openPreparationTaskIDs {
                 guard let task = model.task(id) else { continue }
@@ -262,7 +272,7 @@ struct TodayActions {
     /// Reads the profile that is already loaded rather than assembling a workspace context: a card
     /// on a busy day may be one of a dozen, and building each one's full portrait to decide whether
     /// to draw a Call button is work nobody asked for.
-    func contactActions(for person: Item) -> [ContactActionPreview] {
+    public func contactActions(for person: Item) -> [ContactActionPreview] {
         let destinations = person.personProfile?.destinations() ?? []
         guard !destinations.isEmpty else { return [] }
 
@@ -285,9 +295,9 @@ struct TodayActions {
     /// it is answered from recorded contact rather than from mentions. A call placed from this page
     /// that leaves no trace makes the follow-up suggestions quietly wrong for the person you just
     /// rang, which is the worst possible person for them to be wrong about.
-    func contact(_ preview: ContactActionPreview, person: Item) {
+    public func contact(_ preview: ContactActionPreview, person: Item) {
         guard let url = preview.url else { return }
-        NSWorkspace.shared.open(url)
+        Self.openExternally(url)
 
         services.perform {
             try services.people.recordInteraction(
@@ -298,7 +308,7 @@ struct TodayActions {
         }
     }
 
-    func logInteraction(with person: Item, summary: String) {
+    public func logInteraction(with person: Item, summary: String) {
         let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
@@ -310,7 +320,7 @@ struct TodayActions {
     }
 
     /// Creates a task about somebody, on the day being looked at.
-    func createFollowUp(titled title: String, about person: Item, on day: Date) {
+    public func createFollowUp(titled title: String, about person: Item, on day: Date) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
@@ -329,7 +339,7 @@ struct TodayActions {
     /// Never created automatically. An app that writes a note every morning fills a library with
     /// empty days, and the emptiness is indistinguishable from a day somebody chose not to write
     /// about.
-    func openDailyNote(for day: Date, creatingIfNeeded: Bool) {
+    public func openDailyNote(for day: Date, creatingIfNeeded: Bool) {
         services.perform {
             guard let entry = try services.people.dailyEntry(for: day, creatingIfNeeded: creatingIfNeeded)
             else { return }
@@ -339,7 +349,7 @@ struct TodayActions {
     }
 
     /// Adds a line to the day's note without leaving the page.
-    func appendToDailyNote(_ text: String, on day: Date) {
+    public func appendToDailyNote(_ text: String, on day: Date) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
@@ -364,5 +374,17 @@ struct TodayActions {
             try work(services)
             services.noteChange(to: item)
         }
+    }
+
+    /// Hands a URL to the system, whichever system this is.
+    ///
+    /// The behavioural contract is the one `ContactActionURL` documents: the app composes and
+    /// hands off, and the user presses send in their own chosen app.
+    private static func openExternally(_ url: URL) {
+        #if canImport(AppKit)
+            NSWorkspace.shared.open(url)
+        #elseif canImport(UIKit)
+            UIApplication.shared.open(url)
+        #endif
     }
 }

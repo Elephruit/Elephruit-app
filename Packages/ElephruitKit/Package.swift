@@ -23,13 +23,15 @@ let package = Package(
                 "ElephruitDesign",
                 "ElephruitTransfer",
                 "ElephruitIntegrations",
+                "ElephruitFeaturesCore",
                 "ElephruitFeatures",
             ]
         ),
-        // The same package as the iPhone sees it: everything except the macOS views.
-        // Building this product for an iOS destination is the compile-time proof that
-        // no AppKit leak has crept below the view layer — the gate exists from the
-        // first platform seam, and grows targets as they earn iOS membership.
+        // The same package as the iPhone sees it: everything except `ElephruitFeatures`,
+        // whose views are AppKit-shaped (three-column windows, NSTextView editors, menu
+        // bar extras) and are not asked to compile for a platform they cannot mean
+        // anything on. Building this product for an iOS destination is the compile-time
+        // proof that no AppKit leak has crept below the view layer.
         .library(
             name: "ElephruitMobileKit",
             targets: [
@@ -40,6 +42,7 @@ let package = Package(
                 "ElephruitTransfer",
                 "ElephruitIntegrations",
                 "ElephruitDesign",
+                "ElephruitFeaturesCore",
             ]
         ),
     ],
@@ -86,7 +89,29 @@ let package = Package(
         /// about the domain.
         .target(name: "ElephruitDesign", dependencies: ["ElephruitCore"], swiftSettings: .strict),
 
+        /// The platform-independent half of the feature layer: the composition root
+        /// (`AppServices`), navigation state, and the @Observable models behind Today,
+        /// Capture, Calendar, Records, Search, and Time. No AppKit, no UIKit, and no
+        /// views — which is what lets one set of models sit behind two very different
+        /// shells without either shell compromising the other.
+        .target(
+            name: "ElephruitFeaturesCore",
+            dependencies: [
+                "ElephruitCore",
+                "ElephruitModel",
+                "ElephruitPersistence",
+                "ElephruitSearch",
+                "ElephruitTransfer",
+                "ElephruitDesign",
+                "ElephruitIntegrations",
+            ],
+            swiftSettings: .strict
+        ),
+
         /// Feature modules: one folder per feature, each a view plus an @Observable model.
+        ///
+        /// macOS-only. The models these views observe live in `ElephruitFeaturesCore`,
+        /// re-exported here so the split is invisible to every existing view file.
         .target(
             name: "ElephruitFeatures",
             dependencies: [
@@ -97,6 +122,7 @@ let package = Package(
                 "ElephruitTransfer",
                 "ElephruitDesign",
                 "ElephruitIntegrations",
+                "ElephruitFeaturesCore",
             ],
             swiftSettings: .strict
         ),
@@ -134,8 +160,8 @@ let package = Package(
         .testTarget(
             name: "ElephruitFeaturesTests",
             dependencies: [
-                "ElephruitFeatures", "ElephruitPersistence", "ElephruitModel",
-                "ElephruitCore", "ElephruitDesign", "ElephruitIntegrations",
+                "ElephruitFeatures", "ElephruitFeaturesCore", "ElephruitPersistence",
+                "ElephruitModel", "ElephruitCore", "ElephruitDesign", "ElephruitIntegrations",
             ],
             swiftSettings: .strict
         ),

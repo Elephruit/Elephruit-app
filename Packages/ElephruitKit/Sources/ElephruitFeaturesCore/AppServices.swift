@@ -47,18 +47,29 @@ public final class AppServices {
     /// Tracked time written out to a calendar. Off, and outbound only — see ``TimeCalendarMirror``.
     public let timeMirror: TimeCalendarMirror
 
-    /// The app collapsed to its clock, and whether it currently is.
+    /// The platform shell's long-lived companions — the mini timer panel, the quick-log
+    /// panel — created on first use and then held for the life of the app.
     ///
-    /// Built lazily on first use, because an app nobody collapses should never construct a panel.
-    /// Held here rather than per window: collapsing is a statement about the *application*, and two
-    /// windows racing to hide each other would be two mini timers and no way back.
-    ///
-    /// `@ObservationIgnored` because the *reference* never changes and there is nothing to observe
-    /// about it — and because the `@Observable` macro cannot rewrite a `lazy` stored property at
-    /// all. What views actually watch is the controller's own state, and `MiniTimerController` is
-    /// `@Observable` in its own right.
+    /// A registry rather than named properties, because the types are platform-specific: the
+    /// macOS target declares `MiniTimerController` and `QuickLogController` and reaches them
+    /// through ``accessory(_:make:)``, and this shared class never has to know either name.
+    /// One instance per type, on the same argument the old lazy properties made: collapsing
+    /// to a clock is a statement about the *application*, and two windows racing to hide each
+    /// other would be two mini timers and no way back.
     @ObservationIgnored
-    public private(set) lazy var miniTimer = MiniTimerController(services: self, defaults: defaults)
+    private var accessories: [ObjectIdentifier: AnyObject] = [:]
+
+    /// The one instance of a platform accessory, created on first use.
+    ///
+    /// `@ObservationIgnored` storage, on the same terms as the lazy properties this replaces:
+    /// the reference never changes, so there is nothing to observe about it — what views watch
+    /// is the accessory's own observable state.
+    public func accessory<A: AnyObject>(_ type: A.Type, make: () -> A) -> A {
+        if let held = accessories[ObjectIdentifier(type)] as? A { return held }
+        let made = make()
+        accessories[ObjectIdentifier(type)] = made
+        return made
+    }
 
     /// One date's worth of everything, assembled from the records that already exist.
     ///
@@ -73,24 +84,12 @@ public final class AppServices {
     @ObservationIgnored
     public private(set) lazy var todayPreferences = TodayPreferences(defaults: defaults)
 
-    /// The panel that starts a timer from any application, and names it once it is going.
-    ///
-    /// Held here rather than on the composition root — which is where Quick Jot's controller lives —
-    /// because three separate surfaces need to open it: the global shortcut, the File menu, and the
-    /// menu bar. A controller reachable only from the app object would have to be threaded through
-    /// every one of them, and `ElephruitCommands` has no route to it at all.
-    ///
-    /// Lazy and `@ObservationIgnored` on the same terms as ``miniTimer``: an app whose owner never
-    /// presses the shortcut should never construct a panel, the reference never changes, and what
-    /// views watch is the controller's own observable state.
-    @ObservationIgnored
-    public private(set) lazy var quickLog = QuickLogController(services: self)
-
     /// Where this machine's preferences live.
     ///
     /// Held rather than reached for, so a preview or a test can hand over a throwaway suite and not
-    /// have a focus-cycle length leak into the real one.
-    let defaults: UserDefaults
+    /// have a focus-cycle length leak into the real one. Public so the platform shells can hand
+    /// the same suite to their accessories — see ``accessory(_:make:)``.
+    public let defaults: UserDefaults
 
     /// The user's calendar: what it holds, which sets are saved, and every write.
     ///
@@ -110,7 +109,7 @@ public final class AppServices {
     public let containerSidebar: ContainerSidebarModel
 
     /// The Reminders module's direct view of first-class items.
-    let reminderStore: ReminderStore
+    public let reminderStore: ReminderStore
 
     // MARK: Projects
 
@@ -834,6 +833,15 @@ public final class AppServices {
     // MARK: - Index
 
     /// Builds the search index. Called once after the window appears, never blocking launch.
+    /// Throws away the index and rebuilds it. The user-visible "Rebuild Search Index" command.
+    ///
+    /// Lives beside ``warmSearchIndex()`` rather than in the shell that offers the command,
+    /// because a contact import needs the same rebuild and both shells offer the command.
+    public func invalidateAndWarmIndex() async {
+        await search.invalidateIndex()
+        await warmSearchIndex()
+    }
+
     public func warmSearchIndex() async {
         await search.warmIndex()
     }

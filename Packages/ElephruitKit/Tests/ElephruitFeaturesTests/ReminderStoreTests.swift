@@ -1,5 +1,6 @@
 import ElephruitCore
 @testable import ElephruitFeatures
+@testable import ElephruitFeaturesCore
 import ElephruitModel
 import ElephruitPersistence
 import Foundation
