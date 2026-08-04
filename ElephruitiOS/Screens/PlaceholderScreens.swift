@@ -72,10 +72,6 @@ struct LibraryScreen: View {
 
 // MARK: - Routed screens
 
-struct ItemScreen: View {
-    let itemID: UUID
-    var body: some View { PlaceholderScreen(title: "Item", symbolName: "doc") }
-}
 
 struct ProjectScreen: View {
     let projectID: UUID
@@ -95,45 +91,4 @@ struct ReminderListScreen: View {
 
     let source: Source
     var body: some View { PlaceholderScreen(title: "List", symbolName: "list.bullet") }
-}
-
-struct EventScreen: View {
-    let identityKey: String
-    var body: some View { PlaceholderScreen(title: "Event", symbolName: "calendar") }
-}
-
-struct CalendarScreen: View {
-    var body: some View { PlaceholderScreen(title: "Calendar", symbolName: "calendar") }
-}
-
-struct TimeScreen: View {
-    var body: some View { PlaceholderScreen(title: "Time", symbolName: "clock") }
-}
-
-// MARK: - Shell furniture stubs
-
-/// The running timer above the tab bar. The full control set is the Time pass.
-struct TimerAccessoryView: View {
-    @Environment(\.services) private var services
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.small) {
-            Image(systemName: "record.circle")
-                .foregroundStyle(Theme.Colors.recording)
-            Text(timerLabel)
-                .font(Theme.Text.rowSubtitle)
-                .lineLimit(1)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, Theme.Spacing.medium)
-        .accessibilityIdentifier("mobile.timer.accessory")
-    }
-
-    /// The most specific name the running timer has: its subject, its description, or "Timer".
-    private var timerLabel: String {
-        guard let running = services?.timer.running else { return "Timer" }
-        if let itemTitle = running.itemTitle, !itemTitle.isEmpty { return itemTitle }
-        if !running.entryDescription.isEmpty { return running.entryDescription }
-        return "Timer"
-    }
 }
