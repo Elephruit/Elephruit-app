@@ -217,7 +217,7 @@ private struct NoteWebClipFace: View {
 
     private static func capturedWidth(in html: String) -> CGFloat {
         let expression = try? NSRegularExpression(
-            pattern: #"<article\b[^>]*style="[^"]*\bwidth:\s*([0-9.]+)px"#,
+            pattern: #"<article\b[^>]*style="[^"]*?\bwidth:\s*([0-9.]+)px"#,
             options: .caseInsensitive
         )
         let range = NSRange(html.startIndex..., in: html)
