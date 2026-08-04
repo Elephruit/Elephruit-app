@@ -212,4 +212,78 @@ struct StructuralUndoTests {
         try undo.moveToTrash([])
         #expect(manager.canUndo == false, "An action over nothing is not an action")
     }
+
+    // MARK: The window's manager
+
+    /// The manager `⌘Z` dispatches to is the window's, and the coordinator was registering on one
+    /// no window had ever heard of — so every structural change was silently un-undoable from the
+    /// Edit menu. Adoption is what closes that: the shell hands over the focused window's manager
+    /// and registrations follow it.
+    @Test("An adopted manager takes the registrations, and the menu path works")
+    func adoptedManagerTakesRegistrations() throws {
+        let fixture = try StoreFixture()
+        let (undo, standalone) = makeCoordinator(fixture)
+
+        let window = UndoManager()
+        window.groupsByEvent = false
+        undo.adopt(window)
+
+        let note = try fixture.makeNote(title: "Doomed")
+        try undo.moveToTrash([note])
+
+        #expect(standalone.canUndo == false, "the fallback saw nothing")
+        #expect(window.canUndo, "the window's manager holds the step")
+        #expect(window.undoActionName == "Move to Trash", "and it is named for the menu")
+
+        window.undo()
+        #expect(try fixture.requireItem(id: note.id).deletedAt == nil)
+    }
+
+    /// The redo of an undo must land on the manager that ran the undo — not on whichever window
+    /// happens to be focused by then. Otherwise ⌘Z in one window hands its ⇧⌘Z to another.
+    @Test("Redo stays on the manager that ran the undo, wherever focus went")
+    func redoStaysWithItsWindow() throws {
+        let fixture = try StoreFixture()
+        let (undo, _) = makeCoordinator(fixture)
+
+        let first = UndoManager()
+        first.groupsByEvent = false
+        undo.adopt(first)
+
+        let note = try fixture.makeNote(title: "Doomed")
+        try undo.moveToTrash([note])
+
+        // Focus moves to a second window before the user undoes in the first.
+        let second = UndoManager()
+        second.groupsByEvent = false
+        undo.adopt(second)
+
+        first.undo()
+        #expect(try fixture.requireItem(id: note.id).deletedAt == nil)
+
+        #expect(first.canRedo, "the redo belongs to the window that undid")
+        #expect(second.canRedo == false, "the newly focused window gained nothing")
+
+        first.redo()
+        #expect(try fixture.requireItem(id: note.id).deletedAt != nil)
+    }
+
+    /// `adopt(nil)` restores the standalone fallback, which is also the state every test above
+    /// runs in — the default must stay the default.
+    @Test("Dropping the adoption falls back to the standalone manager")
+    func droppingAdoptionFallsBack() throws {
+        let fixture = try StoreFixture()
+        let (undo, standalone) = makeCoordinator(fixture)
+
+        let window = UndoManager()
+        window.groupsByEvent = false
+        undo.adopt(window)
+        undo.adopt(nil)
+
+        let note = try fixture.makeNote(title: "Doomed")
+        try undo.moveToTrash([note])
+
+        #expect(window.canUndo == false)
+        #expect(standalone.canUndo)
+    }
 }

@@ -259,12 +259,16 @@ public final class AppServices {
 
     /// Structural undo — move, delete, retag, status, archive.
     ///
-    /// One per `AppServices`, sharing the window's `UndoManager`, so `⌘Z` reverses the last
-    /// structural change the same way it reverses typing. The text editor keeps its own manager, and
-    /// which one responds is decided by focus — standard AppKit behaviour.
+    /// One per `AppServices`. The shell hands it the focused window's `UndoManager` through
+    /// ``StructuralUndoCoordinator/adopt(_:)`` — see `RootView` — so `⌘Z` reverses the last
+    /// structural change the same way it reverses typing, on the history of the window it was
+    /// made in.
     public let undo: StructuralUndoCoordinator
 
-    /// The undo manager the shell installs on its window.
+    /// The standalone fallback manager, and the one tests drive directly.
+    ///
+    /// Registrations land here only until a window adopts its own — in the running app this
+    /// carries nothing once the first window is up.
     public let undoManager: UndoManager
 
     /// Pinned items, tags, and saved searches, computed away from the view.

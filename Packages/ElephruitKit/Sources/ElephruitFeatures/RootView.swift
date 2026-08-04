@@ -60,6 +60,12 @@ public struct RootView: View {
 
     @Environment(\.scenePhase) private var scenePhase
 
+    /// This window's own undo manager — the one `⌘Z` and the Edit menu actually reach.
+    @Environment(\.undoManager) private var windowUndoManager
+
+    /// Whether this window is key, so structural undo registers on the focused window's history.
+    @Environment(\.controlActiveState) private var controlActiveState
+
     /// Hoisted out of the `onChange` that watches it: inlining the optional chain and the `??` into
     /// a modifier argument pushes this body past the type checker's budget.
     private var isRemindersEnabled: Bool {
@@ -249,6 +255,18 @@ public struct RootView: View {
         .onKeyPress(.escape) {
             navigation.handleEscape() ? .handled : .ignored
         }
+        // Structural undo registers on the focused window's manager, so Edit ▸ Undo — which is
+        // dispatched to the first responder — can actually reach it. Without this, every trash,
+        // move, retag and status change lands on a manager no menu has ever heard of, and ⌘Z
+        // silently does nothing. Re-adopted whenever this window becomes key, so a two-window
+        // session keeps each change on the history of the window it was made in.
+        .task { adoptUndoManagerIfKey() }
+        .onChange(of: controlActiveState) { _, _ in adoptUndoManagerIfKey() }
+    }
+
+    private func adoptUndoManagerIfKey() {
+        guard controlActiveState == .key || controlActiveState == .active else { return }
+        services?.undo.adopt(windowUndoManager)
     }
 
     /// The shell, with the repair offer above it when there is one.
