@@ -158,6 +158,12 @@ public enum DesignReviewLaunch {
         switch raw {
         case "dark": return .darkAqua
         case "light": return .aqua
+        // The Increase Contrast variants. The adaptive colours in `Theme` resolve against the
+        // appearance's high-contrast names, so forcing one photographs what a person with the
+        // setting on actually gets — without touching the reviewer's system-wide setting, for
+        // the same reason "dark" does not.
+        case "light-contrast": return .accessibilityHighContrastAqua
+        case "dark-contrast": return .accessibilityHighContrastDarkAqua
         default:
             Diagnostics.shell.error("Unknown -ElephruitAppearance \(raw, privacy: .public)")
             return nil

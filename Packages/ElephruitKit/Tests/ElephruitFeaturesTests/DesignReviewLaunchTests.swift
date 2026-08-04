@@ -83,13 +83,21 @@ struct DesignReviewLaunchTests {
 
     // MARK: Appearance
 
-    @Test("Both appearances are nameable")
+    @Test("All four appearances are nameable")
     func readsAppearance() {
         #expect(
             DesignReviewLaunch.appearanceName(in: ["-ElephruitAppearance", "dark"]) == .darkAqua
         )
         #expect(
             DesignReviewLaunch.appearanceName(in: ["-ElephruitAppearance", "light"]) == .aqua
+        )
+        #expect(
+            DesignReviewLaunch.appearanceName(in: ["-ElephruitAppearance", "light-contrast"])
+                == .accessibilityHighContrastAqua
+        )
+        #expect(
+            DesignReviewLaunch.appearanceName(in: ["-ElephruitAppearance", "dark-contrast"])
+                == .accessibilityHighContrastDarkAqua
         )
     }
 
