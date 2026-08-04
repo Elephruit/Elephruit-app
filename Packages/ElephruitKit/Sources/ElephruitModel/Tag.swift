@@ -42,6 +42,13 @@ public final class Tag {
     /// Many-to-many. The inverse is declared on ``Item/tags``.
     public var items: [Item] = []
 
+    /// Many-to-many with tracked time. The inverse is declared on ``TimeEntry/tags``.
+    ///
+    /// Every relationship carries an inverse because CloudKit mirroring requires one, and
+    /// the decision of record is that deferring sync must not make adopting it harder later.
+    /// This pair was the one omission — same file, three lines from the rule.
+    public var timeEntries: [TimeEntry] = []
+
     public init(
         id: UUID = UUID(),
         name: String,

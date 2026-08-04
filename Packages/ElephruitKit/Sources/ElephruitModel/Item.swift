@@ -462,6 +462,35 @@ public final class Item {
     @Relationship(deleteRule: .nullify)
     public var timeEntries: [TimeEntry] = []
 
+    // MARK: The person-record inverses
+
+    // Six relationships reached this Item from the person records with no inverse declared —
+    // found by the pre-sync audit, against the same rule ``timeEntries`` states. Each is the
+    // plain side of its pair; the `@Relationship(inverse:)` naming lives on the to-one side,
+    // matching every other pair in the model. All nullify, deliberately: before these inverses
+    // existed, deleting an item never touched the referencing rows, and a schema bump made for
+    // sync must not quietly change what deletion means. Orphaned rows remain the integrity
+    // pass's to reap, exactly as they were.
+
+    /// The Contacts-app links that name this person. Inverse of ``SystemContactLink/person``.
+    public var contactLinks: [SystemContactLink] = []
+
+    /// Observed facts about this person. Inverse of ``PersonObservationRecord/subject``.
+    public var observationsAbout: [PersonObservationRecord] = []
+
+    /// Facts this note or meeting produced. Inverse of ``PersonObservationRecord/sourceItem``.
+    public var observationsSourced: [PersonObservationRecord] = []
+
+    /// Relationships read from this person's page. Inverse of ``PersonRelationship/subject``.
+    public var relationshipsAsSubject: [PersonRelationship] = []
+
+    /// Relationships in which this person is the other party. Inverse of
+    /// ``PersonRelationship/other``.
+    public var relationshipsAsOther: [PersonRelationship] = []
+
+    /// This person's recurring dates. Inverse of ``PersonCelebration/person``.
+    public var celebrations: [PersonCelebration] = []
+
     /// Time tracked *with* this person, as opposed to *against* this item.
     ///
     /// Only ever populated for ``ItemKind/person``. Its own relationship rather than a second use of

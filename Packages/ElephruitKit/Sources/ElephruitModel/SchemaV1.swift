@@ -446,6 +446,32 @@ public enum SchemaV14: VersionedSchema {
     }
 }
 
+/// The fifteenth schema: every relationship has an inverse, because sync requires it.
+///
+/// Adds no entity and no column that stores anything new — six existing relationships gain
+/// their inverse sides (`Item.contactLinks`, `.observationsAbout`, `.observationsSourced`,
+/// `.relationshipsAsSubject`, `.relationshipsAsOther`, `.celebrations`, and
+/// `Tag.timeEntries`), closing the gap between the model and the rule ``Item/timeEntries``
+/// has stated since v2: CloudKit mirroring requires inverse relationships, and deferring
+/// sync must not make adopting it harder later. A pre-sync audit found these six pairs
+/// holding out; sync arrives behind this version, so the store crosses the boundary once.
+///
+/// Every inverse nullifies, deliberately. Before these existed, deleting an item never
+/// touched the referencing rows — cleanup belongs to the repositories and the integrity
+/// pass — and a schema bump made for sync must not quietly change what deletion means.
+///
+/// ### Why lightweight inference is still right
+/// Inverse declarations reshape the relationship metadata, not the rows: no entity, no
+/// rename, no type change, nothing computed from old data at migration time. ADR 0005's
+/// freeze trigger remains unpulled.
+public enum SchemaV15: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 15) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV14.models
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -458,7 +484,7 @@ public enum SchemaV14: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV14.self]
+        [SchemaV15.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -478,9 +504,9 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV14.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV15.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV14.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV15.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {

@@ -59,6 +59,7 @@ public final class SystemContactLink {
 
     // MARK: Relationships
 
+    @Relationship(deleteRule: .nullify, inverse: \Item.contactLinks)
     public var person: Item?
 
     /// Every value this link has supplied, current and superseded.

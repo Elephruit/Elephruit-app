@@ -127,7 +127,9 @@ public final class TimeEntry {
     @Relationship(deleteRule: .nullify, inverse: \Item.attendedTimeEntries)
     public var people: [Item] = []
 
-    @Relationship(deleteRule: .nullify)
+    // The inverse CloudKit mirroring requires, named here to match ``Item/tags``'s side
+    // of the same convention. Nullify preserves what deletion already meant.
+    @Relationship(deleteRule: .nullify, inverse: \Tag.timeEntries)
     public var tags: [Tag] = []
 
     public init(
