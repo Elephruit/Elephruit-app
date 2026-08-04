@@ -190,16 +190,19 @@ public struct ItemListView: View {
     private var itemList: some View {
         List(selection: selectedItemBinding) {
             ForEach(displayedItems, id: \.id) { item in
-                NavigationLink(value: SidebarSelection.item(id: item.id)) {
-                    row(for: item)
-                }
+                // A plain row with a tag, not a `NavigationLink`. The link was inert decoration
+                // under the old custom shell — no navigator existed, so every click fell through
+                // to the table's selection — but inside `NavigationSplitView` it finally had a
+                // navigator to answer to: its button swallowed the click and then had nowhere to
+                // send the value, because no `navigationDestination` exists in this app. Clicking
+                // a note selected nothing. Selection is the model here; the row says only that.
+                row(for: item)
+                    .tag(item.id)
                 // Draggable via the classic provider API, deliberately: `.draggable` installs
-                // a SwiftUI drag gesture that competes with the table's own mouseDown, and
-                // clicking a row to select it became slow and intermittent while the arrow keys
-                // stayed instant. `.onDrag` hands the drag to the list's native row-drag
-                // session, which has carried drags without costing clicks since before SwiftUI
-                // existed. The payload is the same `CodableRepresentation` bytes, so the
-                // sidebar's `.dropDestination(for: WorkItemTransfer.self)` decodes it unchanged.
+                // a SwiftUI drag gesture that competes with the table's own mouseDown for the
+                // click. `.onDrag` hands the drag to the list's native row-drag session. The
+                // payload is the same `CodableRepresentation` bytes, so the sidebar's
+                // `.dropDestination(for: WorkItemTransfer.self)` decodes it unchanged.
                 .onDrag { Self.dragProvider(for: item.id) }
                 .contextMenu { contextMenu(for: item) }
                 .modifier(ItemSwipeActions(item: item, navigation: navigation, onPermanentDeletion: { pendingPermanentDeletion = $0 }, onChange: { Task { await reload() } }))
