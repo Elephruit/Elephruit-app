@@ -522,7 +522,7 @@ struct SettingsView: View {
             Tab("Shortcuts", systemImage: "keyboard") {
                 whenReady { services in
                     ShortcutSettingsSection(
-                        registry: services.shortcuts,
+                        services: services,
                         globalResults: environment.hotKeyResults
                     )
                 }

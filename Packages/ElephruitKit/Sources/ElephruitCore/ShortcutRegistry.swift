@@ -39,10 +39,25 @@ public struct KeyBinding: Sendable, Hashable, Codable {
 
     /// What a menu or a palette row shows — `["⌘", "⇧", "N"]`.
     public var glyphs: [String] {
-        modifiers.glyphs + [key.uppercased()]
+        modifiers.glyphs + [Self.keyGlyph(for: key)]
     }
 
     public var display: String { glyphs.joined() }
+
+    /// The printable face of a key, for the keys whose character is invisible.
+    ///
+    /// A binding on Return stores `"\r"`, and `"\r".uppercased()` is still a carriage return —
+    /// which a settings row renders as a blank. These are the glyphs macOS itself prints in menus.
+    public static func keyGlyph(for key: String) -> String {
+        switch key {
+        case "\r": "↩"
+        case "\u{8}", "\u{7f}": "⌫"
+        case "\t": "⇥"
+        case " ": "Space"
+        case "\u{1b}": "⎋"
+        default: key.uppercased()
+        }
+    }
 }
 
 /// Everything the app can be asked to do by keyboard.
