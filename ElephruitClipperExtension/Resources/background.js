@@ -2,14 +2,14 @@ async function toggleClipperPanel(tab) {
   if (!tab?.id || !/^https?:/i.test(tab.url || "")) return;
 
   try {
-    const response = await browser.tabs.sendMessage(tab.id, { type: "elephruit.panel.toggle.v6" });
+    const response = await browser.tabs.sendMessage(tab.id, { type: "elephruit.panel.open.v1" });
     if (typeof response?.open === "boolean") return;
   } catch {
     // A tab open during an extension update may not have the newest content script yet.
   }
 
   await browser.scripting.executeScript({ target: { tabId: tab.id }, files: ["panel.js", "content.js"] });
-  await browser.tabs.sendMessage(tab.id, { type: "elephruit.panel.toggle.v6" });
+  await browser.tabs.sendMessage(tab.id, { type: "elephruit.panel.open.v1" });
 }
 
 function dataURL(buffer, mimeType) {

@@ -106,6 +106,8 @@ Safari page
 The containing app and extension advance their native bundle build number with extension updates.
 Safari caches packaged web extensions by native bundle identity and version, so changing only the
 web manifest version is insufficient to guarantee that a rebuilt local test extension is reloaded.
+Panel activation uses an idempotent open command so Safari timeouts and retries cannot accidentally
+close a panel that the page already received and began loading.
 
 The main app still has no network entitlement. Safari itself naturally has network access to display
 the page being clipped; the extension operates on that active page.
