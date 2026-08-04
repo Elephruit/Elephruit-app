@@ -29,10 +29,6 @@ struct RemindersScreen: View {
     var body: some View { PlaceholderScreen(title: "Reminders", symbolName: "checkmark.circle") }
 }
 
-struct RecordsScreen: View {
-    var body: some View { PlaceholderScreen(title: "Records", symbolName: "person.2") }
-}
-
 struct SearchScreen: View {
     var body: some View { PlaceholderScreen(title: "Search", symbolName: "magnifyingglass") }
 }
@@ -103,11 +99,6 @@ struct ReminderListScreen: View {
 
     let source: Source
     var body: some View { PlaceholderScreen(title: "List", symbolName: "list.bullet") }
-}
-
-struct RecordsListScreen: View {
-    let scope: RecordsScope
-    var body: some View { PlaceholderScreen(title: "Records", symbolName: "person.2") }
 }
 
 struct ItemListScreen: View {
