@@ -841,17 +841,35 @@ the app building warning-free with all seven test targets green (~2,430 tests).
   VoiceOver; D8 delivered via A2/A3/D1).
 - **Phase E: E2, E3 (Reminders multi-select), E4 (rows drag onto projects), E5, E6 shipped.**
 
-### 5.2 Remaining, in recommended order
+### 5.2 Second execution session (2026-08-04) — remainder closed, one reversal
 
-1. **C1 — the shell spike** (§4.6.1). Untouched by design: an XL, high-risk refactor gated on
-   its own decision, wrong to start at the tail of a long session. The fallback
-   (native-ize the custom shell) remains fully specified.
-2. **E1 — dark mode + Increase Contrast screen review.** Requires driving the app on a quiet
-   machine; the fixture launch arguments and capture method are proven (see the C2/C3/D1
-   screenshots in this session).
-3. **B4 residual** — the ledger files not cleared by rewrites (fonts ~20 files, paddings ~13,
-   radii ~10, shadows ~6). Mechanical; the hygiene tests enumerate every site and refuse
-   regressions meanwhile.
-4. Deferred small items, folded into the above: swipe-action sets on their declared lists,
-   `forSelectionType:` context menus, the project tab-bar-to-toolbar move, module-scoped
-   search default.
+- **C1 shipped.** The shell rides `NavigationSplitView(columnVisibility:)`: AppKit owns the
+  sidebar (material, divider, autosave, toggle) while the tested interior width engine keeps
+  list/detail, with a hand-drawn pane divider resurrecting the orphaned `setWidth` pipeline.
+- **B4 shipped, ledgers closed.** All five metric allowlists (shadows, fonts, radii, padding,
+  animations) are empty and the staleness expectations stay armed: the next raw metric fails
+  the build. One new token (`heroGlyph`); thin accent bars became `Capsule`; the two numbers
+  that were alignment rather than spacing (bug-list divider inset, map field's hanging margin)
+  are named and derived.
+- **E1 largely done.** New review arguments: `-ElephruitAppearance light-contrast|dark-contrast`
+  (forces the accessibility appearances this app's adaptive tints resolve against) and
+  `-ElephruitStoreName` (a review library nothing else on the machine writes to — the shared
+  temp store was carrying another session's live web clippings). 22-capture sweep across every
+  module in dark plus the dense screens under both contrast appearances, driven only in the
+  user's idle windows. Reviewed clean: Today, Inbox, Reminders, Calendar day, Notes, person
+  page. The dark/contrast pairs proved the adaptive tints respond (calendar and Today differ
+  under forced contrast; screens with no tinted surface are pixel-identical, as expected).
+  Still to review from the captures on disk: Records list, Time, Bookmarks, Kanban, and the
+  contrast set; Reminders needs recapturing after the restoration below.
+- **D1 presentation withdrawn — owner decision.** Mike rejected both the sectioned List and a
+  flat chromeless replacement: the module on main was polished by hand and is the design.
+  Restored from main whole (header, centred card column, full inline composer, bottom bar,
+  one wide pane). Kept from D1: the grammar in Quick Jot/Today, `ReminderStore.sections` (API
+  only), and `ReminderDetailPane` — now serving ⌘K/search via `ItemDetailView`, so the A3
+  dead-end stays fixed. The composer's off-grid metrics are named constants (`ComposerMetrics`)
+  so the hygiene scans read them as decisions; its fonts/shadow/animation moved to
+  value-identical tokens. **Standing rule: no visual changes to this module without explicit
+  direction** (see memory: reminders-module-is-owner-polished).
+- Deferred small items, folded into later work: swipe-action sets on their declared lists,
+  `forSelectionType:` context menus, the project tab-bar-to-toolbar move, module-scoped
+  search default.
