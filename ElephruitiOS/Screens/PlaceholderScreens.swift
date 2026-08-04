@@ -29,10 +29,6 @@ struct RemindersScreen: View {
     var body: some View { PlaceholderScreen(title: "Reminders", symbolName: "checkmark.circle") }
 }
 
-struct SearchScreen: View {
-    var body: some View { PlaceholderScreen(title: "Search", symbolName: "magnifyingglass") }
-}
-
 /// The one placeholder with real content: Library is the shell's own directory, so its
 /// rows exist from the start — each pushes the real route, landing on that route's
 /// placeholder until the screen behind it is built.
@@ -99,44 +95,6 @@ struct ReminderListScreen: View {
 
     let source: Source
     var body: some View { PlaceholderScreen(title: "List", symbolName: "list.bullet") }
-}
-
-struct ItemListScreen: View {
-    enum Source: Hashable {
-        case tag(String)
-        case kind(ItemKind)
-        case archive
-    }
-
-    let source: Source
-
-    var body: some View {
-        PlaceholderScreen(title: title, symbolName: symbolName)
-    }
-
-    private var title: String {
-        switch source {
-        case .tag(let slug): "#\(slug)"
-        case .kind(let kind): kind.pluralDisplayName
-        case .archive: "Archive"
-        }
-    }
-
-    private var symbolName: String {
-        switch source {
-        case .tag: "number"
-        case .kind: "square.grid.2x2"
-        case .archive: "archivebox"
-        }
-    }
-}
-
-struct InboxScreen: View {
-    var body: some View { PlaceholderScreen(title: "Inbox", symbolName: "tray") }
-}
-
-struct TrashScreen: View {
-    var body: some View { PlaceholderScreen(title: "Trash", symbolName: "trash") }
 }
 
 struct EventScreen: View {
