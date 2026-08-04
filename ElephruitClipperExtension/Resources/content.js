@@ -1,6 +1,13 @@
 (() => {
-  if ((globalThis.__elephruitClipperVersion || 0) >= 7) return;
-  globalThis.__elephruitClipperVersion = 7;
+  if ((globalThis.__elephruitClipperVersion || 0) >= 8) return;
+  globalThis.__elephruitClipperVersion = 8;
+
+  // An already-open tab can retain the previous isolated-world script after an extension update.
+  // Remove its detached UI before installing the new API so the next toolbar click cannot produce
+  // overlapping panels or boundaries.
+  globalThis.__elephruitClipperPanelUI?.unmount?.();
+  document.querySelectorAll("[data-elephruit-clipper-ui='panel'], [data-elephruit-clipper-ui='article-boundary']")
+    .forEach((element) => element.remove());
 
   const REMOVE = [
     "script", "style", "noscript", "template", "nav", "form", "button", "input", "select",
@@ -159,21 +166,24 @@
     let previous = root;
     let candidate = root.parentElement;
 
-    while (candidate && candidate !== document.body && candidate !== document.documentElement && levels.length < 7) {
+    // Three distinct regions match the useful contraction model used by mature clippers: the
+    // story, its feed/column, and the surrounding content grid. Page feeds naturally contain far
+    // more text than one story, so text volume is not a reason to reject a geometrically useful
+    // ancestor. Near-identical wrapper divs are skipped.
+    while (candidate && candidate !== document.body && candidate !== document.documentElement && levels.length < 3) {
       const textLength = candidate.innerText?.trim().length || 0;
-      const identity = `${candidate.tagName} ${candidate.id} ${candidate.className}`;
       const rect = candidate.getBoundingClientRect();
       const previousRect = previous.getBoundingClientRect();
-      const visualGrowth = Math.abs(rect.width - previousRect.width) >= 36
-        || Math.abs(rect.height - previousRect.height) >= 48;
-      const textGrowth = textLength >= (previous.innerText?.trim().length || 0) * 1.05;
+      const previousTextLength = Math.max(previous.innerText?.trim().length || 0, 1);
+      const widthGrowth = rect.width >= previousRect.width + 48;
+      const heightGrowth = rect.height >= previousRect.height + 96;
+      const textGrowth = textLength >= previousTextLength * 1.35;
       const isMeaningful = rect.width >= 180
         && rect.height >= 120
         && textLength >= originalTextLength
-        && textLength <= originalTextLength * 3.5
-        && linkDensity(candidate) < 0.72
-        && !NEGATIVE.test(identity)
-        && (visualGrowth || textGrowth || /article|main|content|entry|page|post|story/i.test(identity));
+        && textLength <= Math.max(originalTextLength * 120, 100_000)
+        && linkDensity(candidate) < 0.88
+        && (widthGrowth || heightGrowth || textGrowth);
       if (isMeaningful) {
         levels.push(candidate);
         previous = candidate;
@@ -186,7 +196,8 @@
   function ensureArticleSelection() {
     if (articleSelection?.levels?.[0]?.isConnected) return articleSelection;
     const root = articleRoot();
-    articleSelection = { levels: articleSelectionLevels(root), index: 0 };
+    const levels = articleSelectionLevels(root);
+    articleSelection = { levels, index: levels.length - 1 };
     return articleSelection;
   }
 
@@ -516,7 +527,7 @@
   // that listener's empty response before the new listener answers. `scripting.executeScript` calls
   // this newest API explicitly, so upgrading never requires the user to reload their page.
   globalThis.__elephruitClipperAPI = {
-    version: 7,
+    version: 8,
     extract,
     showArticleSelection,
     hideArticleSelection,
@@ -530,7 +541,7 @@
   };
 
   browser.runtime.onMessage.addListener((message) => {
-    if (message?.type === "elephruit.panel.toggle.v2") return Promise.resolve(togglePanel());
+    if (message?.type === "elephruit.panel.toggle.v3") return Promise.resolve(togglePanel());
     if (message?.type === "elephruit.extract.v4") return Promise.resolve(extract());
     if (message?.type === "elephruit.article.show.v4") return Promise.resolve(showArticleSelection());
     if (message?.type === "elephruit.article.adjust.v4") {

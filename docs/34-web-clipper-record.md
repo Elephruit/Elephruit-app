@@ -9,7 +9,11 @@ into the local Elephruit library. It supports six modes:
   the substantial story nearest the current viewport instead of swallowing the entire feed. It
   removes navigation, advertising, forms, scripts, and other page chrome. When selected, the live
   page dims outside a green article boundary. Paired − / + controls walk through meaningful DOM
-  ancestors so the user can narrow or expand exactly what the preview and saved clip contain.
+  ancestors so the user can narrow or expand exactly what the preview and saved clip contain. The
+  initial boundary is the broadest of as many as three visually distinct regions: the story, its
+  article column, and the surrounding content grid. Repeated − clicks contract through those levels;
+  + expands through them again. Large feed ancestors are accepted based on their geometry rather
+  than rejected merely because they contain substantially more text than the focused story.
 - **Simplified article** keeps the readable region while also stripping site-specific presentation.
 - **Selection** saves the current DOM selection with its source metadata.
 - **Full page** saves a sequence of readable, full-width visual panels. The note renders adjacent
