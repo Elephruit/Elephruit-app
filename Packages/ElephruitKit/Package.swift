@@ -9,7 +9,7 @@ import PackageDescription
 /// a simulator, or an Xcode scheme.
 let package = Package(
     name: "ElephruitKit",
-    platforms: [.macOS(.v26)],
+    platforms: [.macOS(.v26), .iOS(.v26)],
     products: [
         // A single product containing every module. The app target links this once
         // and imports whichever modules it needs.
