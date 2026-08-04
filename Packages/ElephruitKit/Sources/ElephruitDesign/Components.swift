@@ -345,17 +345,30 @@ public struct RowDateLabel: View {
 
 /// A single tag.
 public struct TagChip: View {
+    /// How much presence the chip has.
+    ///
+    /// Two sizes rather than a free parameter, because "a bit bigger" is how a scale erodes.
+    public enum Size {
+        /// The dense default: list rows, inspectors, anywhere chips ride along beside text.
+        case compact
+        /// A chip that is itself a control — the Reminders filter rail — set at the
+        /// subheadline size so a target meant for clicking reads like one.
+        case prominent
+    }
+
     /// `.increased` inside a selected, focused list row. See ``Theme/Emphasis``.
     @Environment(\.backgroundProminence) private var prominence
 
     private let slug: String
     private let colorName: String?
     private let isSelected: Bool
+    private let size: Size
 
-    public init(slug: String, colorName: String? = nil, isSelected: Bool = false) {
+    public init(slug: String, colorName: String? = nil, isSelected: Bool = false, size: Size = .compact) {
         self.slug = slug
         self.colorName = colorName
         self.isSelected = isSelected
+        self.size = size
     }
 
     public var body: some View {
@@ -365,10 +378,10 @@ public struct TagChip: View {
             // of one letter — which is what a list row looked like below about 200 points.
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
-            .font(Theme.Text.chip)
+            .font(size == .compact ? Theme.Text.chip : Theme.Text.rowSubtitle.weight(.medium))
             .foregroundStyle(foreground)
             .padding(.horizontal, Theme.Spacing.small)
-            .padding(.vertical, Theme.Spacing.hairline)
+            .padding(.vertical, size == .compact ? Theme.Spacing.hairline : Theme.Spacing.tight)
             .background(
                 RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
                     .fill(background)
