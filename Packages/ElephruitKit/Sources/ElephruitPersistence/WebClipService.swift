@@ -15,6 +15,13 @@ public struct WebClipService {
     private let items: any ItemRepository
     private let attachments: AttachmentStore
 
+    private struct InlineImage {
+        var attachment: Attachment
+        var caption: String
+        var sourceURL: URL?
+        var isPageCapture: Bool
+    }
+
     public init(items: any ItemRepository, attachments: AttachmentStore) {
         self.items = items
         self.attachments = attachments
@@ -76,7 +83,7 @@ public struct WebClipService {
             )
         }
 
-        var inlineImages: [(attachment: Attachment, caption: String)] = []
+        var inlineImages: [InlineImage] = []
         for (index, image) in clip.images.enumerated() where !image.data.isEmpty {
             let filename = image.filename.trimmingCharacters(in: .whitespacesAndNewlines)
             let stableName = filename.isEmpty ? "web-image-\(index + 1).png" : filename
@@ -91,7 +98,12 @@ public struct WebClipService {
                     to: item
                 )
             }
-            inlineImages.append((attachment, image.altText))
+            inlineImages.append(InlineImage(
+                attachment: attachment,
+                caption: image.altText,
+                sourceURL: image.sourceURL,
+                isPageCapture: false
+            ))
         }
 
         if let screenshot = clip.screenshotData,
@@ -104,25 +116,23 @@ public struct WebClipService {
                 typeIdentifier: format.typeIdentifier,
                 to: item
             )
-            inlineImages.append((attachment, clip.mode == .fullPage ? "Full-page capture" : "Page capture"))
+            inlineImages.append(InlineImage(
+                attachment: attachment,
+                caption: clip.mode == .fullPage ? "Full-page capture" : "Page capture",
+                sourceURL: nil,
+                isPageCapture: true
+            ))
         } else if let screenshot = item.attachments.first(where: { $0.filename.contains("-screenshot.") }) {
-            inlineImages.append((screenshot, clip.mode == .fullPage ? "Full-page capture" : "Page capture"))
+            inlineImages.append(InlineImage(
+                attachment: screenshot,
+                caption: clip.mode == .fullPage ? "Full-page capture" : "Page capture",
+                sourceURL: nil,
+                isPageCapture: true
+            ))
         }
 
         if item.kind == .note, item.noteDocumentData == nil, !inlineImages.isEmpty {
-            let body = noteBody(for: clip, sourceURL: sourceURL)
-            var document = NoteBodyImport.document(from: body)
-            let insertion = document.pieces.lastIndex(where: {
-                if case .object(.divider) = $0 { return true }
-                return false
-            }).map { $0 + 1 } ?? document.pieces.count
-            let imagePieces = inlineImages.map { image in
-                NotePiece.object(.image(
-                    attachmentID: image.attachment.id,
-                    caption: NoteRichText(image.caption)
-                ))
-            }
-            document.pieces.insert(contentsOf: imagePieces, at: insertion)
+            let document = noteDocument(for: clip, sourceURL: sourceURL, inlineImages: inlineImages)
             try items.update(item) { $0.setNoteDocument(document) }
         }
 
@@ -130,6 +140,10 @@ public struct WebClipService {
     }
 
     private func noteBody(for clip: WebClip, sourceURL: URL) -> String {
+        noteSections(for: clip, sourceURL: sourceURL).joined(separator: "\n\n---\n\n")
+    }
+
+    private func noteSections(for clip: WebClip, sourceURL: URL) -> [String] {
         var sections: [String] = []
         let comment = clip.comment.trimmingCharacters(in: .whitespacesAndNewlines)
         if !comment.isEmpty { sections.append(comment) }
@@ -149,7 +163,81 @@ public struct WebClipService {
             sections.append(excerpt)
         }
 
-        return sections.joined(separator: "\n\n---\n\n")
+        return sections
+    }
+
+    /// Builds the rich note in known sections instead of searching the imported page for a divider.
+    /// A clipped page can contain any number of horizontal rules, and a lossless Markdown fallback
+    /// can represent every one of them as plain text. Section ownership is the only stable way to
+    /// guarantee that the visual capture appears near the top of the note.
+    private func noteDocument(
+        for clip: WebClip,
+        sourceURL: URL,
+        inlineImages: [InlineImage]
+    ) -> NoteDocument {
+        let sections = noteSections(for: clip, sourceURL: sourceURL)
+        let content = sections.last ?? ""
+        let prefix = sections.dropLast()
+        var pieces: [NotePiece] = []
+
+        for section in prefix {
+            if !pieces.isEmpty { pieces.append(.object(.divider)) }
+            pieces.append(contentsOf: documentPieces(from: section))
+        }
+        if !pieces.isEmpty { pieces.append(.object(.divider)) }
+
+        let captures = inlineImages.filter(\.isPageCapture)
+        pieces.append(contentsOf: captures.map(imagePiece))
+
+        let pageImages = inlineImages.filter { !$0.isPageCapture }
+        pieces.append(contentsOf: contentPieces(from: content, images: pageImages))
+        return NoteDocument(pieces: pieces.isEmpty ? NoteDocument.empty.pieces : pieces)
+    }
+
+    private func contentPieces(from content: String, images: [InlineImage]) -> [NotePiece] {
+        let matches = images.compactMap { image -> (range: Range<String.Index>, image: InlineImage)? in
+            guard let source = image.sourceURL?.absoluteString else { return nil }
+            let pattern = #"!\[[^\]\n]*\]\("#
+                + NSRegularExpression.escapedPattern(for: source)
+                + #"\)"#
+            guard let expression = try? NSRegularExpression(pattern: pattern),
+                  let match = expression.firstMatch(
+                    in: content,
+                    range: NSRange(content.startIndex..., in: content)
+                  ),
+                  let range = Range(match.range, in: content) else { return nil }
+            return (range, image)
+        }.sorted { $0.range.lowerBound < $1.range.lowerBound }
+
+        var pieces: [NotePiece] = []
+        var cursor = content.startIndex
+        var matchedIDs: Set<UUID> = []
+        for match in matches where match.range.lowerBound >= cursor {
+            pieces.append(contentsOf: documentPieces(from: String(content[cursor..<match.range.lowerBound])))
+            pieces.append(imagePiece(match.image))
+            matchedIDs.insert(match.image.attachment.id)
+            cursor = match.range.upperBound
+        }
+        pieces.append(contentsOf: documentPieces(from: String(content[cursor...])))
+
+        let unmatched = images.filter { !matchedIDs.contains($0.attachment.id) }
+        if !unmatched.isEmpty {
+            pieces.insert(contentsOf: unmatched.map(imagePiece), at: 0)
+        }
+        return pieces
+    }
+
+    private func documentPieces(from text: String) -> [NotePiece] {
+        let section = text.trimmingCharacters(in: .newlines)
+        guard !section.isEmpty else { return [] }
+        return NoteBodyImport.document(from: section).pieces
+    }
+
+    private func imagePiece(_ image: InlineImage) -> NotePiece {
+        .object(.image(
+            attachmentID: image.attachment.id,
+            caption: NoteRichText(image.caption)
+        ))
     }
 
     private func normalizedTitle(_ proposed: String, sourceURL: URL) -> String {

@@ -105,6 +105,27 @@ struct WebClipServiceTests {
         })
     }
 
+    @Test("A full-page capture appears before the copied page text")
+    func placesFullPageCaptureFirst() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+
+        var clip = makeClip(mode: .fullPage)
+        clip.contentMarkdown = "Page introduction.\n\n---\n\nPage footer."
+        clip.screenshotData = Data([0xFF, 0xD8, 0xFF, 0x01, 0x02])
+        let item = try fixture.service.save(clip)
+
+        let imageIndex = try #require(item.noteDocument.pieces.firstIndex { piece in
+            if case .object(.image) = piece { return true }
+            return false
+        })
+        let contentIndex = try #require(item.noteDocument.pieces.firstIndex { piece in
+            piece.paragraph?.plainText.contains("Page introduction") == true
+        })
+
+        #expect(imageIndex < contentIndex)
+    }
+
     @Test("Downloaded page images are local and inline in the note")
     func savesInlinePageImages() throws {
         let fixture = try Fixture()
@@ -129,6 +150,39 @@ struct WebClipServiceTests {
             guard case .object(.image(let attachmentID, let caption)) = piece else { return false }
             return attachmentID == attachment.id && caption.plainText == "A durable local-first diagram"
         })
+    }
+
+    @Test("Downloaded article images keep their position in the copied text")
+    func placesArticleImagesInReadingOrder() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+
+        var clip = makeClip()
+        let imageURL = URL(string: "https://example.com/diagram.png")!
+        clip.contentMarkdown = "Before the diagram.\n\n![System diagram](\(imageURL.absoluteString))\n\nAfter the diagram."
+        clip.images = [WebClipImage(
+            sourceURL: imageURL,
+            altText: "System diagram",
+            filename: "diagram.png",
+            typeIdentifier: "public.png",
+            data: Data([0x89, 0x50, 0x4E, 0x47, 0x01])
+        )]
+
+        let item = try fixture.service.save(clip)
+        let beforeIndex = try #require(item.noteDocument.pieces.firstIndex {
+            $0.paragraph?.plainText.contains("Before the diagram") == true
+        })
+        let imageIndex = try #require(item.noteDocument.pieces.firstIndex {
+            if case .object(.image) = $0 { return true }
+            return false
+        })
+        let afterIndex = try #require(item.noteDocument.pieces.firstIndex {
+            $0.paragraph?.plainText.contains("After the diagram") == true
+        })
+
+        #expect(beforeIndex < imageIndex)
+        #expect(imageIndex < afterIndex)
+        #expect(!item.body.contains("![System diagram]"))
     }
 
     @Test("Retrying an interrupted import completes attachments without duplicating the item")
