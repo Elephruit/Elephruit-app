@@ -38,6 +38,10 @@ struct ReminderComposerStateTests {
             backing: .buffered,
             defer: false
         )
+        // ARC owns this window; without this, `close()` releases it a second time and the test
+        // process dies at the next autorelease-pool pop — inside AppKit's window-animation
+        // teardown, long after this test has passed, taking the whole target's summary with it.
+        window.isReleasedWhenClosed = false
         let anchor = ReminderPopoverAnchorView(
             frame: NSRect(x: 80, y: 40, width: 80, height: 24)
         )

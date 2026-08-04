@@ -90,6 +90,9 @@ struct BugReportTextEditorTests {
             backing: .buffered,
             defer: false
         )
+        // ARC owns this window; `close()` on a window that also releases itself is the
+        // over-release that was killing the test host at autorelease-pool pop.
+        window.isReleasedWhenClosed = false
         window.contentView = host
         window.makeKeyAndOrderFront(nil)
         host.layoutSubtreeIfNeeded()
