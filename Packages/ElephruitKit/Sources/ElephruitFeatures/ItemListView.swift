@@ -177,6 +177,9 @@ public struct ItemListView: View {
                 NavigationLink(value: SidebarSelection.item(id: item.id)) {
                     row(for: item)
                 }
+                // Draggable, at last, in the app whose thesis is that everything links: a row
+                // dropped on a project in the sidebar files it there, undoably.
+                .draggable(WorkItemTransfer(id: item.id))
                 .contextMenu { contextMenu(for: item) }
                 .modifier(ItemSwipeActions(item: item, navigation: navigation, onPermanentDeletion: { pendingPermanentDeletion = $0 }, onChange: { Task { await reload() } }))
             }
