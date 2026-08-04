@@ -222,7 +222,7 @@ async function fullPageImages() {
     panels.push({
       id: crypto.randomUUID(),
       sourceURL: null,
-      altText: `Full-page capture ${panelIndex + 1} of ${panelCount}`,
+      altText: "",
       filename: `full-page-${String(panelIndex + 1).padStart(2, "0")}.jpg`,
       typeIdentifier: "public.jpeg",
       data

@@ -20,16 +20,21 @@ struct NoteObjectPieceView: View {
     @FocusState private var isFocused: Bool
 
     private var isSelected: Bool { model.selectedObjectPiece == pieceIndex }
+    private var isFullPageCapture: Bool {
+        guard case .image(let attachmentID, _) = object else { return false }
+        return item.attachments.first(where: { $0.id == attachmentID })?
+            .filename.hasPrefix("full-page-") == true
+    }
 
     var body: some View {
         face
-            .padding(Theme.Spacing.tight)
+            .padding(isFullPageCapture ? 0 : Theme.Spacing.tight)
             .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                RoundedRectangle(cornerRadius: isFullPageCapture ? 0 : Theme.Radius.medium)
                     .fill(isSelected ? Theme.Colors.selectionFill : Color.clear)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                RoundedRectangle(cornerRadius: isFullPageCapture ? 0 : Theme.Radius.medium)
                     .strokeBorder(isSelected ? Theme.Colors.selection : Color.clear, lineWidth: 1.5)
             )
             .contentShape(Rectangle())
@@ -80,6 +85,7 @@ struct NoteObjectPieceView: View {
                 item: item,
                 attachmentID: attachmentID,
                 caption: caption,
+                isFullPageCapture: isFullPageCapture,
                 onCaptionChange: { newCaption in
                     model.updateObject(.image(attachmentID: attachmentID, caption: newCaption), atPiece: pieceIndex)
                 }
@@ -129,6 +135,7 @@ private struct NoteImageFace: View {
     let item: Item
     let attachmentID: UUID
     let caption: NoteRichText
+    let isFullPageCapture: Bool
     let onCaptionChange: (NoteRichText) -> Void
 
     @State private var captionDraft = ""
@@ -141,8 +148,11 @@ private struct NoteImageFace: View {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(maxHeight: 420)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
+                    .frame(maxWidth: .infinity)
+                    .frame(maxHeight: isFullPageCapture ? nil : 420)
+                    .clipShape(RoundedRectangle(
+                        cornerRadius: isFullPageCapture ? 0 : Theme.Radius.medium
+                    ))
             } else if resolved {
                 missingFace
             } else {
@@ -151,14 +161,16 @@ private struct NoteImageFace: View {
                     .frame(height: 120)
             }
 
-            TextField(
-                String(localized: "Add a caption", comment: "Placeholder under an image"),
-                text: $captionDraft
-            )
-            .textFieldStyle(.plain)
-            .font(Theme.Text.metadata)
-            .foregroundStyle(Theme.Colors.secondaryText)
-            .onSubmit { commitCaption() }
+            if !isFullPageCapture {
+                TextField(
+                    String(localized: "Add a caption", comment: "Placeholder under an image"),
+                    text: $captionDraft
+                )
+                .textFieldStyle(.plain)
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .onSubmit { commitCaption() }
+            }
         }
         .task(id: attachmentID) { load() }
         .onAppear { captionDraft = caption.plainText }

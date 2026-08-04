@@ -114,7 +114,7 @@ public struct NotePageView: View {
                         object: object,
                         onOpenItem: { navigation.selectItem($0) }
                     )
-                    .padding(.vertical, Theme.Spacing.tight)
+                    .padding(.vertical, isFullPageCapture(object) ? 0 : Theme.Spacing.tight)
                 }
             }
         }
@@ -167,6 +167,12 @@ public struct NotePageView: View {
         }
 
         return rows
+    }
+
+    private func isFullPageCapture(_ object: NoteObject) -> Bool {
+        guard case .image(let attachmentID, _) = object else { return false }
+        return item.attachments.first(where: { $0.id == attachmentID })?
+            .filename.hasPrefix("full-page-") == true
     }
 
     // MARK: - The / menu overlay

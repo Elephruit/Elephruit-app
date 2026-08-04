@@ -153,6 +153,12 @@ struct WebClipServiceTests {
 
         #expect(imageIndices.count == 2)
         #expect(imageIndices.allSatisfy { $0 < contentIndex })
+        #expect(imageIndices.allSatisfy { index in
+            guard case .object(.image(_, let caption)) = item.noteDocument.pieces[index] else {
+                return false
+            }
+            return caption.isEmpty
+        })
     }
 
     @Test("Downloaded page images are local and inline in the note")

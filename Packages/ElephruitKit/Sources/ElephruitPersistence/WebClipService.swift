@@ -98,13 +98,14 @@ public struct WebClipService {
                     to: item
                 )
             }
+            let isPageCapture = clip.mode == .fullPage
+                && image.sourceURL == nil
+                && stableName.hasPrefix("full-page-")
             inlineImages.append(InlineImage(
                 attachment: attachment,
-                caption: image.altText,
+                caption: isPageCapture ? "" : image.altText,
                 sourceURL: image.sourceURL,
-                isPageCapture: clip.mode == .fullPage
-                    && image.sourceURL == nil
-                    && stableName.hasPrefix("full-page-")
+                isPageCapture: isPageCapture
             ))
         }
 
