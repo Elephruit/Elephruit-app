@@ -334,6 +334,24 @@ struct ElephruitCommands: Commands {
 
             Divider()
 
+            // ⌃⌘T finally does what its name says, on the thing you have selected. It started an
+            // *untitled* timer from the palette — there was no keyboard route to "time this".
+            Button("Start or Stop Timer") {
+                guard let services else { return }
+                if services.timer.isRunning {
+                    services.timer.stop()
+                } else if let id = navigation?.selectedItemID,
+                          let item = try? services.items.item(id: id) {
+                    services.timer.switchTo(item: item)
+                } else {
+                    services.timer.switchTo(item: nil)
+                }
+            }
+            .shortcut(.toggleTimer, in: shortcuts)
+            .disabled(services == nil)
+
+            Divider()
+
             Button("Back") { navigation?.goBack() }
                 .shortcut(.goBack, in: shortcuts)
                 .disabled(navigation?.canGoBack != true)
@@ -435,6 +453,7 @@ struct ElephruitCommands: Commands {
         case .reminders: .goReminders
         case .notes: .goNotes
         case .records: .goRecords
+        case .time: .goTime
         default: nil
         }
 

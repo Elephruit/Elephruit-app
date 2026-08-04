@@ -92,6 +92,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
     case recordsCommandBar = "peopleCommandBar"
     case quickReminderEntry = "quickTaskEntry"
     case goReminders = "goTasks"
+    case goTime
     case completeReminder = "completeTask"
     case flagReminder = "flagTask"
     case moveToToday
@@ -137,6 +138,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         case .switchCalendarSet: "Switch Calendar Set"
         case .quickReminderEntry: "Quick Reminder Entry"
         case .goReminders: "Go to Reminders"
+        case .goTime: "Go to Time"
         case .completeReminder: "Complete Reminder"
         case .flagReminder: "Flag Reminder"
         case .moveToToday: "Move to Today"
@@ -218,6 +220,9 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Codable {
         // only appeared to own.
         case .quickReminderEntry: KeyBinding("r", [.command, .control])
         case .goReminders: KeyBinding("7")
+        // ⌘8, continuing the numeric run — the one module people reach for all day that had no
+        // key of its own, so "check today's total" was a palette round-trip.
+        case .goTime: KeyBinding("8")
         // Return-adjacent, because completing is what you do most and ⌘Return is free here: the
         // lists are not text fields, and the text fields that exist handle their own Return.
         case .completeReminder: KeyBinding("\r", .command)
