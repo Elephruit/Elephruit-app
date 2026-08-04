@@ -286,6 +286,11 @@ public struct RootView: View {
             }
             splitView
         }
+        // Once, over an empty library only, and never again after any action: the three
+        // keystrokes the product is built around, said instead of left to the menus.
+        .overlay {
+            WelcomeView(navigation: navigation)
+        }
     }
 
     /// The column widths whatever this window is showing has asked for.

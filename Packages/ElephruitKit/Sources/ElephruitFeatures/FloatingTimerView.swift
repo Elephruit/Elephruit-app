@@ -99,6 +99,11 @@ struct FloatingTimerView: View {
             // The dot keeps its job when the words are gone: it is still the way back into the app,
             // and it still says paused or running by its shape and colour.
             .help(isCompact ? "\(state.title) — open the Time log" : "Open the Time log")
+            // Composed, because in the compact state the words are gone from the screen but not
+            // from the question a listener asks: what is running, and what does pressing do.
+            .accessibilityLabel(
+                "\(state.title), \(state.isPaused ? "paused" : "tracking"). Open the Time log"
+            )
 
             clock(state)
 
