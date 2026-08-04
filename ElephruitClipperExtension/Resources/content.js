@@ -1,6 +1,6 @@
 (() => {
-  if ((globalThis.__elephruitClipperVersion || 0) >= 8) return;
-  globalThis.__elephruitClipperVersion = 8;
+  if ((globalThis.__elephruitClipperVersion || 0) >= 9) return;
+  globalThis.__elephruitClipperVersion = 9;
 
   // An already-open tab can retain the previous isolated-world script after an extension update.
   // Remove its detached UI before installing the new API so the next toolbar click cannot produce
@@ -19,6 +19,25 @@
 
   const POSITIVE = /article|body|content|entry|main|page|post|story|text/i;
   const NEGATIVE = /ad|banner|breadcrumb|comment|cookie|footer|header|menu|modal|nav|promo|related|share|sidebar|subscribe|widget/i;
+  const FIDELITY_STYLE_PROPERTIES = [
+    "display", "box-sizing", "float", "clear", "position", "top", "right", "bottom", "left", "z-index",
+    "width", "min-width", "max-width", "height", "min-height", "max-height",
+    "margin-top", "margin-right", "margin-bottom", "margin-left",
+    "padding-top", "padding-right", "padding-bottom", "padding-left",
+    "border-top-width", "border-right-width", "border-bottom-width", "border-left-width",
+    "border-top-style", "border-right-style", "border-bottom-style", "border-left-style",
+    "border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
+    "border-top-left-radius", "border-top-right-radius", "border-bottom-right-radius", "border-bottom-left-radius",
+    "border-collapse", "border-spacing", "background-color", "color", "opacity",
+    "font-family", "font-size", "font-weight", "font-style", "font-variant", "line-height",
+    "letter-spacing", "word-spacing", "text-align", "text-decoration-line", "text-decoration-color",
+    "text-decoration-style", "text-transform", "text-indent", "text-shadow", "white-space",
+    "overflow-wrap", "word-break", "list-style-type", "list-style-position",
+    "grid-template-columns", "grid-template-rows", "grid-auto-flow", "grid-column", "grid-row",
+    "gap", "column-gap", "row-gap", "flex", "flex-basis", "flex-direction", "flex-grow",
+    "flex-shrink", "flex-wrap", "align-content", "align-items", "align-self", "justify-content",
+    "justify-items", "justify-self", "order", "object-fit", "object-position", "aspect-ratio", "vertical-align"
+  ];
 
   function meta(...selectors) {
     for (const selector of selectors) {
@@ -38,8 +57,29 @@
     }
   }
 
+  function fidelityStyle(element) {
+    const computed = getComputedStyle(element);
+    return FIDELITY_STYLE_PROPERTIES.flatMap((property) => {
+      let value = computed.getPropertyValue(property).trim();
+      if (!value) return [];
+      if (property === "position" && ["fixed", "sticky"].includes(value)) value = "static";
+      if (["top", "right", "bottom", "left", "z-index"].includes(property)
+          && ["fixed", "sticky"].includes(computed.position)) return [];
+      return [`${property}:${value}`];
+    }).join(";");
+  }
+
   function clean(root, simplified = false) {
     const clone = root.cloneNode(true);
+    const sourceElements = [root, ...root.querySelectorAll("*")];
+    const clonedElements = [clone, ...clone.querySelectorAll("*")];
+    const fidelityStyles = new Map();
+    if (!simplified) {
+      clonedElements.forEach((element, index) => {
+        const source = sourceElements[index];
+        if (source instanceof Element) fidelityStyles.set(element, fidelityStyle(source));
+      });
+    }
     const sourceImages = [root, ...root.querySelectorAll("img")].filter((node) => node.tagName?.toLowerCase() === "img");
     const clonedImages = [clone, ...clone.querySelectorAll("img")].filter((node) => node.tagName?.toLowerCase() === "img");
     clonedImages.forEach((image, index) => {
@@ -54,7 +94,7 @@
       if (resolved) image.setAttribute("src", resolved);
     });
     clone.querySelectorAll(REMOVE).forEach((node) => node.remove());
-    clone.querySelectorAll("*").forEach((element) => {
+    [clone, ...clone.querySelectorAll("*")].forEach((element) => {
       for (const attribute of [...element.attributes]) {
         const name = attribute.name.toLowerCase();
         if (name.startsWith("on") || ["style", "srcset", "formaction", "ping", "nonce"].includes(name)) {
@@ -70,6 +110,8 @@
         const source = absoluteURL(element.getAttribute("src"));
         source ? element.setAttribute("src", source) : element.removeAttribute("src");
       }
+      const generatedStyle = fidelityStyles.get(element);
+      if (generatedStyle) element.setAttribute("style", generatedStyle);
     });
     return clone;
   }
@@ -161,35 +203,32 @@
   let clipperPanel = null;
 
   function articleSelectionLevels(root) {
-    const levels = [root];
-    const originalTextLength = Math.max(root.innerText?.trim().length || 0, 1);
-    let previous = root;
-    let candidate = root.parentElement;
+    const heading = root.querySelector("h1, h2, h3");
+    let candidate = heading?.querySelector("a") || heading || root;
+    const levels = [];
 
-    // Three distinct regions match the useful contraction model used by mature clippers: the
-    // story, its feed/column, and the surrounding content grid. Page feeds naturally contain far
-    // more text than one story, so text volume is not a reason to reject a geometrically useful
-    // ancestor. Near-identical wrapper divs are skipped.
-    while (candidate && candidate !== document.body && candidate !== document.documentElement && levels.length < 3) {
-      const textLength = candidate.innerText?.trim().length || 0;
+    // Walk the complete containment ladder, including useful regions inside the detected article
+    // and page-wide ancestors outside it. Visually identical wrapper divs are collapsed; real
+    // changes in padding, width, height, or text produce another selectable boundary.
+    while (candidate && candidate !== document.documentElement && levels.length < 10) {
       const rect = candidate.getBoundingClientRect();
-      const previousRect = previous.getBoundingClientRect();
-      const previousTextLength = Math.max(previous.innerText?.trim().length || 0, 1);
-      const widthGrowth = rect.width >= previousRect.width + 48;
-      const heightGrowth = rect.height >= previousRect.height + 96;
-      const textGrowth = textLength >= previousTextLength * 1.35;
-      const isMeaningful = rect.width >= 180
-        && rect.height >= 120
-        && textLength >= originalTextLength
-        && textLength <= Math.max(originalTextLength * 120, 100_000)
-        && linkDensity(candidate) < 0.88
-        && (widthGrowth || heightGrowth || textGrowth);
-      if (isMeaningful) {
+      const textLength = candidate.innerText?.trim().length || 0;
+      const previous = levels.at(-1);
+      const previousRect = previous?.getBoundingClientRect();
+      const previousTextLength = previous?.innerText?.trim().length || 0;
+      const isRequired = candidate === root || candidate === document.body;
+      const isDistinct = !previousRect
+        || Math.abs(rect.width - previousRect.width) >= 12
+        || Math.abs(rect.height - previousRect.height) >= 12
+        || textLength >= Math.max(previousTextLength + 40, previousTextLength * 1.08);
+      if (rect.width >= 40 && rect.height >= 18 && textLength > 0 && (isRequired || isDistinct)) {
         levels.push(candidate);
-        previous = candidate;
       }
+      if (candidate === document.body) break;
       candidate = candidate.parentElement;
     }
+
+    if (!levels.includes(root)) levels.push(root);
     return levels;
   }
 
@@ -197,7 +236,7 @@
     if (articleSelection?.levels?.[0]?.isConnected) return articleSelection;
     const root = articleRoot();
     const levels = articleSelectionLevels(root);
-    articleSelection = { levels, index: levels.length - 1 };
+    articleSelection = { levels, index: Math.max(0, levels.indexOf(root)) };
     return articleSelection;
   }
 
@@ -527,7 +566,7 @@
   // that listener's empty response before the new listener answers. `scripting.executeScript` calls
   // this newest API explicitly, so upgrading never requires the user to reload their page.
   globalThis.__elephruitClipperAPI = {
-    version: 8,
+    version: 9,
     extract,
     showArticleSelection,
     hideArticleSelection,
@@ -541,7 +580,7 @@
   };
 
   browser.runtime.onMessage.addListener((message) => {
-    if (message?.type === "elephruit.panel.toggle.v3") return Promise.resolve(togglePanel());
+    if (message?.type === "elephruit.panel.toggle.v4") return Promise.resolve(togglePanel());
     if (message?.type === "elephruit.extract.v4") return Promise.resolve(extract());
     if (message?.type === "elephruit.article.show.v4") return Promise.resolve(showArticleSelection());
     if (message?.type === "elephruit.article.adjust.v4") {

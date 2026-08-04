@@ -1,6 +1,6 @@
 (() => {
-  if ((globalThis.__elephruitClipperPanelVersion || 0) >= 1) return;
-  globalThis.__elephruitClipperPanelVersion = 1;
+  if ((globalThis.__elephruitClipperPanelVersion || 0) >= 2) return;
+  globalThis.__elephruitClipperPanelVersion = 2;
 
   let activeCleanup = null;
   let activeApplyBoundary = null;
@@ -405,6 +405,35 @@
       return captureVisible({ format: "png" });
     }
 
+    function localizedHTML(html, images, sourceURL) {
+      if (!html) return null;
+      const template = document.createElement("template");
+      template.innerHTML = html;
+      const imagesBySource = new Map();
+      for (const image of images) {
+        if (!image.sourceURL) continue;
+        try {
+          imagesBySource.set(new URL(image.sourceURL, sourceURL).href, image);
+        } catch {
+          // An invalid image URL cannot be preserved safely.
+        }
+      }
+
+      template.content.querySelectorAll("img").forEach((element) => {
+        let source = null;
+        try {
+          source = new URL(element.getAttribute("src"), sourceURL).href;
+        } catch {
+          // Missing and malformed sources are removed below.
+        }
+        const image = source ? imagesBySource.get(source) : null;
+        if (image) element.setAttribute("src", `elephruit-attachment://${image.id}`);
+        else element.removeAttribute("src");
+        element.removeAttribute("srcset");
+      });
+      return template.innerHTML;
+    }
+
     function setStatus(message, success = false) {
       if (state.disposed) return;
       byID("status").textContent = message;
@@ -439,7 +468,9 @@
           version: 1, id: crypto.randomUUID(), mode: state.mode, title: byID("title").value.trim(),
           sourceURL: state.page.sourceURL, canonicalURL: state.page.canonicalURL || null, siteName: state.page.siteName || null,
           author: state.page.author || null, excerpt: state.page.excerpt || null, contentMarkdown: content.markdown || "",
-          contentHTML: ["article", "simplifiedArticle", "selection", "fullPage"].includes(state.mode) ? content.html : null,
+          contentHTML: ["article", "simplifiedArticle", "selection", "fullPage"].includes(state.mode)
+            ? localizedHTML(content.html, images, state.page.sourceURL)
+            : null,
           comment: byID("comment").value.trim(), tagSlugs: tags, projectHint: byID("project").value.trim() || null,
           images, screenshotData: await screenshotData(), clippedAt: new Date().toISOString()
         };
@@ -509,7 +540,7 @@
   }
 
   globalThis.__elephruitClipperPanelUI = {
-    version: 1,
+    version: 2,
     mount,
     unmount() { activeCleanup?.(); },
     articleChanged(payload) { activeApplyBoundary?.(payload); }
