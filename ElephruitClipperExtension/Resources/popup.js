@@ -51,6 +51,28 @@ function siteAccess(tab) {
   };
 }
 
+function contentScriptID(pattern) {
+  let hash = 2166136261;
+  for (const character of pattern) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `elephruit-site-${(hash >>> 0).toString(16)}`;
+}
+
+async function ensureContentScript(site) {
+  const id = contentScriptID(site.pattern);
+  const scripts = await browser.scripting.getRegisteredContentScripts();
+  if (scripts.some((script) => script.id === id)) return;
+  await browser.scripting.registerContentScripts([{
+    id,
+    matches: [site.pattern],
+    js: ["panel.js", "content.js"],
+    runAt: "document_start",
+    persistAcrossSessions: true
+  }]);
+}
+
 function showAccessRequest(tab, site) {
   accessRequest = { tab, site };
   spinner.hidden = true;
@@ -86,9 +108,11 @@ async function openOnTab(tab) {
     return;
   }
 
-  // Dynamic injection is unreliable while a site is redirecting or its main document is still
-  // provisional. Reload once after access is confirmed so Safari installs the declared content
-  // scripts at document_start, then wait for their listener instead of racing the navigation.
+  await ensureContentScript(site);
+
+  // Direct execution is unreliable while a site is redirecting or its main document is still
+  // provisional. Register the content script for this approved site, reload once, and let Safari
+  // install it at document_start instead of racing the navigation.
   title.textContent = "Preparing the clipper…";
   detail.textContent = "Reloading this page once to finish website access.";
   await browser.tabs.reload(tab.id);
