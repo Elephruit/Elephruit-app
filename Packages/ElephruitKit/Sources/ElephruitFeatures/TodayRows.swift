@@ -693,10 +693,36 @@ struct TodayTaskRow: View {
             return .handled
         }
         .contextMenu { TodayTaskMenu(task: task, item: item, plan: plan, actions: actions) }
+        // "Pick a Date…" from the menu above — the reschedule route to an arbitrary day, which
+        // used to require the inspector. Anchored to the row it moves.
+        .popover(isPresented: datePickerBinding, arrowEdge: .trailing) {
+            DatePicker(
+                "Move to",
+                selection: Binding(
+                    get: { plan.date },
+                    set: { chosen in
+                        actions.model.datePickerTaskID = nil
+                        actions.reschedule(item, to: chosen)
+                    }
+                ),
+                displayedComponents: .date
+            )
+            .datePickerStyle(.graphical)
+            .labelsHidden()
+            .padding(Theme.Spacing.medium)
+            .frame(width: 300)
+        }
         .help(tooltip)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel(pieces))
         .accessibilityAddTraits(item.status == .completed ? [.isSelected] : [])
+    }
+
+    private var datePickerBinding: Binding<Bool> {
+        Binding(
+            get: { actions.model.datePickerTaskID == item.id },
+            set: { if !$0, actions.model.datePickerTaskID == item.id { actions.model.datePickerTaskID = nil } }
+        )
     }
 
     @ViewBuilder
@@ -916,6 +942,10 @@ struct TodayTaskMenu: View {
             Button("Later Today") { actions.moveToLaterToday(item) }
             Button("Tomorrow") { actions.reschedule(item, to: clock.startOfTomorrow) }
             Button("Next Week") { actions.reschedule(item, to: clock.startOfDay(daysFromToday: 7)) }
+            Divider()
+            // The route to an arbitrary day, which used to require opening the inspector: five
+            // fixed choices are a shortcut, not a calendar.
+            Button("Pick a Date…") { actions.beginPickingDate(for: item) }
             Divider()
             Button("Take Off the Plan") { actions.reschedule(item, to: nil) }
         }

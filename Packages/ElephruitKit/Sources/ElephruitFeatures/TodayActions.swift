@@ -67,6 +67,11 @@ struct TodayActions {
         act(on: task) { try $0.reminderLifecycle.moveToLaterToday(task) }
     }
 
+    /// Opens the calendar popover for one task — the route to an arbitrary day.
+    func beginPickingDate(for task: Item) {
+        model.datePickerTaskID = task.id
+    }
+
     func setDeadline(_ date: Date?, on task: Item) {
         act(on: task) { try $0.reminderLifecycle.setDeadline(date, on: task) }
     }
@@ -121,22 +126,41 @@ struct TodayActions {
         navigation.selectItem(item.id)
     }
 
-    /// Creates a task on a given day.
+    /// Creates a task on a given day, reading the same grammar every capture surface reads.
     ///
     /// The day is inherited from where it was typed, which is the whole point of a field that lives
     /// inside a day rather than in a sheet: a task added while looking at Thursday is Thursday's,
     /// and nobody has to go and find it again to say so.
+    ///
+    /// ### One grammar, at last
+    /// This field was title-only while Quick Jot and the Reminders composer both read
+    /// `>project @person #tag !friday` — the third capture surface with the third capability set.
+    /// It parses now, with one addition to the rule: a date the grammar names wins over the day
+    /// being looked at, because typing `!friday` *is* choosing a day.
     @discardableResult
     func createTask(titled title: String, on day: Date, under container: Item? = nil) -> Item? {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
+        let vocabulary = (try? services.capture.vocabulary()) ?? .empty
+        var composition = QuickJotComposition()
+        composition.titleText = trimmed
+        _ = composition.flush(knowing: vocabulary)
+
+        var draft = composition.captured(knowing: vocabulary)
+        guard !draft.isEmpty else { return nil }
+        draft.kind = .reminder
+        let grammarChoseADay = draft.dueDate != nil || draft.followDate != nil
+
         var created: Item?
         services.perform {
-            var draft = ItemDraft(kind: .reminder, title: trimmed)
-            draft.parentID = container?.id
-            let task = try services.items.create(draft)
-            try services.reminderLifecycle.commit(task, to: day)
+            guard let task = try services.captureDraft(draft) else { return }
+            if let container, task.parent == nil {
+                try services.items.setParent(task, to: container)
+            }
+            if !grammarChoseADay {
+                try services.reminderLifecycle.commit(task, to: day)
+            }
             services.noteChange(to: task)
             created = task
         }
