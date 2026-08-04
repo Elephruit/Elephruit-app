@@ -23,7 +23,7 @@ async function activeTab() {
 
 async function messagePanel(tabID) {
   return withTimeout(
-    browser.tabs.sendMessage(tabID, { type: "elephruit.panel.toggle.v5" }),
+    browser.tabs.sendMessage(tabID, { type: "elephruit.panel.toggle.v6" }),
     700,
     "Safari did not answer the clipper."
   );

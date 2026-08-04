@@ -30,7 +30,9 @@ existing project for filing without covering the primary reading column. Article
 downloaded into the local library and retain their original position in the resulting document.
 Article and selection clips preserve their sanitized DOM with computed styles, so typography,
 colors, spacing, borders, tables, and columns remain recognizable while the text stays live and
-selectable. The app does not repeat a flattened Markdown copy beneath that document. Article,
+selectable. Faithful article, selection, and full-page clips retain the content inside the chosen
+boundary, including comments; the more aggressive removal of comments, related content, and
+navigation applies only to Simplified mode. The app does not repeat a flattened Markdown copy beneath that document. Article,
 simplified-article, selection, full-page, and screenshot clips become notes; bookmark clips remain
 bookmarks with a visual preview.
 Every clipped PNG and JPEG is passed through macOS Vision locally, and its recognized text joins the

@@ -1,6 +1,6 @@
 (() => {
-  if ((globalThis.__elephruitClipperVersion || 0) >= 10) return;
-  globalThis.__elephruitClipperVersion = 10;
+  if ((globalThis.__elephruitClipperVersion || 0) >= 11) return;
+  globalThis.__elephruitClipperVersion = 11;
 
   // An already-open tab can retain the previous isolated-world script after an extension update.
   // Remove its detached UI before installing the new API so the next toolbar click cannot produce
@@ -9,12 +9,15 @@
   document.querySelectorAll("[data-elephruit-clipper-ui='panel'], [data-elephruit-clipper-ui='article-boundary']")
     .forEach((element) => element.remove());
 
-  const REMOVE = [
-    "script", "style", "noscript", "template", "nav", "form", "button", "input", "select",
-    "textarea", "dialog", "iframe", "canvas", "svg", "video", "audio", "object", "embed",
-    "[aria-hidden='true']", "[hidden]", ".advertisement", ".advert", ".ads", ".cookie-banner",
-    ".newsletter", ".paywall", ".social-share", ".related", ".comments",
+  const REMOVE_UNSAFE = [
+    "script", "style", "noscript", "template", "form", "button", "input", "select", "textarea",
+    "dialog", "iframe", "canvas", "svg", "video", "audio", "object", "embed",
+    "[aria-hidden='true']", "[hidden]",
     "[data-elephruit-clipper-ui]"
+  ].join(",");
+  const REMOVE_SIMPLIFIED = [
+    "nav", ".advertisement", ".advert", ".ads", ".cookie-banner", ".newsletter", ".paywall",
+    ".social-share", ".related", ".comments"
   ].join(",");
 
   const POSITIVE = /article|body|content|entry|main|page|post|story|text/i;
@@ -93,7 +96,8 @@
       );
       if (resolved) image.setAttribute("src", resolved);
     });
-    clone.querySelectorAll(REMOVE).forEach((node) => node.remove());
+    clone.querySelectorAll(REMOVE_UNSAFE).forEach((node) => node.remove());
+    if (simplified) clone.querySelectorAll(REMOVE_SIMPLIFIED).forEach((node) => node.remove());
     [clone, ...clone.querySelectorAll("*")].forEach((element) => {
       for (const attribute of [...element.attributes]) {
         const name = attribute.name.toLowerCase();
@@ -566,7 +570,7 @@
   // that listener's empty response before the new listener answers. `scripting.executeScript` calls
   // this newest API explicitly, so upgrading never requires the user to reload their page.
   globalThis.__elephruitClipperAPI = {
-    version: 10,
+    version: 11,
     extract,
     showArticleSelection,
     hideArticleSelection,
@@ -580,7 +584,7 @@
   };
 
   browser.runtime.onMessage.addListener((message) => {
-    if (message?.type === "elephruit.panel.toggle.v5") return Promise.resolve(togglePanel());
+    if (message?.type === "elephruit.panel.toggle.v6") return Promise.resolve(togglePanel());
     if (message?.type === "elephruit.extract.v4") return Promise.resolve(extract());
     if (message?.type === "elephruit.article.show.v4") return Promise.resolve(showArticleSelection());
     if (message?.type === "elephruit.article.adjust.v4") {
