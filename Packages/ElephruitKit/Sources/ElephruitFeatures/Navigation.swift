@@ -1,4 +1,5 @@
 import ElephruitCore
+import ElephruitModel
 import ElephruitPersistence
 import Foundation
 import Observation
@@ -786,6 +787,42 @@ public final class NavigationModel {
             return selection.title
         }
         return activeModule.title
+    }
+
+    /// Opens an item on the surface that owns its full editing UI.
+    ///
+    /// ### Why this is not `select(.kind(item.kind))` + `selectItem`
+    /// Because for work items that pair is a dead end: a reminder's kind list lives inside the
+    /// Reminders module, whose policy declares no detail pane and no inspector, so the row was
+    /// selected and nothing opened anywhere. The command palette did exactly that, while
+    /// ``WorkItemRedirect`` — the view that catches the same mistake made by clicking — already
+    /// knew the right answer. This is that answer, stated once: a reminder opens in Reminders
+    /// (whose workspace opens its composer for an externally selected row), and project work opens
+    /// on the project that owns it.
+    public func open(_ item: Item) {
+        switch item.kind {
+        case .task, .reminder:
+            select(.reminders)
+            selectItem(item.id)
+
+        case .bug, .feature, .milestone, .release:
+            var cursor = item.parent
+            while let candidate = cursor {
+                if candidate.kind == .project {
+                    select(.project(id: candidate.id, viewID: nil))
+                    selectItem(item.id)
+                    return
+                }
+                cursor = candidate.parent
+            }
+            // An orphan — no owning project to open on. The kind list is the honest fallback.
+            select(.kind(item.kind))
+            selectItem(item.id)
+
+        default:
+            select(.kind(item.kind))
+            selectItem(item.id)
+        }
     }
 
     /// Selects exactly one item.

@@ -22,20 +22,8 @@ struct WorkItemRedirect: View {
     }
 
     private func redirect() {
-        if item.kind == .task || item.kind == .reminder {
-            navigation.select(.reminders)
-            navigation.selectItem(item.id)
-            return
-        }
-
-        var cursor = item.parent
-        while let candidate = cursor {
-            if candidate.kind == .project {
-                navigation.select(.project(id: candidate.id, viewID: nil))
-                navigation.selectItem(item.id)
-                return
-            }
-            cursor = candidate.parent
-        }
+        // One rule, stated on the navigation model, shared with the command palette — the two
+        // doors this mistake used to be made through.
+        navigation.open(item)
     }
 }

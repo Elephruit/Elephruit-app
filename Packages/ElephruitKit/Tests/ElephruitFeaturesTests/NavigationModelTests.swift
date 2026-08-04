@@ -1,5 +1,6 @@
 import ElephruitCore
 import ElephruitFeatures
+import ElephruitPersistence
 import Foundation
 import Testing
 
@@ -395,5 +396,66 @@ struct MultiSelectionTests {
         navigation.select(.inbox)
         #expect(navigation.selectedItemIDs.isEmpty)
         #expect(navigation.selectedItemID == nil)
+    }
+}
+
+/// **`open(_:)`** — the one routing rule for "show me this item", shared by the command palette
+/// and `WorkItemRedirect`.
+///
+/// The dead end this guards against: opening a reminder by its kind selects a row inside the
+/// Reminders module, whose policy declares no detail pane and no inspector — selected, and shown
+/// nowhere, from ⌘K of all places.
+@MainActor
+@Suite("Opening an item routes to the surface that can show it")
+struct ItemOpenRoutingTests {
+    @Test("A reminder opens in Reminders, not in a kind list")
+    func reminderOpensInReminders() throws {
+        let services = AppServices.inMemory()
+        let navigation = NavigationModel()
+        let reminder = try services.items.create(ItemDraft(kind: .reminder, title: "Call back"))
+
+        navigation.open(reminder)
+
+        #expect(navigation.selection == .reminders)
+        #expect(navigation.selectedItemID == reminder.id)
+    }
+
+    @Test("Project work opens on the project that owns it")
+    func bugOpensOnItsProject() throws {
+        let services = AppServices.inMemory()
+        let navigation = NavigationModel()
+        let project = try services.items.create(ItemDraft(kind: .project, title: "Launch"))
+        let bug = try services.items.create(
+            ItemDraft(kind: .bug, title: "Row height wrong", parentID: project.id)
+        )
+
+        navigation.open(bug)
+
+        #expect(navigation.selection == .project(id: project.id, viewID: nil))
+        #expect(navigation.selectedItemID == bug.id)
+    }
+
+    @Test("An orphaned work item falls back to its kind list rather than nowhere")
+    func orphanFallsBackToKindList() throws {
+        let services = AppServices.inMemory()
+        let navigation = NavigationModel()
+        let bug = try services.items.create(ItemDraft(kind: .bug, title: "Unfiled"))
+
+        navigation.open(bug)
+
+        #expect(navigation.selection == .kind(.bug))
+        #expect(navigation.selectedItemID == bug.id)
+    }
+
+    @Test("A note keeps the kind-list behaviour, which was already right for it")
+    func noteKeepsKindList() throws {
+        let services = AppServices.inMemory()
+        let navigation = NavigationModel()
+        let note = try services.items.create(ItemDraft(kind: .note, title: "Positioning"))
+
+        navigation.open(note)
+
+        #expect(navigation.selection == .kind(.note))
+        #expect(navigation.selectedItemID == note.id)
     }
 }
