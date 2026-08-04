@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  NOT YET LIVE. This is the Mac's entitlements file as sync requires it. Wiring it up
+	  is one line — CODE_SIGN_ENTITLEMENTS in Configuration/Elephruit.xcconfig points here
+	  instead of Elephruit.entitlements — but the automatic provisioning profile must first
+	  learn the iCloud and Push capabilities, which requires an Apple ID signed into
+	  Xcode's Accounts settings. Until then the live file keeps the app building on any
+	  machine, and this one keeps the decision reviewable.
+	-->
+	<!--
+	  An entitlement is added in the same commit as the feature that needs it and no earlier.
+	  See docs/06-privacy-and-entitlements.md.
+
+	  Deliberately ABSENT: network server, Photos, Camera, Microphone, Location, Bluetooth,
+	  USB, Downloads folder, Apple Events, JIT, and every temporary exception.
+
+	  **The no-network guarantee changed shape when sync arrived.** For its first year this
+	  file held no network-client entitlement, so the sandbox refused outbound connections at
+	  the kernel boundary — "this app makes no network requests" was verifiable, not a
+	  promise. iCloud sync is a network feature; the kernel-enforced version of the guarantee
+	  ends with it. What remains true, and what Settings says in the same words: the only
+	  endpoint is Apple's CloudKit, the only payload is the user's own library in the user's
+	  own private database, sync is off until turned on, and no analytics, telemetry, or
+	  third-party service exists in the binary.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+
+	<!-- CloudKit, and nothing else on the network. Added in the same commit as sync. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+
+	<!-- The user's own private database, in this app's own container. -->
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.com.elephruit.Elephruit</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+
+	<!-- Silent pushes: how a change on the iPhone reaches an open Mac without polling. -->
+	<key>com.apple.developer.aps-environment</key>
+	<string>development</string>
+
+	<!-- Atomic handoff files shared only with the bundled Safari Web Extension. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>$(ELEPHRUIT_APP_GROUP)</string>
+	</array>
+
+	<!-- Open and save panels: import, export, and attaching files. -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+
+	<!-- Security-scoped bookmarks for files the user keeps outside the app. -->
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
+
+	<!--
+	  Reading and writing the calendar.
+
+	  This entitlement lets the sandbox reach CalendarAgent at all. The TCC prompt is separate and is
+	  triggered only when the user turns the feature on in Settings — until then the app holds an
+	  inert provider and never touches EventKit.
+
+	  EventKit has no read-only tier: its only requests are full access and write-only, so any app
+	  that reads must ask for full access. Phase D used only the read half and proved it with a test
+	  asserting that no mutating call existed anywhere. The calendar module uses both halves, so that
+	  test was replaced rather than deleted, by three narrower properties `CalendarWriteSafetyTests`
+	  still enforces: writes take an `EventDraft` and nothing else, so the CRM has nowhere to leak
+	  through; mutating EventKit calls exist in exactly three named methods; and nothing is saved or
+	  deleted across a series without an explicit scope.
+	-->
+	<key>com.apple.security.personal-information.calendars</key>
+	<true/>
+
+	<!--
+	  The People module: reading the address book.
+
+	  This entitlement lets the sandbox reach the Contacts daemon at all. The TCC prompt is separate
+	  and is triggered only when the user turns the integration on in Settings — until then the app
+	  holds an inert `NoContactsProvider` and never touches `CNContactStore`.
+
+	  Contacts, unlike EventKit, has a single access tier: granting read access grants write access
+	  with it, and the user has no way to give less. Elephruit never writes. `ContactsProviding` has
+	  no write method, and `ContactsWriteSafetyTests` fails if the adapter ever reaches past it to
+	  `CNSaveRequest` — and a second test fails if the adapter fetches a key nothing displays.
+
+	  Still deliberately ABSENT: network client, network server, iCloud, CloudKit, Photos,
+	  Camera, Microphone, Location, Bluetooth, USB, Apple Events, JIT, and every temporary exception.
+	  Business-card scanning needs no camera entitlement: Continuity Camera is presented by the
+	  system, which hands back a file, and Vision reads it on-device.
+	-->
+	<key>com.apple.security.personal-information.addressbook</key>
+	<true/>
+
+	<!--
+	  The Tasks module: linking to Apple Reminders.
+
+	  This entitlement lets the sandbox reach the reminders store at all. The TCC prompt is separate
+	  and is triggered only when the user turns the integration on in Settings — until then the app
+	  holds an inert `NoRemindersProvider` and never touches `EKEventStore`.
+
+	  **This is the first integration that writes**, and the difference is deliberate rather than an
+	  erosion. The calendar and the address book are read-only by construction: their protocols have
+	  no write method, so writing is a compile error. That is not available here, because a task
+	  manager linked to Reminders that cannot tick a reminder off is not linked to anything.
+
+	  So the guarantee changes shape rather than disappearing. Every write is a `ReminderWrite`
+	  value that can be previewed, logged, and asserted about; `RemindersProviding.apply(_:)` is the
+	  single door it goes through; and `RemindersWriteSafetyTests` fails if any other method in the
+	  EventKit adapter names a mutating call, or if a deletion can be reached without an explicit
+	  `LinkedDeletionChoice`.
+
+	  EventKit offers no read-only or write-only tier for reminders — `requestWriteOnlyAccessToEvents()`
+	  is events-only — so full access is the only request there is, and the user has no way to grant
+	  less. The usage string in Info.plist says what is actually done with it.
+
+	  iCloud synchronisation of the user's reminders is the operating system's business. This app
+	  never asks for an Apple ID, holds no iCloud entitlement, and speaks to no private API: it
+	  writes to the store macOS gives it and the OS carries the change wherever the user has
+	  configured it to go.
+	-->
+	<key>com.apple.security.personal-information.reminders</key>
+	<true/>
+</dict>
+</plist>

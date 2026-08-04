@@ -30,6 +30,13 @@
 	<key>UILaunchScreen</key>
 	<dict/>
 
+	<!-- CloudKit's silent pushes wake the app to pull a change; without this the phone
+	     only learns about the Mac's edits on the next foreground launch. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
