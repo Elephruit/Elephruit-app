@@ -12,6 +12,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; width: 390px; min-height: 560px; }
 body { color: var(--ink); background: var(--surface); font-size: 13px; }
 button, input, textarea { font: inherit; }

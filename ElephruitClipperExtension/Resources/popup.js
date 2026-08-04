@@ -42,6 +42,7 @@ async function loadPage() {
     byID("tags").value = saved.elephruitClipTags || "";
     byID("loading").hidden = true;
     byID("clip-form").hidden = false;
+    window.scrollTo(0, 0);
     byID("title").focus();
     byID("title").setSelectionRange(byID("title").value.length, byID("title").value.length);
   } catch (error) {
@@ -292,6 +293,7 @@ function showFatal(message) {
   byID("loading").hidden = true;
   byID("clip-form").hidden = true;
   byID("error").hidden = false;
+  window.scrollTo(0, 0);
   byID("error-message").textContent = message;
 }
 
