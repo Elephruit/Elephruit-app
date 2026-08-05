@@ -51,7 +51,17 @@ struct RecordsListScreen: View {
     }
 }
 
-/// The shared list: scoped records, ranked search on top.
+/// The shared list: scoped records under alphabetical headings, ranked search on top.
+///
+/// ### Why it is sectioned and railed rather than one long scroll
+/// A flat list is fine at forty people and unusable at two thousand: reaching the S's means
+/// flicking, overshooting, and flicking back, and there is nothing on screen that says how far
+/// through you are. Headings answer *where am I* and the rail answers *take me to the M's*, which
+/// are the two questions a long address book is asked and neither of which a scrollbar answers.
+///
+/// The sectioning itself is `PersonListOrganiser`'s, which builds the alphabet from the names that
+/// exist rather than promising A–Z — see that type for why a fixed strip is wrong in most of the
+/// languages people are named in.
 private struct RecordsListBody<TrailingItem: View>: View {
     @Environment(\.services) private var services
     @Environment(MobileShellModel.self) private var shell
@@ -59,7 +69,7 @@ private struct RecordsListBody<TrailingItem: View>: View {
     let scope: RecordsScope
     @ViewBuilder let trailingItem: TrailingItem
 
-    @State private var records: [Item] = []
+    @State private var sections: [PersonListSection] = []
     @State private var results: [RankedPerson] = []
     @State private var searchText = ""
     @State private var loadError: String?
@@ -74,6 +84,36 @@ private struct RecordsListBody<TrailingItem: View>: View {
     @FocusState private var isSearchFocused: Bool
 
     var body: some View {
+        ScrollViewReader { proxy in
+            list
+                // An inset rather than an overlay, so the rows *end* where the rail begins. Laid
+                // over the list, twenty-eight points of letters would sit on top of the trailing
+                // end of every name — and the rail holds no data about anybody, so nothing of the
+                // list's should have to reach underneath it.
+                .safeAreaInset(edge: .trailing, spacing: 0) {
+                    SectionIndexBar(
+                        titles: sections.map(\.title),
+                        isEnabled: !isSearching,
+                        label: "name",
+                        style: .floating,
+                        unavailableReason: "Clear the search to jump by name"
+                    ) { title in
+                        jump(to: title, using: proxy)
+                    }
+                }
+        }
+        .listStyle(.plain)
+        .searchable(text: $searchText, prompt: "Search people")
+        .searchFocused($isSearchFocused)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { trailingItem }
+        }
+        .task(id: reloadKey) { reload() }
+        .onChange(of: searchText) { _, _ in scheduleSearch() }
+        .onDisappear { searchTask?.cancel() }
+    }
+
+    private var list: some View {
         List {
             if let loadError {
                 Label(loadError, systemImage: "exclamationmark.triangle")
@@ -90,17 +130,25 @@ private struct RecordsListBody<TrailingItem: View>: View {
                     .buttonStyle(.plain)
                 }
             } else {
-                ForEach(records) { record in
-                    Button {
-                        open(.person(record.id))
-                    } label: {
-                        MobileItemRow(item: record)
+                ForEach(sections) { section in
+                    Section {
+                        ForEach(section.entries) { entry in
+                            Button {
+                                open(.person(entry.id))
+                            } label: {
+                                MobileRecordRow(entry: entry)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    } header: {
+                        Text(section.title)
+                            .font(Theme.Text.sectionHeader)
+                            .foregroundStyle(Theme.Colors.secondaryText)
                     }
-                    .buttonStyle(.plain)
                 }
             }
 
-            if !isSearching, records.isEmpty, loadError == nil {
+            if !isSearching, sections.isEmpty, loadError == nil {
                 EmptyStateView(
                     symbolName: scope.symbolName,
                     headline: "Nothing here yet",
@@ -110,19 +158,30 @@ private struct RecordsListBody<TrailingItem: View>: View {
                 .frame(maxWidth: .infinity)
             }
         }
-        .listStyle(.plain)
-        .searchable(text: $searchText, prompt: "Search people")
-        .searchFocused($isSearchFocused)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { trailingItem }
-        }
-        .task(id: reloadKey) { reload() }
-        .onChange(of: searchText) { _, _ in scheduleSearch() }
-        .onDisappear { searchTask?.cancel() }
     }
 
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Moves the list to a heading the rail was dragged over.
+    ///
+    /// ### Why it scrolls to the first row rather than to the header
+    /// A plain list's headers are sticky, so the header for the section you are *in* is already
+    /// pinned at the top; scrolling to a header therefore has to argue with the thing that pins it,
+    /// and lands a header's height off. Putting the section's first person at the top puts its
+    /// heading exactly where the sticky one goes, which is the same picture and needs no arguing.
+    ///
+    /// Unanimated on purpose. Scrubbing produces a heading every few points of travel, and
+    /// animating each one would mean the list was always finishing the *previous* jump — the drag
+    /// would feel like it was being resisted. `PersonListOrganiser` supplies the nearest existing
+    /// section for a letter nobody's name begins with, which is what keeps the travel continuous
+    /// rather than sticky.
+    private func jump(to title: String, using proxy: ScrollViewProxy) {
+        guard let target = PersonListOrganiser.section(nearest: title, in: sections),
+              let first = target.entries.first
+        else { return }
+        proxy.scrollTo(first.id, anchor: .top)
     }
 
     /// One key so the list follows both the library and the scope.
@@ -145,11 +204,23 @@ private struct RecordsListBody<TrailingItem: View>: View {
         .contentShape(Rectangle())
     }
 
+    /// Reads the scope's records once and reduces each to what a row draws.
+    ///
+    /// The reduction is the point. Every property a row needs — the name, the employer, the star,
+    /// the tint, the type, the pointer to a photograph — is read here, on the one pass the list
+    /// already makes, and carried on a `PersonListEntry`. A row that reached back into the record
+    /// would fault the profile relationship while the list was scrolling, which is the difference
+    /// between a list that moves and one that stutters at two thousand people.
+    ///
+    /// Ordered and cut into headings by `PersonListOrganiser` rather than here, with the caller's
+    /// locale, so ä sorts with a in German and after z in Swedish without this file knowing either
+    /// fact. `.firstName` is the order because the row shows the display name and sectioning by any
+    /// other part of it would put people under a letter the list does not show.
     private func reload() {
         guard let services else { return }
         do {
             let all = try services.records.allRecords()
-            records = all.filter { record in
+            let scoped = all.filter { record in
                 switch scope {
                 case .all: true
                 case .unsorted: services.records.isUnsorted(record)
@@ -158,6 +229,20 @@ private struct RecordsListBody<TrailingItem: View>: View {
                     scope.recordType.map { services.records.type(of: record) == $0 } ?? true
                 }
             }
+
+            let entries = scoped.map { record in
+                PersonListEntry(
+                    id: record.id,
+                    displayName: record.displayTitle,
+                    organizationName: record.personProfile?.organizationName,
+                    isFavorite: record.isFavorite,
+                    colorName: record.colorName,
+                    recordType: services.records.type(of: record),
+                    contactIdentifier: record.personProfile?.contactsIdentifier
+                )
+            }
+
+            sections = PersonListOrganiser.sections(entries, by: .firstName)
             loadError = nil
         } catch {
             loadError = error.summary
