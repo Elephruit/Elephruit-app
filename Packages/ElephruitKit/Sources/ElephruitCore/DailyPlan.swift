@@ -1264,11 +1264,21 @@ public struct DayPlan: Sendable, Identifiable {
 
     /// The schedule proper: what is left once awareness has taken its share.
     ///
-    /// The complement of ``awarenessEvents(calendar:)`` over the timed entries, so that nothing is
-    /// drawn twice and nothing is dropped — the two together are every event on the day.
+    /// The complement of ``awarenessEvents(calendar:)`` over **every** event, so that nothing is
+    /// drawn twice and nothing is dropped — the two together are the whole day.
+    ///
+    /// ### Why the complement is taken over all events and not the timed ones
+    /// Because the one entry that is all-day and still belongs in the schedule is the one this whole
+    /// split exists to protect: a multi-day offsite with a guest list. Awareness refuses it because
+    /// it has attendees; taking the complement over ``timedEvents(calendar:)`` would have refused it
+    /// again for being all-day, and a week-long meeting with eleven people on it would have appeared
+    /// nowhere at all. It sorts by start like everything else and draws with an "All day" time
+    /// column, which is what it is.
     public func scheduleEvents(calendar: Calendar) -> [DayEvent] {
         let awareness = Set(awarenessEvents(calendar: calendar).map(\.id))
-        return timedEvents(calendar: calendar).filter { !awareness.contains($0.id) }
+        return events
+            .filter { !awareness.contains($0.id) }
+            .sorted { $0.event.startAt < $1.event.startAt }
     }
 
     /// The work that genuinely needs attention, as opposed to what is merely available today.

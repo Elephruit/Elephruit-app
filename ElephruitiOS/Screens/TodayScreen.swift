@@ -64,6 +64,7 @@ private struct TodayContent: View {
             if let plan = model.selectedPlan {
                 briefingSection(plan)
                 calendarStateSection
+                awarenessSection(plan)
                 eventsSection(plan)
                 tasksSection(plan)
                 completedSection(plan)
@@ -239,13 +240,43 @@ private struct TodayContent: View {
         }
     }
 
+    // MARK: - Awareness
+
+    /// What today *is*, as opposed to what is in it.
+    ///
+    /// ### Why this is not part of the schedule
+    /// A four-day trip and a day of leave were being drawn as agenda rows with "All day" where the
+    /// clock time goes, which reads as an appointment that forgot to say when. They are neither
+    /// appointments nor meetings; they are the shape of the day, and the right way to read them is
+    /// once, at the top, before looking at the hours. Nothing here has a time column, and nothing
+    /// here carries a conflict warning — an all-day entry overlaps everything by construction, which
+    /// is why `DayEventRules.conflicts` already refuses to count it.
+    @ViewBuilder
+    private func awarenessSection(_ plan: DayPlan) -> some View {
+        let calendar = services?.dateProvider.calendar ?? .current
+        let awareness = plan.awarenessEvents(calendar: calendar)
+        if !awareness.isEmpty {
+            Section("Awareness") {
+                ForEach(awareness) { event in
+                    TodayAwarenessRow(dayEvent: event, day: plan.date, calendar: calendar)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            shell.push(.event(event.event.identity.storageKey))
+                        }
+                }
+            }
+        }
+    }
+
     // MARK: - Events
 
     @ViewBuilder
     private func eventsSection(_ plan: DayPlan) -> some View {
-        if !plan.events.isEmpty {
+        let calendar = services?.dateProvider.calendar ?? .current
+        let schedule = plan.scheduleEvents(calendar: calendar)
+        if !schedule.isEmpty {
             Section("Schedule") {
-                ForEach(plan.events) { event in
+                ForEach(schedule) { event in
                     TodayEventRow(dayEvent: event)
                         .contentShape(Rectangle())
                         .onTapGesture {
@@ -464,6 +495,74 @@ private struct BriefingFigureChip: View {
         case .notable: Theme.Colors.dueToday
         case .plain: Theme.Colors.primaryText
         }
+    }
+}
+
+/// One thing that is true of the whole day: a trip, a day off, a birthday.
+///
+/// No time column, because there is no time to put in it — that was the tell that these did not
+/// belong in the schedule. What takes its place is the symbol for what the entry *is*, which is a
+/// distinction `DayEventKind` already draws and the schedule had no room to say.
+private struct TodayAwarenessRow: View {
+    let dayEvent: DayEvent
+    let day: Date
+    let calendar: Calendar
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Theme.Spacing.medium) {
+            Image(systemName: dayEvent.kind.symbolName)
+                .foregroundStyle(Theme.Palette.color(named: dayEvent.event.calendarColorName))
+                .frame(width: 20)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+                Text(dayEvent.event.displayTitle)
+                    .font(Theme.Text.rowTitle)
+                    .strikethrough(dayEvent.event.isCancelled)
+                    .lineLimit(2)
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(minHeight: 44)
+        .opacity(dayEvent.event.isCancelled ? 0.6 : 1)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Where in a multi-day entry today falls, or what kind of entry it is.
+    ///
+    /// "Day 2 of 4" is the line that makes a trip useful rather than decorative: an entry that says
+    /// only "Berlin" on each of four mornings tells you nothing you did not know on the first.
+    private var subtitle: String? {
+        if let span = spanDescription { return span }
+        guard dayEvent.kind != .allDay else { return nil }
+        return dayEvent.kind.displayName
+    }
+
+    private var spanDescription: String? {
+        let start = calendar.startOfDay(for: dayEvent.event.startAt)
+        // An all-day entry ends at midnight *after* its last day, so the last inclusive day is a
+        // moment before the end. Without that step a one-day entry reads as spanning two.
+        let last = calendar.startOfDay(
+            for: dayEvent.event.isAllDay
+                ? dayEvent.event.endAt.addingTimeInterval(-1)
+                : dayEvent.event.endAt
+        )
+
+        guard let total = calendar.dateComponents([.day], from: start, to: last).day, total > 0,
+              let elapsed = calendar.dateComponents(
+                  [.day], from: start, to: calendar.startOfDay(for: day)
+              ).day
+        else { return nil }
+
+        return "Day \(elapsed + 1) of \(total + 1)"
     }
 }
 

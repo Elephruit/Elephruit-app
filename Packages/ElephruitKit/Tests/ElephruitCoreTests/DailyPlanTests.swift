@@ -386,6 +386,13 @@ struct DailyPlanTests {
 
         #expect(plan.awarenessEvents(calendar: Self.calendar).isEmpty, "it has a guest list to show")
         #expect(plan.allDayEvents(calendar: Self.calendar).count == 1, "it is still an all-day entry")
+        #expect(
+            plan.scheduleEvents(calendar: Self.calendar).map(\.id) == ["Offsite"],
+            """
+            refused by awareness for having attendees and by the timeline for being all-day, it \
+            would otherwise appear nowhere at all
+            """
+        )
     }
 
     @Test("Awareness and the schedule together are every event, and share none")
@@ -398,6 +405,14 @@ struct DailyPlanTests {
             ),
             DayEvent(event: Self.event("Review", from: Self.at(10), minutes: 60, attendees: ["Maya"]), kind: .meeting),
             DayEvent(event: Self.event("Focus", from: Self.at(14), minutes: 60, availability: .free), kind: .focusBlock),
+            // The awkward one: all-day *and* a meeting, so each half has a reason to refuse it.
+            DayEvent(
+                event: Self.event(
+                    "Offsite", from: Self.at(0), minutes: 2 * 24 * 60,
+                    attendees: ["Rosa"], allDay: true
+                ),
+                kind: .meeting
+            ),
         ]
 
         let plan = DayPlan(
