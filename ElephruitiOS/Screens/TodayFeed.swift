@@ -55,12 +55,23 @@ struct TodayFeedDayHeader: View {
                 tint: Theme.Colors.tertiaryText,
                 isHollow: !plan.hasContent
             ),
-            showsDivider: false
+            showsDivider: false,
+            // The one boundary on this page that is not a change of subject but a change of *day*,
+            // and until now it was drawn as another row: a grey disc, a name in body weight, and
+            // the same hairline every meeting gets. Five days ran together into one column of
+            // entries with dates scattered through it. A rule, a clear gap above it, and a name a
+            // size larger are what make the break the strongest thing on the page — which is what
+            // it is, because everything below it is happening on a different day.
+            showsTopRule: true,
+            topGap: Theme.Spacing.medium
         ) {
             HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+                    // Larger than a row title on purpose. Weight alone was not enough — semibold
+                    // body beside regular body is a difference you have to look for, and nobody
+                    // looks for the thing that is meant to catch the eye.
                     Text(dayName)
-                        .font(Theme.Text.rowTitle.weight(.semibold))
+                        .font(.system(.title3, design: .default, weight: .semibold))
                         .foregroundStyle(Theme.Colors.primaryText)
 
                     Text(subtitle)

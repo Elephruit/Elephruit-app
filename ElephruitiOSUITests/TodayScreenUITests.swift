@@ -72,6 +72,54 @@ final class TodayScreenUITests: XCTestCase {
         add(attachment)
     }
 
+    /// Finished work keeps its words.
+    ///
+    /// The page used to replace a run of ticked reminders with the line "3 completed reminders" and
+    /// a disclosure arrow, which is a receipt rather than a record — and the arrow moved to the
+    /// middle of the row when it was pressed, so even the control that gave the titles back would
+    /// not hold still. This asserts the two halves of the replacement: the title is on the page
+    /// without anything being opened, and there is no count standing in for it.
+    ///
+    /// Scrolled to, because the sample data's finished reminders sit under the day's open work and
+    /// a `List` does not realise cells it has not reached.
+    func testFinishedRemindersKeepTheirTitles() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ElephruitDevelopmentMode",
+            "-ElephruitUseTemporaryStore",
+            "-ElephruitLoadSampleData",
+            "-ElephruitUseFixtureCalendar",
+            "-ElephruitFixturesAuthorized",
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 30))
+
+        let finished = app.staticTexts["Pay the invoice"]
+        for _ in 0..<12 where !finished.exists {
+            app.swipeUp()
+        }
+
+        XCTAssertTrue(
+            finished.exists,
+            "a reminder that was ticked off no longer says what it was"
+        )
+
+        // Matched on the words rather than on an identifier, because the row this replaced had no
+        // identifier of its own — the count *was* the label, and the only way to prove it is gone
+        // is to look for it the way a reader would.
+        XCTAssertFalse(
+            app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", "completed reminder"))
+                .firstMatch.exists,
+            "the collapsed count came back"
+        )
+
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "today-finished-reminders"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     /// People in one meeting are one row, and opening it names them.
     ///
     /// The fixture puts three people in Roadmap sync, which used to be three rows each repeating
