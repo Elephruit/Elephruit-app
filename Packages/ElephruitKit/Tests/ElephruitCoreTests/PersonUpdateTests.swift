@@ -190,6 +190,34 @@ struct PersonUpdateTests {
         #expect(sentence.contains("upper sixth in 2026–27"))
     }
 
+    // MARK: - What the app made of the grade
+
+    @Test("A grade it can read is said back as a grade")
+    func gradeReadingForAReadableGrade() {
+        let reading = Self.daughter.gradeReading(observedOn: Self.conversation, calendar: Self.calendar)
+        #expect(reading == "Reads as 8th grade in 2026–27, and moves up each August.")
+    }
+
+    /// The warning exists because storing an unreadable grade verbatim is right and surprising: it
+    /// will sit unchanged forever, and the moment to find that out is while typing it.
+    @Test("A grade it cannot read says so, and says what will happen")
+    func gradeReadingForAnUnreadableGrade() throws {
+        var capture = Self.son
+        capture.gradeText = "upper sixth"
+
+        let reading = try #require(
+            capture.gradeReading(observedOn: Self.conversation, calendar: Self.calendar)
+        )
+        #expect(reading.contains("“upper sixth” is kept exactly as written for 2026–27"))
+        #expect(reading.contains("will not move up each year"))
+    }
+
+    @Test("No grade, nothing to say")
+    func gradeReadingIsAbsentWithoutAGrade() {
+        let capture = RelativeCapture(kind: .child, label: "son")
+        #expect(capture.gradeReading(observedOn: Self.conversation, calendar: Self.calendar) == nil)
+    }
+
     // MARK: - The whole update
 
     @Test("The worked example is one update carrying nine writes")

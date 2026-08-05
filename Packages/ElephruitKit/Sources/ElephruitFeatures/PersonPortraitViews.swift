@@ -463,7 +463,7 @@ struct PersonRelationshipsSection: View {
         .padding(.horizontal, Theme.Spacing.large)
         .task(id: person.id) { reload() }
         .sheet(isPresented: $isAddingRelationship) {
-            AddRelationshipSheet(person: person, initialKind: relationshipKind) {
+            AddRelativesSheet(person: person, initialKind: relationshipKind) {
                 isAddingRelationship = false
                 reload()
             }

@@ -198,6 +198,27 @@ public struct RelativeCapture: Sendable, Hashable, Identifiable {
         return sentence
     }
 
+    /// What the app made of the grade that was typed, said back before anything is saved.
+    ///
+    /// ### Why an unreadable grade has to be announced rather than quietly kept
+    /// Storing it verbatim and never advancing it is the right behaviour — the alternative is
+    /// re-wording somebody's words into the nearest thing understood — but it is a terrible
+    /// surprise. The moment to notice that "upper sixth" will sit unchanged forever is while it is
+    /// being typed, not next August when the card has silently stayed put and the child has not.
+    ///
+    /// `nil` when there is no grade to read. Lives here rather than in a view so the Mac's sheet,
+    /// the phone's sheet and the meeting debrief cannot say three different things about one word.
+    public func gradeReading(observedOn: Date, calendar: Calendar) -> String? {
+        guard let text = statedGradeText else { return nil }
+        let year = schoolYearIntent.schoolYear(observedOn: observedOn, calendar: calendar)
+
+        guard let grade = parsedGrade else {
+            return "“\(text)” is kept exactly as written for \(year.displayText). "
+                + "Elephruit cannot read it as a grade, so it will not move up each year."
+        }
+        return "Reads as \(grade.displayText) in \(year.displayText), and moves up each August."
+    }
+
     private static func cleaned(_ text: String?) -> String? {
         guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
             return nil
