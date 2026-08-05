@@ -186,7 +186,7 @@ public struct RouteEstimate: Sendable, Hashable {
 /// ordinary words rather than being logged and swallowed. None of them is exceptional: a place that
 /// does not geocode is the *normal* outcome for "Room 2", and the told number covering it is the
 /// feature working rather than failing.
-public enum RouteFailure: Sendable, Hashable {
+public enum RouteFailure: Error, Sendable, Hashable {
     /// Location access has not been granted, or the feature is off. Nothing was attempted.
     case notAuthorized
 
