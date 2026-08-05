@@ -16,16 +16,25 @@ Branch: `claude/family-info-logging-plan-8f3e0b`, off `f6cb2e60`.
 | 3 — Provenance | **Folded into 2.** Everything written through `apply` carries its source. The remaining `source: nil` call sites are facts typed directly with no source to carry — honest, not an omission. The debrief in §5 is what makes the rest of them non-nil. |
 | 4.1 — macOS family editor | **Done.** `AddRelativesSheet` replaces `AddRelationshipSheet`. |
 | 4.2 — macOS fact sheet | **Done.** Grade and School are separate categories; school-year control and reading line. |
-| 4.3 — Command grammar (`at <school>`, the four school words) | Not started. |
+| 4.3 — Command grammar | **Done.** Bare grades, `at <school>`, and a relative with no name. The command bar's own write path is gone — it builds a `PersonUpdate` like everything else. |
 | 5 — Meeting debrief | **Done for macOS.** `MeetingDebriefSheet`, reached from the event inspector. 5.3 (the Today row) not started. |
 | 6 — iOS parity | **6.1 done** — `RelativesSheet` on `PersonScreen`, plus phone review routing. 6.2 (log an interaction) and 6.3 (brief and debrief on `EventScreen`) not started. |
 | 7 — The fill-in queue | **Done on the phone** — "To fill in" on `PersonScreen`, with a one-field naming sheet. Not on the Mac; no Today card. |
 
-**Verification, honestly.** The phone screens are photographed (`Scripts/shot.sh` with
-`-ElephruitSelectPerson`) and `PersonCaptureUITests` drives the capture end to end. The **macOS**
-sheets have never been looked at: they build and are covered by unit tests, and
-`-ElephruitOpenSheet relatives` opens the family editor headlessly, but `screencapture` returned
-black on this machine. Look at them before building anything on top.
+**Verification, honestly.** `PersonCaptureUITests` drives the phone's capture end to end — press
+*Son*, type "senior", save, find the child, name him — and its screenshots are attached to the
+result bundle. The **macOS** sheets have never been looked at: they build, they are covered by unit
+tests, and `-ElephruitOpenSheet relatives` opens the family editor headlessly, but `screencapture`
+returned black on this machine (asleep display or no Screen Recording grant). Look at them before
+building anything on top.
+
+Two traps cost an hour each and are written down so they do not again:
+
+- **A `List` is a `collectionView`,** not an `otherElement`. Querying the wrong type reports a page
+  as absent on a build where a screenshot shows it working.
+- **Scrolling past a cell removes it from the accessibility tree.** Swiping a fixed number of times
+  to the bottom of a long record recycled the section under test out of existence and reported its
+  button as missing. Scroll *until* the element is hittable; never a fixed count.
 
 ---
 
