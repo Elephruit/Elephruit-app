@@ -17,12 +17,15 @@ struct SettingsScreen: View {
     @State private var exportedArchive: URL?
     @State private var exportError: String?
 
+    /// The working day as this screen has it, once it has been edited here.
+    @State private var editedWorkday: WorkdayHours?
     @State private var isChoosingImport = false
     @State private var importSummary: String?
     @State private var importWarnings: [String] = []
 
     var body: some View {
         List {
+            workdaySection
             syncSection
             integrationsSection
             remindersListsSection
@@ -33,6 +36,140 @@ struct SettingsScreen: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    // MARK: - The working day
+
+    /// When the day starts, when it ends, and which days count.
+    ///
+    /// ### Why this is the first section
+    /// Because it is the only setting here that changes a number the app already shows. Today says
+    /// how much of the day is free, and until this existed that was measured against nine-to-five,
+    /// Monday-to-Friday — an assumption the phone had no way to state and no way to correct.
+    ///
+    /// A calendar set overrides it while one is active, and the section says so rather than
+    /// accepting an edit that would have no effect.
+    @ViewBuilder
+    private var workdaySection: some View {
+        if let services {
+            // Held in state as well as written, because the store is not observed here: the record
+            // is read once per assembly by the briefing, not published, so a section reading
+            // `services.workday` on every pass would show the old hours until something else
+            // redrew it.
+            let workday = editedWorkday ?? services.workday
+
+            Section {
+                if case .calendarSet(let name) = workday.source {
+                    LabeledContent("Hours") { Text(workday.summary) }
+                    Label(
+                        "The “\(name)” calendar set sets these while it is active.",
+                        systemImage: "calendar.badge.checkmark"
+                    )
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                } else {
+                    DatePicker(
+                        "Starts",
+                        selection: minutesBinding(\.startMinutes, of: workday.hours),
+                        displayedComponents: .hourAndMinute
+                    )
+                    .accessibilityIdentifier(AccessibilityID.Settings.workdayStart)
+                    DatePicker(
+                        "Ends",
+                        selection: minutesBinding(\.endMinutes, of: workday.hours),
+                        displayedComponents: .hourAndMinute
+                    )
+                    .accessibilityIdentifier(AccessibilityID.Settings.workdayEnd)
+                    weekdayPicker(workday.hours)
+                }
+            } header: {
+                Text("Working day")
+                    .accessibilityIdentifier(AccessibilityID.Settings.workdaySection)
+            } footer: {
+                Text(
+                    workday.source.isChosen
+                        ? "How much of your day is free is measured against these hours."
+                        : """
+                        How much of your day is free is measured against these hours. Nobody has \
+                        set them yet, so Elephruit is assuming \(workday.summary).
+                        """
+                )
+            }
+        }
+    }
+
+    /// Seven toggles, as a row of initials rather than a list of seven switches.
+    ///
+    /// Weekday numbering is the calendar's own — 1 is Sunday — and so are the names, so this is not
+    /// the one screen in the app that only speaks English.
+    private func weekdayPicker(_ hours: WorkingHours) -> some View {
+        HStack(spacing: Theme.Spacing.tight) {
+            ForEach(1...7, id: \.self) { weekday in
+                let isOn = hours.includes(weekday: weekday)
+                Button {
+                    var weekdays = hours.weekdays
+                    if isOn { weekdays.remove(weekday) } else { weekdays.insert(weekday) }
+                    save(WorkingHours(
+                        startMinutes: hours.startMinutes,
+                        endMinutes: hours.endMinutes,
+                        weekdays: weekdays
+                    ))
+                } label: {
+                    Text(WorkdayHours.shortName(weekday))
+                        .font(Theme.Text.metadata)
+                        .frame(maxWidth: .infinity, minHeight: 32)
+                        .background(
+                            isOn ? Theme.Colors.selection.opacity(0.18) : Theme.Colors.subtleFill,
+                            in: RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                        )
+                        .foregroundStyle(isOn ? Theme.Colors.selection : Theme.Colors.secondaryText)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(WorkdayHours.shortName(weekday))
+                .accessibilityValue(isOn ? "Working" : "Not working")
+            }
+        }
+        .padding(.vertical, Theme.Spacing.tight)
+    }
+
+    /// A time picker over minutes-from-midnight.
+    ///
+    /// `DatePicker` wants a `Date` and `WorkingHours` holds minutes, deliberately — minutes carry no
+    /// day, no zone, and no daylight saving, which is what makes "the working day starts at nine"
+    /// mean the same thing in March and in November. The conversion is anchored to today's midnight
+    /// and is thrown away again immediately.
+    private func minutesBinding(
+        _ keyPath: WritableKeyPath<WorkingHours, Int>,
+        of hours: WorkingHours
+    ) -> Binding<Date> {
+        let midnight = Calendar.current.startOfDay(for: Date())
+        return Binding(
+            get: { midnight.addingTimeInterval(TimeInterval(hours[keyPath: keyPath] * 60)) },
+            set: { chosen in
+                let components = Calendar.current.dateComponents([.hour, .minute], from: chosen)
+                let minutes = (components.hour ?? 0) * 60 + (components.minute ?? 0)
+                var start = hours.startMinutes
+                var end = hours.endMinutes
+
+                if keyPath == \WorkingHours.startMinutes {
+                    start = minutes
+                    // Dragging the start past the end pushes the end along rather than collapsing
+                    // the day to nothing, which is what the initialiser's clamp would otherwise do
+                    // — and a zero-length working day silently reads as "no time free at all".
+                    end = max(end, start + 60)
+                } else {
+                    end = max(minutes, start + 15)
+                }
+
+                save(WorkingHours(startMinutes: start, endMinutes: end, weekdays: hours.weekdays))
+            }
+        )
+    }
+
+    private func save(_ hours: WorkingHours) {
+        guard let services else { return }
+        editedWorkday = WorkdayHours(hours: hours, source: .appDefault)
+        services.perform { try services.workdayHours.setAppDefault(hours) }
     }
 
     // MARK: - Sync

@@ -308,9 +308,17 @@ public enum CalendarFixtures {
         events.append(make("Budget review", identifier: "fixture.budget", start: at(2, 14),
                            minutes: 60, calendar: calendars[0], status: .cancelled))
 
-        // A trip across four days, so the all-day band has something to span.
-        events.append(make("Berlin — client visit", identifier: "fixture.trip", start: at(3, 0),
+        // A trip across four days, starting yesterday, so today is the middle of something rather
+        // than the start of it. That is the case the awareness band exists for: an entry reading
+        // only "Berlin" on each of four mornings says nothing that was not already known on the
+        // first, and "day 2 of 4" is the whole of what makes it worth a row.
+        events.append(make("Berlin — client visit", identifier: "fixture.trip", start: at(-1, 0),
                            minutes: 4 * 24 * 60, calendar: calendars[0], allDay: true))
+
+        // An all-day entry that is only today, so the one-day case is drawn too — it must not say
+        // "day 1 of 1", which is a sentence nobody needs.
+        events.append(make("Rosa's birthday", identifier: "fixture.birthday", start: at(0, 0),
+                           minutes: 24 * 60, calendar: calendars[2], allDay: true))
 
         // Time claimed and left showing as free, which is what a defended block is — and which the
         // day's plan must not count as a meeting or as a clash with the review above it.

@@ -952,9 +952,10 @@ public final class DailyPlanService {
         let focus = FocusTimeRules.focusTime(
             on: day,
             events: events.map(\.event),
-            // The active calendar set's own hours, so the briefing and the time grid cannot disagree
-            // about when the working day ends.
-            workingHours: services.calendar.activeSet?.workingHours ?? .standard,
+            // One resolved answer — the active set's hours, else the app's own setting, else the
+            // assumption — so the briefing, the time grid and the settings screen cannot disagree
+            // about when the working day ends. See ``AppServices/workday``.
+            workingHours: services.workday.hours,
             now: now,
             calendar: calendar
         )

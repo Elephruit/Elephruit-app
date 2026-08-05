@@ -101,6 +101,13 @@ struct MobileRootView: View {
         // Not on the Time screen itself, where the tracker card is already showing the same clock
         // and a larger Stop a few points above it. Two stop buttons for one timer on one screen
         // is a question about which of them is the real one.
+        // Room under every scrolling screen for the button that floats over all of them.
+        //
+        // The plus does not displace content, it covers it, so without this the last row of any
+        // list comes to rest under the glass and cannot be read at any scroll position — the end
+        // of Today's thread, the last reminder in a list, the final row of a project. It belongs
+        // here rather than on each screen because the button is the shell's, not theirs.
+        .contentMargins(.bottom, MobileAddMenu.footprint, for: .scrollContent)
         .overlay(alignment: .bottomLeading) {
             if !isShowingTheTracker {
                 MobileTimerPill()

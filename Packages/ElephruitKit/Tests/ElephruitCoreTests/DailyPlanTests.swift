@@ -250,6 +250,220 @@ struct DailyPlanTests {
         #expect(focus.available == 0)
     }
 
+    // MARK: - Free time, named
+
+    @Test("Every gap worth offering is handed back, in clock order, with its own times")
+    func freeSlotsAreNamedRatherThanTotalled() {
+        let events = [
+            Self.event("Standup", from: Self.at(9.5), minutes: 30, attendees: ["Maya"]),
+            Self.event("Review", from: Self.at(11), minutes: 60, attendees: ["Maya"]),
+        ]
+
+        let focus = FocusTimeRules.focusTime(
+            on: Self.today, events: events, workingHours: Self.workingHours,
+            now: Self.at(9, dayOffset: -1), calendar: Self.calendar
+        )
+
+        // 9:00–9:30, 10:00–11:00, 12:00–17:00.
+        #expect(focus.slots.map(\.range.lowerBound) == [Self.at(9), Self.at(10), Self.at(12)])
+        #expect(focus.slots.map(\.range.upperBound) == [Self.at(9.5), Self.at(11), Self.at(17)])
+        #expect(focus.slots.allSatisfy { !$0.isCurrent }, "no stretch of a future day is under way")
+    }
+
+    @Test("A gap too short to use is not offered as free time")
+    func shortGapsAreNotOpportunities() {
+        let events = [
+            Self.event("A", from: Self.at(9), minutes: 55, attendees: ["Maya"]),
+            // Five minutes between them: walking, not free time.
+            Self.event("B", from: Self.at(10), minutes: 420, attendees: ["Maya"]),
+        ]
+
+        let focus = FocusTimeRules.focusTime(
+            on: Self.today, events: events, workingHours: Self.workingHours,
+            now: Self.at(9, dayOffset: -1), calendar: Self.calendar
+        )
+
+        #expect(focus.slots.isEmpty)
+        // The total still counts it, because it is genuinely unclaimed. The two numbers answer
+        // different questions and are deliberately allowed to differ.
+        #expect(focus.available == 5 * 60)
+    }
+
+    @Test("The stretch happening now says so, because a start time in the past means nothing")
+    func theCurrentStretchIsMarked() {
+        let focus = FocusTimeRules.focusTime(
+            on: Self.today,
+            events: [Self.event("Review", from: Self.at(15), minutes: 60, attendees: ["Maya"])],
+            workingHours: Self.workingHours,
+            now: Self.at(14), calendar: Self.calendar
+        )
+
+        #expect(focus.slots.count == 2)
+        #expect(focus.slots[0].isCurrent)
+        #expect(focus.slots[0].rangeSummary.hasPrefix("until"))
+        #expect(!focus.slots[1].isCurrent, "16:00–17:00 has not started")
+        #expect(focus.slots[1].durationSummary == "1h")
+    }
+
+    @Test("Free time is said as a fraction of the time it is free out of")
+    func freeTimeCarriesItsDenominator() {
+        let events = [Self.event("Review", from: Self.at(10), minutes: 60, attendees: ["Maya"])]
+
+        let wholeDay = FocusTimeRules.focusTime(
+            on: Self.today, events: events, workingHours: Self.workingHours,
+            now: Self.at(9, dayOffset: -1), calendar: Self.calendar
+        )
+        #expect(wholeDay.windowLength == 8 * 3_600)
+        #expect(wholeDay.proportionSummary == "7h free of 8h")
+
+        // Late in the day the denominator is what is left, not the eight hours mostly spent — "30m
+        // free of 8h" at four in the afternoon is true and useless.
+        let lateOn = FocusTimeRules.focusTime(
+            on: Self.today, events: [], workingHours: Self.workingHours,
+            now: Self.at(16), calendar: Self.calendar
+        )
+        #expect(lateOn.windowLength == 3_600)
+        #expect(lateOn.proportionSummary == "1h free of 1h")
+    }
+
+    @Test("A day with nothing free says so rather than saying nothing of nothing")
+    func anEmptyDenominatorFallsBack() {
+        let focus = FocusTimeRules.focusTime(
+            on: Self.today,
+            events: [Self.event("All of it", from: Self.at(9), minutes: 480, attendees: ["Maya"])],
+            workingHours: Self.workingHours,
+            now: Self.at(9, dayOffset: -1), calendar: Self.calendar
+        )
+
+        #expect(!focus.hasAny)
+        #expect(focus.proportionSummary == focus.summary)
+        #expect(focus.proportionSummary == "Nothing free")
+    }
+
+    @Test("A day with no working window offers nothing to fill")
+    func closedDaysOfferNoSlots() {
+        let weekdaysOnly = WorkingHours(startMinutes: 9 * 60, endMinutes: 17 * 60, weekdays: [])
+        let focus = FocusTimeRules.focusTime(
+            on: Self.today, events: [], workingHours: weekdaysOnly,
+            now: Self.at(9), calendar: Self.calendar
+        )
+        #expect(focus.slots.isEmpty)
+
+        let past = FocusTimeRules.focusTime(
+            on: Self.at(0, dayOffset: -3), events: [], workingHours: Self.workingHours,
+            now: Self.today, calendar: Self.calendar
+        )
+        #expect(past.slots.isEmpty)
+    }
+
+    @Test("A block marked free is still free time somebody can be offered")
+    func defendedBlocksStayOfferable() {
+        let focus = FocusTimeRules.focusTime(
+            on: Self.today,
+            events: [Self.event("Focus", from: Self.at(14), minutes: 120, availability: .free)],
+            workingHours: Self.workingHours,
+            now: Self.at(9, dayOffset: -1),
+            calendar: Self.calendar
+        )
+
+        #expect(focus.slots.count == 1)
+        #expect(focus.slots[0].range == Self.at(9)..<Self.at(17))
+    }
+
+    // MARK: - Awareness
+
+    @Test("What describes the day sits apart from what claims an hour of it")
+    func awarenessIsSeparateFromTheSchedule() {
+        let trip = DayEvent(
+            event: Self.event("Berlin", from: Self.at(0), minutes: 4 * 24 * 60, allDay: true),
+            kind: .allDay
+        )
+        let leave = DayEvent(
+            event: Self.event("Leave", from: Self.at(9), minutes: 480, availability: .unavailable),
+            kind: .away
+        )
+        let review = DayEvent(
+            event: Self.event("Review", from: Self.at(10), minutes: 60, attendees: ["Maya"]),
+            kind: .meeting
+        )
+        let dentist = DayEvent(
+            event: Self.event("Dentist", from: Self.at(15), minutes: 30),
+            kind: .appointment
+        )
+
+        let plan = DayPlan(
+            date: Self.today,
+            isToday: true,
+            briefing: DayBriefing(date: Self.today, isToday: true),
+            events: [trip, leave, review, dentist]
+        )
+
+        #expect(plan.awarenessEvents(calendar: Self.calendar).map(\.id) == ["Berlin", "Leave"])
+        #expect(plan.scheduleEvents(calendar: Self.calendar).map(\.id) == ["Review", "Dentist"])
+    }
+
+    @Test("A week-long offsite is a meeting, not a fact about the week")
+    func attendeesKeepAnEventOutOfAwareness() {
+        let offsite = DayEvent(
+            event: Self.event(
+                "Offsite", from: Self.at(0), minutes: 4 * 24 * 60,
+                attendees: ["Maya", "Rosa"], allDay: true
+            ),
+            kind: .meeting
+        )
+
+        let plan = DayPlan(
+            date: Self.today,
+            isToday: true,
+            briefing: DayBriefing(date: Self.today, isToday: true),
+            events: [offsite]
+        )
+
+        #expect(plan.awarenessEvents(calendar: Self.calendar).isEmpty, "it has a guest list to show")
+        #expect(plan.allDayEvents(calendar: Self.calendar).count == 1, "it is still an all-day entry")
+        #expect(
+            plan.scheduleEvents(calendar: Self.calendar).map(\.id) == ["Offsite"],
+            """
+            refused by awareness for having attendees and by the timeline for being all-day, it \
+            would otherwise appear nowhere at all
+            """
+        )
+    }
+
+    @Test("Awareness and the schedule together are every event, and share none")
+    func theTwoHalvesAccountForTheWholeDay() {
+        let events = [
+            DayEvent(event: Self.event("Berlin", from: Self.at(0), minutes: 1_440, allDay: true), kind: .allDay),
+            DayEvent(
+                event: Self.event("Leave", from: Self.at(9), minutes: 480, availability: .unavailable),
+                kind: .away
+            ),
+            DayEvent(event: Self.event("Review", from: Self.at(10), minutes: 60, attendees: ["Maya"]), kind: .meeting),
+            DayEvent(event: Self.event("Focus", from: Self.at(14), minutes: 60, availability: .free), kind: .focusBlock),
+            // The awkward one: all-day *and* a meeting, so each half has a reason to refuse it.
+            DayEvent(
+                event: Self.event(
+                    "Offsite", from: Self.at(0), minutes: 2 * 24 * 60,
+                    attendees: ["Rosa"], allDay: true
+                ),
+                kind: .meeting
+            ),
+        ]
+
+        let plan = DayPlan(
+            date: Self.today,
+            isToday: true,
+            briefing: DayBriefing(date: Self.today, isToday: true),
+            events: events
+        )
+
+        let awareness = Set(plan.awarenessEvents(calendar: Self.calendar).map(\.id))
+        let schedule = Set(plan.scheduleEvents(calendar: Self.calendar).map(\.id))
+
+        #expect(awareness.isDisjoint(with: schedule), "nothing may be drawn twice")
+        #expect(awareness.union(schedule) == Set(events.map(\.id)), "nothing may be dropped")
+    }
+
     @Test("Durations are rounded down to five minutes rather than claiming a precision they lack")
     func durationsAreRounded() {
         #expect(DurationPhrase.rounded(3_797) == "1h")
@@ -612,5 +826,29 @@ struct DailyPlanTests {
 
         let data = try JSONEncoder().encode(filters)
         #expect(try JSONDecoder().decode(TodayFilters.self, from: data) == filters)
+    }
+
+    /// The preference written by an older build, which knew nothing about free time.
+    ///
+    /// Synthesized `Decodable` throws on a missing key rather than taking the property's default, so
+    /// without a hand-written initialiser adding one switch would have made every stored preference
+    /// undecodable — and `TodayPreferences` would have silently reset everybody's filters on the
+    /// next launch. The fallback there is for a corrupt preference, not for a field somebody added.
+    @Test("A preference saved before a switch existed keeps every switch it did set")
+    func olderPreferencesDecodeWithoutLosingWhatTheySaid() throws {
+        let older = """
+        {
+            "showsTasks": true, "showsMeetings": false, "showsPeople": true,
+            "showsDailyNote": true, "showsCompleted": false, "usesIntegratedAgenda": true,
+            "hiddenCalendarIdentifiers": ["work"], "hiddenContainerIDs": []
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(TodayFilters.self, from: Data(older.utf8))
+
+        #expect(!decoded.showsMeetings, "what they did say survives")
+        #expect(!decoded.showsCompleted)
+        #expect(decoded.hiddenCalendarIdentifiers == ["work"])
+        #expect(decoded.showsFreeTime, "what they never said takes its default")
     }
 }

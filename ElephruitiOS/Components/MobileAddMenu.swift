@@ -97,6 +97,15 @@ struct MobileAddMenu: View {
     /// between a 41-point drawing and a 44-point target.
     private static let target: CGFloat = glyphBox + 2 * Theme.Spacing.hairline
 
+    /// How much of the bottom of the screen the plus owns.
+    ///
+    /// It floats over the content rather than displacing it, so a scrolling view has to leave this
+    /// much room underneath or its final row can never be read — it comes to rest under the glass
+    /// at every scroll position. Derived from the button's own measurements rather than typed
+    /// again: a clearance that stops matching the thing it is clearing is worse than none, because
+    /// it looks deliberate while being wrong. Applied once, on the shell — see `MobileRootView`.
+    static let footprint: CGFloat = target + Theme.Spacing.section
+
     /// How far each control travels from the plus's center.
     ///
     /// Measured against the controls rather than picked. Five of them across a quarter turn sit

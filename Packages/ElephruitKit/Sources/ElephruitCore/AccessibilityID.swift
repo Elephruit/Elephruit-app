@@ -137,6 +137,16 @@ public enum AccessibilityID {
         /// The period-and-grouping rail, which both Time surfaces draw — see `TimeFilterBar`.
         public static let filterBar = "time.filterBar"
 
+        /// A filing chip's popup, whichever chip opened it.
+        ///
+        /// ### Why this exists rather than a test matching the title
+        /// Because the popup does not draw its title. It is anchored to the control that opened it
+        /// and is already labelled by it, so the header row was deliberately removed and the name
+        /// kept only as an accessibility label on the container — which is not a `StaticText`, and
+        /// so is not what `app.staticTexts["Subject"]` finds. A test written against the title was
+        /// asserting on a row that had been taken away.
+        public static let pickerPopup = "time.pickerPopup"
+
         // The phone's floating clock: a pill over every screen but the Time screen's own card,
         // which grows into the controls rather than navigating to them.
         public static let pill = "time.pill"
@@ -370,5 +380,15 @@ public enum AccessibilityID {
         public static let shortcutsTab = "settings.shortcuts"
         public static let privacyTab = "settings.privacy"
         public static let rebuildIndexButton = "settings.rebuildIndex"
+
+        /// When the user works — the section, and the two ends of the day.
+        ///
+        /// Named because they are *chrome*: text this view renders from a literal, which is the
+        /// kind that gets restructured. A test matching "Starts" is a test that passes until
+        /// somebody wraps the row in a control or rewords the label, and then waits out its whole
+        /// timeout before failing with a message about the feature.
+        public static let workdaySection = "settings.workday"
+        public static let workdayStart = "settings.workday.start"
+        public static let workdayEnd = "settings.workday.end"
     }
 }

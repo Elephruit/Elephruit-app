@@ -67,6 +67,24 @@ These rules apply to every task in this repository.
 - Do not combine unrelated changes or user-owned edits in a commit.
 - Do not leave completed task work uncommitted unless the user explicitly asks for that.
 
+## Running tests
+
+- Run every `xcodebuild test` through `scripts/xctest.sh`, passing the same arguments you would have
+  passed to `xcodebuild test`. Do not call `xcodebuild test` directly.
+- The script exists because worktrees share one machine: several of them target the same simulators
+  by name, and the app has one bundle identifier, so two simulator runs at once install over each
+  other and race on the same app container. The script takes a machine-wide lock for simulator
+  destinations, runs tests serially, pins derived data and package checkouts under the worktree's
+  own `.xcode-local/`, and always writes a result bundle.
+- Plain builds — `xcodebuild build`, `swift build`, `swift test` — go through no wrapper. They
+  contend for nothing, and making them queue behind somebody else's simulator would be the slowest
+  possible way to be correct.
+- A UI-test failure is usually diagnosed from the result bundle rather than from a second run:
+  `xcrun xcresulttool export attachments --path <bundle> --output-path <dir>` yields the screenshots
+  and the accessibility hierarchy at the moment of the failure.
+- These runs take many minutes. Start them in the background and wait for them; never cut one short
+  with a timeout, and never start a second while one is in flight.
+
 ## Language
 
 - Use US English for all user-facing copy, documentation, comments, test names, and new identifiers.

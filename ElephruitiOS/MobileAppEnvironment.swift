@@ -56,9 +56,30 @@ final class MobileAppEnvironment {
 
         do {
             let stack: PersistenceStack
+
+            /// Where per-device preferences live for this run.
+            ///
+            /// ### Why a temporary store implies temporary preferences
+            /// Because half an isolated launch is worse than none. `-ElephruitUseTemporaryStore`
+            /// promises a run that leaves nothing behind, and it was keeping that promise for the
+            /// library and breaking it for every switch: a UI test that turned free time off left it
+            /// off for the *next* test, which then failed for a reason that was nowhere in its own
+            /// code. Three runs went into finding that, which is three more than the bug is worth to
+            /// anybody who meets it next.
+            ///
+            /// One fixed suite, wiped at launch, rather than a fresh name each time — a new suite per
+            /// run would leave a plist behind on every launch and never collect them.
+            var preferences: UserDefaults = .standard
+
             if isDevelopmentMode, arguments.contains("-ElephruitUseTemporaryStore") {
                 let location = StoreLocation.temporary(name: "MobileDevelopment-\(UUID().uuidString)")
                 stack = try PersistenceStack.open(mode: .onDisk(location))
+
+                let suiteName = "com.elephruit.development"
+                if let scratch = UserDefaults(suiteName: suiteName) {
+                    scratch.removePersistentDomain(forName: suiteName)
+                    preferences = scratch
+                }
             } else {
                 let location = try StoreLocation.application()
                 // The setting asks; the stack decides — same line, same rule as the Mac.
@@ -97,7 +118,8 @@ final class MobileAppEnvironment {
                 isDevelopmentMode: isDevelopmentMode,
                 contactsProvider: contactsProvider,
                 calendarProvider: calendarProvider,
-                remindersProvider: remindersProvider
+                remindersProvider: remindersProvider,
+                defaults: preferences
             )
 
             if isDevelopmentMode, arguments.contains("-ElephruitLoadSampleData") {

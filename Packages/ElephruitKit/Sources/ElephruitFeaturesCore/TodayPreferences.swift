@@ -61,6 +61,7 @@ public final class TodayPreferences {
     public func togglePeople() { filters.showsPeople.toggle() }
     public func toggleDailyNote() { filters.showsDailyNote.toggle() }
     public func toggleCompleted() { filters.showsCompleted.toggle() }
+    public func toggleFreeTime() { filters.showsFreeTime.toggle() }
 
     public func setIntegratedAgenda(_ isIntegrated: Bool) {
         filters.usesIntegratedAgenda = isIntegrated

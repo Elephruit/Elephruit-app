@@ -155,12 +155,12 @@ final class TimeTrackerUITests: XCTestCase {
             app.keyboards.element.waitForNonExistence(timeout: 5),
             "opening a filing chip should have put the keyboard away"
         )
-        // The popup carries its name as a label rather than a heading — the header was taken out
-        // deliberately, because a popup anchored to the control that opened it spends its first
-        // row saying what you just tapped. The name is still there for the reading that needs it,
-        // which is this one.
+        // The header was taken out deliberately — a popup anchored to the control that opened it
+        // spends its first row saying what you just tapped — so the name survives only as a label
+        // on a `children: .contain` container. Matched by identifier rather than by that label,
+        // because chrome is what gets restructured and the words are what change.
         XCTAssertTrue(
-            app.otherElements["Subject"].waitForExistence(timeout: 5),
+            app.descendants(matching: .any)["time.pickerPopup"].waitForExistence(timeout: 5),
             "the subject chip opened nothing"
         )
         snap(app, "03-subject")
