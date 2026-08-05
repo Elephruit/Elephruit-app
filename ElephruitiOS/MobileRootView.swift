@@ -1,6 +1,7 @@
 import ElephruitCore
 import ElephruitDesign
 import ElephruitFeaturesCore
+import ElephruitPersistence
 import SwiftUI
 
 /// The iPhone shell: one stack, a drawer behind it, a capture button, and the running timer.
@@ -50,6 +51,16 @@ struct MobileRootView: View {
         .sheet(isPresented: $shell.isCaptureVisible) {
             CaptureSheet()
         }
+        // The two composers the fan can reach that have no screen of their own to open on. A
+        // reminder and a note both land somewhere the app already draws — the list, the note's
+        // own page — so they navigate. An event and an hour of tracked time are forms, and a form
+        // opened from a floating button belongs over whatever the button was floating above.
+        .sheet(isPresented: $shell.isEventEditorVisible) {
+            EventEditorSheet(existing: nil, defaultDay: Date())
+        }
+        .sheet(isPresented: $shell.isManualTimeVisible) {
+            ManualEntrySheet()
+        }
         .task {
             // The keyboard's one-off setup cost, moved off the first tap that needs it.
             await Keyboard.warmAfterLaunch()
@@ -81,19 +92,31 @@ struct MobileRootView: View {
                     }
                 }
         }
-        .overlay(alignment: .bottomTrailing) { primaryButton }
-        .safeAreaInset(edge: .bottom) {
-            // Attached only while a timer runs: a permanent blank bar would be chrome with
-            // nothing to say, and it would cost every screen the height to say it.
-            //
-            // And not on the Time screen itself, where the tracker card is already showing the
-            // same clock and a larger Stop a few points above it. Two stop buttons for one timer
-            // on one screen is a question about which of them is the real one.
-            if services?.timer.running != nil, !isShowingTheTracker {
-                TimerAccessoryView()
-                    .frame(height: 44)
-                    .background(.bar)
+        // Three layers, in this order: the clock in the bottom-left, the scrim over the whole
+        // screen, the fan in the bottom-right. All above the stack rather than inside it, so a
+        // drill-down cannot scroll them away and a pushed screen cannot draw over them — and the
+        // clock under the scrim rather than over it, because while the fan is open the clock is
+        // part of the screen being asked about rather than part of the question.
+        //
+        // Not on the Time screen itself, where the tracker card is already showing the same clock
+        // and a larger Stop a few points above it. Two stop buttons for one timer on one screen
+        // is a question about which of them is the real one.
+        .overlay(alignment: .bottomLeading) {
+            if !isShowingTheTracker {
+                MobileTimerPill()
             }
+        }
+        .overlay {
+            MobileAddMenuScrim(isOpen: shell.isAddMenuOpen) {
+                setAddMenu(open: false)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            MobileAddMenu(
+                isOpen: shell.isAddMenuOpen,
+                setOpen: { setAddMenu(open: $0) },
+                perform: { make($0) }
+            )
         }
     }
 
@@ -102,34 +125,59 @@ struct MobileRootView: View {
         shell.destination == .time && shell.path.isEmpty
     }
 
-    /// The one button the shell floats over every screen — and the reason it is not always the
-    /// same button.
+    // MARK: - The plus
+
+    /// Opens or folds the fan.
     ///
-    /// Quick capture is what a plus means on a screen with nothing to add to: it writes into the
-    /// Inbox because the Inbox is where a thought with no home goes. On Reminders that is the
-    /// wrong answer to a plus held over a list of reminders — the thing being added is a
-    /// reminder, it belongs in the list under the thumb, and filing it in the Inbox for sorting
-    /// later is an extra journey for a decision that has already been made.
-    private var primaryButton: some View {
-        CaptureButton(
-            label: composesReminders ? "New reminder" : "Quick capture",
-            hint: composesReminders
-                ? "Opens a composer at the end of the list"
-                : "Captures a reminder, note, or anything else into the Inbox"
-        ) {
-            if composesReminders {
-                shell.requestNewReminder()
-            } else {
-                shell.isCaptureVisible = true
-            }
+    /// The change is made plainly, without a transaction around it: the fan's controls each
+    /// animate on their own curve and their own delay, and the scrim on a third — an enclosing
+    /// `withAnimation` would be overridden by every one of them and would only misdescribe what
+    /// happens. The motion lives with the views that own it; see ``MobileAddMenu``.
+    ///
+    /// A keyboard goes when the menu comes, for the same reason it goes when the drawer does —
+    /// what is being asked for is somewhere other than the field currently being typed into.
+    private func setAddMenu(open: Bool) {
+        if open {
+            Keyboard.dismiss()
+            // The clock folds before the fan opens. Both live along the same bottom edge, and an
+            // open card in one corner while an arc unrolls out of the other is two things asking
+            // for the same attention — and the card would be answering a question the user has
+            // just visibly moved on from.
+            shell.isTimerExpanded = false
+        }
+        shell.isAddMenuOpen = open
+    }
+
+    /// What each of the fan's five means, in one table.
+    ///
+    /// The reminder and the note go to where the thing being made will live, and the event and
+    /// the manual hour open over wherever the user already was. That split is not arbitrary: a
+    /// reminder and a note are objects you go on to work with, so arriving beside them is part of
+    /// making them, while an event and an hour of tracked time are facts you are recording about
+    /// something else, and being moved to the calendar to record one is a journey the user did
+    /// not ask for. Capture is the fifth because sometimes none of the four is the answer yet.
+    private func make(_ action: MobileAddAction) {
+        switch action {
+        case .reminder: shell.requestNewReminder()
+        case .event: shell.isEventEditorVisible = true
+        case .note: createNote()
+        case .time: shell.isManualTimeVisible = true
+        case .capture: shell.isCaptureVisible = true
         }
     }
 
-    /// Whether the screen under the button is the reminders list itself. A drill-down from it —
-    /// a smart list, one reminder's detail — is not, because the composer that would open lives
-    /// on the screen that got left behind.
-    private var composesReminders: Bool {
-        shell.destination == .reminders && !shell.canPop
+    /// A note, opened on its own page.
+    ///
+    /// Created before it is shown, rather than composed in a sheet and saved on the way out: a
+    /// note is a page you write on until you leave, and there is no moment in that where it is
+    /// still a draft waiting for a Save button to make it real.
+    private func createNote() {
+        guard let services else { return }
+        services.perform {
+            let created = try services.items.create(ItemDraft(kind: .note))
+            services.noteChange(to: created)
+            shell.push(.item(created.id))
+        }
     }
 
     /// The chevron's version: the same change, animated, because nothing was already moving.
@@ -176,55 +224,6 @@ struct MobileDestinationView: View {
         case .search: SearchScreen()
         case .settings: SettingsScreen()
         }
-    }
-}
-
-/// The shell's floating button: whatever the screen under it means by "add".
-struct CaptureButton: View {
-    /// How far above the shell's bottom edge the button rests. The tab bar it used to clear is
-    /// gone, so this is now the ordinary content inset — the button sits where the thumb
-    /// already is instead of where the chrome used to be.
-    private static let bottomClearance: CGFloat = Theme.Spacing.section
-
-    /// The glyph's box, which the glass grows by a little over a point: 40 here measures 41 on
-    /// screen, against the 58 this used to draw.
-    ///
-    /// Two layers of padding had to be found before that number meant anything. It began as a
-    /// 56-point box inside `.buttonStyle(.glassProminent)` — a style that pads what it is handed
-    /// *and* refuses to go below its own minimum, so the button drew at 58 whatever this said,
-    /// and taking it from 56 to 44 to 26 changed not one pixel. Applying the glass to the shape
-    /// directly is what made the number load-bearing again.
-    ///
-    /// Smaller because this floats over lists whose content is the point, permanently, on every
-    /// screen: the loudest object in the room should not be the one you use least.
-    private static let glyphBox: CGFloat = 40
-
-    var label: String
-    var hint: String
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "plus")
-                .font(.body.weight(.semibold))
-                .foregroundStyle(Theme.Colors.onAccent)
-                .frame(width: Self.glyphBox, height: Self.glyphBox)
-                .glassEffect(
-                    .regular.tint(Theme.Colors.selection).interactive(),
-                    in: .circle
-                )
-                // A margin the eye cannot see and the thumb can: the drawn circle is 41 points,
-                // and the target has to be 44 whatever the drawing does.
-                .padding(Theme.Spacing.hairline)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .elevation(.floating)
-        .padding(.trailing, Theme.Spacing.large)
-        .padding(.bottom, Self.bottomClearance)
-        .accessibilityLabel(label)
-        .accessibilityHint(hint)
-        .accessibilityIdentifier("mobile.capture.button")
     }
 }
 

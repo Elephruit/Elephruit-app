@@ -520,46 +520,7 @@ struct EditEntrySheet: View {
     }
 }
 
-// MARK: - The accessory above the tab bar
-
-/// The running timer, visible from every tab. Tap for Time; the stop button is right
-/// there, because "stop tracking" should never require a journey.
-struct TimerAccessoryView: View {
-    @Environment(\.services) private var services
-    @Environment(MobileShellModel.self) private var shell
-
-    var body: some View {
-        if let services, let running = services.timer.running {
-            Button {
-                shell.push(.time)
-            } label: {
-                HStack(spacing: Theme.Spacing.small) {
-                    // No pulse: a repeating symbol effect keeps the display link alive for
-                    // the whole session, and the timer's ticking digits already say "live".
-                    Image(systemName: "record.circle")
-                        .foregroundStyle(Theme.Colors.recording)
-                    Text(running.displayTitle)
-                        .font(Theme.Text.rowSubtitle)
-                        .lineLimit(1)
-                    Spacer(minLength: Theme.Spacing.small)
-                    Text(services.timer.elapsedDisplay)
-                        .font(Theme.Text.rowSubtitle)
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-                    Button {
-                        _ = services.timer.stop()
-                    } label: {
-                        Image(systemName: "stop.fill")
-                            .frame(width: 32, height: 32)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Stop timer")
-                }
-                .padding(.horizontal, Theme.Spacing.medium)
-            }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Timer running: \(running.displayTitle), \(services.timer.elapsedDisplay)")
-        }
-    }
-}
+// The strip that used to sit above the tab bar has gone to `MobileTimerPill`, which explains
+// why: it charged every screen 44 points for the whole time a timer ran, to say two things that
+// fit in a pill, and it could only stop a timer — pausing one, or seeing what it was filed
+// against, still cost a journey to this screen.

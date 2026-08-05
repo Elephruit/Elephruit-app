@@ -702,6 +702,36 @@ extension Theme {
         /// have.
         public static let drawer: Animation = .spring(response: 0.34, dampingFraction: 0.9)
 
+        /// A set of controls thrown out from the button that opened them, and pulled back into it.
+        ///
+        /// The one animation in the app that has to answer *where did these come from*. A fan of
+        /// controls appears at positions nothing on screen explains, so the motion is the whole
+        /// explanation: they leave the button, they travel, they arrive. Damped less than
+        /// ``reorder`` because a small overshoot at the end of that journey is what reads as
+        /// thrown rather than drawn — and still damped enough that the overshoot is one settle
+        /// and not a wobble, which on a control the thumb is already moving toward would be the
+        /// difference between confident and unfinished.
+        public static let fan: Animation = .spring(response: 0.34, dampingFraction: 0.72)
+
+        /// How far apart in time two neighbours in a fan start moving.
+        ///
+        /// Deliberately shorter than the eye can count. Long enough that the arc unrolls from one
+        /// end rather than appearing all at once — which is what makes five circles read as five
+        /// things rather than one thing splitting — and short enough that everything is in flight
+        /// together, so the last control never feels like it was waiting its turn. At five
+        /// controls the whole stagger is 140ms against a 340ms spring: an accent on the motion,
+        /// not a queue.
+        public static let fanStagger: TimeInterval = 0.035
+
+        /// A small control growing into a large one without moving, and shrinking back.
+        ///
+        /// The sibling of ``fan``, for the case where nothing travels: the control stays exactly
+        /// where the finger left it and grows around itself, so the motion has to carry the whole
+        /// claim that this *is* the same object rather than a panel that replaced it. Damped
+        /// harder than the fan because the thing changing is a rectangle's size — an overshoot
+        /// there is a card that visibly wobbles, where on a circle in flight it reads as speed.
+        public static let expansion: Animation = .spring(response: 0.32, dampingFraction: 0.86)
+
         /// The animation to use, or `nil` when Reduce Motion is on.
         ///
         /// Returning `nil` rather than a zero duration matters: SwiftUI treats a `nil`

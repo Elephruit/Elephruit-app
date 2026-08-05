@@ -209,17 +209,25 @@ final class RemindersUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Reminders"].exists)
     }
 
-    /// The shell's floating button means "another reminder" here, not "capture into the Inbox" —
-    /// and it opens the card at the top, where it can be read and typed into.
+    /// A reminder asked for from the shell's fan is composed *here*, in the list, not filed into
+    /// the Inbox — and the card opens at the top, where it can be read and typed into.
     ///
-    /// A plus held over a list of reminders that files its answer somewhere else is a plus
-    /// answering a question nobody asked. And the button is not a place in the list: it floats
-    /// over the bottom-right corner, so answering it at the *end* of the list would put a card
-    /// you are about to type into behind the keyboard, under the button that opened it.
+    /// The fan can ask for a reminder from any screen in the app, and on every other screen that
+    /// means travelling to Reminders first. On Reminders it must not: a plus held over a list of
+    /// reminders that answers somewhere else is a plus answering a question nobody asked. And the
+    /// button is not a place in the list — it floats over the bottom-right corner, so answering
+    /// at the *end* of the list would put a card you are about to type into behind the keyboard,
+    /// under the button that opened it.
     func testTheShellButtonWritesAReminderAtTheTop() throws {
         let app = launchOnReminders()
 
-        app.buttons["mobile.capture.button"].tap()
+        // By coordinate: this screen's background is itself a "new reminder" tap target, and it
+        // is what a plain `tap()` on the plus lands on. `FloatingControlTaps` has the detail.
+        app.buttons["mobile.capture.button"].tapCenter()
+        let reminder = app.buttons["mobile.add.reminder"]
+        XCTAssertTrue(reminder.waitForExistence(timeout: 5), "The plus should fan out")
+        reminder.tapCenter()
+
         let title = composerTitle(app)
         XCTAssertTrue(
             title.waitForExistence(timeout: 5),
