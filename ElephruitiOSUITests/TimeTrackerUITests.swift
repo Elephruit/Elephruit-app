@@ -32,8 +32,22 @@ final class TimeTrackerUITests: XCTestCase {
         return app
     }
 
+    /// Gets to the Time screen from wherever the app came back to.
+    ///
+    /// Which screen that is is deliberately not asserted. The shell restores the destination
+    /// that was last open, and the store these tests launch against is temporary — so the entries
+    /// do not survive a relaunch but the choice of screen does, and a test that runs after one
+    /// that ended on Time arrives on Time. Waiting for "Today" made every test in this class
+    /// depend on the order it ran in, which is a dependency none of them mean to have. What is
+    /// worth waiting for is the shell itself; the rest is travel, and travel that has already
+    /// happened is travel that can be skipped.
     private func openTime(_ app: XCUIApplication) {
-        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 15))
+        XCTAssertTrue(
+            app.buttons["mobile.sidebar.button"].waitForExistence(timeout: 15),
+            "the app never finished launching into its shell"
+        )
+        guard !app.navigationBars["Time"].exists else { return }
+
         if !app.buttons["mobile.sidebar.time"].exists {
             app.buttons["mobile.sidebar.button"].tap()
         }
