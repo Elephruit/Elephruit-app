@@ -59,6 +59,13 @@ private struct TodayContent: View {
     /// The gap or the task the block sheet is up about, if it is up.
     @State private var blocking: BlockTimeSubject?
 
+    /// Whether a development launch has already had its sheet.
+    ///
+    /// Once per launch, not once per change. Without this, writing anything from the sheet changes
+    /// the library, which changes the source token, which opens the sheet again over the page the
+    /// write was meant to reveal — which is exactly how a passing test started failing.
+    @State private var hasOpenedReviewSheet = false
+
     /// How close to the end the scroll has to get before the next week is asked for.
     ///
     /// About a screen. Less and the feed visibly stops before it continues; more and a flick that
@@ -506,7 +513,8 @@ private struct TodayContent: View {
     /// the whole working afternoon is, and photographing *that* would be photographing a state no
     /// user ever sees.
     private func openBlockSheetIfReviewing() {
-        guard blocking == nil,
+        guard !hasOpenedReviewSheet,
+              blocking == nil,
               let subject = TodayReviewLaunch.blockSheet(),
               services?.calendar.calendars.isEmpty == false,
               let plan = model.selectedPlan
@@ -521,6 +529,7 @@ private struct TodayContent: View {
             else { return }
             blocking = .task(entry.item, plan)
         }
+        hasOpenedReviewSheet = true
     }
 
     private func openMeetingNotes(_ event: DayEvent) {
@@ -805,30 +814,21 @@ private struct TodayFreeSlotRow: View {
         // read, it is the absence of one, and drawing it as a gap in the line says so before a
         // single word is read.
         TimelineRow(railStyle: .dashed) {
-            Text(slot.isCurrent ? "Now" : slot.range.lowerBound.formatted(date: .omitted, time: .shortened))
-                .font(Theme.Text.metadata)
-                .monospacedDigit()
-                .foregroundStyle(Theme.Colors.tertiaryText)
-        } content: {
-            // "15m free · until 10:00 AM". Not the whole range: the column to the left has already
-            // said when it starts, and "9:45 AM │ 15m free · 9:45 AM – 10:00 AM" says it twice.
-            Text("\(slot.durationSummary) free · until \(endLabel)")
+            // Both ends of it, now that no column to the left is saying where it starts.
+            // `rangeSummary` already knows to say "until 4:00 PM" for a stretch under way, where a
+            // start time in the past is a number the reader has to subtract from before it means
+            // anything.
+            Text("\(slot.durationSummary) free · \(slot.rangeSummary)")
                 .font(Theme.Text.rowSubtitle)
                 .foregroundStyle(Theme.Colors.secondaryText)
                 .lineLimit(1)
         }
         .accessibilityElement(children: .combine)
-        // Spoken with both ends, unlike the drawn row: a combined element is read as one sentence,
-        // so there is no column to the left to have already said when it starts.
         .accessibilityLabel("\(slot.durationSummary) free, \(slot.rangeSummary)")
         // Named so a test can count the gaps without matching on their text. Scanning labels for
         // "free" finds the briefing's line at the top of the page as well, and a predicate walking
         // the whole hierarchy of a long list is slow enough to time the test out.
         .accessibilityIdentifier("today.freeSlot")
-    }
-
-    private var endLabel: String {
-        slot.range.upperBound.formatted(date: .omitted, time: .shortened)
     }
 }
 
@@ -936,23 +936,15 @@ private struct TodayEventRow: View {
                 tint: Theme.Palette.color(named: dayEvent.event.calendarColorName)
             )
         ) {
-            VStack(alignment: .trailing, spacing: 0) {
-                if dayEvent.event.isAllDay {
-                    Text("All day")
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.secondaryText)
-                } else {
-                    Text(dayEvent.event.startAt.formatted(date: .omitted, time: .shortened))
-                        .font(Theme.Text.metadata)
-                        .monospacedDigit()
-                    Text(dayEvent.event.endAt.formatted(date: .omitted, time: .shortened))
-                        .font(Theme.Text.metadata)
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.Colors.tertiaryText)
-                }
-            }
-        } content: {
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+                // When, above what — the line the eye runs down when it is looking for a time
+                // rather than for a name. It used to be a column of its own to the left of the
+                // rail; see `Timeline` for why the page is better off without one.
+                Text(whenLine)
+                    .font(Theme.Text.metadata)
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.Colors.secondaryText)
+
                 Text(dayEvent.event.displayTitle)
                     .font(Theme.Text.rowTitle)
                     .strikethrough(dayEvent.event.isCancelled)
@@ -982,6 +974,13 @@ private struct TodayEventRow: View {
         .opacity(dayEvent.event.isCancelled ? 0.6 : 1)
         .accessibilityElement(children: .combine)
     }
+
+    /// "9:30 AM – 9:45 AM", or the one word an all-day entry has instead.
+    private var whenLine: String {
+        guard !dayEvent.event.isAllDay else { return "All day" }
+        return dayEvent.event.startAt.formatted(date: .omitted, time: .shortened)
+            + " – " + dayEvent.event.endAt.formatted(date: .omitted, time: .shortened)
+    }
 }
 
 /// A task on the day, on the thread.
@@ -996,26 +995,29 @@ private struct TodayTaskRow: View {
     let day: DayTask
     let toggle: () -> Void
 
+    /// Whether the circle is filled in.
+    ///
+    /// Read from the record rather than kept here, so the fill appears the moment the task is
+    /// completed and stays right if the same task is completed from somewhere else.
+    private var isCompleted: Bool { task.status == .completed }
+
     var body: some View {
         TimelineRow(
+            // The mark on the thread *is* the checkbox. Everywhere else the badge says what kind of
+            // thing a row is; for work, the only thing worth saying is whether it is done, and a
+            // circle on the line saying it is one mark instead of two.
+            //
+            // Outlined in the reason's own colour, so a page of work still reads as late, due, or
+            // merely chosen without a word being read. Completed, it fills and takes a check —
+            // the same colour, now solid, which is what "done" has looked like since paper.
             badge: Timeline.Badge(
-                symbolName: day.primaryReason?.symbolName ?? "circle",
-                tint: tint
-            )
+                symbolName: isCompleted ? "checkmark" : nil,
+                tint: tint,
+                isHollow: !isCompleted
+            ),
+            badgeAction: toggle,
+            badgeLabel: isCompleted ? "Reopen \(task.displayTitle)" : "Complete \(task.displayTitle)"
         ) {
-            // The completion circle takes the column that a time takes on a meeting: the leading
-            // column is always "when, or who", and for work you have chosen to do today the honest
-            // answer is neither — it is whether it is done.
-            Button(action: toggle) {
-                Image(systemName: "circle")
-                    .font(Theme.Text.rowTitle)
-                    .foregroundStyle(Theme.Colors.secondaryText)
-                    .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Complete \(task.displayTitle)")
-        } content: {
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 Text(task.displayTitle)
                     .font(Theme.Text.rowTitle)
@@ -1059,6 +1061,10 @@ struct TodayPersonRow: View {
     var isNested: Bool = false
 
     var body: some View {
+        // No face on this row any more. It used to sit in a gutter *outside* the rail, which put a
+        // person's initials beside the day rather than in it — and their colour is already on the
+        // badge, where every other row says what kind of thing it is. Faces still belong to the
+        // gathering row, where four of them at a glance answer "who am I with at four".
         TimelineRow(
             badge: isNested
                 ? nil
@@ -1067,10 +1073,6 @@ struct TodayPersonRow: View {
                     tint: Theme.Palette.color(named: person.colorName)
                 )
         ) {
-            // A face where a time would be. Same column, same promise: this says *who*.
-            PersonAvatar(name: person.name, colorName: person.colorName)
-                .accessibilityHidden(true)
-        } content: {
             HStack(spacing: Theme.Spacing.small) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                     Text(person.name)

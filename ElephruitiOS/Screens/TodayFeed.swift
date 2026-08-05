@@ -57,11 +57,6 @@ struct TodayFeedDayHeader: View {
             ),
             showsDivider: false
         ) {
-            Text(dayNumber)
-                .font(Theme.Text.rowTitle.weight(.semibold))
-                .monospacedDigit()
-                .foregroundStyle(Theme.Colors.secondaryText)
-        } content: {
             HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                     Text(dayName)
@@ -95,7 +90,7 @@ struct TodayFeedDayHeader: View {
         (services?.dateProvider ?? SystemDateProvider()).dayKey(for: plan.date)
     }
 
-    /// The date, in the column that always says *when*.
+    /// The date itself, which used to have a column of its own to the left of the rail.
     private var dayNumber: String {
         plan.date.formatted(.dateTime.day())
     }
@@ -114,13 +109,17 @@ struct TodayFeedDayHeader: View {
         return "Tomorrow"
     }
 
-    /// The month, and the one word a glance needs when there is nothing under it.
+    /// The date, and the one word a glance needs when there is nothing under it.
+    ///
+    /// The day number joined the month here when the leading column went. It has to be *somewhere*
+    /// — a feed of weekdays ninety days long is unreadable without one — and under the weekday is
+    /// where a date belongs when it is no longer a column.
     ///
     /// No counts. Everything the day holds is drawn immediately below, so "3 meetings" above three
     /// meetings is the interface reading itself back to you.
     private var subtitle: String {
-        let month = plan.date.formatted(.dateTime.month(.wide))
-        return plan.hasContent ? month : "\(month) · Clear"
+        let date = "\(dayNumber) \(plan.date.formatted(.dateTime.month(.wide)))"
+        return plan.hasContent ? date : "\(date) · Clear"
     }
 }
 
@@ -132,6 +131,9 @@ struct TodayFeedEventLine: View {
 
     let dayEvent: DayEvent
 
+    /// See ``Timeline/timeWidth`` for why this is scaled here rather than fixed there.
+    @ScaledMetric(relativeTo: .caption) private var timeWidth: CGFloat = Timeline.timeWidth
+
     var body: some View {
         TimelineRow(
             badge: Timeline.Badge(
@@ -140,16 +142,21 @@ struct TodayFeedEventLine: View {
                 isCompact: true
             )
         ) {
-            Text(timeText)
-                .font(Theme.Text.metadata)
-                .monospacedDigit()
-                .foregroundStyle(Theme.Colors.secondaryText)
-        } content: {
-            Text(dayEvent.event.displayTitle)
-                .font(Theme.Text.rowSubtitle)
-                .foregroundStyle(Theme.Colors.primaryText)
-                .strikethrough(dayEvent.event.isCancelled, color: Theme.Colors.tertiaryText)
-                .lineLimit(1)
+            // One line, so the time shares it — in a column of its own width, or a run of summary
+            // lines jags every time an hour gains a digit.
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
+                Text(timeText)
+                    .font(Theme.Text.metadata)
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .frame(width: timeWidth, alignment: .leading)
+
+                Text(dayEvent.event.displayTitle)
+                    .font(Theme.Text.rowSubtitle)
+                    .foregroundStyle(Theme.Colors.primaryText)
+                    .strikethrough(dayEvent.event.isCancelled, color: Theme.Colors.tertiaryText)
+                    .lineLimit(1)
+            }
         }
         .opacity(dayEvent.event.isCancelled ? 0.6 : 1)
         .accessibilityElement(children: .combine)
@@ -169,6 +176,9 @@ struct TodayFeedTaskLine: View {
     let task: DayTask
     let item: Item
 
+    /// See ``Timeline/timeWidth`` for why this is scaled here rather than fixed there.
+    @ScaledMetric(relativeTo: .caption) private var timeWidth: CGFloat = Timeline.timeWidth
+
     var body: some View {
         TimelineRow(
             badge: Timeline.Badge(
@@ -177,20 +187,21 @@ struct TodayFeedTaskLine: View {
                 isCompact: true
             )
         ) {
-            // A reminder with a time of its own belongs on the clock beside the meetings. One
-            // without has nothing to put here, and an empty column is honest where a glyph
-            // repeating the badge would not be.
-            if let pinned = task.pinnedAt {
-                Text(pinned.formatted(date: .omitted, time: .shortened))
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
+                // A reminder with a time of its own lines up with the meetings above it. One
+                // without leaves the column empty, which is honest — most work has no hour, and
+                // inventing one for the sake of a straight edge is the agenda telling a lie.
+                Text(task.pinnedAt.map { $0.formatted(date: .omitted, time: .shortened) } ?? "")
                     .font(Theme.Text.metadata)
                     .monospacedDigit()
                     .foregroundStyle(Theme.Colors.tertiaryText)
+                    .frame(width: timeWidth, alignment: .leading)
+
+                Text(item.displayTitle)
+                    .font(Theme.Text.rowSubtitle)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .lineLimit(1)
             }
-        } content: {
-            Text(item.displayTitle)
-                .font(Theme.Text.rowSubtitle)
-                .foregroundStyle(Theme.Colors.secondaryText)
-                .lineLimit(1)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)

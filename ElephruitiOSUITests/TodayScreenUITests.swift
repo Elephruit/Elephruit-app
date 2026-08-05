@@ -198,9 +198,14 @@ final class TodayScreenUITests: XCTestCase {
 
         app.buttons["today.block.add"].tap()
 
-        // On the page, in the work — not in the schedule, where an appointment would be.
+        // On the page, in the work — not in the schedule, where an appointment would be. Scrolled
+        // to rather than waited for: the work sits below a screenful of schedule, and a `List` does
+        // not realise cells it has not reached, so no timeout conjures one.
         let written = app.staticTexts["Ring the vet"]
-        XCTAssertTrue(written.waitForExistence(timeout: 10), "the reminder was never written")
+        for _ in 0..<10 where !written.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(written.exists, "the reminder was never written")
     }
 
     /// The same sheet, reached from the work rather than from the room.
