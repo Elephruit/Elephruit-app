@@ -43,6 +43,16 @@ GENERATE_INFOPLIST_FILE = YES
 // No entitlements file. A Live Activity started by the app it ships inside needs none, and an
 // entitlement lands in the same commit as the feature that needs it — the rule the two app
 // entitlement files already keep.
+//
+// Said out loud rather than left unsaid, because "unset" and "empty" are the same thing to the
+// build system only until something above sets it. For one release they were not the same: the
+// project-level configurations named the *macOS* xcconfig as their base, so a target that stayed
+// quiet here inherited `Configuration/Elephruit.entitlements` — sandbox, iCloud, silent pushes and
+// a team-prefixed App Group — and this extension asked the portal for capabilities no iOS wildcard
+// profile carries, in a form ("6YXGZMLWFB.com.elephruit.ElephruitMemory") the portal rejects
+// outright because iOS groups must start with `group.`. The project file no longer inherits from a
+// platform; this line means the claim above survives if it ever does again.
+CODE_SIGN_ENTITLEMENTS =
 SKIP_INSTALL = YES
 
 // MARK: - Linking

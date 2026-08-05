@@ -463,10 +463,18 @@ public actor EventKitCalendarProvider: CalendarProviding {
         }
     }
 
+    /// The invitation's people.
+    ///
+    /// ### Why the organizer is merged in rather than read separately
+    /// `EKEvent.organizer` is not part of `EKEvent.attendees`, and whether the two overlap depends on
+    /// the account the invitation travelled through: an Exchange invitation reaching an iCloud
+    /// calendar lists exactly one attendee — the user — and names the person who called the meeting
+    /// only as the organizer. Taking the attendee list at face value there turns a meeting with
+    /// somebody into an appointment with nobody. See ``EventAttendee/merging(organizer:into:)``.
     static func attendees(for event: EKEvent) -> [EventAttendee] {
         let organizerIdentifier = event.organizer.flatMap(emailAddress(of:))
 
-        return (event.attendees ?? []).map { participant in
+        let invited = (event.attendees ?? []).map { participant in
             let email = emailAddress(of: participant)
             return EventAttendee(
                 name: participant.name ?? email ?? "",
@@ -477,6 +485,27 @@ public actor EventKitCalendarProvider: CalendarProviding {
                 isCurrentUser: participant.isCurrentUser
             )
         }
+
+        return EventAttendee.merging(organizer: event.organizer.map(attendee(forOrganizer:)), into: invited)
+    }
+
+    /// The organizer as an attendee in their own right.
+    ///
+    /// An organizer carries no participation of their own on most accounts — they called the meeting,
+    /// so they are in it — and `.accepted` is the honest reading rather than leaving a row that says
+    /// the person who scheduled it has not replied.
+    static func attendee(forOrganizer participant: EKParticipant) -> EventAttendee {
+        let email = emailAddress(of: participant)
+        return EventAttendee(
+            name: participant.name ?? email ?? "",
+            emailAddress: email,
+            participation: participant.participantStatus == .unknown
+                ? .accepted
+                : participation(for: participant.participantStatus),
+            role: role(for: participant.participantRole),
+            isOrganizer: true,
+            isCurrentUser: participant.isCurrentUser
+        )
     }
 
     /// The address behind a participant, which EventKit exposes only as a `mailto:` URL.

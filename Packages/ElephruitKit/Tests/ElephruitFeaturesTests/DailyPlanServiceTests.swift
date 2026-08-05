@@ -406,6 +406,54 @@ struct DailyPlanServiceTests {
         #expect(day.people.filter { $0.personID == maya.id }.count == 1)
     }
 
+    /// The case an invitation cannot describe: an entry with nobody else on it, which the calendar
+    /// therefore calls an appointment, and which the user has said is with somebody. The link is an
+    /// instruction, so the day honours it rather than re-deciding who is in the room.
+    @Test("A person linked by hand reaches the day even when the calendar names nobody")
+    func handLinkingSurvivesAnEventWithNoAttendees() async throws {
+        let event = Self.event("Coffee", id: "one", from: Self.at(11), minutes: 30)
+        let services = await Self.fixture(events: [event])
+
+        let maya = try services.persons.createPerson(PersonDraft(fullName: "Maya Chen"))
+        _ = try services.eventLinks.link(person: maya, to: event)
+
+        let day = try await plan(services)
+        let entry = try #require(day.people.first { $0.personID == maya.id })
+        #expect(entry.isMeetingToday)
+    }
+
+    /// What an Exchange invitation looks like once it has reached an iCloud calendar: the only
+    /// attendee is the user, and the person who called the meeting is the organizer. Read as the
+    /// calendar hands it over, this is an hour with nobody in it.
+    @Test("The organizer of an invitation is somebody the day knows about")
+    func theOrganizerIsAPerson() async throws {
+        let services = await Self.fixture(events: [
+            Self.event(
+                "Harbinder/Mike Connect", id: "one", from: Self.at(14), minutes: 30,
+                attendees: EventAttendee.merging(
+                    organizer: EventAttendee(
+                        name: "Harbinder Raina",
+                        emailAddress: "harbinder@zs.example",
+                        isOrganizer: true
+                    ),
+                    into: [EventAttendee(name: "me@example.com", emailAddress: "me@example.com", isCurrentUser: true)]
+                )
+            )
+        ])
+
+        let harbinder = try services.persons.createPerson(
+            PersonDraft(
+                fullName: "Harbinder Raina",
+                emails: [LabelledValue(label: "work", value: "harbinder@zs.example")]
+            )
+        )
+
+        let day = try await plan(services)
+        let entry = try #require(day.people.first { $0.personID == harbinder.id })
+        #expect(entry.isMeetingToday)
+        #expect(day.people.count == 1, "the user is not a guest at their own meeting")
+    }
+
     // MARK: - Preparation
 
     @Test("A meeting says what is still to be done before it, and what already was")
