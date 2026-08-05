@@ -89,7 +89,7 @@ struct MobileChoiceList: View {
 
     private var popoverBody: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
+            clearRow
 
             if choices.count > Self.searchThreshold, onRequestSearch != nil {
                 searchRow
@@ -98,9 +98,34 @@ struct MobileChoiceList: View {
 
             list
         }
+        .padding(.vertical, Theme.Spacing.small)
         .frame(width: 300)
         .frame(maxHeight: 360)
         .presentationCompactAdaptation(.popover)
+        // The name the header used to carry, kept for the reading that still needs it.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(title)
+    }
+
+    /// What is left of the header: a way to take the choice back, and only when there is a
+    /// choice to take back.
+    ///
+    /// The title went. A popup anchored to the control that opened it is already labelled by
+    /// that control — the word "TAGS" over a list of tags, one tap after tapping the tag button,
+    /// is the popup spending its first row telling you what you just did. On a phone that row is
+    /// a tenth of the popup and the popup is already short of space.
+    @ViewBuilder
+    private var clearRow: some View {
+        if let onClear, !selection.isEmpty {
+            HStack {
+                Spacer(minLength: 0)
+                Button("Clear", action: onClear)
+                    .font(Theme.Text.chip)
+                    .accessibilityIdentifier("reminders.picker.clear")
+            }
+            .padding(.horizontal, Theme.Spacing.medium)
+            .padding(.bottom, Theme.Spacing.small)
+        }
     }
 
     /// The door to the keyboard, drawn as a row rather than a field.
@@ -187,28 +212,6 @@ struct MobileChoiceList: View {
     }
 
     // MARK: - Shared parts
-
-    private var header: some View {
-        HStack {
-            Text(title)
-                .font(Theme.Text.sectionHeader)
-                .kerning(Theme.Text.Tracking.caps)
-                .foregroundStyle(Theme.Colors.secondaryText)
-
-            Spacer(minLength: 0)
-
-            if let onClear, !selection.isEmpty {
-                Button("Clear", action: onClear)
-                    .font(Theme.Text.chip)
-                    .accessibilityIdentifier("reminders.picker.clear")
-            }
-        }
-        .textCase(.uppercase)
-        .padding(.horizontal, Theme.Spacing.medium)
-        .padding(.top, Theme.Spacing.medium)
-        .padding(.bottom, Theme.Spacing.small)
-        .accessibilityAddTraits(.isHeader)
-    }
 
     private var list: some View {
         ScrollView {
@@ -430,6 +433,11 @@ struct MobileProjectPicker: View {
 /// keep. The named rows are on top because they answer the question almost every time, and they
 /// are rows rather than a segmented control so a thumb has 44 points to land on. Nothing here
 /// needs typing, so this one stays a popover in every case.
+///
+/// No title and no Clear. Both sat above the first row, and between them they spent the top of a
+/// short popup on a word the control already said and a button the card already has: the date is
+/// a chip on the composer with an × on it, which is where you look when you want it gone. This
+/// opens on "Today", which is the answer most of the time.
 struct MobileDayPicker: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
@@ -444,8 +452,6 @@ struct MobileDayPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
-
             quickRow("Today", daysFromToday: 0, symbol: "sun.max")
             quickRow("Tomorrow", daysFromToday: 1, symbol: "sunrise")
             quickRow("Next week", daysFromToday: 7, symbol: "calendar.badge.plus")
@@ -480,35 +486,11 @@ struct MobileDayPicker: View {
             .labelsHidden()
             .padding(.horizontal, Theme.Spacing.small)
         }
-        .padding(.bottom, Theme.Spacing.small)
+        .padding(.vertical, Theme.Spacing.small)
         .frame(width: Self.width)
         .presentationCompactAdaptation(.popover)
-    }
-
-    private var header: some View {
-        HStack {
-            Text(title)
-                .font(Theme.Text.sectionHeader)
-                .kerning(Theme.Text.Tracking.caps)
-                .foregroundStyle(Theme.Colors.secondaryText)
-
-            Spacer(minLength: 0)
-
-            if selection != nil || isSomeday?.wrappedValue == true {
-                Button("Clear") {
-                    selection = nil
-                    isSomeday?.wrappedValue = false
-                    dismiss()
-                }
-                .font(Theme.Text.chip)
-                .accessibilityIdentifier("reminders.picker.clear")
-            }
-        }
-        .textCase(.uppercase)
-        .padding(.horizontal, Theme.Spacing.medium)
-        .padding(.top, Theme.Spacing.medium)
-        .padding(.bottom, Theme.Spacing.small)
-        .accessibilityAddTraits(.isHeader)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(title)
     }
 
     private func quickRow(_ label: String, daysFromToday: Int, symbol: String) -> some View {

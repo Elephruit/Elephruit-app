@@ -27,29 +27,26 @@ struct MobileRootView: View {
     /// the drawer is a layer over the app, not another page of it.
     private static let sidebarWidth: CGFloat = 288
 
-    /// The strip along the leading edge that starts the drawer. Matches the width the system's
-    /// own interactive-pop gesture claims, so the two feel like one gesture at different
-    /// depths rather than two gestures with different targets.
-    private static let edgeGestureWidth: CGFloat = 20
-
-    /// How far a drag must travel before it decides. Below this the drawer springs back, which
-    /// keeps a hesitant thumb from committing to a screen change it did not mean.
-    private static let dragCommitDistance: CGFloat = 60
-
     /// Navigation survives relaunch: the destination and each destination's drill-down.
     @SceneStorage("mobile.navigation") private var storedNavigation: String?
     @State private var hasRestored = false
-
-    /// The live drag offset, in points, while a gesture is in flight.
-    @State private var dragTranslation: CGFloat = 0
 
     /// The running timer, as the Dynamic Island sees it.
     @State private var liveActivity = TimerLiveActivityController()
 
     var body: some View {
-        ZStack(alignment: .leading) {
-            contentLayer
-            sidebarLayer
+        MobileDrawer(
+            isOpen: shell.isSidebarOpen,
+            canPop: shell.canPop,
+            width: Self.sidebarWidth,
+            // Plain, because the drawer animates its own settle: a gesture that has just been
+            // let go needs a spring that continues it, and only the view holding the gesture
+            // knows that is what happened.
+            setOpen: { applySidebar(open: $0) }
+        ) {
+            navigationStack
+        } drawer: {
+            MobileSidebar()
         }
         .background(Theme.Colors.windowBackground)
         .environment(shell)
@@ -62,6 +59,8 @@ struct MobileRootView: View {
             if let storedNavigation {
                 shell.restore(from: storedNavigation)
             }
+            // The keyboard's one-off setup cost, moved off the first tap that needs it.
+            await Keyboard.warmAfterLaunch()
         }
         .onChange(of: shell.restoration) {
             storedNavigation = shell.encodedRestoration
@@ -89,46 +88,6 @@ struct MobileRootView: View {
 
     // MARK: - Layers
 
-    /// The drawer, sliding into the strip the content vacates.
-    ///
-    /// Above the content in z-order rather than behind it, though it never overlaps: the two
-    /// occupy the screen's width between them. A `NavigationStack` is a UIKit container that
-    /// shadows its siblings in the accessibility tree, so a drawer *behind* one is a drawer
-    /// VoiceOver and the UI tests cannot reach — visible, tappable by a sighted thumb, and
-    /// absent from the only two readings of the app that check whether it is really there.
-    ///
-    /// It travels exactly as far as the content does, so the two move as one piece: the screen
-    /// slides right and the drawer follows it in, occupying the strip the screen vacates and
-    /// never overlapping it. A drawer that lagged or led would read as two layers arguing
-    /// about one gesture.
-    private var sidebarLayer: some View {
-        MobileSidebar()
-            .frame(width: Self.sidebarWidth)
-            .offset(x: revealedWidth - Self.sidebarWidth)
-            .accessibilityHidden(revealedWidth == 0)
-    }
-
-    private var contentLayer: some View {
-        navigationStack
-            .overlay {
-                // The scrim both dims and disarms: while the drawer is open the screen behind
-                // it is scenery, and a tap on scenery should close the drawer rather than
-                // land on whatever control happens to be under the thumb.
-                if revealedWidth > 0 {
-                    Rectangle()
-                        .fill(Theme.Colors.scrim.opacity(0.28 * revealProgress))
-                        .contentShape(Rectangle())
-                        .onTapGesture { setSidebar(open: false) }
-                        .accessibilityLabel("Close the sidebar")
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityAction { setSidebar(open: false) }
-                }
-            }
-            .offset(x: revealedWidth)
-            .overlay(alignment: .leading) { edgeGestureCatcher }
-            .gesture(shell.isSidebarOpen ? closeDrag : nil)
-    }
-
     private var navigationStack: some View {
         NavigationStack(path: $shell.path) {
             MobileDestinationView(destination: shell.destination)
@@ -150,11 +109,7 @@ struct MobileRootView: View {
                     }
                 }
         }
-        .overlay(alignment: .bottomTrailing) {
-            CaptureButton {
-                shell.isCaptureVisible = true
-            }
-        }
+        .overlay(alignment: .bottomTrailing) { primaryButton }
         .safeAreaInset(edge: .bottom) {
             // Attached only while a timer runs: a permanent blank bar would be chrome with
             // nothing to say, and it would cost every screen the height to say it.
@@ -175,64 +130,52 @@ struct MobileRootView: View {
         shell.destination == .time && shell.path.isEmpty
     }
 
-    /// The leading strip that starts the drawer, live only at the root of a stack.
+    /// The one button the shell floats over every screen — and the reason it is not always the
+    /// same button.
     ///
-    /// Above the root, the same strip belongs to the system's interactive pop — and it is the
-    /// same gesture in the user's hand, so it must not be intercepted here. Popping the last
-    /// route arms this again, which is what makes "keep swiping right" walk all the way home.
-    @ViewBuilder
-    private var edgeGestureCatcher: some View {
-        if !shell.isSidebarOpen && !shell.canPop {
-            Color.clear
-                .frame(width: Self.edgeGestureWidth)
-                .contentShape(Rectangle())
-                .gesture(openDrag)
+    /// Quick capture is what a plus means on a screen with nothing to add to: it writes into the
+    /// Inbox because the Inbox is where a thought with no home goes. On Reminders that is the
+    /// wrong answer to a plus held over a list of reminders — the thing being added is a
+    /// reminder, it belongs in the list under the thumb, and filing it in the Inbox for sorting
+    /// later is an extra journey for a decision that has already been made.
+    private var primaryButton: some View {
+        CaptureButton(
+            label: composesReminders ? "New reminder" : "Quick capture",
+            hint: composesReminders
+                ? "Opens a composer at the end of the list"
+                : "Captures a reminder, note, or anything else into the Inbox"
+        ) {
+            if composesReminders {
+                shell.requestNewReminder()
+            } else {
+                shell.isCaptureVisible = true
+            }
         }
     }
 
-    // MARK: - The gesture
-
-    private var openDrag: some Gesture {
-        DragGesture(minimumDistance: 8)
-            .onChanged { value in
-                dragTranslation = max(0, min(value.translation.width, Self.sidebarWidth))
-            }
-            .onEnded { value in
-                let committed = value.translation.width > Self.dragCommitDistance
-                    || value.predictedEndTranslation.width > Self.sidebarWidth / 2
-                dragTranslation = 0
-                setSidebar(open: committed)
-            }
+    /// Whether the screen under the button is the reminders list itself. A drill-down from it —
+    /// a smart list, one reminder's detail — is not, because the composer that would open lives
+    /// on the screen that got left behind.
+    private var composesReminders: Bool {
+        shell.destination == .reminders && !shell.canPop
     }
 
-    private var closeDrag: some Gesture {
-        DragGesture(minimumDistance: 8)
-            .onChanged { value in
-                dragTranslation = max(-Self.sidebarWidth, min(0, value.translation.width))
-            }
-            .onEnded { value in
-                let closed = value.translation.width < -Self.dragCommitDistance
-                    || value.predictedEndTranslation.width < -Self.sidebarWidth / 2
-                dragTranslation = 0
-                setSidebar(open: !closed)
-            }
-    }
-
-    /// How far the content currently sits from its home position: the settled state plus
-    /// whatever the thumb is adding, clamped so no drag can push past either end.
-    private var revealedWidth: CGFloat {
-        let settled: CGFloat = shell.isSidebarOpen ? Self.sidebarWidth : 0
-        return min(max(settled + dragTranslation, 0), Self.sidebarWidth)
-    }
-
-    private var revealProgress: Double {
-        Double(revealedWidth / Self.sidebarWidth)
-    }
-
+    /// The chevron's version: the same change, animated, because nothing was already moving.
     private func setSidebar(open: Bool) {
-        withCalmAnimation(Theme.Motion.standard) {
-            shell.isSidebarOpen = open
+        withCalmAnimation(Theme.Motion.drawer) {
+            applySidebar(open: open)
         }
+    }
+
+    /// Opening the drawer is leaving the screen, so the keyboard goes with it.
+    ///
+    /// Both ways in run through here — the chevron and the edge swipe — because a keyboard left
+    /// standing over a drawer is the same wrong picture however the drawer was asked for. It also
+    /// answers a question the chevron used to leave hanging: tapped while writing a reminder, it
+    /// slid the screen aside and left the keyboard sitting on top of the drawer.
+    private func applySidebar(open: Bool) {
+        if open { Keyboard.dismiss() }
+        shell.isSidebarOpen = open
     }
 
     /// The `elephruit:` scheme, honoured on the same read-only terms as the Mac: every URL
@@ -288,32 +231,51 @@ struct MobileDestinationView: View {
     }
 }
 
-/// The floating quick-capture button.
+/// The shell's floating button: whatever the screen under it means by "add".
 struct CaptureButton: View {
     /// How far above the shell's bottom edge the button rests. The tab bar it used to clear is
     /// gone, so this is now the ordinary content inset — the button sits where the thumb
     /// already is instead of where the chrome used to be.
     private static let bottomClearance: CGFloat = Theme.Spacing.section
 
-    /// The button's face: comfortably above the 44-point minimum target, matching the
-    /// platform's floating-action convention.
-    private static let diameter: CGFloat = 56
+    /// The glyph's box, which the glass grows by a little over a point: 40 here measures 41 on
+    /// screen, against the 58 this used to draw.
+    ///
+    /// Two layers of padding had to be found before that number meant anything. It began as a
+    /// 56-point box inside `.buttonStyle(.glassProminent)` — a style that pads what it is handed
+    /// *and* refuses to go below its own minimum, so the button drew at 58 whatever this said,
+    /// and taking it from 56 to 44 to 26 changed not one pixel. Applying the glass to the shape
+    /// directly is what made the number load-bearing again.
+    ///
+    /// Smaller because this floats over lists whose content is the point, permanently, on every
+    /// screen: the loudest object in the room should not be the one you use least.
+    private static let glyphBox: CGFloat = 40
 
+    var label: String
+    var hint: String
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: "plus")
-                .font(.title2.weight(.semibold))
-                .frame(width: Self.diameter, height: Self.diameter)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Theme.Colors.onAccent)
+                .frame(width: Self.glyphBox, height: Self.glyphBox)
+                .glassEffect(
+                    .regular.tint(Theme.Colors.selection).interactive(),
+                    in: .circle
+                )
+                // A margin the eye cannot see and the thumb can: the drawn circle is 41 points,
+                // and the target has to be 44 whatever the drawing does.
+                .padding(Theme.Spacing.hairline)
+                .contentShape(Circle())
         }
-        .buttonStyle(.glassProminent)
-        .clipShape(Circle())
+        .buttonStyle(.plain)
         .elevation(.floating)
         .padding(.trailing, Theme.Spacing.large)
         .padding(.bottom, Self.bottomClearance)
-        .accessibilityLabel("Quick capture")
-        .accessibilityHint("Captures a reminder, note, or anything else into the Inbox")
+        .accessibilityLabel(label)
+        .accessibilityHint(hint)
         .accessibilityIdentifier("mobile.capture.button")
     }
 }
