@@ -7,6 +7,24 @@ which is *getting a fact into the app in the ninety seconds after you hear it*.
 
 Branch: `claude/family-info-logging-plan-8f3e0b`, off `f6cb2e60`.
 
+## Status
+
+| Phase | State |
+|---|---|
+| 1 — Core | **Done.** High-school words parse; `SchoolYearIntent`; `FactAttribute.school`; `RelativeCapture` / `PersonUpdate`. |
+| 2 — Persistence | **Done.** Schema 0.0.18 (`hasStatedName`); `createUnnamedRelative`; `renamePerson` with phrase refresh; `apply(_:source:observedOn:)`; `thingsToFillIn(for:)`. |
+| 3 — Provenance | **Folded into 2.** Everything written through `apply` carries its source. The remaining `source: nil` call sites are facts typed directly with no source to carry — honest, not an omission. The debrief in §5 is what makes the rest of them non-nil. |
+| 4.1 — macOS family editor | **Done.** `AddRelativesSheet` replaces `AddRelationshipSheet`. |
+| 4.2 — macOS fact sheet | **Done.** Grade and School are separate categories; school-year control and reading line. |
+| 4.3 — Command grammar (`at <school>`, the four school words) | Not started. |
+| 5 — Meeting debrief | Not started. |
+| 6 — iOS parity | Not started. |
+| 7 — The fill-in queue | Query built (2.5); no interface yet. |
+
+**Not verified visually.** The macOS sheet builds, is covered by tests, and opens under
+`-ElephruitOpenSheet relatives` — but `screencapture` returned black on this machine, so nobody has
+looked at it. Do that before building anything on top of it.
+
 ---
 
 ## 1. The case this plan is measured against
