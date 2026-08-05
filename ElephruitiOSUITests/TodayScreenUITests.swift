@@ -112,6 +112,10 @@ final class TodayScreenUITests: XCTestCase {
             "opening the meeting did not name its people"
         )
 
+        // The meeting that opened is at the bottom of the screen, so what it opened is below it.
+        // Photographing from here catches the fold rather than the people.
+        app.swipeUp()
+
         let opened = XCTAttachment(screenshot: app.screenshot())
         opened.name = "today-people-expanded"
         opened.lifetime = .keepAlways

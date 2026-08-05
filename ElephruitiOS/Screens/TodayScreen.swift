@@ -1293,6 +1293,42 @@ struct TodayPersonRow: View {
     /// sibling — the rail runs plain behind them instead, which is what subordinate reads as.
     var isNested: Bool = false
 
+    /// How many stated facts are worth carrying into a room.
+    ///
+    /// Three. One is a decoration and everything a record holds is a dossier; three is what
+    /// somebody can actually keep in mind while saying hello.
+    private static let visibleFacts = 3
+
+    /// Whether this page may say what it knows about somebody.
+    ///
+    /// A Calendar Set can turn it off — the one a person switches into before sharing their screen
+    /// in a meeting. Their name and why they are on the day stay, because those are on the invitation
+    /// anyway; when you last spoke, what you owe each other, and anything remembered about them do
+    /// not.
+    private var showsContext: Bool {
+        services?.calendar.activeSet?.showsPersonContext ?? true
+    }
+
+    /// "Last spoke 3 weeks ago · 2 open items with them", when either is true.
+    ///
+    /// One line rather than two, because they are one thought — how this relationship stands —
+    /// and a row that spends four lines on one person pushes the rest of the day off the screen.
+    private var history: String? {
+        var parts: [String] = []
+
+        if let moment = person.lastContact, moment.isContact, let services {
+            parts.append("Last \(moment.kindDescription) \(moment.relativeDescription(using: services.dateProvider))")
+        }
+        // Spelled out rather than inflected: automatic inflection is a `LocalizedStringKey` trick,
+        // and this is a `String` being assembled from parts, where the markup would print itself.
+        let open = person.openTaskIDs.count
+        if open > 0 {
+            parts.append(open == 1 ? "1 open item with them" : "\(open) open items with them")
+        }
+
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     var body: some View {
         // No face on this row any more. It used to sit in a gutter *outside* the rail, which put a
         // person's initials beside the day rather than in it — and their colour is already on the
@@ -1322,11 +1358,24 @@ struct TodayPersonRow: View {
                             .foregroundStyle(Theme.Colors.secondaryText)
                             .lineLimit(1)
                     }
-                    if let fact = person.quickFacts.first {
-                        Text(fact)
-                            .font(Theme.Text.metadata)
-                            .foregroundStyle(Theme.Colors.tertiaryText)
-                            .lineLimit(1)
+
+                    if showsContext {
+                        if let history {
+                            Text(history)
+                                .font(Theme.Text.metadata)
+                                .foregroundStyle(Theme.Colors.secondaryText)
+                                .lineLimit(1)
+                        }
+
+                        // Three rather than one. A single fact is a decoration; three are a
+                        // briefing, and the assembler has already filtered out anything sensitive
+                        // and anything it merely inferred — see `DailyPlanService.quickFacts(from:)`.
+                        ForEach(person.quickFacts.prefix(Self.visibleFacts), id: \.self) { fact in
+                            Text(fact)
+                                .font(Theme.Text.metadata)
+                                .foregroundStyle(Theme.Colors.tertiaryText)
+                                .lineLimit(2)
+                        }
                     }
                 }
 
