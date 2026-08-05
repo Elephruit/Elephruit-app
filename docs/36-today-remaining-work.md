@@ -156,6 +156,35 @@ Where it plugs in: `TravelPreferences.minutes(to:)` is the single question the p
 An ETA should arrive as a *better answer to that question*, not as a second code path — the row, the
 sheet and the block already read it.
 
+#### Should the Mac get this switch too? Not yet, and the reason is not caution
+
+Asked because `TravelPreferences` sits in `ElephruitFeaturesCore` and `MapKitRouteProvider` in
+`ElephruitIntegrations` — both shared, both linked by the Mac already, so a Settings row would be
+an afternoon. It should still wait, because **the prerequisite is missing rather than the plumbing.**
+
+Route estimates is not a feature on its own. It is a better answer to "when should I leave", and on
+the Mac nothing asks that question. Every caller of `TravelPreferences` and `TravelRules` is a phone
+file — `ElephruitiOS/Screens/TodayScreen.swift` and `BlockTimeSheet.swift`. The Mac has the whole
+Today feature in `ElephruitFeatures/TodayView.swift` and its rows show an event's location
+(`TodayRows.swift:180`), but no leave-by line, no journey, and no travel block. A switch shipped
+into that would change nothing a user could see, which is the worst kind of privacy control: it
+asks somebody to weigh a real cost against no benefit.
+
+So the order is: **port the leave-by line to the Mac's Today first** — §3.4's work, which needs only
+`TravelPreferences` and a default-minutes setting, no permission and no network — and only then is
+there something for an estimate to improve. If that port is never wanted, the answer to this
+question is a permanent no rather than a deferral.
+
+Two costs that only exist on the Mac, worth knowing before the port is scheduled:
+
+- **Location is a sandbox entitlement here, not just a usage string.** `Configuration/Elephruit.entitlements`
+  lists Location under "Deliberately ABSENT", and that list is the app's own record of restraint.
+  On iOS the same feature costs a usage string and TCC. The Mac would be spending something the
+  phone did not have to spend.
+- **A Mac is more often the thing you are travelling *from* than the thing you carry.** A desktop's
+  answer to "how long from here" is right for the office it is sitting in and wrong for anywhere
+  else, in a way a phone's never is.
+
 ### 3.6 The blocks view — blocked on a decision
 
 Ask 3 was "options to adjust to show blocks". Deferred; the owner is undecided between a proportional
