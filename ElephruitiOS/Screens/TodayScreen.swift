@@ -264,6 +264,22 @@ private struct TodayContent: View {
         // read as a glitch.
         .onChange(of: model.sourceToken) { _, _ in
             withCalmAnimation(Theme.Motion.standard) { model.assemble() }
+        }
+        // Journeys are measured for the whole day at once, not per row as each scrolls into view.
+        //
+        // Per row was the obvious arrangement and it was wrong twice over. A `List` only realises
+        // cells near the viewport, so an evening meeting five screens down is never measured until
+        // somebody scrolls to it — and then the line changes under the thumb that arrived at it.
+        // Worse, the block sheet reads the number when it opens, so a journey reached from anywhere
+        // but the row itself was quietly booked against the guess. A day holds a handful of events
+        // and `refreshEstimate` refuses everything not worth asking, so asking about all of them is
+        // cheaper than the bug.
+        .task(id: model.sourceToken) {
+            await measureTravelForTheDay()
+            // After the measuring, not alongside the assembly, and for the reason the sheet already
+            // waits on the calendar: a review launch exists to photograph what a user sees, and a
+            // journey sheet opened before its ETA arrives shows the guess the page was about to
+            // replace. Ordinary use is unaffected — a thumb reaches the line long after this.
             openBlockSheetIfReviewing()
         }
         // The horizontal day-swipe is gone, and the feed is why. It existed when this page showed
@@ -652,7 +668,7 @@ private struct TodayContent: View {
                 case .event(let event):
                     TodayEventRow(
                         dayEvent: event,
-                        travelMinutes: travelMinutes(for: event),
+                        travel: travel(for: event),
                         onTravel: { blocking = .travel(event, plan) }
                     )
                         .contentShape(Rectangle())
@@ -769,6 +785,19 @@ private struct TodayContent: View {
             guard let entry = model.openTasks(in: plan).first(where: { $0.day.pinnedAt == nil })
             else { return }
             blocking = .task(entry.item, plan)
+        case .travel:
+            // The first journey still ahead — the same one the page would draw a "leave by" under,
+            // found the same way, so what opens here is never a meeting the page is silent about.
+            let calendar = services?.dateProvider.calendar ?? .current
+            guard let event = plan.scheduleEvents(calendar: calendar).first(where: {
+                TravelRules.isWorthSaying(
+                    $0.event,
+                    minutes: services?.travel.minutes(to: $0.event.locationName)
+                        ?? TravelRules.defaultMinutes,
+                    now: services?.dateProvider.now ?? .now
+                )
+            }) else { return }
+            blocking = .travel(event, plan)
         }
         hasOpenedReviewSheet = true
     }
@@ -778,12 +807,41 @@ private struct TodayContent: View {
     /// Nothing is said for a video call, for an all-day entry, or once the moment to leave has
     /// passed — a "leave by 9:45" under a meeting you are already late for is a reproach rather
     /// than a plan. See ``TravelRules`` for why each of those is a refusal rather than an omission.
-    private func travelMinutes(for event: DayEvent) -> Int? {
+    ///
+    /// Whether the number was measured or given is decided in ``TravelPreferences``, and this does
+    /// not look: it asks the same question it always asked and draws whatever comes back.
+    private func travel(for event: DayEvent) -> TravelNumber? {
         guard let services else { return nil }
-        let minutes = services.travel.minutes(to: event.event.locationName)
-        guard TravelRules.isWorthSaying(event.event, minutes: minutes, now: services.dateProvider.now)
-        else { return nil }
-        return minutes
+        let travel = services.travel.travel(to: event.event.locationName)
+        guard TravelRules.isWorthSaying(
+            event.event, minutes: travel.minutes, now: services.dateProvider.now
+        ) else { return nil }
+        return travel
+    }
+
+    /// Asks how long the day's journeys really take, for the ones worth asking about.
+    ///
+    /// Everything that decides "no" lives in ``TravelPreferences/refreshEstimate(to:departingAt:)``
+    /// — the switch, the permission, the window, the answers already held, the places that refused —
+    /// so this is only the question the page itself can answer: which of these is somewhere to go.
+    /// ``RoutePlace/init(travellingTo:)`` decides that, and is the point where everything about a
+    /// meeting except its address is dropped.
+    ///
+    /// In order, and awaited one at a time. A day's journeys are few, they are asked about the
+    /// moment the day assembles rather than while anybody waits, and firing them at once would put
+    /// several requests in the air for a page that mostly wants the first one.
+    private func measureTravelForTheDay() async {
+        guard let services, let plan = model.selectedPlan else { return }
+        let calendar = services.dateProvider.calendar
+
+        for event in plan.scheduleEvents(calendar: calendar) {
+            guard let place = RoutePlace(travellingTo: event.event) else { continue }
+            let minutes = services.travel.minutes(to: event.event.locationName)
+            await services.travel.refreshEstimate(
+                to: place,
+                departingAt: TravelRules.leaveBy(event.event, minutes: minutes)
+            )
+        }
     }
 
     private func openMeetingNotes(_ event: DayEvent) {
@@ -1183,11 +1241,22 @@ private struct TodayAwarenessRow: View {
 private struct TodayEventRow: View {
     let dayEvent: DayEvent
 
-    /// How long the user says it takes to get there, when this is somewhere to go and there is
-    /// still time to set off. `nil` draws no line at all.
-    var travelMinutes: Int?
+    /// How long the journey takes, when this is somewhere to go and there is still time to set off.
+    /// `nil` draws no line at all.
+    ///
+    /// A ``TravelNumber`` rather than an `Int` so the line can say which kind of answer it is — see
+    /// ``TravelRules/summary(leavingAt:travel:)``. The row does not know or care whether route
+    /// estimates are switched on; it is handed an answer and draws it.
+    var travel: TravelNumber?
 
     var onTravel: () -> Void = {}
+
+    /// A car for a measured drive, a tram for a measured journey — and the walking figure for
+    /// anything nobody measured, which is what it has always meant here.
+    private func travelSymbol(_ travel: TravelNumber) -> String {
+        guard case .measured(_, let transport, _) = travel else { return "figure.walk" }
+        return transport.symbolName
+    }
 
     var body: some View {
         TimelineRow(
@@ -1217,17 +1286,21 @@ private struct TodayEventRow: View {
                         .lineLimit(1)
                 }
 
-                if let travelMinutes {
+                if let travel {
                     // Subordinate to the meeting rather than a row of its own: it is a fact *about*
                     // this entry, and giving it a place on the thread would make a day of four
                     // meetings look like a day of eight things.
                     Button(action: onTravel) {
                         Label(
                             TravelRules.summary(
-                                leavingAt: TravelRules.leaveBy(dayEvent.event, minutes: travelMinutes),
-                                minutes: travelMinutes
+                                leavingAt: TravelRules.leaveBy(
+                                    dayEvent.event, minutes: travel.minutes
+                                ),
+                                travel: travel
                             ),
-                            systemImage: "figure.walk"
+                            // The symbol follows the answer: a measured drive gets a car, and the
+                            // walking figure goes back to meaning a journey nobody measured.
+                            systemImage: travelSymbol(travel)
                         )
                         .font(Theme.Text.metadata)
                         .foregroundStyle(Theme.Colors.selection)
