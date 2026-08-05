@@ -41,7 +41,22 @@ struct RemindersScreen: View {
     /// the circles read as one column rather than as the first cell of a table.
     private static let separatorInset: CGFloat = 44
 
+    /// Where a new reminder's editor sits, which is not always the same place.
+    ///
+    /// A tap on the list opens the editor where the tap happened — the end, where the next
+    /// reminder goes. The shell's floating button is not a place in the list: it is chrome over
+    /// the bottom-right corner, and honouring it at the end of the list puts a card you are about
+    /// to type into behind the keyboard and under the button that opened it. From there it goes
+    /// to the top, where it can be read and edited.
+    private enum NewReminderPlacement {
+        case tail
+        case top
+    }
+
     @State private var composing: Composing?
+    /// Read only while a new reminder is being written; meaningless otherwise, which is why it is
+    /// not part of `Composing` — an editor on a reminder has exactly one place it can be.
+    @State private var newReminderPlacement: NewReminderPlacement = .tail
     /// Which field the editor should arrive on, when the tap that opened it said so.
     @State private var openingField: ComposerField?
     @State private var draft = ReminderComposerDraft()
@@ -97,6 +112,14 @@ struct RemindersScreen: View {
             ToolbarItem(placement: .topBarTrailing) { completedToggle }
         }
         .task(id: services?.changeToken ?? 0) { reload() }
+        // The shell's floating button, over this screen, means "another reminder" — and the
+        // only place that can honour it is here, because the composer opens at the end of the
+        // list rather than over it.
+        .onChange(of: shell.newReminderRequests) { startNewReminder(at: .top) }
+        // Leaving the screen is a way of closing the editor, and every way of closing it keeps
+        // what is in it. Without this, walking out of Reminders with a half-written card open
+        // was the one exit that threw the words away.
+        .onDisappear { settleOpenEditor() }
     }
 
     /// The saved rules over this library, as a menu rather than a permanent rail.
@@ -139,12 +162,18 @@ struct RemindersScreen: View {
             listContent
                 .onChange(of: composing) { _, current in
                     guard current != nil else { return }
-                    // The editor is at the end of a list that is usually taller than the
-                    // screen, so opening one can put it — and the × that closes it — below the
-                    // fold or behind the keyboard. An editor you have to go looking for is an
-                    // editor that has trapped you.
+                    // The editor is in a list that is usually taller than the screen, so opening
+                    // one can put it — and the × that closes it — below the fold or behind the
+                    // keyboard. An editor you have to go looking for is an editor that has
+                    // trapped you.
+                    //
+                    // A card at the head of the list goes to the top of the screen rather than
+                    // the middle: that is the whole reason it was put there, and centring it
+                    // would hand back the half of the screen the keyboard was going to take.
+                    let anchor: UnitPoint =
+                        current == .newReminder && newReminderPlacement == .top ? .top : .center
                     withCalmAnimation {
-                        scroller.scrollTo(Self.composerAnchor, anchor: .center)
+                        scroller.scrollTo(Self.composerAnchor, anchor: anchor)
                     }
                 }
         }
@@ -160,6 +189,11 @@ struct RemindersScreen: View {
                     Label(actionError, systemImage: "exclamationmark.triangle")
                         .font(Theme.Text.metadata)
                         .foregroundStyle(Theme.Colors.warning)
+                }
+
+                if composing == .newReminder, newReminderPlacement == .top {
+                    composer(quickCommitKeepsOpen: true)
+                        .id(Self.composerAnchor)
                 }
 
                 ForEach(sections) { group in
@@ -185,7 +219,7 @@ struct RemindersScreen: View {
                 // top of the list, which is right for a window you can see all of at once and
                 // wrong for a phone — the tap that opened it happened down here, and a form
                 // that answers a tap by scrolling somewhere else has moved the conversation.
-                if composing == .newReminder {
+                if composing == .newReminder, newReminderPlacement == .tail {
                     composer(quickCommitKeepsOpen: true)
                         .id(Self.composerAnchor)
                 } else if composing == nil {
@@ -384,11 +418,23 @@ struct RemindersScreen: View {
         .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
     }
 
+    /// A new reminder where the tap for it happened: the end of the list.
+    ///
+    /// Kept argument-free because it is passed as an action to four different controls, and a
+    /// defaulted parameter cannot be handed over as a plain closure.
     private func startNewReminder() {
-        guard composing != .newReminder else { return }
+        startNewReminder(at: .tail)
+    }
+
+    private func startNewReminder(at placement: NewReminderPlacement) {
+        // Already open in the place being asked for is nothing to do. Open somewhere *else* is a
+        // request to move, which is worth honouring: the button that asked has a view about where
+        // the card should be.
+        guard composing != .newReminder || newReminderPlacement != placement else { return }
         settleOpenEditor()
         draft.reset()
         openingField = nil
+        newReminderPlacement = placement
         withCalmAnimation(Theme.Motion.appearance) {
             composing = .newReminder
         }

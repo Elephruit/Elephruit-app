@@ -80,13 +80,28 @@ struct MobileReminderComposer: View {
         )
         .elevation(.floating)
         .task {
+            // The card arrives before anything is asked of the keyboard.
+            //
+            // Taking focus in the same turn as the appearance meant the tap that opened the
+            // editor bought the whole text-input stack as well: the first `becomeFirstResponder`
+            // of a session connects to the keyboard's own process, and that connection has been
+            // measured at over a second on a real phone. Spent here, it is spent *before the
+            // card has drawn* — so the list sits there, apparently ignoring the tap, and the row
+            // and the keyboard finally appear together two seconds later.
+            //
+            // Waiting the length of the appearance costs the keyboard a tenth of a second and
+            // buys the tap an immediate answer. `KeyboardWarmup` pays the rest of the bill, at
+            // launch, where nobody is waiting.
+            try? await Task.sleep(for: .milliseconds(150))
+            // The wait is cancellable and the sleep swallows its own cancellation, so this is
+            // the check that keeps a closed editor from summoning a keyboard on its way out.
+            guard !Task.isCancelled else { return }
             guard let opening else {
                 focus = .title
                 return
             }
-            // One turn of the run loop before presenting: the card is arriving, and a popover
-            // anchored to a control that has not been laid out yet has nothing to point at.
-            await Task.yield()
+            // A popover anchored to a control that has not been laid out yet has nothing to
+            // point at, so this waits for the same reason and then some.
             open(opening)
         }
         .sheet(item: $searchingField) { field in
@@ -310,7 +325,7 @@ struct MobileReminderComposer: View {
     /// down to icons, the row stops needing to scroll at all.
     private var controlScroller: some View {
         HStack(spacing: Theme.Spacing.small) {
-            Button { activePopover = .project } label: {
+            Button { open(.project) } label: {
                 HStack(spacing: Theme.Spacing.hairline) {
                     Image(systemName: "square.stack.3d.up")
                     if let project = draft.projectTitle {
@@ -328,7 +343,14 @@ struct MobileReminderComposer: View {
             .buttonStyle(.plain)
             .accessibilityLabel(draft.projectTitle.map { "Project: \($0)" } ?? "Choose a project")
             .accessibilityIdentifier("reminders.composer.project")
-            .popover(isPresented: showing(.project), arrowEdge: .top) {
+            // `nil` rather than `.top`, here and on all five: the edge is a *requirement*, and
+            // requiring the popup to hang below its control is a promise the bottom of a screen
+            // cannot keep. The composer sits at the end of the list, so the row of controls is
+            // usually a couple of hundred points from the bottom — below it there is room for a
+            // date grid on no phone ever made, and the system answered by squeezing the popup
+            // into whatever was left. Left to choose, it opens upward, at full size, over the
+            // list it came from. Which is what Reminders does.
+            .popover(isPresented: showing(.project), arrowEdge: nil) {
                 MobileProjectPicker(
                     selected: $draft.projectTitle,
                     onRequestSearch: { requestSearch(.project) }
@@ -338,8 +360,8 @@ struct MobileReminderComposer: View {
             Spacer(minLength: 0)
 
             control(symbol: "calendar", isActive: draft.startAt != nil || draft.isSomeday,
-                    label: "When", identifier: "when") { activePopover = .when }
-                .popover(isPresented: showing(.when), arrowEdge: .top) {
+                    label: "When", identifier: "when") { open(.when) }
+                .popover(isPresented: showing(.when), arrowEdge: nil) {
                     MobileDayPicker(
                         title: "When",
                         selection: $draft.startAt,
@@ -348,8 +370,8 @@ struct MobileReminderComposer: View {
                 }
 
             control(symbol: "tag", isActive: !draft.tagSlugs.isEmpty,
-                    label: "Tags", identifier: "tags") { activePopover = .tags }
-                .popover(isPresented: showing(.tags), arrowEdge: .top) {
+                    label: "Tags", identifier: "tags") { open(.tags) }
+                .popover(isPresented: showing(.tags), arrowEdge: nil) {
                     MobileTagPicker(
                         selected: $draft.tagSlugs,
                         onRequestSearch: { requestSearch(.tags) }
@@ -357,8 +379,8 @@ struct MobileReminderComposer: View {
                 }
 
             control(symbol: "person", isActive: !draft.personNames.isEmpty,
-                    label: "People", identifier: "people") { activePopover = .people }
-                .popover(isPresented: showing(.people), arrowEdge: .top) {
+                    label: "People", identifier: "people") { open(.people) }
+                .popover(isPresented: showing(.people), arrowEdge: nil) {
                     MobilePeoplePicker(
                         selected: $draft.personNames,
                         onRequestSearch: { requestSearch(.people) }
@@ -369,8 +391,8 @@ struct MobileReminderComposer: View {
                     label: "Checklist", identifier: "checklist") { open(.checklist) }
 
             control(symbol: "flag", isActive: draft.dueAt != nil,
-                    label: "Deadline", identifier: "deadline") { activePopover = .deadline }
-                .popover(isPresented: showing(.deadline), arrowEdge: .top) {
+                    label: "Deadline", identifier: "deadline") { open(.deadline) }
+                .popover(isPresented: showing(.deadline), arrowEdge: nil) {
                     MobileDayPicker(title: "Deadline", selection: $draft.dueAt, isSomeday: nil)
                 }
         }
@@ -408,6 +430,15 @@ struct MobileReminderComposer: View {
 
     /// Opens one field. Five of them are popovers; the checklist is a row inside the card, so
     /// "open" means something different for it and this is the one place that knows so.
+    ///
+    /// *Every* way of opening a field comes through here — the six controls, and an arrival that
+    /// already knows which field it means. It did not: the controls used to set `activePopover`
+    /// themselves and only the checklist and the arriving tap called this, so five of the six
+    /// buttons skipped the part that puts the keyboard away. Tapping one while the title still
+    /// held focus presented a popover over a live keyboard, anchored to a control the keyboard
+    /// was about to move, and the phone spent the next second sorting out which of the two owned
+    /// the bottom half of the screen. That is the freeze, and this is why there is no second
+    /// door.
     private func open(_ field: ComposerField) {
         // The checklist is the one field that wants the keyboard — it is a row you type into.
         guard field != .checklist else {
