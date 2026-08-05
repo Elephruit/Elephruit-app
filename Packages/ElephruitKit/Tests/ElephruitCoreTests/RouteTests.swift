@@ -108,33 +108,110 @@ struct RouteTests {
         #expect(RouteRules.minutes(fromSeconds: .nan) == 1)
     }
 
+    static let calendar = Calendar(identifier: .gregorian)
+
+    private static func expiry(departingIn seconds: TimeInterval) -> Date {
+        RouteRules.expiry(
+            measuredAt: now, departingAt: now.addingTimeInterval(seconds), calendar: calendar
+        )
+    }
+
     @Test("An answer goes stale")
     func estimatesExpire() {
         let estimate = RouteEstimate(
-            placeKey: "room 2", minutes: 12, transport: .driving, measuredAt: Self.now
+            placeKey: "room 2", minutes: 12, transport: .driving,
+            measuredAt: Self.now, expiresAt: Self.now.addingTimeInterval(900)
         )
 
         #expect(RouteRules.isFresh(estimate, now: Self.now))
-        #expect(RouteRules.isFresh(estimate, now: Self.now.addingTimeInterval(RouteRules.freshness - 1)))
-        #expect(!RouteRules.isFresh(estimate, now: Self.now.addingTimeInterval(RouteRules.freshness)))
+        #expect(RouteRules.isFresh(estimate, now: Self.now.addingTimeInterval(899)))
+        #expect(!RouteRules.isFresh(estimate, now: Self.now.addingTimeInterval(900)))
 
         // A measurement from the future is a clock that moved, not a fresh answer.
         #expect(!RouteRules.isFresh(estimate, now: Self.now.addingTimeInterval(-60)))
     }
 
-    /// Both ends of the window, because both are the app declining to spend a location read.
-    @Test("Only a journey soon is worth measuring")
-    func measuringHasAWindow() {
-        let soon = Self.now.addingTimeInterval(30 * 60)
-        #expect(RouteRules.isWorthMeasuring(departingAt: soon, now: Self.now))
+    /// An answer given no life of its own is already dead, which fails toward asking again.
+    @Test("A measurement nobody dated expires immediately")
+    func anUndatedEstimateIsNeverFresh() {
+        let raw = RouteEstimate(
+            placeKey: "room 2", minutes: 12, transport: .driving, measuredAt: Self.now
+        )
+        #expect(!RouteRules.isFresh(raw, now: Self.now))
+    }
 
-        let thursday = Self.now.addingTimeInterval(RouteRules.horizon + 60)
-        #expect(!RouteRules.isWorthMeasuring(departingAt: thursday, now: Self.now),
-                "Traffic four hours out is not knowable, so the lookup buys a number that will be wrong")
+    /// The rule that replaced both the flat freshness and the lookahead horizon.
+    @Test("How long an answer lives depends on how far off the journey is")
+    func expiryFollowsTheDeparture() {
+        // Inside the busy window: fifteen minutes, because now an accident is actionable.
+        #expect(Self.expiry(departingIn: 30 * 60) == Self.now.addingTimeInterval(15 * 60))
+        #expect(Self.expiry(departingIn: RouteRules.closeIn) == Self.now.addingTimeInterval(15 * 60))
 
-        let longGone = Self.now.addingTimeInterval(-RouteRules.freshness - 60)
+        // Later today, but far enough out that the answer is quiet — and clamped so it dies exactly
+        // as the busy window opens rather than a moment after.
+        let threeHours = Self.expiry(departingIn: 3 * 60 * 60)
+        #expect(threeHours == Self.now.addingTimeInterval(RouteRules.sameDayFreshness))
+
+        let twoHours = Self.expiry(departingIn: 2 * 60 * 60)
+        #expect(twoHours == Self.now.addingTimeInterval(2 * 60 * 60 - RouteRules.closeIn),
+                "the last quiet answer must expire as the busy window opens, with no second trigger")
+    }
+
+    /// The Detroit case: booked from another state, and right the morning you are in the right one.
+    @Test("An answer for another day dies at that day's end")
+    func tomorrowsJourneyExpiresTonight() {
+        let nextWeek = Self.expiry(departingIn: 7 * 24 * 60 * 60)
+        let tomorrow = Self.calendar.date(
+            byAdding: .day, value: 1, to: Self.calendar.startOfDay(for: Self.now)
+        )
+
+        #expect(nextWeek == tomorrow, """
+            The first look tomorrow must measure again, from wherever the reader woke up — which is \
+            the start-of-day re-measure, expressed as an expiry rather than a scheduler.
+            """)
+    }
+
+    /// One refusal now, where there used to be two. The lookahead limit is gone: MapKit is given the
+    /// real departure date and models the traffic it expects then, so a meeting next week is a fair
+    /// question — and refusing to ask was what left a number nobody had earned on the page.
+    @Test("Only a journey already gone is past measuring")
+    func measuringRefusesOnlyThePast() {
+        #expect(RouteRules.isWorthMeasuring(
+            departingAt: Self.now.addingTimeInterval(30 * 60), now: Self.now
+        ))
+        #expect(RouteRules.isWorthMeasuring(
+            departingAt: Self.now.addingTimeInterval(9 * 24 * 60 * 60), now: Self.now
+        ), "a journey next week is measurable; MapKit is told when it departs")
+
+        let longGone = Self.now.addingTimeInterval(-RouteRules.closeInFreshness - 60)
         #expect(!RouteRules.isWorthMeasuring(departingAt: longGone, now: Self.now),
                 "A journey already begun cannot be planned")
+    }
+
+    /// Two kinds of "no", retiring at the moments they actually stop being true.
+    @Test("A refusal is remembered for as long as it is likely to hold")
+    func refusalsRetireSensibly() {
+        let tomorrow = Self.calendar.date(
+            byAdding: .day, value: 1, to: Self.calendar.startOfDay(for: Self.now)
+        )
+
+        for failure in [RouteFailure.placeNotFound, .noRoute, .implausible] {
+            #expect(
+                RouteRules.retryAt(after: failure, now: Self.now, calendar: Self.calendar) == tomorrow,
+                "\(failure) comes right on the day you are in the right city, not before"
+            )
+        }
+
+        #expect(
+            RouteRules.retryAt(after: .unavailable, now: Self.now, calendar: Self.calendar)
+                == Self.now.addingTimeInterval(5 * 60),
+            "a network that was down comes back"
+        )
+
+        #expect(
+            RouteRules.retryAt(after: .notAuthorized, now: Self.now, calendar: Self.calendar) == nil,
+            "a switch to respect is not a refusal to time"
+        )
     }
 
     /// The failure mode this exists for: a geocoder handed a string with no city in it finds a
@@ -160,21 +237,50 @@ struct RouteTests {
 
         #expect(told == TravelRules.summary(leavingAt: moment, minutes: 15),
                 "A told number reads exactly as it always did")
-        #expect(measured.hasSuffix("drive"))
+        #expect(measured?.hasSuffix("drive") == true)
         #expect(measured != told)
 
         let walked = TravelRules.summary(
             leavingAt: moment, travel: .measured(12, transport: .walking, at: moment)
         )
-        #expect(walked.hasSuffix("walk"), "A walk and a drive of the same length are different meetings")
+        #expect(walked?.hasSuffix("walk") == true,
+                "A walk and a drive of the same length are different meetings")
     }
 
     @Test("A number knows where it came from")
     func travelNumbersReportTheirSource() {
-        #expect(TravelNumber.told(15).minutes == 15)
-        #expect(!TravelNumber.told(15).isMeasured)
-        #expect(TravelNumber.measured(12, transport: .transit, at: Self.now).minutes == 12)
-        #expect(TravelNumber.measured(12, transport: .transit, at: Self.now).isMeasured)
+        #expect(TravelAnswer.told(15).minutes == 15)
+        #expect(!TravelAnswer.told(15).isMeasured)
+        #expect(TravelAnswer.measured(12, transport: .transit, at: Self.now).minutes == 12)
+        #expect(TravelAnswer.measured(12, transport: .transit, at: Self.now).isMeasured)
+    }
+
+    /// The case that exists because its absence produced a number nobody had earned.
+    @Test("An answer nobody has is an answer, not a default")
+    func anUnknownAnswerHasNoNumber() {
+        #expect(TravelAnswer.unknown(nil).minutes == nil)
+        #expect(TravelAnswer.unknown(.placeNotFound).minutes == nil)
+        #expect(!TravelAnswer.unknown(nil).isMeasured)
+
+        // And there is no sentence for it, so a caller cannot render one by accident.
+        #expect(TravelRules.summary(leavingAt: Self.now, travel: .unknown(nil)) == nil)
+    }
+
+    /// "Nothing to say" against "I tried and could not work it out" — the distinction the reader
+    /// actually cares about, and the only thing that decides between silence and an offer.
+    @Test("Only a failure the reader can settle invites them to")
+    func onlySomeFailuresAskForHelp() {
+        #expect(TravelAnswer.unknown(.noRoute).invitesAnAnswer)
+        #expect(TravelAnswer.unknown(.implausible).invitesAnAnswer,
+                "booked in Detroit from Minnesota: worth a word, because they can fix it and we cannot")
+
+        #expect(!TravelAnswer.unknown(.placeNotFound).invitesAnAnswer,
+                "a meeting room does not geocode and does not need to — you are in the building")
+        #expect(!TravelAnswer.unknown(.unavailable).invitesAnAnswer,
+                "an error that heals itself in five minutes should never have been shown")
+        #expect(!TravelAnswer.unknown(nil).invitesAnAnswer, "nothing has been asked yet")
+        #expect(!TravelAnswer.told(15).invitesAnAnswer)
+        #expect(!TravelAnswer.measured(12, transport: .driving, at: Self.now).invitesAnAnswer)
     }
 
     /// Silence is the design, not an oversight. A meeting room that does not geocode must not put an

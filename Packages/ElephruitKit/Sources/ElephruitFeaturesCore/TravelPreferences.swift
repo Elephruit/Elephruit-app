@@ -5,22 +5,26 @@ import Observation
 
 /// How long it takes the user to get places.
 ///
-/// ### Two sources, one question
-/// The page asks ``minutes(to:)`` and gets a number. It has always been the number its owner gave;
-/// it can now be one a routing service measured. Crucially it is still **one question** — the row,
-/// the block sheet and the calendar write all read this and none of them knows or cares which
-/// source answered. A measured ETA arriving as a second code path would have meant three call sites
-/// each deciding when to trust which, and three chances to disagree about what a day looks like.
+/// ### Two sources, one question, and an honest silence
+/// The page asks ``travel(to:)`` and gets an answer. It is still **one question** — the row, the
+/// block sheet and the calendar write all read this and none of them decides anything. A measured
+/// ETA arriving as a second code path would have meant three call sites each deciding when to trust
+/// which, and three chances to disagree about what a day looks like.
 ///
-/// The order is fixed and the fallbacks are unconditional:
+/// The order is fixed:
 ///
 /// 1. a **fresh** measurement for this place, if estimates are on and one has arrived;
-/// 2. what the user said about this place;
-/// 3. the default nobody has changed.
+/// 2. what the user actually said about this place;
+/// 3. nothing at all, with the reason attached.
 ///
-/// Every step down is silent. A place that will not geocode, a phone with no signal, a permission
-/// that was refused — all of them land on a number that works, which is the whole reason the told
-/// number was never demoted to a fallback of last resort.
+/// ### Why the bottom of that list is nothing rather than a default
+/// Because it used to be fifteen minutes, and that was a number nobody had earned rendered in the
+/// same words, weight and confidence as one somebody had. The first person to use the feature read
+/// "leave by 5:45" off a meeting the app had never looked up, and asked how it knew. It did not.
+///
+/// A default is a fine starting position for a picker, where somebody is choosing; it is not a fine
+/// answer to "how long does this take". ``startingMinutes(for:)`` serves the first case and is the
+/// only remaining reader of ``defaultMinutes``.
 ///
 /// ### Why the told numbers persist and the measurements do not
 /// What somebody says about a journey is a fact about their life and survives a relaunch. A
@@ -82,18 +86,24 @@ public final class TravelPreferences {
             // report a drive as a walk until each one aged out.
             estimates.removeAll()
             refusals.removeAll()
+            lastFailures.removeAll()
         }
     }
 
     /// Measurements that have arrived, keyed by place. In memory only — see the type's note.
     private var estimates: [String: RouteEstimate] = [:]
 
-    /// When each place last refused, so the commonest case does not ask forever.
+    /// When each place may be asked about again, so the commonest case does not ask forever.
     ///
     /// A meeting room never geocodes and appears in a calendar five days a week, so without this
     /// every redraw of the page would spend a network call learning the same "no". See
-    /// ``RouteRules/retryDelay(after:)``.
+    /// ``RouteRules/retryAt(after:now:calendar:)``.
     private var refusals: [String: Date] = [:]
+
+    /// Why each place has no number, so the row can tell "nothing to say" from "I could not work
+    /// this out". Kept beside the retry time rather than folded into it, because the two answer
+    /// different questions — when to ask again, and what to show meanwhile.
+    private var lastFailures: [String: RouteFailure] = [:]
 
     /// Places with a question outstanding, so a scroll does not ask four times about one room.
     @ObservationIgnored private var inFlight: Set<String> = []
@@ -124,12 +134,21 @@ public final class TravelPreferences {
 
     // MARK: - Answering
 
-    /// How long to allow for a given place, and where the number came from.
+    /// How long to allow for a given place, and who says so.
     ///
-    /// The whole ordering lives here, in one place, so nothing downstream has to decide it.
-    public func travel(to location: String?) -> TravelNumber {
+    /// The whole ordering lives here, in one place, so nothing downstream has to decide it:
+    ///
+    /// 1. a **fresh** measurement, if estimates are on and one has arrived;
+    /// 2. what the user actually said about *this place*;
+    /// 3. nothing — and the reason, if there was one.
+    ///
+    /// Step three used to be the default fifteen minutes. It was the wrong answer and, worse, an
+    /// answer indistinguishable from the other two: the page rendered "leave by 5:45" under a
+    /// meeting nothing had ever looked up. The default is now the starting position of a picker in
+    /// the block sheet and never reaches the page as a claim. See ``TravelAnswer``.
+    public func travel(to location: String?) -> TravelAnswer {
         guard let location, case let key = TravelRules.placeKey(for: location), !key.isEmpty else {
-            return .told(defaultMinutes)
+            return .unknown(nil)
         }
 
         if isEstimating, let estimate = estimates[key],
@@ -137,15 +156,18 @@ public final class TravelPreferences {
             return .measured(estimate.minutes, transport: estimate.transport, at: estimate.measuredAt)
         }
 
-        return .told(minutesByPlace[key] ?? defaultMinutes)
+        if let told = minutesByPlace[key] { return .told(told) }
+
+        return .unknown(isEstimating ? lastFailures[key] : nil)
     }
 
-    /// How long to allow for a given place.
+    /// The number to start a picker at — never a number to render as a fact.
     ///
-    /// Unchanged in shape from before there was any such thing as a measurement, which is the point:
-    /// the page, the sheet and the calendar write ask exactly what they always asked.
-    public func minutes(to location: String?) -> Int {
-        travel(to: location).minutes
+    /// The block sheet needs *something* in its Length field the moment it opens, and there the
+    /// figure is a starting position somebody is about to adjust rather than a claim the app is
+    /// making. That is the only remaining use of ``defaultMinutes``.
+    public func startingMinutes(for location: String?) -> Int {
+        travel(to: location).minutes ?? defaultMinutes
     }
 
     // MARK: - Asking
@@ -195,14 +217,29 @@ public final class TravelPreferences {
         // disconnected from is the app ignoring them.
         guard isEstimating else { return }
 
+        let calendar = dateProvider.calendar
+
         switch answer {
-        case .success(let estimate):
+        case .success(var estimate):
+            // The provider measures; how long the answer lives is this layer's business, because it
+            // depends on the journey rather than on the route — see
+            // ``RouteRules/expiry(measuredAt:departingAt:calendar:)``. An adapter that decided this
+            // would have to know about the reader's day.
+            estimate.expiresAt = RouteRules.expiry(
+                measuredAt: estimate.measuredAt, departingAt: moment, calendar: calendar
+            )
             estimates[key] = estimate
             refusals.removeValue(forKey: key)
+            lastFailures.removeValue(forKey: key)
+
         case .failure(let failure):
             estimates.removeValue(forKey: key)
-            let delay = RouteRules.retryDelay(after: failure)
-            if delay > 0 { refusals[key] = dateProvider.now.addingTimeInterval(delay) }
+            lastFailures[key] = failure
+            if let retryAt = RouteRules.retryAt(
+                after: failure, now: dateProvider.now, calendar: calendar
+            ) {
+                refusals[key] = retryAt
+            }
         }
     }
 
@@ -240,6 +277,7 @@ public final class TravelPreferences {
         authorization = .notRequested
         estimates.removeAll()
         refusals.removeAll()
+        lastFailures.removeAll()
         inFlight.removeAll()
     }
 
@@ -274,6 +312,7 @@ public final class TravelPreferences {
         minutesByPlace.removeValue(forKey: key)
         estimates.removeValue(forKey: key)
         refusals.removeValue(forKey: key)
+        lastFailures.removeValue(forKey: key)
     }
 
     /// How many places have been answered for, which is the only thing Settings needs to say about
@@ -284,5 +323,6 @@ public final class TravelPreferences {
         minutesByPlace = [:]
         estimates.removeAll()
         refusals.removeAll()
+        lastFailures.removeAll()
     }
 }
