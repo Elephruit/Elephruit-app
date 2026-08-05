@@ -79,26 +79,6 @@ final class RemindersUITests: XCTestCase {
         )
     }
 
-    /// What is typed is saved, and lands in the list under it.
-    func testWritingAReminderAddsItToTheList() throws {
-        let app = launchOnReminders()
-
-        startNewReminder(app)
-        let title = composerTitle(app)
-        XCTAssertTrue(title.waitForExistence(timeout: 5))
-        title.typeText("Book the rehearsal room")
-        app.buttons["reminders.composer.done"].tap()
-
-        XCTAssertTrue(
-            app.staticTexts["Book the rehearsal room"].waitForExistence(timeout: 5),
-            "A committed reminder should appear in the list"
-        )
-        XCTAssertFalse(
-            composerTitle(app).exists,
-            "Done should close the composer"
-        )
-    }
-
     /// Cancelling writes nothing — the composer that a stray tap opened has to be free to leave.
     func testCancellingKeepsTheListUnchanged() throws {
         let app = launchOnReminders()
@@ -113,8 +93,13 @@ final class RemindersUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Never meant to write this"].exists)
     }
 
-    /// A row opens in place: the editor is the row, not a sheet over it.
-    func testTappingARowEditsItInline() throws {
+    /// The round trip: what is typed is saved, appears in the list, and opens in place.
+    ///
+    /// One test rather than two. A separate "writing adds it to the list" case asserted the
+    /// same save, the same list refresh and the same text — and could not assert the strongest
+    /// thing available, which is that reopening the row shows back exactly what was typed.
+    /// That equality is the real promise, so the test that can make it owns the whole trip.
+    func testWritingAReminderSavesItAndOpensItInPlace() throws {
         let app = launchOnReminders()
 
         startNewReminder(app)
@@ -124,7 +109,12 @@ final class RemindersUITests: XCTestCase {
         app.buttons["reminders.composer.done"].tap()
 
         let row = app.staticTexts["Return the library books"]
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            row.waitForExistence(timeout: 5),
+            "A committed reminder should appear in the list"
+        )
+        XCTAssertFalse(composerTitle(app).exists, "Done should close the composer")
+
         row.tap()
 
         let editor = composerTitle(app)
