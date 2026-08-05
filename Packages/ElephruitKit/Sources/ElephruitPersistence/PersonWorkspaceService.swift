@@ -576,7 +576,7 @@ public struct FillInPrompt: Sendable, Hashable, Identifiable {
 
     public var symbolName: String {
         switch kind {
-        case .missingName: "person.badge.questionmark"
+        case .missingName: "person.fill.questionmark"
         case .unconfirmedFact: "questionmark.circle"
         }
     }
