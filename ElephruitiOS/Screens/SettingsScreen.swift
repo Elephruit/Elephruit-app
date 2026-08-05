@@ -26,6 +26,7 @@ struct SettingsScreen: View {
     var body: some View {
         List {
             workdaySection
+            travelSection
             syncSection
             integrationsSection
             remindersListsSection
@@ -92,6 +93,52 @@ struct SettingsScreen: View {
                         : """
                         How much of your day is free is measured against these hours. Nobody has \
                         set them yet, so Elephruit is assuming \(workday.summary).
+                        """
+                )
+            }
+        }
+    }
+
+    /// How long the app should assume a journey takes, until it is told otherwise about a place.
+    ///
+    /// ### Why this is a setting and not a lookup
+    /// Because the alternative is a route lookup, which means a location permission, a network call
+    /// and somebody's whereabouts leaving the device — three promises this app makes about itself,
+    /// spent to turn "fifteen minutes" into "twelve". The number is the user's, and the app
+    /// remembers it per place so nobody has to give it twice for the same room.
+    @ViewBuilder
+    private var travelSection: some View {
+        if let services {
+            @Bindable var travel = services.travel
+
+            Section {
+                Picker("Allow", selection: $travel.defaultMinutes) {
+                    ForEach([5, 10, 15, 20, 30, 45, 60], id: \.self) { minutes in
+                        Text(DurationPhrase.exact(TimeInterval(minutes * 60))).tag(minutes)
+                    }
+                }
+                .accessibilityIdentifier("settings.travel.default")
+
+                if travel.rememberedPlaceCount > 0 {
+                    Button("Forget remembered places", role: .destructive) {
+                        travel.forgetAllPlaces()
+                    }
+                    .accessibilityIdentifier("settings.travel.forget")
+                }
+            } header: {
+                Text("Getting there")
+            } footer: {
+                Text(
+                    travel.rememberedPlaceCount > 0
+                        ? """
+                        Used for a place Elephruit has not been told about. It remembers what you \
+                        allow for each place — \(travel.rememberedPlaceCount) so far. Nothing about \
+                        where you are or where you are going ever leaves this device.
+                        """
+                        : """
+                        Used to say when to leave for a meeting somewhere. It remembers what you \
+                        allow for each place. Nothing about where you are or where you are going \
+                        ever leaves this device.
                         """
                 )
             }

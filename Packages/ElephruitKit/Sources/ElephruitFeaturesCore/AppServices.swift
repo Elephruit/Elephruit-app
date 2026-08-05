@@ -84,6 +84,10 @@ public final class AppServices {
     @ObservationIgnored
     public private(set) lazy var todayPreferences = TodayPreferences(defaults: defaults)
 
+    /// How long the user says it takes them to get places. Never measured, only told.
+    @ObservationIgnored
+    public private(set) lazy var travel = TravelPreferences(defaults: defaults)
+
     /// Where this machine's preferences live.
     ///
     /// Held rather than reached for, so a preview or a test can hand over a throwaway suite and not

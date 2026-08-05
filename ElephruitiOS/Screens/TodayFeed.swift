@@ -57,11 +57,6 @@ struct TodayFeedDayHeader: View {
             ),
             showsDivider: false
         ) {
-            Text(dayNumber)
-                .font(Theme.Text.rowTitle.weight(.semibold))
-                .monospacedDigit()
-                .foregroundStyle(Theme.Colors.secondaryText)
-        } content: {
             HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                     Text(dayName)
@@ -95,32 +90,41 @@ struct TodayFeedDayHeader: View {
         (services?.dateProvider ?? SystemDateProvider()).dayKey(for: plan.date)
     }
 
-    /// The date, in the column that always says *when*.
+    /// The date itself, which used to have a column of its own to the left of the rail.
     private var dayNumber: String {
         plan.date.formatted(.dateTime.day())
     }
 
-    /// "Tomorrow" once, and the weekday every day after.
+    /// "Yesterday" and "Tomorrow" once each, and the weekday every day beyond them.
     ///
-    /// Deliberately not "In 3 days" or "Next Thursday". A weekday is the name somebody already
-    /// plans in — a meeting is on Thursday, not on day four — and relative counting past tomorrow
-    /// makes the reader do arithmetic to find the day they were looking for. The month underneath
-    /// carries the rest, which is what keeps a bare weekday unambiguous ninety days out.
+    /// Deliberately not "In 3 days" or "Last Thursday". A weekday is the name somebody already
+    /// plans in — a meeting is on Thursday, not on day four — and relative counting past the two
+    /// neighbours makes the reader do arithmetic to find the day they were looking for. The date
+    /// underneath carries the rest, which is what keeps a bare weekday unambiguous either way.
     private var dayName: String {
-        guard let today = services?.dateProvider.startOfToday,
-              let tomorrow = calendar.date(byAdding: .day, value: 1, to: today),
-              calendar.isDate(plan.date, inSameDayAs: tomorrow)
-        else { return plan.date.formatted(.dateTime.weekday(.wide)) }
-        return "Tomorrow"
+        guard let today = services?.dateProvider.startOfToday else {
+            return plan.date.formatted(.dateTime.weekday(.wide))
+        }
+        for (offset, name) in [(1, "Tomorrow"), (-1, "Yesterday")] {
+            guard let neighbour = calendar.date(byAdding: .day, value: offset, to: today),
+                  calendar.isDate(plan.date, inSameDayAs: neighbour)
+            else { continue }
+            return name
+        }
+        return plan.date.formatted(.dateTime.weekday(.wide))
     }
 
-    /// The month, and the one word a glance needs when there is nothing under it.
+    /// The date, and the one word a glance needs when there is nothing under it.
+    ///
+    /// The day number joined the month here when the leading column went. It has to be *somewhere*
+    /// — a feed of weekdays ninety days long is unreadable without one — and under the weekday is
+    /// where a date belongs when it is no longer a column.
     ///
     /// No counts. Everything the day holds is drawn immediately below, so "3 meetings" above three
     /// meetings is the interface reading itself back to you.
     private var subtitle: String {
-        let month = plan.date.formatted(.dateTime.month(.wide))
-        return plan.hasContent ? month : "\(month) · Clear"
+        let date = "\(dayNumber) \(plan.date.formatted(.dateTime.month(.wide)))"
+        return plan.hasContent ? date : "\(date) · Clear"
     }
 }
 
@@ -132,6 +136,9 @@ struct TodayFeedEventLine: View {
 
     let dayEvent: DayEvent
 
+    /// See ``Timeline/timeWidth`` for why this is scaled here rather than fixed there.
+    @ScaledMetric(relativeTo: .caption) private var timeWidth: CGFloat = Timeline.timeWidth
+
     var body: some View {
         TimelineRow(
             badge: Timeline.Badge(
@@ -140,16 +147,21 @@ struct TodayFeedEventLine: View {
                 isCompact: true
             )
         ) {
-            Text(timeText)
-                .font(Theme.Text.metadata)
-                .monospacedDigit()
-                .foregroundStyle(Theme.Colors.secondaryText)
-        } content: {
-            Text(dayEvent.event.displayTitle)
-                .font(Theme.Text.rowSubtitle)
-                .foregroundStyle(Theme.Colors.primaryText)
-                .strikethrough(dayEvent.event.isCancelled, color: Theme.Colors.tertiaryText)
-                .lineLimit(1)
+            // One line, so the time shares it — in a column of its own width, or a run of summary
+            // lines jags every time an hour gains a digit.
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
+                Text(timeText)
+                    .font(Theme.Text.metadata)
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .frame(width: timeWidth, alignment: .leading)
+
+                Text(dayEvent.event.displayTitle)
+                    .font(Theme.Text.rowSubtitle)
+                    .foregroundStyle(Theme.Colors.primaryText)
+                    .strikethrough(dayEvent.event.isCancelled, color: Theme.Colors.tertiaryText)
+                    .lineLimit(1)
+            }
         }
         .opacity(dayEvent.event.isCancelled ? 0.6 : 1)
         .accessibilityElement(children: .combine)
@@ -169,6 +181,9 @@ struct TodayFeedTaskLine: View {
     let task: DayTask
     let item: Item
 
+    /// See ``Timeline/timeWidth`` for why this is scaled here rather than fixed there.
+    @ScaledMetric(relativeTo: .caption) private var timeWidth: CGFloat = Timeline.timeWidth
+
     var body: some View {
         TimelineRow(
             badge: Timeline.Badge(
@@ -177,20 +192,21 @@ struct TodayFeedTaskLine: View {
                 isCompact: true
             )
         ) {
-            // A reminder with a time of its own belongs on the clock beside the meetings. One
-            // without has nothing to put here, and an empty column is honest where a glyph
-            // repeating the badge would not be.
-            if let pinned = task.pinnedAt {
-                Text(pinned.formatted(date: .omitted, time: .shortened))
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.small) {
+                // A reminder with a time of its own lines up with the meetings above it. One
+                // without leaves the column empty, which is honest — most work has no hour, and
+                // inventing one for the sake of a straight edge is the agenda telling a lie.
+                Text(task.pinnedAt.map { $0.formatted(date: .omitted, time: .shortened) } ?? "")
                     .font(Theme.Text.metadata)
                     .monospacedDigit()
                     .foregroundStyle(Theme.Colors.tertiaryText)
+                    .frame(width: timeWidth, alignment: .leading)
+
+                Text(item.displayTitle)
+                    .font(Theme.Text.rowSubtitle)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .lineLimit(1)
             }
-        } content: {
-            Text(item.displayTitle)
-                .font(Theme.Text.rowSubtitle)
-                .foregroundStyle(Theme.Colors.secondaryText)
-                .lineLimit(1)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
@@ -207,6 +223,64 @@ struct TodayFeedTaskLine: View {
     private var accessibilityLabel: String {
         guard let reason = task.primaryReason else { return item.displayTitle }
         return "\(item.displayTitle), \(reason.label)"
+    }
+}
+
+// MARK: - The start of the run
+
+/// What sits above today: the way into the days behind it, or the far end of them.
+///
+/// ### Why the first one is a press and the rest are a scroll
+/// Because today is the top of this page. There is nothing above it to scroll *through*, so the
+/// gesture that would ask for the past — dragging down at the top — is already spoken for by pull
+/// to refresh, and a page where one drag means two things is a page that does the wrong one. So the
+/// first step back is a control, and once there is history above, reaching the top of it pages the
+/// way the bottom of the feed does.
+struct TodayFeedHeader: View {
+    let isShowingPast: Bool
+    let isExtending: Bool
+    let canLoadMore: Bool
+    let reveal: () -> Void
+
+    var body: some View {
+        // No line at all until there is history above: this row sits above the briefing, which is
+        // about the day rather than in it, and the thread does not start until the first entry. Once
+        // days *are* above, the line starts here and runs down into them.
+        TimelineRow(railStyle: isShowingPast ? .head : .none, showsDivider: false) {
+            HStack {
+                Spacer()
+                content
+                Spacer()
+            }
+            .contentShape(Rectangle())
+        }
+        .opacity(isShowingPast && !isExtending && canLoadMore ? 0.4 : 1)
+        // Named on the control, and the row told to keep its children reachable: a container that
+        // owns an identifier hides everything inside it, which is exactly where the button is.
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if !isShowingPast {
+            Button(action: reveal) {
+                Label("Earlier days", systemImage: "chevron.up")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(AccessibilityID.Today.showPreviousDays)
+        } else if !canLoadMore {
+            // Said, rather than left as a scroll that silently stops.
+            Text("Three months back is as far as this looks.")
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.tertiaryText)
+                .multilineTextAlignment(.center)
+        } else {
+            ProgressView()
+                .controlSize(.small)
+                .accessibilityLabel("Loading earlier days")
+        }
     }
 }
 

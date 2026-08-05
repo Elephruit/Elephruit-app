@@ -84,16 +84,14 @@ struct TodayGatheringRow: View {
                 badge: Timeline.Badge(symbolName: "person.2", tint: Theme.Colors.selection),
                 showsDivider: !isExpanded
             ) {
-                Text(isAllDay ? "All day" : startAt.formatted(date: .omitted, time: .shortened))
-                    .font(Theme.Text.metadata)
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.Colors.secondaryText)
-            } content: {
                 Button(action: toggle) {
                     HStack(spacing: Theme.Spacing.small) {
                         VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
                             faces
-                            Text(title)
+                            // The time joins the title on one line, now that the gutter it used to
+                            // sit in is gone. They belong together anyway: "4:00 PM · Roadmap sync"
+                            // is how somebody says it out loud.
+                            Text("\(when) · \(title)")
                                 .font(Theme.Text.rowSubtitle)
                                 .foregroundStyle(Theme.Colors.secondaryText)
                                 .lineLimit(1)
@@ -153,8 +151,11 @@ struct TodayGatheringRow: View {
         .accessibilityHidden(true)
     }
 
+    private var when: String {
+        isAllDay ? "All day" : startAt.formatted(date: .omitted, time: .shortened)
+    }
+
     private var summary: String {
-        let when = isAllDay ? "All day" : startAt.formatted(date: .omitted, time: .shortened)
         let names = ListPhrase.joined(people.map(\.name))
         return "\(when), \(title), with \(names)"
     }

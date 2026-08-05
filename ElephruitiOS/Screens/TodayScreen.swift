@@ -56,13 +56,69 @@ private struct TodayContent: View {
     /// identifier so it survives a reassembly — a reload must not close what somebody opened.
     @State private var expandedGatherings: Set<String> = []
 
+    /// The gap or the task the block sheet is up about, if it is up.
+    @State private var blocking: BlockTimeSubject?
+
+    /// Whether a development launch has already been given the history it asked for.
+    ///
+    /// One-shot for the same reason the sheet below is: pressing "Today" closes the past again, the
+    /// window token changes, and a flag-driven reveal that re-reads the argument would open it
+    /// straight back up — a page that cannot be returned to now, which is exactly what it broke.
+    @State private var hasOpenedReviewPast = false
+
+    /// Whether a development launch has already had its sheet.
+    ///
+    /// Once per launch, not once per change. Without this, writing anything from the sheet changes
+    /// the library, which changes the source token, which opens the sheet again over the page the
+    /// write was meant to reveal — which is exactly how a passing test started failing.
+    @State private var hasOpenedReviewSheet = false
+
     /// How close to the end the scroll has to get before the next week is asked for.
     ///
     /// About a screen. Less and the feed visibly stops before it continues; more and a flick that
     /// was never going to reach the bottom has already spent a calendar read.
     private static let pagingReach: CGFloat = 600
 
+    /// How much of the page's strength a day that is over keeps.
+    private static let pastDimming: CGFloat = 0.55
+
+    /// Whether today's first and last rows have been drawn.
+    ///
+    /// Both start false, and that is the fix rather than the cautious default. Today is taller than
+    /// the window, so its *end* is below the fold on arrival and a list never realises it — a flag
+    /// that started true therefore stayed true forever, and the page believed today was on screen
+    /// from a month away. What keeps the pill from flashing at launch is the day below, which is
+    /// unset until something has actually been seen.
+    @State private var topEdgeVisible = false
+    @State private var bottomEdgeVisible = false
+
+    /// The day that most recently came into view.
+    ///
+    /// ### Why this and not the geometry
+    /// The first version measured where today's edges sat in the scroll view and compared that with
+    /// the window's height. It reported that today was on screen from three weeks away, because a
+    /// `List` recycles the rows it has scrolled past: the markers stopped being asked, their last
+    /// answers stayed in state, and the page went on believing them. Anything derived from a row's
+    /// *position* has that hole in it.
+    ///
+    /// What a recycled row can still say is "I have just come into view", which is the one event it
+    /// is guaranteed to be alive for. So each day says so as it arrives, and the page keeps the last
+    /// one — which also answers *which way* today is, by comparing dates instead of offsets.
+    @State private var visibleDay: Date?
+
+    /// Whether the next arrival of earlier days is the first, which is the one time the page moves.
+    @State private var isFirstRevealOfPast = false
+
+    private static let todayTopID = "today.anchor.top"
+    private static let todayBottomID = "today.anchor.bottom"
+
     var body: some View {
+        ScrollViewReader { proxy in
+            page(proxy)
+        }
+    }
+
+    private func page(_ proxy: ScrollViewProxy) -> some View {
         List {
             if let failure = model.failure {
                 TimelineRow(
@@ -79,7 +135,10 @@ private struct TodayContent: View {
             }
 
             if let plan = model.selectedPlan {
+                earlierFeed
+                todayEdge(id: Self.todayTopID) { topEdgeVisible = $0 }
                 daySections(plan, isAnchor: true)
+                todayEdge(id: Self.todayBottomID) { bottomEdgeVisible = $0 }
                 upcomingFeed
             } else if model.isLoadingInitially {
                 HStack {
@@ -115,18 +174,55 @@ private struct TodayContent: View {
             guard remaining < Self.pagingReach else { return }
             model.extendFuture()
         }
+        // Days arriving above the viewport move nothing under the thumb, and that is the *List's*
+        // doing rather than this page's — it holds the visible row still and grows upward behind it.
+        // Proved by accident: the first version of this reveal scrolled to yesterday by hand and
+        // appeared to do nothing at all, because the list had already stayed exactly where it was.
+        // A hand-written restore on top of that is worse than redundant — it re-pins the reader to
+        // one row every time a week loads, which turns scrolling into the past into hitting a wall.
+        //
+        // What does need saying is the first reveal: somebody who pressed "Earlier days" has to see
+        // the days they asked for, so the page steps up to the oldest of them.
+        .onChange(of: model.previousDays.count) { _, _ in
+            // A development launch asking for a deeper past keeps asking until it has one — and
+            // only while its one reveal is still in progress.
+            if let wanted = TodayReviewLaunch.earlierDays(),
+               hasOpenedReviewPast, model.isShowingPreviousDays, model.pastDayCount < wanted {
+                askForEarlierDays()
+            }
+
+            guard isFirstRevealOfPast, let earliest = model.previousDays.first else { return }
+            isFirstRevealOfPast = false
+
+            // Deferred by a frame: the rows exist as values the moment the count changes, but the
+            // list has not laid out the ones above the viewport yet, and a `scrollTo` aimed at a row
+            // it has not realised does nothing — silently, which is how this first read as "the
+            // button is broken".
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(80))
+                withCalmAnimation(Theme.Motion.standard) {
+                    proxy.scrollTo(dayRowID(earliest.date), anchor: .top)
+                }
+            }
+        }
         .refreshable {
             // Honest refresh: re-reads the calendar, which genuinely can have changed
             // underneath the app. The library itself needs no pulling — it is local.
             await model.reload()
         }
+        // Two ways back, because they answer at different moments. The toolbar is where somebody
+        // *looks* for it; the pill is under the thumb that scrolled away, and it says which way.
+        .overlay(alignment: .bottom) {
+            if !isTodayOnScreen { backToNow(proxy) }
+        }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                if !model.isOnToday {
-                    Button("Today") {
-                        withCalmAnimation(Theme.Motion.standard) { model.returnToToday() }
-                    }
-                    .accessibilityIdentifier("today.return")
+                // Shown when the page is standing on another day *or* when today has been scrolled
+                // out of sight. The second case is new and is most of them: the anchor has not
+                // changed, the reader has simply run three weeks down the feed.
+                if !model.isOnToday || !isTodayOnScreen {
+                    Button("Today") { returnToNow(proxy) }
+                        .accessibilityIdentifier("today.return")
                 }
                 Menu {
                     Button("Previous Day", systemImage: "chevron.backward") {
@@ -144,20 +240,114 @@ private struct TodayContent: View {
                 }
             }
         }
+        .sheet(item: $blocking) { subject in
+            BlockTimeSheet(
+                actions: actions,
+                plan: subject.plan,
+                slot: subject.slot,
+                task: subject.task,
+                travel: subject.travel
+            )
+        }
         // The same two-token drive as the Mac: the window token reloads the calendar,
         // the source token reassembles from memory. See `TodayModel` for why they differ.
-        .task(id: model.windowToken) { await model.reload() }
-        .onChange(of: model.sourceToken) { _, _ in model.assemble() }
-        // A day is a horizontal thing: swipe back and forward through it.
-        .gesture(
-            DragGesture(minimumDistance: 40)
-                .onEnded { value in
-                    guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                    withCalmAnimation(Theme.Motion.standard) {
-                        model.step(days: value.translation.width < 0 ? 1 : -1)
-                    }
-                }
-        )
+        .task(id: model.windowToken) {
+            await model.reload()
+            if TodayReviewLaunch.earlierDays() != nil, !hasOpenedReviewPast, !model.isShowingPreviousDays {
+                hasOpenedReviewPast = true
+                askForEarlierDays()
+            }
+        }
+        // Animated, because one of the things that changes the source token is this page writing to
+        // the calendar. A block written as busy takes back the free time it was made from, so the
+        // thread reassembles under the thumb that just wrote it. That is honest, and it must not
+        // read as a glitch.
+        .onChange(of: model.sourceToken) { _, _ in
+            withCalmAnimation(Theme.Motion.standard) { model.assemble() }
+            openBlockSheetIfReviewing()
+        }
+        // The horizontal day-swipe is gone, and the feed is why. It existed when this page showed
+        // one day and moving to another meant replacing it; now tomorrow is simply further down and
+        // yesterday is further up, so the swipe was a second, less obvious way to do what the scroll
+        // already does — while competing for the same gesture as the rows' own swipe actions. The
+        // toolbar's Previous and Next Day remain for anyone who wants to *stand on* another day.
+    }
+
+    /// Whether any part of the anchor day is on screen.
+    ///
+    /// Three ways of being on screen, and the third is the one a single flag would miss: today is
+    /// taller than the window, so somebody reading the middle of it can see neither end. What they
+    /// *have* seen most recently is today, and that is what the last visible day says.
+    private var isTodayOnScreen: Bool {
+        if topEdgeVisible || bottomEdgeVisible { return true }
+        guard let visibleDay, let calendar = services?.dateProvider.calendar else { return true }
+        return calendar.isDate(visibleDay, inSameDayAs: model.selectedDate)
+    }
+
+    /// Whether today lies below what is on screen, which is what makes the pill's arrow honest.
+    private var isTodayBelow: Bool {
+        guard let visibleDay else { return false }
+        return visibleDay < model.selectedDate
+    }
+
+    /// A one-point row marking where today begins and ends, so the page can tell whether the day is
+    /// on screen without asking every row in it.
+    private func todayEdge(id: String, report: @escaping (Bool) -> Void) -> some View {
+        Color.clear
+            .frame(height: 1)
+            .id(id)
+            // Realisation, not visibility. `onScrollVisibilityChange` never fired once for these
+            // rows — a `List` is not the scroll view the modifier is documented against — and the
+            // page spent three attempts believing a signal that was never sent. Appearing and
+            // disappearing is the one thing a list cell definitely does.
+            .onAppear {
+                report(true)
+                visibleDay = model.selectedDate
+            }
+            .onDisappear { report(false) }
+            .onTimeline()
+    }
+
+    /// The pill that says which way now is.
+    ///
+    /// It says the direction because "Today" alone is a button whose result is a surprise: from
+    /// three weeks ahead the page has to travel up, from last month it has to travel down, and an
+    /// arrow is the cheapest possible way to stop that being a guess.
+    private func backToNow(_ proxy: ScrollViewProxy) -> some View {
+        Button {
+            returnToNow(proxy)
+        } label: {
+            Label("Today", systemImage: isTodayBelow ? "arrow.down" : "arrow.up")
+                .font(Theme.Text.metadata.weight(.semibold))
+                .padding(.horizontal, Theme.Spacing.medium)
+                .padding(.vertical, Theme.Spacing.small)
+                .background(Theme.Colors.selection, in: Capsule())
+                .foregroundStyle(Theme.Colors.onAccent)
+        }
+        .buttonStyle(.plain)
+        .elevation(.floating)
+        // Clear of the shell's floating plus, which owns the bottom trailing corner.
+        .padding(.bottom, Theme.Spacing.section)
+        .transition(.opacity)
+        .accessibilityIdentifier("today.backToNow")
+    }
+
+    /// Takes the reader back to now, which is usually a scroll rather than a change of day.
+    ///
+    /// ### Why the history is left loaded
+    /// Because "back to today" is a statement about where you are *looking*, not a request to
+    /// forget what you opened. Resetting the window at the same time removed every row above today
+    /// while the scroll to it was still in flight, and the page landed wherever the collapse left
+    /// it — which was never today. Standing on another day is the one case that really is a
+    /// different page, and only that one rebuilds.
+    private func returnToNow(_ proxy: ScrollViewProxy) {
+        guard model.isOnToday else {
+            withCalmAnimation(Theme.Motion.standard) { model.returnToToday() }
+            return
+        }
+        withCalmAnimation(Theme.Motion.standard) {
+            proxy.scrollTo(Self.todayTopID, anchor: .top)
+        }
     }
 
     // MARK: - A day, in full
@@ -210,26 +400,7 @@ private struct TodayContent: View {
         }
 
         ForEach(model.followingDays) { plan in
-            TodayFeedDayHeader(plan: plan, isExpanded: model.isExpanded(plan)) {
-                withCalmAnimation(Theme.Motion.standard) { model.toggleExpanded(plan) }
-            }
-            .onTimeline()
-
-            // Closed, the day is its own summary. Open, the full sections carry it — drawing both
-            // would put every meeting on the screen twice.
-            if model.isExpanded(plan) {
-                daySections(plan, isAnchor: false)
-            } else {
-                let calendar = services?.dateProvider.calendar ?? .current
-
-                ForEach(plan.scheduleEvents(calendar: calendar)) { event in
-                    TodayFeedEventLine(dayEvent: event).onTimeline()
-                }
-
-                ForEach(model.openTasks(in: plan), id: \.day.id) { entry in
-                    TodayFeedTaskLine(task: entry.day, item: entry.item).onTimeline()
-                }
-            }
+            feedDay(plan)
         }
 
         if model.selectedPlan != nil {
@@ -239,6 +410,94 @@ private struct TodayContent: View {
             )
             .onTimeline()
         }
+    }
+
+    // MARK: - The days before it
+
+    /// The run of days above the one you are standing on.
+    ///
+    /// ### Why the past is dimmed and the line with it
+    /// Because it is the same page and it is not the same *kind* of information. A day that is over
+    /// cannot be planned, only read, and drawing it at full strength above today makes the page open
+    /// on a record rather than on a plan. Dimming the rows says "this is behind you"; fading the
+    /// rail says the thread itself is older up there, which the rows alone cannot say — a
+    /// full-strength line running up through three grey days reads as somebody having turned the
+    /// lights down rather than as time.
+    @ViewBuilder
+    private var earlierFeed: some View {
+        TodayFeedHeader(
+            isShowingPast: model.isShowingPreviousDays,
+            isExtending: model.isExtendingPast,
+            canLoadMore: model.canLoadEarlierDays,
+            reveal: { askForEarlierDays() }
+        )
+        .environment(\.timelineIsPast, true)
+        // The top of the page pages itself, but on *reaching* it rather than on being near it.
+        //
+        // The feed below uses proximity, and doing the same here ran the window straight back to
+        // its ninety-day ceiling in one gesture: each load leaves the reader where they were with
+        // the new days above them, so "near the top" is true again immediately, and a week of clear
+        // days is barely four hundred points tall. Reaching this row converges instead — after a
+        // load it is a week further up, and asking again means scrolling to it again.
+        .onAppear {
+            guard model.isShowingPreviousDays else { return }
+            askForEarlierDays()
+        }
+        .onTimeline()
+
+        ForEach(model.previousDays) { plan in
+            feedDay(plan)
+                .opacity(Self.pastDimming)
+                .environment(\.timelineIsPast, true)
+        }
+    }
+
+    /// One day of a feed: its marker, and either its summary or the whole day opened out.
+    ///
+    /// The same builder above today and below it. A day behind you and a day ahead of you are the
+    /// same object read in two directions, and giving them two renderings is how a page ends up
+    /// meaning different things at its two ends.
+    @ViewBuilder
+    private func feedDay(_ plan: DayPlan) -> some View {
+        TodayFeedDayHeader(plan: plan, isExpanded: model.isExpanded(plan)) {
+            withCalmAnimation(Theme.Motion.standard) { model.toggleExpanded(plan) }
+        }
+        .id(dayRowID(plan.date))
+        // Each day says when it arrives, which is how the page knows where the reader is without
+        // asking a recycled row where it used to be.
+        .onAppear { visibleDay = plan.date }
+        .onTimeline()
+
+        // Closed, the day is its own summary. Open, the full sections carry it — drawing both
+        // would put every meeting on the screen twice.
+        if model.isExpanded(plan) {
+            daySections(plan, isAnchor: false)
+        } else {
+            let calendar = services?.dateProvider.calendar ?? .current
+
+            ForEach(plan.scheduleEvents(calendar: calendar)) { event in
+                TodayFeedEventLine(dayEvent: event).onTimeline()
+            }
+
+            ForEach(model.openTasks(in: plan), id: \.day.id) { entry in
+                TodayFeedTaskLine(task: entry.day, item: entry.item).onTimeline()
+            }
+        }
+    }
+
+    /// Asks for the days behind, noting whether this is the first time.
+    ///
+    /// The guard against asking twice for the same week is the model's, so a run of scroll events
+    /// costs one calendar read rather than one each.
+    private func askForEarlierDays() {
+        guard model.canLoadEarlierDays, !model.isExtendingPast else { return }
+
+        isFirstRevealOfPast = !model.isShowingPreviousDays
+        model.extendPast()
+    }
+
+    private func dayRowID(_ date: Date) -> String {
+        "day:" + (services?.dateProvider.dayKey(for: date) ?? "\(date.timeIntervalSinceReferenceDate)")
     }
 
     // MARK: - Briefing
@@ -391,7 +650,11 @@ private struct TodayContent: View {
             ForEach(rows) { row in
                 switch row {
                 case .event(let event):
-                    TodayEventRow(dayEvent: event)
+                    TodayEventRow(
+                        dayEvent: event,
+                        travelMinutes: travelMinutes(for: event),
+                        onTravel: { blocking = .travel(event, plan) }
+                    )
                         .contentShape(Rectangle())
                         .onTapGesture {
                             shell.push(.event(event.event.identity.storageKey))
@@ -409,7 +672,14 @@ private struct TodayContent: View {
                         }
                         .onTimeline()
                 case .free(let slot):
-                    TodayFreeSlotRow(slot: slot).onTimeline()
+                    TodayFreeSlotRow(slot: slot)
+                        .contentShape(Rectangle())
+                        .onTapGesture { blocking = .slot(slot, plan) }
+                        // Said, because the row does not look like a button and should not: it is a
+                        // gap in a line. What it can do has to be spoken instead of drawn.
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint("Block this time")
+                        .onTimeline()
                 }
             }
         }
@@ -477,6 +747,45 @@ private struct TodayContent: View {
         }
     }
 
+    /// Opens the block sheet on the first gap of the day, when a development launch asked for it.
+    ///
+    /// Driven off the source token rather than off the first reload, and refusing to open until the
+    /// calendar has answered: a day assembled before the events arrive has one enormous gap where
+    /// the whole working afternoon is, and photographing *that* would be photographing a state no
+    /// user ever sees.
+    private func openBlockSheetIfReviewing() {
+        guard !hasOpenedReviewSheet,
+              blocking == nil,
+              let subject = TodayReviewLaunch.blockSheet(),
+              services?.calendar.calendars.isEmpty == false,
+              let plan = model.selectedPlan
+        else { return }
+
+        switch subject {
+        case .gap:
+            guard let slot = plan.briefing.focus.slots.first else { return }
+            blocking = .slot(slot, plan)
+        case .work:
+            guard let entry = model.openTasks(in: plan).first(where: { $0.day.pinnedAt == nil })
+            else { return }
+            blocking = .task(entry.item, plan)
+        }
+        hasOpenedReviewSheet = true
+    }
+
+    /// How long to allow for getting to an event, or `nil` when the page should say nothing.
+    ///
+    /// Nothing is said for a video call, for an all-day entry, or once the moment to leave has
+    /// passed — a "leave by 9:45" under a meeting you are already late for is a reproach rather
+    /// than a plan. See ``TravelRules`` for why each of those is a refusal rather than an omission.
+    private func travelMinutes(for event: DayEvent) -> Int? {
+        guard let services else { return nil }
+        let minutes = services.travel.minutes(to: event.event.locationName)
+        guard TravelRules.isWorthSaying(event.event, minutes: minutes, now: services.dateProvider.now)
+        else { return nil }
+        return minutes
+    }
+
     private func openMeetingNotes(_ event: DayEvent) {
         guard let services else { return }
         services.perform {
@@ -525,6 +834,14 @@ private struct TodayContent: View {
                         } label: {
                             Label("This Evening", systemImage: "moon")
                         }
+
+                        // The same sheet the gaps open, arriving from the other direction: from
+                        // work looking for room rather than from room looking for work.
+                        Button {
+                            blocking = .task(entry.item, plan)
+                        } label: {
+                            Label("Block Time", systemImage: "shield")
+                        }
                     }
                     .contextMenu { taskMenu(entry.item, plan: plan) }
                     .onTimeline()
@@ -539,6 +856,9 @@ private struct TodayContent: View {
         }
         Button("Start Timer", systemImage: "play.circle") {
             actions.startTimer(on: task)
+        }
+        Button("Block Time", systemImage: "shield") {
+            blocking = .task(task, plan)
         }
         Button(
             task.isFlagged ? "Remove Flag" : "Flag",
@@ -748,30 +1068,21 @@ private struct TodayFreeSlotRow: View {
         // read, it is the absence of one, and drawing it as a gap in the line says so before a
         // single word is read.
         TimelineRow(railStyle: .dashed) {
-            Text(slot.isCurrent ? "Now" : slot.range.lowerBound.formatted(date: .omitted, time: .shortened))
-                .font(Theme.Text.metadata)
-                .monospacedDigit()
-                .foregroundStyle(Theme.Colors.tertiaryText)
-        } content: {
-            // "15m free · until 10:00 AM". Not the whole range: the column to the left has already
-            // said when it starts, and "9:45 AM │ 15m free · 9:45 AM – 10:00 AM" says it twice.
-            Text("\(slot.durationSummary) free · until \(endLabel)")
+            // Both ends of it, now that no column to the left is saying where it starts.
+            // `rangeSummary` already knows to say "until 4:00 PM" for a stretch under way, where a
+            // start time in the past is a number the reader has to subtract from before it means
+            // anything.
+            Text("\(slot.durationSummary) free · \(slot.rangeSummary)")
                 .font(Theme.Text.rowSubtitle)
                 .foregroundStyle(Theme.Colors.secondaryText)
                 .lineLimit(1)
         }
         .accessibilityElement(children: .combine)
-        // Spoken with both ends, unlike the drawn row: a combined element is read as one sentence,
-        // so there is no column to the left to have already said when it starts.
         .accessibilityLabel("\(slot.durationSummary) free, \(slot.rangeSummary)")
         // Named so a test can count the gaps without matching on their text. Scanning labels for
         // "free" finds the briefing's line at the top of the page as well, and a predicate walking
         // the whole hierarchy of a long list is slow enough to time the test out.
         .accessibilityIdentifier("today.freeSlot")
-    }
-
-    private var endLabel: String {
-        slot.range.upperBound.formatted(date: .omitted, time: .shortened)
     }
 }
 
@@ -872,6 +1183,12 @@ private struct TodayAwarenessRow: View {
 private struct TodayEventRow: View {
     let dayEvent: DayEvent
 
+    /// How long the user says it takes to get there, when this is somewhere to go and there is
+    /// still time to set off. `nil` draws no line at all.
+    var travelMinutes: Int?
+
+    var onTravel: () -> Void = {}
+
     var body: some View {
         TimelineRow(
             badge: Timeline.Badge(
@@ -879,23 +1196,15 @@ private struct TodayEventRow: View {
                 tint: Theme.Palette.color(named: dayEvent.event.calendarColorName)
             )
         ) {
-            VStack(alignment: .trailing, spacing: 0) {
-                if dayEvent.event.isAllDay {
-                    Text("All day")
-                        .font(Theme.Text.metadata)
-                        .foregroundStyle(Theme.Colors.secondaryText)
-                } else {
-                    Text(dayEvent.event.startAt.formatted(date: .omitted, time: .shortened))
-                        .font(Theme.Text.metadata)
-                        .monospacedDigit()
-                    Text(dayEvent.event.endAt.formatted(date: .omitted, time: .shortened))
-                        .font(Theme.Text.metadata)
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.Colors.tertiaryText)
-                }
-            }
-        } content: {
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+                // When, above what — the line the eye runs down when it is looking for a time
+                // rather than for a name. It used to be a column of its own to the left of the
+                // rail; see `Timeline` for why the page is better off without one.
+                Text(whenLine)
+                    .font(Theme.Text.metadata)
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.Colors.secondaryText)
+
                 Text(dayEvent.event.displayTitle)
                     .font(Theme.Text.rowTitle)
                     .strikethrough(dayEvent.event.isCancelled)
@@ -906,6 +1215,25 @@ private struct TodayEventRow: View {
                         .font(Theme.Text.rowSubtitle)
                         .foregroundStyle(Theme.Colors.secondaryText)
                         .lineLimit(1)
+                }
+
+                if let travelMinutes {
+                    // Subordinate to the meeting rather than a row of its own: it is a fact *about*
+                    // this entry, and giving it a place on the thread would make a day of four
+                    // meetings look like a day of eight things.
+                    Button(action: onTravel) {
+                        Label(
+                            TravelRules.summary(
+                                leavingAt: TravelRules.leaveBy(dayEvent.event, minutes: travelMinutes),
+                                minutes: travelMinutes
+                            ),
+                            systemImage: "figure.walk"
+                        )
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.selection)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("today.travel")
                 }
 
                 if dayEvent.hasConflict {
@@ -923,7 +1251,17 @@ private struct TodayEventRow: View {
             }
         }
         .opacity(dayEvent.event.isCancelled ? 0.6 : 1)
-        .accessibilityElement(children: .combine)
+        // Contained rather than combined, because the row now holds a control. A container that owns
+        // its children speaks as one sentence and takes their controls with it, which is a "leave
+        // by" line nobody can press.
+        .accessibilityElement(children: .contain)
+    }
+
+    /// "9:30 AM – 9:45 AM", or the one word an all-day entry has instead.
+    private var whenLine: String {
+        guard !dayEvent.event.isAllDay else { return "All day" }
+        return dayEvent.event.startAt.formatted(date: .omitted, time: .shortened)
+            + " – " + dayEvent.event.endAt.formatted(date: .omitted, time: .shortened)
     }
 }
 
@@ -939,26 +1277,29 @@ private struct TodayTaskRow: View {
     let day: DayTask
     let toggle: () -> Void
 
+    /// Whether the circle is filled in.
+    ///
+    /// Read from the record rather than kept here, so the fill appears the moment the task is
+    /// completed and stays right if the same task is completed from somewhere else.
+    private var isCompleted: Bool { task.status == .completed }
+
     var body: some View {
         TimelineRow(
+            // The mark on the thread *is* the checkbox. Everywhere else the badge says what kind of
+            // thing a row is; for work, the only thing worth saying is whether it is done, and a
+            // circle on the line saying it is one mark instead of two.
+            //
+            // Outlined in the reason's own colour, so a page of work still reads as late, due, or
+            // merely chosen without a word being read. Completed, it fills and takes a check —
+            // the same colour, now solid, which is what "done" has looked like since paper.
             badge: Timeline.Badge(
-                symbolName: day.primaryReason?.symbolName ?? "circle",
-                tint: tint
-            )
+                symbolName: isCompleted ? "checkmark" : nil,
+                tint: tint,
+                isHollow: !isCompleted
+            ),
+            badgeAction: toggle,
+            badgeLabel: isCompleted ? "Reopen \(task.displayTitle)" : "Complete \(task.displayTitle)"
         ) {
-            // The completion circle takes the column that a time takes on a meeting: the leading
-            // column is always "when, or who", and for work you have chosen to do today the honest
-            // answer is neither — it is whether it is done.
-            Button(action: toggle) {
-                Image(systemName: "circle")
-                    .font(Theme.Text.rowTitle)
-                    .foregroundStyle(Theme.Colors.secondaryText)
-                    .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Complete \(task.displayTitle)")
-        } content: {
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 Text(task.displayTitle)
                     .font(Theme.Text.rowTitle)
@@ -1001,7 +1342,47 @@ struct TodayPersonRow: View {
     /// sibling — the rail runs plain behind them instead, which is what subordinate reads as.
     var isNested: Bool = false
 
+    /// How many stated facts are worth carrying into a room.
+    ///
+    /// Three. One is a decoration and everything a record holds is a dossier; three is what
+    /// somebody can actually keep in mind while saying hello.
+    private static let visibleFacts = 3
+
+    /// Whether this page may say what it knows about somebody.
+    ///
+    /// A Calendar Set can turn it off — the one a person switches into before sharing their screen
+    /// in a meeting. Their name and why they are on the day stay, because those are on the invitation
+    /// anyway; when you last spoke, what you owe each other, and anything remembered about them do
+    /// not.
+    private var showsContext: Bool {
+        services?.calendar.activeSet?.showsPersonContext ?? true
+    }
+
+    /// "Last spoke 3 weeks ago · 2 open items with them", when either is true.
+    ///
+    /// One line rather than two, because they are one thought — how this relationship stands —
+    /// and a row that spends four lines on one person pushes the rest of the day off the screen.
+    private var history: String? {
+        var parts: [String] = []
+
+        if let moment = person.lastContact, moment.isContact, let services {
+            parts.append("Last \(moment.kindDescription) \(moment.relativeDescription(using: services.dateProvider))")
+        }
+        // Spelled out rather than inflected: automatic inflection is a `LocalizedStringKey` trick,
+        // and this is a `String` being assembled from parts, where the markup would print itself.
+        let open = person.openTaskIDs.count
+        if open > 0 {
+            parts.append(open == 1 ? "1 open item with them" : "\(open) open items with them")
+        }
+
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     var body: some View {
+        // No face on this row any more. It used to sit in a gutter *outside* the rail, which put a
+        // person's initials beside the day rather than in it — and their colour is already on the
+        // badge, where every other row says what kind of thing it is. Faces still belong to the
+        // gathering row, where four of them at a glance answer "who am I with at four".
         TimelineRow(
             badge: isNested
                 ? nil
@@ -1010,10 +1391,6 @@ struct TodayPersonRow: View {
                     tint: Theme.Palette.color(named: person.colorName)
                 )
         ) {
-            // A face where a time would be. Same column, same promise: this says *who*.
-            PersonAvatar(name: person.name, colorName: person.colorName)
-                .accessibilityHidden(true)
-        } content: {
             HStack(spacing: Theme.Spacing.small) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                     Text(person.name)
@@ -1030,11 +1407,24 @@ struct TodayPersonRow: View {
                             .foregroundStyle(Theme.Colors.secondaryText)
                             .lineLimit(1)
                     }
-                    if let fact = person.quickFacts.first {
-                        Text(fact)
-                            .font(Theme.Text.metadata)
-                            .foregroundStyle(Theme.Colors.tertiaryText)
-                            .lineLimit(1)
+
+                    if showsContext {
+                        if let history {
+                            Text(history)
+                                .font(Theme.Text.metadata)
+                                .foregroundStyle(Theme.Colors.secondaryText)
+                                .lineLimit(1)
+                        }
+
+                        // Three rather than one. A single fact is a decoration; three are a
+                        // briefing, and the assembler has already filtered out anything sensitive
+                        // and anything it merely inferred — see `DailyPlanService.quickFacts(from:)`.
+                        ForEach(person.quickFacts.prefix(Self.visibleFacts), id: \.self) { fact in
+                            Text(fact)
+                                .font(Theme.Text.metadata)
+                                .foregroundStyle(Theme.Colors.tertiaryText)
+                                .lineLimit(2)
+                        }
                     }
                 }
 

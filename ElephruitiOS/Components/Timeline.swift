@@ -11,37 +11,38 @@ import SwiftUI
 /// sequence you are moving through, and it lets a gap be drawn as *a gap in the line* rather than as
 /// a row that happens to say "free".
 ///
-/// ### The three columns, and what each is for
+/// ### The two columns, and what each is for
 /// Every row has the same skeleton, and the skeleton is the whole reason the page reads as one
 /// thing:
 ///
-/// - **Leading** — *when, or who.* A time, a completion circle, a face. Never a title.
-/// - **The rail** — *what kind of thing this is,* as one badge sitting on the line.
-/// - **Content** — everything else.
+/// - **The rail**, at the left edge — *what kind of thing this is,* as one badge sitting on the
+///   line. On a piece of work the badge is also the control that finishes it.
+/// - **Content** — everything else, including *when*.
+///
+/// ### Why the time is no longer a column of its own
+/// It was: a 64-point gutter to the left of the rail held a time, a face or a completion circle,
+/// and the rail floated in the middle of the page with a third of the width behind it. Two things
+/// were wrong with that. The gutter was mostly empty — only meetings and timed reminders had
+/// anything to put in it — so the page paid a permanent column for an occasional fact. And a face
+/// in the gutter put a person's initials *outside* the line that is meant to hold everything the
+/// day contains, which reads as a marginal note rather than as an entry.
+///
+/// So the rail moved to the edge, the gutter went, and the time became the first thing the content
+/// says. The line now runs down the side of the page the way a margin rule does, and everything is
+/// on it.
 ///
 /// A row that breaks the skeleton breaks the page, which is why the geometry is here as constants
 /// and not as numbers typed into each row.
 enum Timeline {
-    /// The column that holds a time or a face. Trailing-aligned, so times form a straight edge
-    /// against the rail however wide they are.
-    ///
-    /// ### Why every user of this scales it
-    /// 64 points is what "10:00 AM" needs in monospaced caption digits at the standard text size,
-    /// and the number is not a guess: 56 was tried, it fit "9:30 AM", and it split every
-    /// double-digit hour onto two lines — which the first live screenshot of this page caught. So
-    /// the column is a *seed* for a `@ScaledMetric` in each view that draws it, never a fixed width,
-    /// or the same wrap comes back the moment somebody raises their text size.
-    static let leadingWidth: CGFloat = 64
-
     /// The rail's own column. The line runs down its centre and badges are centred on the line.
     static let railWidth: CGFloat = 40
 
-    /// The margin before the leading column starts.
+    /// The margin before the rail.
     ///
-    /// Without it a nine-thirty sits three points off the edge of the screen. The first screenshot
-    /// of the rail had every time in the day pressed against the bezel, which reads as text that
-    /// escaped rather than a column that was placed.
-    static let leadingInset: CGFloat = Theme.Spacing.large
+    /// Small on purpose: this is a margin rule, and a rule that is not near the margin is just a
+    /// line through the middle of the page. Not zero, because a badge touching the bezel reads as
+    /// something that has slipped off the edge.
+    static let railInset: CGFloat = Theme.Spacing.small
 
     static let badgeSize: CGFloat = 26
 
@@ -65,6 +66,11 @@ enum Timeline {
         /// Time with nothing in it. The line goes dashed, so free time is legible as a gap in the
         /// day at a glance rather than as another row to read.
         case dashed
+        /// The first entry: the line starts at the badge and runs on down.
+        ///
+        /// The mirror of ``tail``, and it says the same thing at the other end — a thread that
+        /// begins at the top of the screen promises something above it that is not there.
+        case head
         /// The last entry: the line runs in from above and stops at the badge.
         ///
         /// A thread that runs on past its final row promises something below it that is not there,
@@ -74,6 +80,23 @@ enum Timeline {
         /// No line at all — for a row that is not part of the day, like a failure.
         case none
     }
+
+    /// The width a time gets when it shares a line with a title, so a run of summary lines has its
+    /// titles on one edge rather than jagging with every hour that gains a digit.
+    ///
+    /// ### Why every user of this scales it
+    /// 64 points is what "10:00 AM" needs in monospaced caption digits at the standard text size,
+    /// and the number is not a guess: 56 was tried, it fit "9:30 AM", and it split every
+    /// double-digit hour onto two lines — which the first live screenshot of this page caught. So
+    /// it is a *seed* for a `@ScaledMetric` in each view that draws it, never a fixed width, or the
+    /// same wrap comes back the moment somebody raises their text size.
+    static let timeWidth: CGFloat = 64
+
+    /// The tap target a badge gets when it is also a control.
+    ///
+    /// Larger than the badge and larger than the rail: 26 points is a legible mark and an unfair
+    /// target, and the overhang costs nothing because it is a shape rather than a drawing.
+    static let controlSize: CGFloat = 44
 
     /// What sits on the line: a symbol in a filled circle, ringed in the page's own colour so the
     /// line appears to pass behind it rather than through it.
@@ -129,53 +152,74 @@ enum Timeline {
     }
 }
 
+/// Whether these rows belong to a day that is over.
+///
+/// An environment value rather than a parameter on every row, because it is a fact about a *run* of
+/// rows — a whole day behind today — and threading it through eight row types would mean eight
+/// chances to forget it on one of them.
+private struct TimelinePastKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var timelineIsPast: Bool {
+        get { self[TimelinePastKey.self] }
+        set { self[TimelinePastKey.self] = newValue }
+    }
+}
+
 /// One entry on the thread.
 ///
 /// The rail is drawn to the row's full height and the padding lives on the columns beside it, so
 /// consecutive rows join into an unbroken line with nothing to align by hand.
-struct TimelineRow<Leading: View, Content: View>: View {
+struct TimelineRow<Content: View>: View {
     var railStyle: Timeline.RailStyle = .solid
     var badge: Timeline.Badge?
+
+    /// What pressing the badge does, when pressing it does anything.
+    ///
+    /// Only work has this. A meeting's badge says what kind of thing it is and nothing more, but a
+    /// task's badge is the same circle a to-do list has always had, sitting where the thread already
+    /// draws one — so it may as well *be* the control rather than have a second circle beside it.
+    var badgeAction: (() -> Void)?
+
+    /// What the badge control is called, for anyone who cannot see a circle change colour.
+    var badgeLabel: String?
+
     /// Whether a hairline closes the row off. The last row of the day does not need one.
     var showsDivider: Bool = true
-    @ViewBuilder var leading: () -> Leading
     @ViewBuilder var content: () -> Content
 
-    /// Widens with the text it holds rather than wrapping a time mid-digit. See
-    /// ``Timeline/leadingWidth`` for why this is scaled everywhere and fixed nowhere.
-    @ScaledMetric(relativeTo: .caption) private var leadingWidth: CGFloat = Timeline.leadingWidth
+    @Environment(\.timelineIsPast) private var isPast
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
-            // Backed by `Color.clear` so the column exists whatever the caller puts in it.
-            //
-            // This is not belt and braces; it is the fix for a bug found twice. `EmptyView` takes
-            // no part in layout, so a `.frame(width:)` around one is discarded and the column
-            // vanishes — and a caller does not have to *pass* `EmptyView` to hit it, only to write
-            // an `if` with no `else`, which is what an untimed reminder's empty gutter looks like.
-            // Reserving the width here means no row can lose the gutter by accident.
-            // `.topTrailing`, not `.trailing`: a `ZStack`'s horizontal alignment says nothing about
-            // the vertical one, and the default centres. Against a tall row — a meeting with a
-            // location, a conflict and three names — a centred time drifts to the middle of a block
-            // it is supposed to be labelling the top of.
-            ZStack(alignment: .topTrailing) {
-                Color.clear
-                leading()
-            }
-            .frame(width: leadingWidth, alignment: .trailing)
-            .padding(.leading, Timeline.leadingInset)
-            .padding(.top, Theme.Spacing.medium)
-
             ZStack(alignment: .top) {
                 rail
                 if let badge {
-                    badge.padding(.top, Theme.Spacing.small)
+                    if let badgeAction {
+                        Button(action: badgeAction) {
+                            badge
+                                .frame(width: Timeline.controlSize, height: Timeline.controlSize)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(badgeLabel ?? "")
+                        // Offset rather than padded: the target is taller than the badge, and
+                        // padding it down would push the *whole* control below the line the badge is
+                        // meant to sit on.
+                        .offset(y: Theme.Spacing.small + Timeline.badgeSize / 2 - Timeline.controlSize / 2)
+                    } else {
+                        badge.padding(.top, Theme.Spacing.small)
+                    }
                 }
             }
             .frame(width: Timeline.railWidth)
+            .padding(.leading, Timeline.railInset)
 
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, Theme.Spacing.tight)
                 .padding(.top, Theme.Spacing.medium)
                 .padding(.bottom, Theme.Spacing.medium)
                 .padding(.trailing, Theme.Spacing.large)
@@ -190,6 +234,15 @@ struct TimelineRow<Leading: View, Content: View>: View {
         .background(Theme.Colors.contentBackground)
     }
 
+    /// The line's own colour, fainter behind a day that is over.
+    ///
+    /// Dimming the rows is not enough on its own: the thread is what makes the page one thing, and a
+    /// full-strength line running up through three greyed days says the days are the same and
+    /// somebody turned the lights down. A fading line says the thread is *older* up there.
+    private var railColor: Color {
+        isPast ? Theme.Colors.separator.opacity(0.4) : Theme.Colors.separator
+    }
+
     @ViewBuilder
     private var rail: some View {
         switch railStyle {
@@ -198,21 +251,28 @@ struct TimelineRow<Leading: View, Content: View>: View {
         case .solid:
             TimelineLine()
                 .stroke(
-                    Theme.Colors.separator,
+                    railColor,
                     style: StrokeStyle(lineWidth: Timeline.lineWidth)
                 )
                 .frame(maxHeight: .infinity)
         case .dashed:
             TimelineLine()
                 .stroke(
-                    Theme.Colors.separator,
+                    railColor,
                     style: StrokeStyle(lineWidth: Timeline.lineWidth, dash: [3, 4])
+                )
+                .frame(maxHeight: .infinity)
+        case .head:
+            TimelineLine(startingAt: Timeline.badgeCentreY)
+                .stroke(
+                    railColor,
+                    style: StrokeStyle(lineWidth: Timeline.lineWidth)
                 )
                 .frame(maxHeight: .infinity)
         case .tail:
             TimelineLine(stoppingAt: Timeline.badgeCentreY)
                 .stroke(
-                    Theme.Colors.separator,
+                    railColor,
                     style: StrokeStyle(lineWidth: Timeline.lineWidth)
                 )
                 .frame(maxHeight: .infinity)
@@ -227,35 +287,17 @@ struct TimelineRow<Leading: View, Content: View>: View {
 /// variants from the same path is also what guarantees the solid and dashed rails sit on exactly
 /// the same axis — a half-point of drift between them would read as a kink in the thread.
 private struct TimelineLine: Shape {
+    /// How far down to begin. `nil` starts at the top of the row.
+    var startingAt: CGFloat?
+
     /// How far down to draw. `nil` runs the whole height.
     var stoppingAt: CGFloat?
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.move(to: CGPoint(x: rect.midX, y: startingAt.map { rect.minY + $0 } ?? rect.minY))
         path.addLine(to: CGPoint(x: rect.midX, y: stoppingAt.map { rect.minY + $0 } ?? rect.maxY))
         return path
-    }
-}
-
-/// A row with nothing to say in the leading column — an all-day entry, a note.
-///
-/// Safe to hand `EmptyView` here because ``TimelineRow`` backs the column with `Color.clear` itself;
-/// see the note there for why that is load-bearing rather than defensive.
-extension TimelineRow where Leading == EmptyView {
-    init(
-        railStyle: Timeline.RailStyle = .solid,
-        badge: Timeline.Badge? = nil,
-        showsDivider: Bool = true,
-        @ViewBuilder content: @escaping () -> Content
-    ) {
-        self.init(
-            railStyle: railStyle,
-            badge: badge,
-            showsDivider: showsDivider,
-            leading: { EmptyView() },
-            content: content
-        )
     }
 }
 
@@ -270,19 +312,17 @@ struct TimelineHeader<Trailing: View>: View {
     var identifier: String?
     @ViewBuilder var trailing: () -> Trailing
 
-    /// The same scaled column as the rows, so a header's rail sits on the rows' rail at every text
-    /// size. A fixed width here and a scaled one there is a thread with a kink in it.
-    @ScaledMetric(relativeTo: .caption) private var leadingWidth: CGFloat = Timeline.leadingWidth
+    @Environment(\.timelineIsPast) private var isPast
 
     var body: some View {
         HStack(alignment: .center, spacing: 0) {
-            Color.clear
-                .frame(width: leadingWidth)
-                .padding(.leading, Timeline.leadingInset)
-
             TimelineLine()
-                .stroke(Theme.Colors.separator, style: StrokeStyle(lineWidth: Timeline.lineWidth))
+                .stroke(
+                    isPast ? Theme.Colors.separator.opacity(0.4) : Theme.Colors.separator,
+                    style: StrokeStyle(lineWidth: Timeline.lineWidth)
+                )
                 .frame(width: Timeline.railWidth)
+                .padding(.leading, Timeline.railInset)
 
             HStack {
                 Text(title)
@@ -294,6 +334,7 @@ struct TimelineHeader<Trailing: View>: View {
                 Spacer()
                 trailing()
             }
+            .padding(.leading, Theme.Spacing.tight)
             .padding(.top, Theme.Spacing.large)
             .padding(.bottom, Theme.Spacing.small)
             .padding(.trailing, Theme.Spacing.large)

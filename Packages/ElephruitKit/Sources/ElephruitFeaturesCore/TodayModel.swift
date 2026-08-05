@@ -30,9 +30,17 @@ public final class TodayModel {
 
     /// Whether the days before the selected one are on screen.
     ///
-    /// Off by default and behind a deliberate control. Yesterday is not a plan; it is a record, and
+    /// Off by default and behind a deliberate act. Yesterday is not a plan; it is a record, and
     /// putting it above today means opening the app and reading what you already did.
     public private(set) var isShowingPreviousDays = false
+
+    /// How many days before the selected one are drawn, once they have been asked for.
+    ///
+    /// Grows the way the future does, and for the same reason: a page that can be scrolled into the
+    /// past has no button to stop pressing. What is different is the starting point — the future
+    /// begins loaded because tomorrow is part of planning today, and the past begins at nothing
+    /// because it is not.
+    public private(set) var pastDayCount = 0
 
     /// How many days after the selected one are drawn compactly.
     public private(set) var futureDayCount = TodayModel.initialFutureDayCount
@@ -45,7 +53,8 @@ public final class TodayModel {
     public private(set) var expandedEventID: String?
 
     public static let initialFutureDayCount = 4
-    static let previousDayCount = 3
+    /// How much history the first ask reveals — enough to see the last few days, not a month.
+    public static let previousDayCount = 3
     public static let dayLoadIncrement = 7
 
     /// How far ahead the window is ever allowed to reach.
@@ -56,6 +65,14 @@ public final class TodayModel {
     /// somebody looks at it. Three months is past the horizon anybody plans against on a phone,
     /// and it is a span EventKit answers for without complaint.
     public static let maximumFutureDayCount = 90
+
+    /// How far back the window is ever allowed to reach.
+    ///
+    /// The same ceiling as the future, for the same reason: every extension re-reads the calendar
+    /// for the whole span. Three months is also as far back as this page can be *useful* — beyond
+    /// it somebody is looking for a particular day, and the place to find one of those is the
+    /// calendar, not a scroll.
+    public static let maximumPastDayCount = 90
 
     // MARK: What it found
 
@@ -140,8 +157,12 @@ public final class TodayModel {
         guard !calendar.isDate(day, inSameDayAs: selectedDate) else { return }
         selectedDate = day
         // The window travels with the selection, so the days after it are the days after *it* rather
-        // than the days after wherever the page was opened.
+        // than the days after wherever the page was opened. The past travels too, and back to
+        // nothing: three weeks of history loaded around Tuesday are not history around Friday, and
+        // carrying them would make every day-step re-read a span nobody is looking at.
         futureDayCount = Self.initialFutureDayCount
+        pastDayCount = 0
+        isShowingPreviousDays = false
         expandedDays = []
         expandedEventID = nil
     }
@@ -154,14 +175,46 @@ public final class TodayModel {
     public func returnToToday() {
         select(today)
         isShowingPreviousDays = false
+        pastDayCount = 0
     }
 
     public func showPreviousDays() {
         isShowingPreviousDays = true
+        pastDayCount = max(pastDayCount, Self.previousDayCount)
     }
 
     public func hidePreviousDays() {
         isShowingPreviousDays = false
+        pastDayCount = 0
+    }
+
+    /// Whether there is any more past to ask for.
+    public var canLoadEarlierDays: Bool {
+        pastDayCount < Self.maximumPastDayCount
+    }
+
+    /// Whether a longer run of history has been asked for and not yet drawn.
+    ///
+    /// The mirror of ``isExtendingFuture``, and read from the days themselves for the same reason: a
+    /// flag has to be cleared on every path that can end an assembly, including the ones that fail,
+    /// and a flag left set is a feed that has stopped paging.
+    public var isExtendingPast: Bool {
+        previousDays.count < pastDayCount
+    }
+
+    /// Ask for another week behind, if the last week asked for has arrived.
+    ///
+    /// What scrolling up calls. The first call is the one that opens the past at all — before it,
+    /// nothing behind today is loaded, which is what keeps arriving at this page free of a question
+    /// nobody asked.
+    public func extendPast() {
+        guard !isExtendingPast, canLoadEarlierDays else { return }
+
+        guard isShowingPreviousDays else {
+            showPreviousDays()
+            return
+        }
+        pastDayCount = min(Self.maximumPastDayCount, pastDayCount + Self.dayLoadIncrement)
     }
 
     /// Whether there is any more future to ask for.
@@ -215,6 +268,10 @@ public final class TodayModel {
     public struct WindowToken: Equatable {
         var date: Date
         var showsPrevious: Bool
+        /// How far back it reaches. Part of the token because asking for another week of history is
+        /// a change to *which dates* the calendar is being asked about — which is the whole job of
+        /// this token, and leaving it out is a feed that grows its count and never loads the days.
+        var pastCount: Int
         var futureCount: Int
         var calendarIsEnabled: Bool
     }
@@ -223,6 +280,7 @@ public final class TodayModel {
         WindowToken(
             date: selectedDate,
             showsPrevious: isShowingPreviousDays,
+            pastCount: pastDayCount,
             futureCount: futureDayCount,
             calendarIsEnabled: services.calendar.isEnabled
         )
@@ -336,14 +394,14 @@ public final class TodayModel {
     }
 
     private var firstVisibleDay: Date {
-        guard isShowingPreviousDays,
-              let earlier = calendar.date(byAdding: .day, value: -Self.previousDayCount, to: selectedDate)
+        guard isShowingPreviousDays, pastDayCount > 0,
+              let earlier = calendar.date(byAdding: .day, value: -pastDayCount, to: selectedDate)
         else { return selectedDate }
         return earlier
     }
 
     private var visibleDayCount: Int {
-        (isShowingPreviousDays ? Self.previousDayCount : 0) + 1 + futureDayCount
+        (isShowingPreviousDays ? pastDayCount : 0) + 1 + futureDayCount
     }
 
     // MARK: - Reading records
