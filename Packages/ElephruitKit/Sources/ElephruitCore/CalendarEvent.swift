@@ -117,6 +117,20 @@ public struct CalendarEventSummary: Sendable, Hashable, Identifiable {
     public var accountName: String?
 
     public var locationName: String?
+
+    /// Where the location actually is, when the organizer picked a place rather than typing one.
+    ///
+    /// ### Why a read type may hold this and a draft may not
+    /// EventKit already knows this — `EKEvent.structuredLocation` carries a `CLLocation` whenever the
+    /// place came from a picker — and carrying it here is what lets a route lookup skip geocoding a
+    /// string that is already resolved. That is strictly less guessing, not more.
+    ///
+    /// It goes on the *read* projection and stays off ``EventDraft``, which is the line that matters:
+    /// the app can be told where a meeting is, and still has no way to write a coordinate into
+    /// somebody's calendar. `nil` for the ordinary event whose location is a line of text.
+    public var locationLatitude: Double?
+    public var locationLongitude: Double?
+
     public var notes: String?
     public var url: URL?
 
@@ -170,6 +184,8 @@ public struct CalendarEventSummary: Sendable, Hashable, Identifiable {
         calendarColorName: String? = nil,
         accountName: String? = nil,
         locationName: String? = nil,
+        locationLatitude: Double? = nil,
+        locationLongitude: Double? = nil,
         notes: String? = nil,
         url: URL? = nil,
         status: EventStatus = .none,
@@ -196,6 +212,8 @@ public struct CalendarEventSummary: Sendable, Hashable, Identifiable {
         self.calendarColorName = calendarColorName
         self.accountName = accountName
         self.locationName = locationName
+        self.locationLatitude = locationLatitude
+        self.locationLongitude = locationLongitude
         self.notes = notes
         self.url = url
         self.status = status

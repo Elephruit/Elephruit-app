@@ -1,17 +1,18 @@
 import Foundation
 
-/// Getting to the things on the day, without asking anybody where you are.
+/// Getting to the things on the day.
 ///
-/// ### Why this stage knows nothing about maps
-/// Because "leave by a quarter to" is useful, needs no permission, and cannot be wrong in the way a
-/// wrong ETA is wrong. A route lookup means a location service, a network call, and an address
-/// leaving the device — all of which this app promises not to do without being asked — and it can
-/// still tell somebody with total confidence that they have twenty minutes when the line is down.
+/// ### This stage still knows nothing about maps, and that is now a division of labour
+/// It recognises which entries are somewhere you have to *go*, and subtracts however long the
+/// journey takes. Where that number comes from is not its business: for a long time the only source
+/// was the user, and ``RouteRules`` has since added a measured one that the user can switch on.
+/// Neither changes the arithmetic here, which is the point of the split — a wrong ETA and a wrong
+/// guess produce the same "leave by", and only one of them costs a location permission.
 ///
-/// So the first version does the honest, boring thing: it recognises which entries are somewhere you
-/// have to *go*, and subtracts however long the user says that takes. The number is theirs, which is
-/// why it is never wrong in a way they cannot fix, and remembering it per place is what stops them
-/// having to say it twice about the same room.
+/// The told number remains the floor rather than a fallback of last resort. It needs no permission,
+/// no network, and no map, it is never wrong in a way its owner cannot fix, and remembering it per
+/// place is what stops anybody saying it twice about the same room. A measurement is allowed to
+/// improve on it and is never required to exist.
 public enum TravelRules {
     /// The buffer used until somebody says otherwise.
     ///
@@ -68,6 +69,18 @@ public enum TravelRules {
     public static func summary(leavingAt moment: Date, minutes: Int) -> String {
         "Leave by " + moment.formatted(date: .omitted, time: .shortened)
             + " · " + DurationPhrase.exact(TimeInterval(minutes * 60))
+    }
+
+    /// The same line, saying so when the number was measured rather than given.
+    ///
+    /// "Leave by 9:45 AM · 12 min drive" against "Leave by 9:45 AM · 15 min". One word, and it is
+    /// the difference between a figure the app looked up and a figure its owner supplied. Drawing
+    /// them identically would let a guess borrow a measurement's authority, which matters most
+    /// exactly when the measurement is unavailable and nobody has been told.
+    public static func summary(leavingAt moment: Date, travel: TravelNumber) -> String {
+        let base = summary(leavingAt: moment, minutes: travel.minutes)
+        guard case .measured(_, let transport, _) = travel else { return base }
+        return base + " " + transport.journeyNoun
     }
 
     /// What a block of travel is called on the calendar.
