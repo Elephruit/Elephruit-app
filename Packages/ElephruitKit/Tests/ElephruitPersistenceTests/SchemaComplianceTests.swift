@@ -87,7 +87,7 @@ struct SchemaComplianceTests {
     /// whether a migrating launch takes a backup.
     @Test("Schema version is reported for archives and diagnostics")
     func schemaVersionIsReadable() {
-        #expect(CurrentSchema.versionString == "0.0.16")
+        #expect(CurrentSchema.versionString == "0.0.17")
     }
 
     /// The constraint table from `docs/05-cloudkit-and-migrations.md`, scanned rather than

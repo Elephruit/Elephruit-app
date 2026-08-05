@@ -495,6 +495,31 @@ public enum SchemaV16: VersionedSchema {
     }
 }
 
+/// The seventeenth schema: the working day belongs to the person, not to the device.
+///
+/// Adds one table, `WorkdaySettingsRecord`, with no relationships and every attribute defaulted.
+///
+/// ### Why a table and not a preference
+/// Working hours already existed — on ``CalendarSetRecord``, editable only from the Mac's calendar
+/// set editor — and which set is *active* is a per-device `UserDefaults` key. So a phone with no set
+/// chosen on that phone resolved to `WorkingHours.standard` and measured "how much of today is free"
+/// against nine-to-five, Monday-to-Friday, which nobody had said and nobody could see. The fix is an
+/// app-level default that syncs, with a set continuing to override it while one is active. A
+/// preference would have reproduced the bug on the next device.
+///
+/// ### Why lightweight inference is still right
+/// The same argument as every version since `SchemaV4`: a new entity, no rename, no type change, and
+/// nothing computed from old data at migration time. A store opened under this version gains an
+/// empty table, and an empty table reads as "nobody has said", which is exactly what was true before
+/// the migration ran. ADR 0005's model-type freeze stays unpulled.
+public enum SchemaV17: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 17) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV16.models + [WorkdaySettingsRecord.self]
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -507,7 +532,7 @@ public enum SchemaV16: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV16.self]
+        [SchemaV17.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -527,9 +552,9 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV16.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV17.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV16.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV17.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {

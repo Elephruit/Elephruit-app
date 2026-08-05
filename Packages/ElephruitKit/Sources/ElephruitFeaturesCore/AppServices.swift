@@ -100,6 +100,9 @@ public final class AppServices {
     public let eventTemplates: EventTemplateService
     public let eventLinks: EventAnnotationService
 
+    /// When the user works. See ``workday`` for the resolved answer, which is what surfaces read.
+    public let workdayHours: WorkdayService
+
     // MARK: The Reminders module
 
     /// Every way a reminder or project work record can change.
@@ -223,6 +226,15 @@ public final class AppServices {
     /// I/O operation and so a test can hand in a registry without touching the user's preferences.
     public var shortcuts: ShortcutRegistry {
         didSet { shortcuts.save(to: .standard) }
+    }
+
+    /// When the user works, and where that answer came from.
+    ///
+    /// The one place any surface should ask. Reaching for `calendar.activeSet?.workingHours` instead
+    /// is how the briefing and the settings screen end up disagreeing about the same afternoon — and
+    /// how the phone spent its first release measuring free time against hours nobody had chosen.
+    public var workday: WorkdayHours {
+        workdayHours.resolved(activeSet: calendar.activeSet)
     }
 
     /// Whether Home offers follow-up suggestions.
@@ -471,6 +483,7 @@ public final class AppServices {
         )
         self.calendarSets = calendarSets
         self.eventTemplates = EventTemplateService(context: context, dateProvider: dateProvider)
+        self.workdayHours = WorkdayService(context: context, dateProvider: dateProvider)
 
         let eventLinks = EventAnnotationService(context: context, items: items, dateProvider: dateProvider)
         self.eventLinks = eventLinks
