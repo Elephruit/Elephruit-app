@@ -6,7 +6,7 @@ import Observation
 /// The iPhone's top-level places.
 ///
 /// ### Why a sidebar rather than a tab bar
-/// A tab bar holds five slots, and this app has thirteen places worth naming. The old shell
+/// A tab bar holds five slots, and this app has fourteen places worth naming. The old shell
 /// paid for that shortfall twice: four modules got a tab, and everything else — the calendar,
 /// notes, time, bookmarks, the inbox, the archive, the trash — got filed behind a row called
 /// "Library", which is not a place but an apology for the tab bar's arithmetic. A drawer has
@@ -22,6 +22,7 @@ import Observation
 /// of a tab bar that then switches instantly.
 enum MobileDestination: String, Hashable, CaseIterable, Codable {
     case today
+    case projects
     case calendar
     case reminders
     case records
@@ -41,8 +42,17 @@ enum MobileDestination: String, Hashable, CaseIterable, Codable {
     /// where sessions start; the modules a day is worked in follow; the holding pens — inbox,
     /// archive, trash — come after the work rather than among it; search and settings sit at the
     /// foot where a utility belongs.
+    ///
+    /// **Projects is a band of its own, above the modules**, which is where the Mac's sidebar
+    /// puts the projects tree. `AppModule.displayOrder` deliberately omits `.projects` because on
+    /// the Mac a module *swaps the sidebar away*, and doing that to projects takes the list you
+    /// switch projects with along with it. That argument does not carry to a phone: here every
+    /// place is a screen you enter, including Today, and the drawer is one swipe from all of them
+    /// — so a row costs projects nothing that it does not also cost the calendar. What does carry
+    /// is the ranking, and this is it: your own structure sits above the app's furniture.
     static let groups: [[MobileDestination]] = [
         [.today],
+        [.projects],
         [.calendar, .reminders, .records, .notes, .time, .areas, .bookmarks],
         [.inbox, .archive, .trash],
         [.search, .settings],
@@ -51,6 +61,7 @@ enum MobileDestination: String, Hashable, CaseIterable, Codable {
     var title: String {
         switch self {
         case .today: "Today"
+        case .projects: "Projects"
         case .calendar: "Calendar"
         case .reminders: "Reminders"
         case .records: "Records"
@@ -71,6 +82,7 @@ enum MobileDestination: String, Hashable, CaseIterable, Codable {
     var symbolName: String {
         switch self {
         case .today: "sun.horizon"
+        case .projects: "square.stack.3d.up"
         case .calendar: "calendar"
         case .reminders: "bell"
         case .records: "person.text.rectangle"
@@ -91,6 +103,7 @@ enum MobileDestination: String, Hashable, CaseIterable, Codable {
     var hint: String {
         switch self {
         case .today: "What today asks of you, most urgent first."
+        case .projects: "Work with an outcome and an end."
         case .calendar: "Your days, laid out, and everything you know about them."
         case .reminders: "Things to remember, when they matter, and what you chose for today."
         case .records: "People and things, with their notes, history, and shared work."
