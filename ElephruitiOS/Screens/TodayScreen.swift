@@ -274,7 +274,13 @@ private struct TodayContent: View {
         // but the row itself was quietly booked against the guess. A day holds a handful of events
         // and `refreshEstimate` refuses everything not worth asking, so asking about all of them is
         // cheaper than the bug.
-        .task(id: model.sourceToken) {
+        //
+        // Keyed on more than the day, because the day is not the only thing that changes the answer.
+        // Turning route estimates on in Settings changes nothing the source token watches — it is
+        // the library and the calendar — so the page a reader comes back to kept its guesses and
+        // measured nothing, and the switch appeared to do nothing at all. Same for changing how you
+        // travel, which invalidates every answer on hand.
+        .task(id: travelTrigger) {
             await measureTravelForTheDay()
             // After the measuring, not alongside the assembly, and for the reason the sheet already
             // waits on the calendar: a review launch exists to photograph what a user sees, and a
@@ -792,7 +798,7 @@ private struct TodayContent: View {
             guard let event = plan.scheduleEvents(calendar: calendar).first(where: {
                 TravelRules.isWorthSaying(
                     $0.event,
-                    minutes: services?.travel.minutes(to: $0.event.locationName)
+                    minutes: services?.travel.startingMinutes(for: $0.event.locationName)
                         ?? TravelRules.defaultMinutes,
                     now: services?.dateProvider.now ?? .now
                 )
@@ -808,15 +814,47 @@ private struct TodayContent: View {
     /// passed — a "leave by 9:45" under a meeting you are already late for is a reproach rather
     /// than a plan. See ``TravelRules`` for why each of those is a refusal rather than an omission.
     ///
-    /// Whether the number was measured or given is decided in ``TravelPreferences``, and this does
-    /// not look: it asks the same question it always asked and draws whatever comes back.
-    private func travel(for event: DayEvent) -> TravelNumber? {
+    /// Whether the number was measured, given, or missing is decided in ``TravelPreferences``, and
+    /// this does not look: it asks the same question it always asked and draws whatever comes back.
+    ///
+    /// A journey with no number is still returned, because "we could not work this out" can be worth
+    /// saying — see ``TravelAnswer/invitesAnAnswer``.
+    ///
+    /// The zero is deliberate rather than a stand-in for missing. ``TravelRules/leaveBy(_:minutes:)``
+    /// clamps to at least a minute, so a journey nobody has a number for stops being mentioned one
+    /// minute before the meeting begins — which is the right moment for an offer to set a travel
+    /// time to disappear, and the same rule the measured line already follows.
+    private func travel(for event: DayEvent) -> TravelAnswer? {
         guard let services else { return nil }
         let travel = services.travel.travel(to: event.event.locationName)
         guard TravelRules.isWorthSaying(
-            event.event, minutes: travel.minutes, now: services.dateProvider.now
+            event.event, minutes: travel.minutes ?? 0, now: services.dateProvider.now
         ) else { return nil }
         return travel
+    }
+
+    /// Everything that changes which journeys need measuring, or what their answers would be.
+    ///
+    /// The day, obviously — but also whether measuring is switched on at all and how the reader says
+    /// they travel, neither of which the source token watches. Both are settings on another screen,
+    /// which is exactly why they were missed: nothing about *this* page changes when they do.
+    ///
+    /// And which days are open, because opening one out of the feed is the moment its journeys
+    /// become visible and therefore the moment they become worth asking about.
+    private var travelTrigger: TravelTrigger {
+        TravelTrigger(
+            source: model.sourceToken,
+            expanded: model.expandedDays,
+            isEstimating: services?.travel.isEstimating ?? false,
+            transport: services?.travel.transport ?? .driving
+        )
+    }
+
+    private struct TravelTrigger: Equatable {
+        var source: TodayModel.SourceToken
+        var expanded: Set<Date>
+        var isEstimating: Bool
+        var transport: RouteTransport
     }
 
     /// Asks how long the day's journeys really take, for the ones worth asking about.
@@ -830,17 +868,33 @@ private struct TodayContent: View {
     /// In order, and awaited one at a time. A day's journeys are few, they are asked about the
     /// moment the day assembles rather than while anybody waits, and firing them at once would put
     /// several requests in the air for a page that mostly wants the first one.
+    ///
+    /// ### Which days, and why not all of them
+    /// The anchor day, plus any day the reader has opened out of the feed — that is, exactly the
+    /// days drawn *in full*, and so exactly the days that have a "leave by" line to fill in. A day
+    /// still collapsed to its summary shows no journeys at all, and the feed runs ninety days out:
+    /// measuring those would be a hundred route lookups for lines nobody is looking at.
+    ///
+    /// This was the anchor day alone until removing the default number made the gap visible. Before
+    /// that, a journey in the feed fell back to fifteen minutes and drew a line regardless of
+    /// whether anything had measured it — so nobody noticed that nothing had.
     private func measureTravelForTheDay() async {
-        guard let services, let plan = model.selectedPlan else { return }
+        guard let services else { return }
         let calendar = services.dateProvider.calendar
 
-        for event in plan.scheduleEvents(calendar: calendar) {
-            guard let place = RoutePlace(travellingTo: event.event) else { continue }
-            let minutes = services.travel.minutes(to: event.event.locationName)
-            await services.travel.refreshEstimate(
-                to: place,
-                departingAt: TravelRules.leaveBy(event.event, minutes: minutes)
-            )
+        let drawn = ([model.selectedPlan].compactMap { $0 }
+            + model.previousDays.filter(model.isExpanded)
+            + model.followingDays.filter(model.isExpanded))
+
+        for plan in drawn {
+            for event in plan.scheduleEvents(calendar: calendar) {
+                guard let place = RoutePlace(travellingTo: event.event) else { continue }
+                let minutes = services.travel.startingMinutes(for: event.event.locationName)
+                await services.travel.refreshEstimate(
+                    to: place,
+                    departingAt: TravelRules.leaveBy(event.event, minutes: minutes)
+                )
+            }
         }
     }
 
@@ -1241,19 +1295,20 @@ private struct TodayAwarenessRow: View {
 private struct TodayEventRow: View {
     let dayEvent: DayEvent
 
-    /// How long the journey takes, when this is somewhere to go and there is still time to set off.
-    /// `nil` draws no line at all.
+    /// The journey to this meeting, when it is somewhere to go and there is still time to set off.
+    /// `nil` means this is not a journey at all.
     ///
-    /// A ``TravelNumber`` rather than an `Int` so the line can say which kind of answer it is — see
-    /// ``TravelRules/summary(leavingAt:travel:)``. The row does not know or care whether route
-    /// estimates are switched on; it is handed an answer and draws it.
-    var travel: TravelNumber?
+    /// A ``TravelAnswer`` rather than an `Int` so the row can draw three different things: a
+    /// measurement, a number its owner gave, or — for a journey nobody has a number for — either an
+    /// offer to sort it out or nothing whatsoever. The row does not know whether route estimates are
+    /// switched on; it is handed an answer and draws it.
+    var travel: TravelAnswer?
 
     var onTravel: () -> Void = {}
 
     /// A car for a measured drive, a tram for a measured journey — and the walking figure for
     /// anything nobody measured, which is what it has always meant here.
-    private func travelSymbol(_ travel: TravelNumber) -> String {
+    private func travelSymbol(_ travel: TravelAnswer) -> String {
         guard case .measured(_, let transport, _) = travel else { return "figure.walk" }
         return transport.symbolName
     }
@@ -1286,18 +1341,19 @@ private struct TodayEventRow: View {
                         .lineLimit(1)
                 }
 
-                if let travel {
-                    // Subordinate to the meeting rather than a row of its own: it is a fact *about*
-                    // this entry, and giving it a place on the thread would make a day of four
-                    // meetings look like a day of eight things.
+                // Three outcomes, and the third one is silence.
+                //
+                // Subordinate to the meeting rather than a row of its own either way: this is a fact
+                // *about* the entry, and giving it a place on the thread would make a day of four
+                // meetings look like a day of eight things.
+                if let travel, let minutes = travel.minutes,
+                   let summary = TravelRules.summary(
+                       leavingAt: TravelRules.leaveBy(dayEvent.event, minutes: minutes),
+                       travel: travel
+                   ) {
                     Button(action: onTravel) {
                         Label(
-                            TravelRules.summary(
-                                leavingAt: TravelRules.leaveBy(
-                                    dayEvent.event, minutes: travel.minutes
-                                ),
-                                travel: travel
-                            ),
+                            summary,
                             // The symbol follows the answer: a measured drive gets a car, and the
                             // walking figure goes back to meaning a journey nobody measured.
                             systemImage: travelSymbol(travel)
@@ -1307,6 +1363,19 @@ private struct TodayEventRow: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("today.travel")
+
+                } else if travel?.invitesAnAnswer == true {
+                    // We looked and could not work it out — most often because the reader is in a
+                    // different city from the meeting they have just booked. Worth a word, because
+                    // they can settle it in one tap and the app cannot settle it at all. A place
+                    // that simply does not geocode says nothing: you are already in the building.
+                    Button(action: onTravel) {
+                        Label("Set travel time", systemImage: "questionmark.circle")
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("today.travel.unknown")
                 }
 
                 if dayEvent.hasConflict {

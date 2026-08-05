@@ -19,6 +19,10 @@ final class TodayFeedUITests: XCTestCase {
             "-ElephruitUseFixtureCalendar",
             "-ElephruitUseFixtureContacts",
             "-ElephruitUseFixtureReminders",
+            // Journeys are measured or they are absent — there is no default number to fall back
+            // on any more — so a feed test that wants to see a "leave by" line has to switch
+            // routing on. See `testAMeetingSomewhereSaysWhenToLeave`.
+            "-ElephruitUseFixtureRoutes",
             "-ElephruitFixturesAuthorized",
         ]
         app.launch()
@@ -92,12 +96,19 @@ final class TodayFeedUITests: XCTestCase {
         )
     }
 
-    /// A meeting somewhere says when to leave, and the line writes the journey.
+    /// A meeting somewhere says when to leave, says it was measured, and the line writes the journey.
     ///
     /// Asserted against a day that has not happened yet, on purpose. A "leave by" line disappears
     /// once the moment has passed, so a test aimed at today's meetings proves the feature before
     /// lunch and fails after it — which is a test reporting the clock. Tomorrow evening is always
     /// still ahead.
+    ///
+    /// ### This became assertable when the lookahead horizon went away
+    /// It could not be written before. Measuring used to refuse anything more than four hours out,
+    /// so the only journey a test could see measured was this evening's — which made the assertion
+    /// pass between about two and six and fail the rest of the day. Now MapKit is given the real
+    /// departure date, tomorrow's dinner is a fair question, and the answer is the same at any hour
+    /// the suite happens to run. The gap this closes is the one that let two bugs ship.
     func testAMeetingSomewhereSaysWhenToLeave() throws {
         let app = launch()
 
@@ -115,6 +126,14 @@ final class TodayFeedUITests: XCTestCase {
             app.swipeUp()
         }
         XCTAssertTrue(travel.exists, "a meeting with an address said nothing about getting to it")
+
+        // The whole point of the line: a figure the app looked up reads differently from one its
+        // owner supplied. If this ever says only "23 min", a measurement is being drawn with the
+        // authority of a guess — or, worse, a guess with the authority of a measurement.
+        XCTAssertTrue(
+            travel.label.contains("drive"),
+            "a measured journey must say so, not borrow the wording of a number somebody typed: \(travel.label)"
+        )
         snap(app, "07-leave-by")
 
         travel.tap()

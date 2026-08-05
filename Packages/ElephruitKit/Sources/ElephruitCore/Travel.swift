@@ -77,8 +77,12 @@ public enum TravelRules {
     /// the difference between a figure the app looked up and a figure its owner supplied. Drawing
     /// them identically would let a guess borrow a measurement's authority, which matters most
     /// exactly when the measurement is unavailable and nobody has been told.
-    public static func summary(leavingAt moment: Date, travel: TravelNumber) -> String {
-        let base = summary(leavingAt: moment, minutes: travel.minutes)
+    ///
+    /// `nil` for a journey nobody has a number for. There is deliberately no sentence for that case
+    /// here — see ``TravelAnswer/invitesAnAnswer``, which decides between silence and an offer.
+    public static func summary(leavingAt moment: Date, travel: TravelAnswer) -> String? {
+        guard let minutes = travel.minutes else { return nil }
+        let base = summary(leavingAt: moment, minutes: minutes)
         guard case .measured(_, let transport, _) = travel else { return base }
         return base + " " + transport.journeyNoun
     }

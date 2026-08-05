@@ -385,7 +385,8 @@ struct BlockTimeSheet: View {
         }
         proposal = actions.proposal(
             travellingTo: travel,
-            minutes: services?.travel.minutes(to: travel.event.locationName) ?? TravelRules.defaultMinutes
+            minutes: services?.travel.startingMinutes(for: travel.event.locationName)
+                ?? TravelRules.defaultMinutes
         )
     }
 

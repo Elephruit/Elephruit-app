@@ -134,9 +134,30 @@ coordinate carry became compulsory, because skipping the geocode for a place the
 resolved is strictly less guessing. It rides on `CalendarEventSummary`; `EventDraft`'s allowlist is
 untouched, so the app can be *told* where a meeting is and still cannot write a coordinate.
 
-`TravelPreferences.minutes(to:)` kept its signature exactly. The ordering lives in one method — a
-fresh measurement, then what the user said, then the default — and every step down is silent.
-`travel(to:)` is the richer answer for the one caller that needs the provenance.
+The ordering lives in one method, `TravelPreferences.travel(to:)`: **a fresh measurement, then what
+the user said about that place, then nothing at all.**
+
+That third step used to be a default fifteen minutes, and it was the feature's worst bug rather than
+its safety net. A number nobody had earned was rendered in the same words, weight and confidence as
+a measurement, under meetings the app had never looked up — and the first person to use it read
+"leave by 5:45" off one and asked, reasonably, how it knew. It did not. A default is a fine starting
+position for a picker, where somebody is choosing; it is not an answer to "how long does this take".
+``TravelAnswer`` therefore has an `unknown` case, `startingMinutes(for:)` serves the picker, and
+`defaultMinutes` never reaches the page.
+
+**When it asks is one function, not a schedule.** `RouteRules.expiry(measuredAt:departingAt:)` makes
+an answer's life depend on how far off the journey is: fifteen minutes inside the last ninety, an
+hour earlier the same day (clamped so the last quiet answer dies exactly as the busy window opens),
+and *until tomorrow morning* for anything further out. The start-of-day re-measure is that expiry
+rather than a scheduler — the first look tomorrow is from wherever the reader woke up, which is the
+whole point.
+
+**There is no lookahead horizon.** There was one, of four hours, on the reasoning that traffic is not
+knowable further out. That was wrong twice: MapKit takes a real `departureDate` and models the
+traffic it expects then, and refusing to ask was exactly what left an unearned number on the page for
+a meeting booked next week. What remains is the *origin* problem — a Detroit meeting booked from
+Minnesota is a true ten-hour answer to the wrong question — and that is handled by not rendering an
+implausible answer and retiring it overnight rather than by declining to ask.
 
 | File | What it is |
 |---|---|
@@ -147,12 +168,12 @@ fresh measurement, then what the user said, then the default — and every step 
 | `Packages/.../ElephruitFeaturesCore/TravelPreferences.swift` | The ordering, the estimate cache, the remembered refusals, the switch |
 | `Tests/ElephruitCoreTests/RouteSafetyTests.swift` | The field list, the query's arguments, the confined import |
 
-Four things worth carrying forward:
+Seven things worth carrying forward. The first four are traps; the last three are the shape of every
+bug this feature actually shipped, which was the same bug three times.
 
 1. **Refusals must be remembered, not just successes.** A `List` redraws on every scroll, a meeting
    room never geocodes, and the room is what appears in a calendar five days a week. Caching only
-   the answers leaves the commonest case asking forever. Half a day for a place that does not exist,
-   five minutes for a service that was merely unreachable.
+   the answers leaves the commonest case asking forever.
 2. **Measure the whole day, never per row.** Per row looks right — `.task` follows the row's life —
    but a `List` does not realise cells below the fold, so an evening journey stays unmeasured until
    it is scrolled to and then changes under the thumb. Worse, the block sheet reads the number when
@@ -161,6 +182,19 @@ Four things worth carrying forward:
    sheet was photographing the guess the page was about to replace.
 4. **Giving a `Toggle` an accessibility identifier collapses the row into one wide `Switch`**, so
    `tap()` aims at the label and nothing happens. See `flip` in `RouteEstimateSettingsUITests`.
+
+5. **A silent fallback hides everything downstream of it.** Every one of the three shipped bugs was
+   invisible because the default number filled the hole: the switch not re-measuring, the relaunch
+   never measuring at all, and the feed's own days never being measured. All three drew a plausible
+   line the whole time. The default was removed to be honest and it immediately exposed two of them.
+6. **`.task(id:)` keys are a list of everything that changes the answer**, and settings on another
+   screen belong on it. `travelTrigger` carries the source token, the open days, the switch and the
+   transport, because each of them was at some point missing and each absence was a bug that read as
+   "the feature does nothing".
+7. **Verify in the arrangement a user is actually in.** The fixture launch enables routing at
+   startup, so every screenshot and test took the path where it is already on — and the paths where
+   somebody turns it on, or relaunches afterwards, were both broken. That is not a testing gap so
+   much as a fixture that flatters the code.
 
 The Settings copy was rewritten in the same commit, as required. The iCloud and About claims are now
 true in *both* states rather than following the switch — a privacy claim you have to watch is not
