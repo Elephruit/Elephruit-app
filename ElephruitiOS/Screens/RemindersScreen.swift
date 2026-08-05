@@ -344,8 +344,7 @@ struct RemindersScreen: View {
         MobileReminderComposer(
             draft: $draft,
             onQuickCommit: { commit(keepsOpen: quickCommitKeepsOpen) },
-            onCommitAndClose: { commit(keepsOpen: false) },
-            onCancel: closeComposer
+            onDismiss: { commit(keepsOpen: false) }
         )
         // The Mac's transition, to the token: the editor grows into place from the top edge of
         // where it will sit, so it reads as the list making room rather than a card landing on
