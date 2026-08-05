@@ -2,10 +2,32 @@
 
 ## Privacy posture
 
-The app makes **no network requests of any kind** in v1. Not for analytics, not for
-crash reports, not for update checks, not for link previews. This is verifiable: the
-app has no `com.apple.security.network.client` entitlement, so an attempted outbound
-connection would fail at the sandbox boundary rather than silently succeed.
+The app made **no network requests of any kind** in v1. Not for analytics, not for
+crash reports, not for update checks, not for link previews. That was verifiable rather than
+promised: the app had no `com.apple.security.network.client` entitlement, so an attempted
+outbound connection would fail at the sandbox boundary rather than silently succeed.
+
+**Since then the Mac has grown two endpoints, and the posture is now a list rather than a
+denial.** Kept in the past tense above because the sentence is worth having on the record —
+losing the kernel-enforced version of a guarantee is a thing that should be visible in the
+document, not quietly overwritten.
+
+| Endpoint | Reached when | Carries |
+|---|---|---|
+| Apple's CloudKit | Sync is on, which it is not until somebody turns it on | The user's own library, in the user's own private database |
+| Apple Maps (`MKLocalSearch`) | Somebody is typing into a record's place field, and at no other moment | The typed words, and nothing else — never a note, never who the record is about |
+
+Everything else in the table below is unchanged: no analytics, no telemetry, no crash reporting,
+no third-party service, and no `URLSession` of our own anywhere in the sources.
+
+The Maps search has **no switch**, unlike every integration in `docs/19`, because it is not a
+standing permission — it is a thing that happens while somebody is doing it. That is a defensible
+position and it is also the reason it went uncounted in every place that lists what this app talks
+to: a feature with no toggle appears on no settings screen, so nothing ever prompted anybody to
+write it down, and the copy went on claiming a number that had already changed. A
+third endpoint changes this table, `Configuration/Elephruit.entitlements`, the Sync footer in
+`Elephruit/SyncSettingsSection.swift`, and the Privacy tab in `Elephruit/ElephruitApp.swift`, in
+one commit.
 
 | Practice | Position |
 |---|---|

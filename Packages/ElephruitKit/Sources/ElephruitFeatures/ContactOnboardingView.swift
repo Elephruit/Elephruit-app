@@ -164,10 +164,19 @@ struct ContactExplanationView: View {
             }
 
             VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+                // "Elephruit has no network access at all" was true of the binary that shipped
+                // without a network-client entitlement, and stopped being true when sync arrived.
+                // Rewritten to say where things go rather than to deny that anything goes anywhere,
+                // because this sheet is read by somebody deciding whether to hand over an address
+                // book, and a sentence they can disprove costs more than it buys.
                 factRow(
                     "lock.shield",
-                    "Everything stays on this Mac",
-                    "Contacts are read locally. Elephruit has no network access at all, so nothing can be uploaded."
+                    "Nothing here is uploaded to us",
+                    """
+                    Contacts are read locally, and there is no Elephruit account and no Elephruit \
+                    server. What this import makes stays on this Mac unless you turn on iCloud \
+                    sync, and then it goes to your own private database and nowhere else.
+                    """
                 )
                 factRow(
                     "arrow.left.arrow.right.circle",
