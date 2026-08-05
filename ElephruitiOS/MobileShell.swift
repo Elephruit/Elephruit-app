@@ -124,6 +124,8 @@ enum MobileRoute: Hashable, Codable {
     case smartList(UUID)
     /// A built-in smart list, by its stable string id.
     case builtInSmartList(String)
+    /// A search the user named and kept — the text they typed, run again.
+    case savedSearch(UUID)
     /// A scoped slice of the Records module — pets, organizations, favorites.
     case records(RecordsScope)
     /// Everything carrying one tag.
@@ -184,6 +186,18 @@ final class MobileShellModel {
     /// The one search session, kept when the user leaves and returns.
     var searchText = ""
 
+    /// Where a push goes when this is not the shell drawing the screen.
+    ///
+    /// On the iPad the sidebar and the stage decide where things open, and every screen in this
+    /// target navigates by calling ``push(_:)``. Rather than teach twenty screens which shell they
+    /// are inside — a question they would have to ask correctly every time, forever — the wide
+    /// shell installs a redirect here and takes the routes. Returning `false` declines one, and
+    /// the stack push happens as it always did.
+    ///
+    /// `@ObservationIgnored` because a closure is not state anybody draws: observing it would
+    /// invalidate every view in the app the moment a window changed width class.
+    @ObservationIgnored var routeRedirect: ((MobileRoute) -> Bool)?
+
     /// The current destination's drill-down.
     var path: [MobileRoute] {
         get { paths[destination] ?? [] }
@@ -212,6 +226,7 @@ final class MobileShellModel {
     /// to where they came from. Jumping elsewhere would answer "open Maya" by losing the
     /// search that found her.
     func push(_ route: MobileRoute) {
+        if routeRedirect?(route) == true { return }
         var path = paths[destination] ?? []
         path.append(route)
         paths[destination] = path

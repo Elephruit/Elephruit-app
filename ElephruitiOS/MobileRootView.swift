@@ -20,22 +20,20 @@ struct MobileRootView: View {
     @Environment(\.services) private var services
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var shell = MobileShellModel()
+    /// Owned by `AdaptiveRootView`, not by this view. A window may change width class mid-session,
+    /// and the journey has to survive the change — which needs one owner above both shells rather
+    /// than a fresh model each time an arrangement appears.
+    @Environment(MobileShellModel.self) private var shell
 
     /// How far the content slides. Wide enough to read a thirteen-row list comfortably,
     /// narrow enough that the screen behind it stays visibly *there* rather than replaced —
     /// the drawer is a layer over the app, not another page of it.
     private static let sidebarWidth: CGFloat = 288
 
-    /// Navigation survives relaunch: the destination and each destination's drill-down.
-    @SceneStorage("mobile.navigation") private var storedNavigation: String?
-    @State private var hasRestored = false
-
-    /// The running timer, as the Dynamic Island sees it.
-    @State private var liveActivity = TimerLiveActivityController()
-
     var body: some View {
-        MobileDrawer(
+        @Bindable var shell = shell
+
+        return MobileDrawer(
             isOpen: shell.isSidebarOpen,
             canPop: shell.canPop,
             width: Self.sidebarWidth,
@@ -49,47 +47,21 @@ struct MobileRootView: View {
             MobileSidebar()
         }
         .background(Theme.Colors.windowBackground)
-        .environment(shell)
         .sheet(isPresented: $shell.isCaptureVisible) {
             CaptureSheet()
         }
         .task {
-            guard !hasRestored else { return }
-            hasRestored = true
-            if let storedNavigation {
-                shell.restore(from: storedNavigation)
-            }
             // The keyboard's one-off setup cost, moved off the first tap that needs it.
             await Keyboard.warmAfterLaunch()
         }
-        .onChange(of: shell.restoration) {
-            storedNavigation = shell.encodedRestoration
-        }
-        .onOpenURL { url in
-            handleDeepLink(url)
-        }
-        // The island is not driven by the commands that change the timer — see
-        // `TimerLiveActivityController`. It is driven by *what the timer is*, read here on every
-        // pass the observation system already wakes this view for, and compared with what the
-        // system is currently showing.
-        .task {
-            liveActivity.adoptExisting()
-            liveActivity.apply(timerActivityState)
-        }
-        .onChange(of: timerActivityState) { _, state in
-            liveActivity.apply(state)
-        }
-    }
-
-    /// What the Dynamic Island should be saying, or `nil` for nothing.
-    private var timerActivityState: ElephruitTimerAttributes.ContentState? {
-        .current(services)
     }
 
     // MARK: - Layers
 
     private var navigationStack: some View {
-        NavigationStack(path: $shell.path) {
+        @Bindable var shell = shell
+
+        return NavigationStack(path: $shell.path) {
             MobileDestinationView(destination: shell.destination)
                 .navigationDestination(for: MobileRoute.self) { route in
                     MobileRouteView(route: route)
@@ -178,31 +150,6 @@ struct MobileRootView: View {
         shell.isSidebarOpen = open
     }
 
-    /// The `elephruit:` scheme, honoured on the same read-only terms as the Mac: every URL
-    /// navigates, none mutates.
-    private func handleDeepLink(_ url: URL) {
-        guard url.scheme == "elephruit" else { return }
-
-        // A destination named by a link is a destination, not a drill-down: the host alone is
-        // enough to place the user, so the shell steps there and pops whatever was open.
-        if let host = url.host(), let destination = MobileDestination(rawValue: host) {
-            shell.select(destination)
-            return
-        }
-
-        switch url.host() {
-        case "people": shell.select(.records)
-        case "library": shell.select(.today); shell.isSidebarOpen = true
-        case "notes": shell.select(.notes)
-        case "capture": shell.isCaptureVisible = true
-        case "item":
-            if let id = UUID(uuidString: url.lastPathComponent),
-                let item = try? services?.items.item(id: id) {
-                shell.open(MobileShellModel.route(for: item.kind, id: id), in: shell.destination)
-            }
-        default: break
-        }
-    }
 }
 
 /// One destination's root screen.
