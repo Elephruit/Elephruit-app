@@ -17,13 +17,15 @@ Branch: `claude/family-info-logging-plan-8f3e0b`, off `f6cb2e60`.
 | 4.1 — macOS family editor | **Done.** `AddRelativesSheet` replaces `AddRelationshipSheet`. |
 | 4.2 — macOS fact sheet | **Done.** Grade and School are separate categories; school-year control and reading line. |
 | 4.3 — Command grammar (`at <school>`, the four school words) | Not started. |
-| 5 — Meeting debrief | Not started. |
-| 6 — iOS parity | Not started. |
-| 7 — The fill-in queue | Query built (2.5); no interface yet. |
+| 5 — Meeting debrief | **Done for macOS.** `MeetingDebriefSheet`, reached from the event inspector. 5.3 (the Today row) not started. |
+| 6 — iOS parity | **6.1 done** — `RelativesSheet` on `PersonScreen`, plus phone review routing. 6.2 (log an interaction) and 6.3 (brief and debrief on `EventScreen`) not started. |
+| 7 — The fill-in queue | **Done on the phone** — "To fill in" on `PersonScreen`, with a one-field naming sheet. Not on the Mac; no Today card. |
 
-**Not verified visually.** The macOS sheet builds, is covered by tests, and opens under
-`-ElephruitOpenSheet relatives` — but `screencapture` returned black on this machine, so nobody has
-looked at it. Do that before building anything on top of it.
+**Verification, honestly.** The phone screens are photographed (`Scripts/shot.sh` with
+`-ElephruitSelectPerson`) and `PersonCaptureUITests` drives the capture end to end. The **macOS**
+sheets have never been looked at: they build and are covered by unit tests, and
+`-ElephruitOpenSheet relatives` opens the family editor headlessly, but `screencapture` returned
+black on this machine. Look at them before building anything on top.
 
 ---
 
