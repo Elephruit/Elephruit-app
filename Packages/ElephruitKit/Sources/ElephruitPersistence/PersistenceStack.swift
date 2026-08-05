@@ -4,6 +4,10 @@ import Foundation
 import SQLite3
 import SwiftData
 
+#if canImport(UIKit)
+    import UIKit
+#endif
+
 /// How the store is configured.
 public enum StoreMode: Sendable, Hashable {
     /// A file-backed store at the given location. Production.
@@ -17,6 +21,22 @@ public enum StoreMode: Sendable, Hashable {
 ///
 /// Defined in milestone 1 and reporting ``SyncStatus/disabled`` so that the sidebar's
 /// status line does not change shape when sync arrives in Phase 4.
+/// What this machine is called, in the app's own voice.
+///
+/// The wording used to be a compile-time `#if os(macOS)`, which was true while iOS meant one
+/// device. It does not any more: an iPad running the same binary was being told its library was
+/// stored on this iPhone. Read at runtime rather than built in, because the answer is a property
+/// of the device and not of the platform the code was compiled for.
+public enum DeviceName {
+    public static var thisDevice: String {
+        #if os(macOS)
+            "Mac"
+        #else
+            UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
+        #endif
+    }
+}
+
 public enum SyncStatus: Sendable, Hashable {
     case disabled
     case idle(lastSyncedAt: Date?)
@@ -28,11 +48,7 @@ public enum SyncStatus: Sendable, Hashable {
     public var summary: String {
         switch self {
         case .disabled:
-            #if os(macOS)
-                "Stored on this Mac"
-            #else
-                "Stored on this iPhone"
-            #endif
+            "Stored on this \(DeviceName.thisDevice)"
         case .idle(let date):
             if let date { "Synced \(date.formatted(.relative(presentation: .named)))" } else { "Synced" }
         case .syncing: "Syncing…"
