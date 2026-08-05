@@ -1,8 +1,48 @@
 import ElephruitCore
+import ElephruitDesign
 @testable import ElephruitFeaturesCore
 import ElephruitIntegrations
 import Foundation
 import Testing
+
+/// The letters in the circle when there is no photograph.
+///
+/// One derivation, exercised here rather than in four view files — see ``ElephruitDesign/Avatar``
+/// for the two rules this replaced.
+@Suite("Avatar monograms")
+@MainActor
+struct AvatarMonogramTests {
+    @Test("First word and last word, not the first two")
+    func firstAndLast() {
+        #expect(Avatar.initials(from: "Amara Okonjo") == "AO")
+        // The case the Mac's own avatar got wrong: four words, one surname.
+        #expect(Avatar.initials(from: "Rosa María de la Cruz") == "RC")
+        #expect(Avatar.initials(from: "Cher") == "C")
+    }
+
+    /// A monogram is made of letters, and a name that ends in a number does not have a numeric
+    /// surname. The seeded library is full of these, and a column of "A1 A3 A6" read as serial
+    /// numbers rather than as people.
+    @Test("A trailing number is not an initial")
+    func digitsAreNotInitials() {
+        #expect(Avatar.initials(from: "Amara Abara 1") == "AA")
+        #expect(Avatar.initials(from: "Viggo Xu 112") == "VX")
+        #expect(Avatar.initials(from: "John Smith 2") == "JS")
+    }
+
+    /// Nothing alphabetic anywhere. An empty circle says less than the record's own first character.
+    @Test("A name with no letters keeps its first character")
+    func nothingAlphabetic() {
+        #expect(Avatar.initials(from: "1975") == "1")
+        #expect(Avatar.initials(from: "") == "")
+        #expect(Avatar.initials(from: "   ") == "")
+    }
+
+    @Test("Extra spaces are not extra words")
+    func spacingIsIgnored() {
+        #expect(Avatar.initials(from: "  Maya   Chen  ") == "MC")
+    }
+}
 
 /// Reading contact photographs, and the cache that makes reading them affordable.
 ///
@@ -18,7 +58,7 @@ struct ContactPhotoTests {
     ///
     /// A class with a counter rather than `FixtureContactsProvider`, because what is under test is
     /// the number of reads, and the fixture is deliberately silent about how many it has served.
-    final class CountingProvider: ContactsProviding, @unchecked Sendable {
+    class CountingProvider: ContactsProviding, @unchecked Sendable {
         let picture: Data?
         private(set) var reads = 0
 
@@ -47,6 +87,29 @@ struct ContactPhotoTests {
         func thumbnail(forIdentifier identifier: String) async -> Data? {
             reads += 1
             return picture
+        }
+    }
+
+    /// A provider that stops inside `thumbnail` until the test lets it go, and announces that it
+    /// has stopped. Everything else is a `CountingProvider` that never answers.
+    final class GatedProvider: CountingProvider, @unchecked Sendable {
+        private let arrivals = AsyncStream<Void>.makeStream()
+        private var waiting: CheckedContinuation<Void, Never>?
+
+        /// Yields once each time a fetch has begun and suspended.
+        var entries: AsyncStream<Void> { arrivals.stream }
+
+        override func thumbnail(forIdentifier identifier: String) async -> Data? {
+            await withCheckedContinuation { continuation in
+                waiting = continuation
+                arrivals.continuation.yield()
+            }
+            return picture
+        }
+
+        func release() {
+            waiting?.resume()
+            waiting = nil
         }
     }
 
@@ -165,6 +228,30 @@ struct ContactPhotoTests {
 
         #expect(service.cachedPhoto(forContactIdentifier: "abc") == nil)
         #expect(service.photos.state(for: "abc") == nil)
+    }
+
+    /// The window this closes: a read already in flight, answering after the switch was thrown.
+    ///
+    /// Deterministic rather than timed. The provider suspends inside `thumbnail` and says so, which
+    /// is what lets the test disable the integration at exactly the moment a fetch is outstanding —
+    /// the state a `sleep` would only sometimes produce.
+    @Test("A read still in flight when Contacts is switched off does not put its face back")
+    func disablingBeatsAnOutstandingRead() async {
+        let provider = GatedProvider()
+        let service = makeService(provider)
+        await service.enable()
+
+        let pending = Task { await service.photo(forContactIdentifier: "abc") }
+
+        var entries = provider.entries.makeAsyncIterator()
+        _ = await entries.next()
+
+        service.disable()
+        provider.release()
+        _ = await pending.value
+
+        #expect(service.cachedPhoto(forContactIdentifier: "abc") == nil)
+        #expect(service.photos.state(for: "abc") == nil, "a forgotten face must stay forgotten")
     }
 
     /// The integration starts off, and off means the address book is not touched at all.

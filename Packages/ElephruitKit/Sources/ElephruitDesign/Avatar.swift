@@ -109,10 +109,25 @@ public struct Avatar: View {
     }
 
     /// The first letters of the first and last words — "Amara Okonjo" → "AO", "Cher" → "C".
+    ///
+    /// ### Why only words that begin with a letter count
+    /// A monogram is made of letters. Taking the last word whatever it was put digits in the circle
+    /// the moment a name ended in one — "Amara Abara 1" came out **A1**, and a seeded library of a
+    /// hundred and fifty read as a column of serial numbers. Real names do it too: a record
+    /// disambiguated as "John Smith 2" or filed as "Wing 3" is not somebody whose initials are J2.
+    /// Skipping non-alphabetic words gives "Amara Abara 1" → AA and leaves every ordinary name
+    /// exactly as it was.
     public static func initials(from name: String) -> String {
-        let words = name.split(separator: " ").filter { !$0.isEmpty }
-        let letters = [words.first, words.count > 1 ? words.last : nil]
-            .compactMap { $0?.first }
+        let words = name.split(separator: " ").filter { $0.first?.isLetter == true }
+
+        guard let first = words.first?.first else {
+            // Nothing alphabetic anywhere — a record called "1975" or "☂" keeps its own first
+            // character, because an empty circle says less than a wrong letter would.
+            return name.trimmingCharacters(in: .whitespacesAndNewlines)
+                .first.map { String($0).uppercased() } ?? ""
+        }
+
+        let letters = [first, words.count > 1 ? words.last?.first : nil].compactMap { $0 }
         return letters.map(String.init).joined().uppercased()
     }
 
