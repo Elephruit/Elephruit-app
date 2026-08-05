@@ -50,6 +50,9 @@ struct MobileReminderComposer: View {
     @FocusState private var focus: Field?
     @State private var vocabulary = CaptureVocabulary.empty
     @State private var activePopover: ComposerField?
+    /// The field whose search sheet is up. Separate from `activePopover` because they are two
+    /// presentations and the popover has to be gone before the sheet can arrive.
+    @State private var searchingField: ComposerField?
     /// Whether the checklist's entry row is showing, mirroring the Mac's `.checklist` stop.
     @State private var isAddingStep = false
 
@@ -88,6 +91,9 @@ struct MobileReminderComposer: View {
             // anchored to a control that has not been laid out yet has nothing to point at.
             await Task.yield()
             open(opening)
+        }
+        .sheet(item: $searchingField) { field in
+            searchSheet(for: field)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("reminders.composer")
@@ -326,7 +332,10 @@ struct MobileReminderComposer: View {
             .accessibilityLabel(draft.projectTitle.map { "Project: \($0)" } ?? "Choose a project")
             .accessibilityIdentifier("reminders.composer.project")
             .popover(isPresented: showing(.project), arrowEdge: .top) {
-                MobileProjectPicker(selected: $draft.projectTitle)
+                MobileProjectPicker(
+                    selected: $draft.projectTitle,
+                    onRequestSearch: { requestSearch(.project) }
+                )
             }
 
             Spacer(minLength: 0)
@@ -344,13 +353,19 @@ struct MobileReminderComposer: View {
             control(symbol: "tag", isActive: !draft.tagSlugs.isEmpty,
                     label: "Tags", identifier: "tags") { activePopover = .tags }
                 .popover(isPresented: showing(.tags), arrowEdge: .top) {
-                    MobileTagPicker(selected: $draft.tagSlugs)
+                    MobileTagPicker(
+                        selected: $draft.tagSlugs,
+                        onRequestSearch: { requestSearch(.tags) }
+                    )
                 }
 
             control(symbol: "person", isActive: !draft.personNames.isEmpty,
                     label: "People", identifier: "people") { activePopover = .people }
                 .popover(isPresented: showing(.people), arrowEdge: .top) {
-                    MobilePeoplePicker(selected: $draft.personNames)
+                    MobilePeoplePicker(
+                        selected: $draft.personNames,
+                        onRequestSearch: { requestSearch(.people) }
+                    )
                 }
 
             control(symbol: "checklist", isActive: !draft.checklist.isEmpty,
@@ -364,6 +379,34 @@ struct MobileReminderComposer: View {
         }
         .padding(.horizontal, Theme.Spacing.medium)
         .padding(.vertical, Theme.Spacing.small)
+    }
+
+    /// Trades the popover for the sheet that can hold a keyboard.
+    ///
+    /// Sequenced rather than swapped: dismissing a popover and presenting a sheet in the same
+    /// turn asks UIKit to run two presentation transitions at once, and it answers by dropping
+    /// one of them. The popover goes first, and the sheet follows once it is gone.
+    private func requestSearch(_ field: ComposerField) {
+        activePopover = nil
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            searchingField = field
+        }
+    }
+
+    @ViewBuilder
+    private func searchSheet(for field: ComposerField) -> some View {
+        switch field {
+        case .tags:
+            MobileTagPicker(selected: $draft.tagSlugs, style: .search)
+        case .people:
+            MobilePeoplePicker(selected: $draft.personNames, style: .search)
+        case .project:
+            MobileProjectPicker(selected: $draft.projectTitle, style: .search)
+        case .when, .deadline, .checklist:
+            // Nothing here is typed into, so nothing here escalates.
+            EmptyView()
+        }
     }
 
     /// Opens one field. Five of them are popovers; the checklist is a row inside the card, so

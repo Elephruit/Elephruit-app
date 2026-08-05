@@ -7,12 +7,12 @@ import SwiftUI
 
 /// One thing that can be chosen, already reduced to what choosing needs.
 ///
-/// A value type, and the reason is the whole performance story of these popovers. The first
+/// A value type, and the reason is the whole performance story of these lists. The first
 /// version held `Item`s and filtered them with
 /// `TextNormalizer.foldedForMatching($0.displayTitle).contains(query)` — which, on every
 /// keystroke, faulted every record out of the store to read a computed title and allocated a
-/// folded copy of it. Typing four letters walked the object graph four times. Here the title is
-/// read once, folded once, and every keystroke after that compares plain strings.
+/// folded copy of it. Here the title is read once, folded once, and every keystroke after that
+/// compares plain strings.
 struct MobileChoice: Identifiable, Hashable {
     let id: String
     let title: String
@@ -30,24 +30,30 @@ struct MobileChoice: Identifiable, Hashable {
     }
 }
 
-/// A small list you choose from, anchored to the control that opened it.
+/// Where a list of choices is being shown, which decides how it behaves.
 ///
-/// ### Tapping before typing
-/// The desktop version of this is a query field you type into. That is the right instrument for
-/// a keyboard and the wrong one for a thumb: raising the keyboard inside a popup shoves the
-/// popup around, covers the list it is filtering, and asks for the slowest input a phone has.
-/// So the list comes first and the search field appears only once there are more choices than
-/// fit — under that, every option is already on screen and one tap away, and the keyboard never
-/// opens at all.
-///
-/// ### No navigation chrome
-/// No `NavigationStack`, no `.searchable`, no Done. Those are a screen's furniture, and this is
-/// a popup: it has a title because it needs one, and it closes by being tapped away from.
-struct MobileChoicePopover: View {
-    /// How many rows can be shown before the list needs a way to narrow itself. Eight 44-point
-    /// rows is about a popover's worth of height on the smallest phone this ships to.
-    private static let searchThreshold = 8
+/// The two are the same list with the same rows; what differs is whether a keyboard is coming.
+enum MobileChoiceStyle {
+    /// A small popup anchored to its control. Tapping only — no field, no keyboard.
+    case popover
+    /// A sheet that exists because someone wants to type. The field is focused on arrival.
+    case search
+}
 
+/// A list you choose from: tapping in a popover, typing in a sheet.
+///
+/// ### Why typing is a different presentation
+/// A search field inside a popover looks reasonable and is not: tapping it raises the keyboard,
+/// the keyboard shoves the popup somewhere it was not anchored, and what is left of the popup
+/// is a few rows above a keyboard covering the list being filtered. The field was a promise the
+/// popover could not keep.
+///
+/// So the popover does not have one. It has the list — which for most tags, most people and
+/// nearly every project list is the whole answer, one tap away, with no keyboard at all — and a
+/// row that says *Search*. Tapping that closes the popup and opens a sheet built for the
+/// keyboard: field at the top, focused on arrival, the full height of the screen beneath it for
+/// results. Each presentation does the one thing it is good at.
+struct MobileChoiceList: View {
     let title: String
     let choices: [MobileChoice]
     /// Whether more than one can be on at a time.
@@ -60,28 +66,127 @@ struct MobileChoicePopover: View {
     /// Present when the choice can be taken back to nothing.
     var onClear: (() -> Void)?
 
+    var style: MobileChoiceStyle = .popover
+    /// Asked for when the popover's Search row is tapped.
+    var onRequestSearch: (() -> Void)?
+
+    @Environment(\.dismiss) private var dismiss
+
+    /// Below this many rows, searching is slower than looking.
+    private static let searchThreshold = 8
+
     @State private var query = ""
-    @FocusState private var isSearchFocused: Bool
+    @FocusState private var isFieldFocused: Bool
 
     var body: some View {
+        switch style {
+        case .popover: popoverBody
+        case .search: searchBody
+        }
+    }
+
+    // MARK: - Tapping
+
+    private var popoverBody: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
 
-            if showsSearch {
-                searchField
+            if choices.count > Self.searchThreshold, onRequestSearch != nil {
+                searchRow
                 Divider()
             }
 
             list
         }
         .frame(width: 300)
-        // Fixed height only when there is a search field. A list that shrinks as it filters
-        // makes the popover resize under the thumb between one keystroke and the next; a short
-        // list with no filter has nothing to resize for and should not be padded out to a size
-        // it does not need.
-        .frame(height: showsSearch ? 360 : nil)
+        .frame(maxHeight: 360)
         .presentationCompactAdaptation(.popover)
     }
+
+    /// The door to the keyboard, drawn as a row rather than a field.
+    ///
+    /// It looks like a search field on purpose — that is what it leads to — but it is a button,
+    /// because a field here would put a keyboard inside a popup.
+    private var searchRow: some View {
+        Button {
+            onRequestSearch?()
+        } label: {
+            HStack(spacing: Theme.Spacing.small) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+                Text("Search")
+                    .font(Theme.Text.rowSubtitle)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, Theme.Spacing.medium)
+            .frame(minHeight: 40)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Search \(title)")
+        .accessibilityIdentifier("reminders.picker.searchRow")
+    }
+
+    // MARK: - Typing
+
+    private var searchBody: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: Theme.Spacing.medium) {
+                field
+                Button("Done") { dismiss() }
+                    .font(Theme.Text.rowTitle.weight(.semibold))
+                    .accessibilityIdentifier("reminders.picker.done")
+            }
+            .padding(.horizontal, Theme.Spacing.large)
+            .padding(.top, Theme.Spacing.large)
+            .padding(.bottom, Theme.Spacing.medium)
+
+            Divider()
+            list
+        }
+        // Large rather than medium: the keyboard takes half a phone, and a medium sheet under a
+        // keyboard is a search field with two results below it.
+        .presentationDetents([.large])
+        .task {
+            // A beat after the sheet arrives. Focusing during the presentation animation is how
+            // a keyboard ends up half-raised over a sheet that is still sliding up.
+            try? await Task.sleep(for: .milliseconds(350))
+            isFieldFocused = true
+        }
+    }
+
+    private var field: some View {
+        HStack(spacing: Theme.Spacing.small) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(Theme.Colors.tertiaryText)
+
+            TextField("Search \(title.lowercased())", text: $query)
+                .font(Theme.Text.rowTitle)
+                .focused($isFieldFocused)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .submitLabel(.done)
+                .onSubmit { commitFirstMatch() }
+                .accessibilityIdentifier("reminders.picker.search")
+
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Theme.Colors.tertiaryText)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear the search")
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.medium)
+        .frame(minHeight: 44)
+        .background(Theme.Colors.subtleFill, in: Capsule())
+    }
+
+    // MARK: - Shared parts
 
     private var header: some View {
         HStack {
@@ -105,34 +210,6 @@ struct MobileChoicePopover: View {
         .accessibilityAddTraits(.isHeader)
     }
 
-    private var searchField: some View {
-        HStack(spacing: Theme.Spacing.small) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(Theme.Colors.tertiaryText)
-
-            TextField("Filter", text: $query)
-                .font(Theme.Text.rowSubtitle)
-                .focused($isSearchFocused)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .submitLabel(.done)
-                .accessibilityIdentifier("reminders.picker.search")
-
-            if !query.isEmpty {
-                Button {
-                    query = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(Theme.Colors.tertiaryText)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear the filter")
-            }
-        }
-        .padding(.horizontal, Theme.Spacing.medium)
-        .padding(.bottom, Theme.Spacing.small)
-    }
-
     private var list: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
@@ -153,14 +230,13 @@ struct MobileChoicePopover: View {
                 }
             }
         }
-        .scrollIndicators(.automatic)
+        .scrollDismissesKeyboard(.interactively)
     }
 
     private func row(_ choice: MobileChoice, isCoined: Bool) -> some View {
         let isOn = selection.contains(choice.id)
         return Button {
-            onToggle(choice)
-            if !allowsMultiple { query = "" }
+            choose(choice)
         } label: {
             HStack(spacing: Theme.Spacing.medium) {
                 Image(systemName: isCoined ? "plus.circle" : choice.symbolName)
@@ -182,9 +258,8 @@ struct MobileChoicePopover: View {
                         .foregroundStyle(Theme.Colors.selection)
                 }
             }
-            .padding(.horizontal, Theme.Spacing.medium)
-            // The full touch minimum. These are the rows a thumb is aiming at while the phone
-            // is in one hand, which is the case the desktop's 20-point menu rows never had.
+            .padding(.horizontal, style == .search ? Theme.Spacing.large : Theme.Spacing.medium)
+            // The full touch minimum: these are rows aimed at with the phone in one hand.
             .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
@@ -193,14 +268,25 @@ struct MobileChoicePopover: View {
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
-    // MARK: - Filtering
-
-    private var showsSearch: Bool {
-        choices.count > Self.searchThreshold
+    private func choose(_ choice: MobileChoice) {
+        onToggle(choice)
+        query = ""
+        // A single-choice list has nothing left to ask once it has been answered.
+        if !allowsMultiple, style == .search { dismiss() }
     }
 
-    /// Plain string containment over keys folded when the list was built — no model access, no
-    /// allocation per row, nothing that gets slower as the library grows wider.
+    private func commitFirstMatch() {
+        if let coined {
+            choose(coined)
+        } else if let first = matching.first {
+            choose(first)
+        }
+    }
+
+    // MARK: - Filtering
+
+    /// Plain string containment over keys folded when the list was built — no model access and
+    /// no allocation per row, so it does not get slower as the library gets wider.
     private var matching: [MobileChoice] {
         let wanted = TextNormalizer.foldedForMatching(query)
         guard !wanted.isEmpty else { return choices }
@@ -223,11 +309,13 @@ struct MobileTagPicker: View {
     @Environment(\.services) private var services
 
     @Binding var selected: [String]
+    var style: MobileChoiceStyle = .popover
+    var onRequestSearch: (() -> Void)?
 
     @State private var choices: [MobileChoice] = []
 
     var body: some View {
-        MobileChoicePopover(
+        MobileChoiceList(
             title: "Tags",
             choices: choices,
             allowsMultiple: true,
@@ -244,7 +332,9 @@ struct MobileTagPicker: View {
                     selected.append(choice.id)
                 }
             },
-            onClear: { selected.removeAll() }
+            onClear: { selected.removeAll() },
+            style: style,
+            onRequestSearch: onRequestSearch
         )
         .task {
             choices = ((try? services?.tags.allTags()) ?? []).map {
@@ -259,15 +349,17 @@ struct MobilePeoplePicker: View {
     @Environment(\.services) private var services
 
     @Binding var selected: [String]
+    var style: MobileChoiceStyle = .popover
+    var onRequestSearch: (() -> Void)?
 
     @State private var choices: [MobileChoice] = []
 
     var body: some View {
-        MobileChoicePopover(
+        MobileChoiceList(
             title: "People",
             choices: choices,
             allowsMultiple: true,
-            selection: Set(selected),
+            selection: Set(selected.map { TextNormalizer.foldedForMatching($0) }),
             onToggle: { choice in
                 if let index = selected.firstIndex(of: choice.title) {
                     selected.remove(at: index)
@@ -275,15 +367,15 @@ struct MobilePeoplePicker: View {
                     selected.append(choice.title)
                 }
             },
-            onClear: { selected.removeAll() }
+            onClear: { selected.removeAll() },
+            style: style,
+            onRequestSearch: onRequestSearch
         )
         .task {
-            // Read once, here, rather than on every keystroke. `displayTitle` and
-            // `effectiveSymbolName` both walk the model; doing that inside a filter is what
-            // made typing in this popover feel broken.
+            // Read once, here, rather than on every keystroke: `displayTitle` walks the model.
             choices = ((try? services?.records.allRecords()) ?? []).map {
                 MobileChoice(
-                    id: $0.id.uuidString,
+                    id: TextNormalizer.foldedForMatching($0.displayTitle),
                     title: $0.displayTitle,
                     symbolName: $0.effectiveSymbolName,
                     colorName: $0.colorName
@@ -298,11 +390,13 @@ struct MobileProjectPicker: View {
     @Environment(\.services) private var services
 
     @Binding var selected: String?
+    var style: MobileChoiceStyle = .popover
+    var onRequestSearch: (() -> Void)?
 
     @State private var choices: [MobileChoice] = []
 
     var body: some View {
-        MobileChoicePopover(
+        MobileChoiceList(
             title: "Project",
             choices: choices,
             allowsMultiple: false,
@@ -310,7 +404,9 @@ struct MobileProjectPicker: View {
             onToggle: { choice in
                 selected = selected == choice.title ? nil : choice.title
             },
-            onClear: { selected = nil }
+            onClear: { selected = nil },
+            style: style,
+            onRequestSearch: onRequestSearch
         )
         .task {
             choices = ((try? services?.items.items(matching: ItemQuery.kind(.project))) ?? []).map {
@@ -331,8 +427,9 @@ struct MobileProjectPicker: View {
 ///
 /// A day rather than an instant: every scheduling decision this app makes is about which day
 /// something belongs to, and a picker offering 3:47 PM would offer precision the model does not
-/// keep. The named rows are on top because they answer the question almost every time, and
-/// they are rows rather than a segmented control so a thumb has 44 points to land on.
+/// keep. The named rows are on top because they answer the question almost every time, and they
+/// are rows rather than a segmented control so a thumb has 44 points to land on. Nothing here
+/// needs typing, so this one stays a popover in every case.
 struct MobileDayPicker: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
@@ -342,7 +439,7 @@ struct MobileDayPicker: View {
     /// Bound only for When: Someday is a kind of when, and a deadline cannot be someday.
     var isSomeday: Binding<Bool>?
 
-    /// Wider than the list popovers because a month grid has seven columns to fit.
+    /// Wider than the lists because a month grid has seven columns to fit.
     private static let width: CGFloat = 320
 
     var body: some View {
@@ -416,10 +513,12 @@ struct MobileDayPicker: View {
 
     private func quickRow(_ label: String, daysFromToday: Int, symbol: String) -> some View {
         let day = services?.dateProvider.startOfDay(daysFromToday: daysFromToday)
-        let isOn = day.map { candidate in
-            guard let selection, let calendar = services?.dateProvider.calendar else { return false }
-            return calendar.isDate(selection, inSameDayAs: candidate)
-        } ?? false
+        let isOn: Bool = {
+            guard let day, let selection, let calendar = services?.dateProvider.calendar else {
+                return false
+            }
+            return calendar.isDate(selection, inSameDayAs: day)
+        }()
 
         return Button {
             selection = day
