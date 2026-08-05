@@ -52,12 +52,27 @@ enum Timeline {
 
     static let lineWidth: CGFloat = 1
 
+    /// The air a row keeps above and below its content.
+    ///
+    /// ### Why this went up
+    /// Because a row was ending where the next one began. Every entry on this page has the same
+    /// skeleton and most of them run to several lines — a time, a title, a place, a warning, a list
+    /// of names — and at twelve points of padding the gap *between* two meetings was barely larger
+    /// than the gap between a meeting's own lines. The hairline was doing all the work of saying
+    /// where one thing stopped, and a hairline is not enough on its own. Sixteen is: the eye reads
+    /// the tight lines as one block and the wide gap as the end of it, before the rule is noticed at
+    /// all.
+    ///
+    /// The badge takes the same value, so the mark on the thread stays level with the row's first
+    /// line however this is tuned.
+    static let rowPadding: CGFloat = Theme.Spacing.large
+
     /// How far down a row the badge's centre sits — the top padding plus half the badge.
     ///
     /// Named because the closing row's rail has to stop *exactly* there. A line that stops short
     /// leaves the last badge hanging off the end of the thread; one that overshoots pokes out below
     /// it. Either reads as a rendering fault rather than as an ending.
-    static let badgeCentreY: CGFloat = Theme.Spacing.small + badgeSize / 2
+    static let badgeCentreY: CGFloat = rowPadding + badgeSize / 2
 
     /// How the line is drawn through a row.
     enum RailStyle {
@@ -188,6 +203,22 @@ struct TimelineRow<Content: View>: View {
 
     /// Whether a hairline closes the row off. The last row of the day does not need one.
     var showsDivider: Bool = true
+
+    /// Whether a rule opens the row, rather than the row above closing it.
+    ///
+    /// The difference matters at a boundary. A divider belongs to the thing above it and reads as
+    /// "that has ended"; a rule at the top of a row reads as "this begins here", which is the whole
+    /// job of a day marker. Only a boundary should have one — a page where every row is ruled top
+    /// and bottom is a page of double lines saying nothing twice.
+    var showsTopRule: Bool = false
+
+    /// Extra air above the row, on top of the ordinary padding.
+    ///
+    /// For the same boundary: a rule with nothing on either side of it is a scratch on the page.
+    /// What makes a new day legible before a word is read is the *space*, and the rule only tells
+    /// the eye where the space ends.
+    var topGap: CGFloat = 0
+
     @ViewBuilder var content: () -> Content
 
     @Environment(\.timelineIsPast) private var isPast
@@ -208,9 +239,9 @@ struct TimelineRow<Content: View>: View {
                         // Offset rather than padded: the target is taller than the badge, and
                         // padding it down would push the *whole* control below the line the badge is
                         // meant to sit on.
-                        .offset(y: Theme.Spacing.small + Timeline.badgeSize / 2 - Timeline.controlSize / 2)
+                        .offset(y: Timeline.badgeCentreY + topGap - Timeline.controlSize / 2)
                     } else {
-                        badge.padding(.top, Theme.Spacing.small)
+                        badge.padding(.top, Timeline.rowPadding + topGap)
                     }
                 }
             }
@@ -220,11 +251,18 @@ struct TimelineRow<Content: View>: View {
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, Theme.Spacing.tight)
-                .padding(.top, Theme.Spacing.medium)
-                .padding(.bottom, Theme.Spacing.medium)
+                .padding(.top, Timeline.rowPadding + topGap)
+                .padding(.bottom, Timeline.rowPadding)
                 .padding(.trailing, Theme.Spacing.large)
                 .overlay(alignment: .bottom) {
                     if showsDivider {
+                        Rectangle()
+                            .fill(Theme.Colors.separator)
+                            .frame(height: Timeline.lineWidth)
+                    }
+                }
+                .overlay(alignment: .top) {
+                    if showsTopRule {
                         Rectangle()
                             .fill(Theme.Colors.separator)
                             .frame(height: Timeline.lineWidth)
@@ -325,17 +363,26 @@ struct TimelineHeader<Trailing: View>: View {
                 .padding(.leading, Timeline.railInset)
 
             HStack {
+                // Secondary rather than tertiary, and with room above it.
+                //
+                // A label at the faintest grey the palette has, set eight points from the row it
+                // names and sixteen from the row it follows, is not a heading — it is a caption that
+                // happens to be in capitals, and the page read as one undifferentiated column
+                // because of it. Turning the contrast up and putting a section's worth of air above
+                // it is what makes "SCHEDULE" a place where one kind of thing stops and another
+                // starts. It is still not a card: no border, no fill, and the thread runs on behind
+                // it.
                 Text(title)
                     .font(Theme.Text.sectionHeader)
                     .kerning(Theme.Text.Tracking.caps)
                     .textCase(.uppercase)
-                    .foregroundStyle(Theme.Colors.tertiaryText)
+                    .foregroundStyle(Theme.Colors.secondaryText)
                     .accessibilityIdentifier(identifier ?? "")
                 Spacer()
                 trailing()
             }
             .padding(.leading, Theme.Spacing.tight)
-            .padding(.top, Theme.Spacing.large)
+            .padding(.top, Theme.Spacing.section)
             .padding(.bottom, Theme.Spacing.small)
             .padding(.trailing, Theme.Spacing.large)
         }
