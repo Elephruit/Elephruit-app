@@ -137,6 +137,23 @@ struct TimeBlockTests {
         )
     }
 
+    @Test("A gap already under way starts on the next quarter, not on a timestamp")
+    func currentSlotsStartOnARoundTime() {
+        let running = DayFreeSlot(
+            range: Self.at(11).addingTimeInterval(7 * 60)..<Self.at(12), isCurrent: true
+        )
+        #expect(TimeBlockRules.start(in: running, calendar: Self.calendar) == Self.at(11.25))
+
+        // A gap too short to survive the rounding keeps its ragged start, which is the lesser evil.
+        let brief = DayFreeSlot(
+            range: Self.at(11).addingTimeInterval(7 * 60)..<Self.at(11.3), isCurrent: true
+        )
+        #expect(TimeBlockRules.start(in: brief, calendar: Self.calendar) == brief.range.lowerBound)
+
+        // A gap later in the day begins where it begins; there is nothing ragged about it.
+        #expect(TimeBlockRules.start(in: Self.slot(14, 15), calendar: Self.calendar) == Self.at(14))
+    }
+
     // MARK: - What gets written
 
     @Test("A block carries the task's title and nothing else about it")

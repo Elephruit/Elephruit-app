@@ -349,6 +349,25 @@ public final class EventAnnotationService {
         try save()
     }
 
+    /// Ties a piece of work to the block of time written to make room for it.
+    ///
+    /// ### Why the link is here and not in the event
+    /// Because the event goes to an account somebody else may be able to read, and "this hour is
+    /// for the thing I have been avoiding since March" is not a fact to sync to a work Exchange
+    /// server. The event carries the task's title, which the person chose to put on their calendar
+    /// by blocking the time; the association lives on the annotation, where nothing leaves the
+    /// device.
+    ///
+    /// Separate from ``link(record:to:)`` because that one refuses anything that is not a Record —
+    /// correctly, since tagging a *person* on an event is a claim about who was there. A task is
+    /// neither a participant nor a Record; it is the reason the block exists.
+    @discardableResult
+    public func link(task: Item, to event: CalendarEventSummary) throws(AppError) -> Item? {
+        guard let meeting = try meetingItem(for: event) else { return nil }
+        try items.link(meeting, to: task, kind: .related)
+        return meeting
+    }
+
     /// Compatibility spellings for existing person-specific workflows.
     @discardableResult
     public func link(person: Item, to event: CalendarEventSummary) throws(AppError) -> Item? {

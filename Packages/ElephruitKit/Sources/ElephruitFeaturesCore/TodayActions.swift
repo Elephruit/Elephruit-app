@@ -265,6 +265,121 @@ public struct TodayActions {
         }
     }
 
+    // MARK: - Blocking time
+
+    /// The day's unscheduled work, ranked for one gap.
+    ///
+    /// Only what has no time of its own: a task already pinned to half past three has been given a
+    /// place in the day, and offering to give it a second one is offering to double-book somebody
+    /// against themselves.
+    public func work(for slot: DayFreeSlot, in plan: DayPlan) -> [TimeBlockCandidate] {
+        let unscheduled = model.openTasks(in: plan).filter { $0.day.pinnedAt == nil }
+        return TimeBlockRules.candidates(
+            in: slot,
+            from: unscheduled.map { entry in
+                TimeBlockCandidate(
+                    id: entry.item.id,
+                    title: entry.item.displayTitle,
+                    estimateMinutes: entry.item.estimateMinutes
+                )
+            }
+        )
+    }
+
+    /// What the app would write, before it writes anything.
+    ///
+    /// Every part of this is shown and changeable in the sheet: the calendar it lands on, whether it
+    /// defends the time, how long it lasts. Nothing here is a silent guess — see ``TimeBlockRules``
+    /// for how the length is arrived at, and why an estimate never outgrows the gap it is going into.
+    ///
+    /// Returns `nil` when there is no calendar that can be written to at all, which is a state the
+    /// interface has to explain rather than a failure to report after the fact.
+    ///
+    /// - Parameters:
+    ///   - task: The work the block is for. `nil` is a plain focus block.
+    ///   - slot: The gap it is going into, when the user chose one. Without it the day's own free
+    ///     time is consulted, and failing that a sensible hour is proposed and shown.
+    public func proposal(
+        blocking task: Item?,
+        in slot: DayFreeSlot?,
+        on plan: DayPlan
+    ) -> TimeBlockProposal? {
+        guard let calendarIdentifier = services.calendar.defaultCalendarIdentifier else { return nil }
+
+        let estimate = task?.estimateMinutes
+        let chosen = slot ?? TimeBlockRules.slot(forEstimate: estimate, among: plan.briefing.focus.slots)
+
+        let start: Date
+        var room = chosen
+        if let chosen {
+            start = TimeBlockRules.start(in: chosen, calendar: clock.calendar)
+            // The gap as it is *from the start actually proposed*, so a rounded start cannot produce
+            // a block that runs past the meeting the gap ends at.
+            if start > chosen.range.lowerBound, start < chosen.range.upperBound {
+                room = DayFreeSlot(range: start..<chosen.range.upperBound, isCurrent: chosen.isCurrent)
+            }
+        } else {
+            start = defaultStart(on: plan)
+        }
+
+        return TimeBlockProposal(
+            taskID: task?.id,
+            title: task?.displayTitle ?? "Focus",
+            startAt: start,
+            length: TimeBlockRules.length(forEstimate: estimate, in: room),
+            calendarIdentifier: calendarIdentifier
+        )
+    }
+
+    /// Writes the block, and remembers locally what it was for.
+    ///
+    /// The link back to the task is the second half of this and not an optional extra: without it a
+    /// block is an event called "Draft the brief" with no relationship to the brief, and every
+    /// surface that could show one beside the other has nothing to go on. It is written through
+    /// ``EventAnnotationService``, on this device, and the calendar account never learns of it.
+    ///
+    /// A failed link does not fail the write. The event exists by then, and reporting "could not
+    /// save" for something that was saved is the worse of the two wrong answers.
+    @discardableResult
+    public func write(_ proposal: TimeBlockProposal) async -> Result<CalendarEventSummary, CalendarWriteFailure> {
+        let outcome = await services.calendar.create(
+            proposal.draft(timeZoneIdentifier: clock.calendar.timeZone.identifier)
+        )
+
+        if case .success(let event) = outcome, let id = proposal.taskID, let task = model.task(id) {
+            services.perform {
+                try services.eventLinks.link(task: task, to: event)
+                services.noteChange(to: task)
+            }
+        }
+        return outcome
+    }
+
+    /// Takes back a block just written.
+    ///
+    /// ### Why undo is part of the feature rather than a later refinement
+    /// Because the fastest way to make somebody distrust a button that writes to their calendar is
+    /// for the first thing it writes to be wrong and hard to remove. The confirmation says what was
+    /// written and offers this in the same breath.
+    @discardableResult
+    public func removeBlock(_ event: CalendarEventSummary) async -> Result<Void, CalendarWriteFailure> {
+        await services.calendar.delete(event.identity, scope: .thisEvent)
+    }
+
+    /// When to propose a block on a day with no free time left in it.
+    ///
+    /// Today gets the next quarter hour, which is the soonest anybody can act on. Another day gets
+    /// the hour their working day starts, because there is no "now" on a day that has not happened
+    /// and the start of the day is the only honest default.
+    private func defaultStart(on plan: DayPlan) -> Date {
+        guard !plan.isToday else {
+            return TimeBlockRules.nextRoundStart(after: clock.now, calendar: clock.calendar)
+        }
+        let minutes = services.workday.hours.startMinutes
+        let midnight = clock.calendar.startOfDay(for: plan.date)
+        return clock.calendar.date(byAdding: .minute, value: minutes, to: midnight) ?? midnight
+    }
+
     // MARK: - People
 
     /// Ways to reach somebody, in the order their own record makes sensible.

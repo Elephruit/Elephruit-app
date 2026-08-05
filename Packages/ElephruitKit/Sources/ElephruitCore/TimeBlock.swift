@@ -107,6 +107,19 @@ public enum TimeBlockRules {
         return inOrder.max { $0.duration < $1.duration }
     }
 
+    /// Where a block inside a gap begins.
+    ///
+    /// The start of the gap, except for one already under way. A stretch that opened when the last
+    /// meeting overran begins at 11:07, and 11:07 is a timestamp rather than a plan — so a gap in
+    /// progress rounds up to the next quarter. Unless that would eat it: rounding a twelve-minute
+    /// gap forward leaves a block nobody wants, and the ragged start is the lesser evil.
+    public static func start(in slot: DayFreeSlot, calendar: Calendar) -> Date {
+        guard slot.isCurrent else { return slot.range.lowerBound }
+        let rounded = nextRoundStart(after: slot.range.lowerBound, calendar: calendar)
+        guard slot.range.upperBound.timeIntervalSince(rounded) >= 5 * 60 else { return slot.range.lowerBound }
+        return rounded
+    }
+
     /// The next time worth starting something, when there is no gap to start it in.
     ///
     /// Rounded up to the next quarter hour: an event beginning at 2:07 PM is a timestamp rather than
