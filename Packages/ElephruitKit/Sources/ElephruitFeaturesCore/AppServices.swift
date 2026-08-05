@@ -702,6 +702,11 @@ public final class AppServices {
     /// costs milliseconds and never work (the `dayRelevanceKey` argument, applied to sync).
     public func absorbRemoteChanges() {
         changeToken &+= 1
+        // Before the derived pass, because the timer is the one piece of state a view reads
+        // straight from this object rather than from a fetch — and the only one where being a
+        // few seconds stale is not a cosmetic problem but a clock counting time nobody is
+        // working. See ``TimerService/absorbRemoteChange()``.
+        timer.absorbRemoteChange()
         refreshDerivedState()
         Task { await warmSearchIndex() }
     }
