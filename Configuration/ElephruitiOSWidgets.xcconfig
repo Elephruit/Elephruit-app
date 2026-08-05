@@ -1,0 +1,51 @@
+// The widget extension's build settings — the whole file, on the same argument as the two app
+// xcconfigs beside it: the `pbxproj` stays small and is touched only when a target appears.
+//
+// A sibling rather than an `#include` of `ElephruitiOS.xcconfig` for the reason that file gives
+// for not including the macOS one: it states `INFOPLIST_FILE`, `CODE_SIGN_ENTITLEMENTS` and an
+// application's `PRODUCT_BUNDLE_IDENTIFIER`, and an extension that inherited any of those and
+// then overrode them is an extension somebody will one day forget to override.
+
+// MARK: - Identity
+
+PRODUCT_NAME = ElephruitiOSWidgets
+// The app's identifier plus one component, which is what the system requires of an extension it
+// is going to load inside that app.
+PRODUCT_BUNDLE_IDENTIFIER = com.elephruit.ElephruitMemory.iOS.Widgets
+PRODUCT_MODULE_NAME = ElephruitiOSWidgets
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+
+// MARK: - Platform
+
+SDKROOT = iphoneos
+IPHONEOS_DEPLOYMENT_TARGET = 26.0
+SUPPORTED_PLATFORMS = iphoneos iphonesimulator
+TARGETED_DEVICE_FAMILY = 1
+ARCHS = $(ARCHS_STANDARD)
+
+// MARK: - Swift
+
+SWIFT_VERSION = 6.0
+SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+GCC_TREAT_WARNINGS_AS_ERRORS = YES
+SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES
+SWIFT_EMIT_LOC_STRINGS = YES
+
+// MARK: - Bundle
+
+INFOPLIST_FILE = Configuration/ElephruitiOSWidgets-Info.plist
+GENERATE_INFOPLIST_FILE = YES
+// No entitlements file. A Live Activity started by the app it ships inside needs none, and an
+// entitlement lands in the same commit as the feature that needs it — the rule the two app
+// entitlement files already keep.
+SKIP_INSTALL = YES
+
+// MARK: - Linking
+
+LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks @executable_path/../../Frameworks
+
+// MARK: - Signing
+
+#include "Signing.xcconfig"
+CODE_SIGN_STYLE = Automatic

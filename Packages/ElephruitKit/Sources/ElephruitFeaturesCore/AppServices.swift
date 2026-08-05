@@ -702,6 +702,11 @@ public final class AppServices {
     /// costs milliseconds and never work (the `dayRelevanceKey` argument, applied to sync).
     public func absorbRemoteChanges() {
         changeToken &+= 1
+        // Before the derived pass, because the timer is the one piece of state a view reads
+        // straight from this object rather than from a fetch — and the only one where being a
+        // few seconds stale is not a cosmetic problem but a clock counting time nobody is
+        // working. See ``TimerService/absorbRemoteChange()``.
+        timer.absorbRemoteChange()
         refreshDerivedState()
         Task { await warmSearchIndex() }
     }
@@ -878,6 +883,18 @@ public final class AppServices {
         Task { await engine.indexDidChange(for: item) }
         changeToken &+= 1
         refreshDerivedState()
+    }
+
+    /// Says a time entry was written, so anything listing them re-asks its own question.
+    ///
+    /// Only the token: entries carry no badge and are not in the search index, so the derived
+    /// pass would be work for nothing. It exists because a log is a *fetch* — a plain call
+    /// SwiftUI cannot see going stale — and the surfaces that draw one were, until this,
+    /// relying on the ticking clock beside them to invalidate the view every second. That
+    /// re-read the whole day's entries once a second while a timer ran, and stopped re-reading
+    /// them at all the moment the clock moved into a child view.
+    public func noteTimeChange() {
+        changeToken &+= 1
     }
 
     /// Captures a line of text **and** keeps derived state current.

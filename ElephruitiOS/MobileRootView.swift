@@ -43,6 +43,9 @@ struct MobileRootView: View {
     /// The live drag offset, in points, while a gesture is in flight.
     @State private var dragTranslation: CGFloat = 0
 
+    /// The running timer, as the Dynamic Island sees it.
+    @State private var liveActivity = TimerLiveActivityController()
+
     var body: some View {
         ZStack(alignment: .leading) {
             contentLayer
@@ -66,6 +69,22 @@ struct MobileRootView: View {
         .onOpenURL { url in
             handleDeepLink(url)
         }
+        // The island is not driven by the commands that change the timer — see
+        // `TimerLiveActivityController`. It is driven by *what the timer is*, read here on every
+        // pass the observation system already wakes this view for, and compared with what the
+        // system is currently showing.
+        .task {
+            liveActivity.adoptExisting()
+            liveActivity.apply(timerActivityState)
+        }
+        .onChange(of: timerActivityState) { _, state in
+            liveActivity.apply(state)
+        }
+    }
+
+    /// What the Dynamic Island should be saying, or `nil` for nothing.
+    private var timerActivityState: ElephruitTimerAttributes.ContentState? {
+        .current(services)
     }
 
     // MARK: - Layers
@@ -139,12 +158,21 @@ struct MobileRootView: View {
         .safeAreaInset(edge: .bottom) {
             // Attached only while a timer runs: a permanent blank bar would be chrome with
             // nothing to say, and it would cost every screen the height to say it.
-            if services?.timer.running != nil {
+            //
+            // And not on the Time screen itself, where the tracker card is already showing the
+            // same clock and a larger Stop a few points above it. Two stop buttons for one timer
+            // on one screen is a question about which of them is the real one.
+            if services?.timer.running != nil, !isShowingTheTracker {
                 TimerAccessoryView()
                     .frame(height: 44)
                     .background(.bar)
             }
         }
+    }
+
+    /// Whether the Time screen's own tracker card is the thing on screen.
+    private var isShowingTheTracker: Bool {
+        shell.destination == .time && shell.path.isEmpty
     }
 
     /// The leading strip that starts the drawer, live only at the root of a stack.
