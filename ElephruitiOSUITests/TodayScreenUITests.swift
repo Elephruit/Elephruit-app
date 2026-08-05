@@ -41,6 +41,37 @@ final class TodayScreenUITests: XCTestCase {
         add(attachment)
     }
 
+    /// The far end of the thread: people, and the day's note closing it off.
+    ///
+    /// Scrolled to rather than waited for. A SwiftUI `List` only realises cells near the viewport,
+    /// so anything below the fold is absent from the accessibility tree entirely and no timeout
+    /// will conjure it.
+    func testThreadRunsThroughToTheDaysNote() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ElephruitDevelopmentMode",
+            "-ElephruitUseTemporaryStore",
+            "-ElephruitLoadSampleData",
+            "-ElephruitUseFixtureCalendar",
+            "-ElephruitFixturesAuthorized",
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 30))
+
+        let note = app.staticTexts["Write about this day"]
+        for _ in 0..<12 where !note.exists {
+            app.swipeUp()
+        }
+
+        XCTAssertTrue(note.exists, "the thread never reached the day's note")
+
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "today-thread-end"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     /// The gaps are rows, and the switch that hides them actually hides them.
     ///
     /// Asserted rather than only photographed, because "free" appearing on screen is not proof the

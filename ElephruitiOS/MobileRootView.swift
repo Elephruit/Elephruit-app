@@ -109,6 +109,13 @@ struct MobileRootView: View {
                     }
                 }
         }
+        // Room under every scrolling screen for the button that floats over all of them.
+        //
+        // The button does not displace content, it covers it, so without this the last row of any
+        // list comes to rest under the glass and cannot be read at any scroll position — the end
+        // of Today's thread, the last reminder in a list, the final row of a project. It belongs
+        // here rather than on each screen because the button is the shell's, not theirs.
+        .contentMargins(.bottom, CaptureButton.footprint, for: .scrollContent)
         .overlay(alignment: .bottomTrailing) { primaryButton }
         .safeAreaInset(edge: .bottom) {
             // Attached only while a timer runs: a permanent blank bar would be chrome with
@@ -250,6 +257,15 @@ struct CaptureButton: View {
     /// Smaller because this floats over lists whose content is the point, permanently, on every
     /// screen: the loudest object in the room should not be the one you use least.
     private static let glyphBox: CGFloat = 40
+
+    /// How much of the bottom of the screen this button owns.
+    ///
+    /// The button floats over the content rather than displacing it, so a scrolling view has to
+    /// leave this much room underneath or its final row can never be read — it comes to rest under
+    /// the glass. Derived from the button's own measurements rather than typed again, because a
+    /// clearance that stops matching the thing it is clearing is worse than none: it looks
+    /// deliberate while being wrong.
+    static let footprint: CGFloat = glyphBox + Theme.Spacing.hairline * 2 + bottomClearance
 
     var label: String
     var hint: String

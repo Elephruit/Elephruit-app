@@ -55,10 +55,17 @@ private struct TodayContent: View {
     var body: some View {
         List {
             if let failure = model.failure {
-                Section {
-                    Label(failure.summary, systemImage: "exclamationmark.triangle")
+                TimelineRow(
+                    railStyle: .none,
+                    badge: Timeline.Badge(
+                        symbolName: "exclamationmark.triangle", tint: Theme.Colors.warning
+                    )
+                ) {
+                    Text(failure.summary)
+                        .font(Theme.Text.rowSubtitle)
                         .foregroundStyle(Theme.Colors.warning)
                 }
+                .onTimeline()
             }
 
             if let plan = model.selectedPlan {
@@ -72,30 +79,32 @@ private struct TodayContent: View {
                 dailyNoteSection(plan)
 
                 if plan.isEmpty, model.failure == nil {
-                    Section {
-                        EmptyStateView(
-                            symbolName: plan.isToday ? "sun.max" : "calendar",
-                            headline: plan.isToday ? "A clear day" : "Nothing planned",
-                            message: plan.isToday
-                                ? "Nothing scheduled, nothing due. Capture something, or enjoy it."
-                                : "Nothing scheduled or due on this day yet.",
-                            tone: .accomplished
-                        )
-                    }
-                    .listRowBackground(Color.clear)
+                    EmptyStateView(
+                        symbolName: plan.isToday ? "sun.max" : "calendar",
+                        headline: plan.isToday ? "A clear day" : "Nothing planned",
+                        message: plan.isToday
+                            ? "Nothing scheduled, nothing due. Capture something, or enjoy it."
+                            : "Nothing scheduled or due on this day yet.",
+                        tone: .accomplished
+                    )
+                    .onTimeline()
                 }
             } else if model.isLoadingInitially {
-                Section {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                        Spacer()
-                    }
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
                 }
-                .listRowBackground(Color.clear)
+                .padding(.vertical, Theme.Spacing.extraLarge)
+                .onTimeline()
             }
         }
-        .listStyle(.insetGrouped)
+        // Plain, because every grouped style insets and rounds each section into a card of its own —
+        // which is the thing the rail exists instead of. The rows draw their own background and
+        // their own hairlines, so the list contributes geometry and nothing else.
+        .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 0)
+        .background(Theme.Colors.contentBackground)
         .refreshable {
             // Honest refresh: re-reads the calendar, which genuinely can have changed
             // underneath the app. The library itself needs no pulling — it is local.
@@ -143,11 +152,16 @@ private struct TodayContent: View {
 
     // MARK: - Briefing
 
+    /// The day in figures, above the thread rather than on it.
+    ///
+    /// The one part of the page that is not an entry in the day: it is *about* the day, so it sits
+    /// full-width with no rail, and the thread starts underneath it. Path puts a cover photo here
+    /// for the same structural reason — something has to establish the top of the line.
     @ViewBuilder
     private func briefingSection(_ plan: DayPlan) -> some View {
         let figures = plan.briefing.figures
         if !figures.isEmpty || plan.briefing.next != nil {
-            Section {
+            VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
                 if !figures.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: Theme.Spacing.small) {
@@ -155,11 +169,9 @@ private struct TodayContent: View {
                                 BriefingFigureChip(figure: figure)
                             }
                         }
+                        .padding(.horizontal, Theme.Spacing.large)
                     }
-                    .listRowInsets(EdgeInsets(
-                        top: Theme.Spacing.small, leading: Theme.Spacing.large,
-                        bottom: Theme.Spacing.small, trailing: Theme.Spacing.large
-                    ))
+                    .padding(.horizontal, -Theme.Spacing.large)
                 }
 
                 if let next = plan.briefing.next {
@@ -197,6 +209,9 @@ private struct TodayContent: View {
                     }
                 }
             }
+            .padding(.horizontal, Theme.Spacing.large)
+            .padding(.vertical, Theme.Spacing.medium)
+            .onTimeline()
         }
     }
 
@@ -207,37 +222,38 @@ private struct TodayContent: View {
         if let services {
             let calendar = services.calendar
             if !calendar.isEnabled {
-                Section {
-                    NavigationLink(value: MobileRoute.settings) {
-                        Label {
-                            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                                Text("Calendar is off")
-                                    .font(Theme.Text.rowTitle)
-                                Text("Turn it on in Settings to see meetings here.")
-                                    .font(Theme.Text.rowSubtitle)
-                                    .foregroundStyle(Theme.Colors.secondaryText)
-                            }
-                        } icon: {
-                            Image(systemName: "calendar.badge.plus")
-                                .foregroundStyle(Theme.Colors.selection)
-                        }
-                    }
-                }
-            } else if calendar.authorization == .denied || calendar.authorization == .restricted {
-                Section {
-                    Label {
+                NavigationLink(value: MobileRoute.settings) {
+                    TimelineRow(
+                        badge: Timeline.Badge(
+                            symbolName: "calendar.badge.plus", tint: Theme.Colors.selection
+                        )
+                    ) {
                         VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                            Text("Calendar access is denied")
+                            Text("Calendar is off")
                                 .font(Theme.Text.rowTitle)
-                            Text("Allow access in Settings › Privacy to see meetings here.")
+                            Text("Turn it on in Settings to see meetings here.")
                                 .font(Theme.Text.rowSubtitle)
                                 .foregroundStyle(Theme.Colors.secondaryText)
                         }
-                    } icon: {
-                        Image(systemName: "calendar.badge.exclamationmark")
-                            .foregroundStyle(Theme.Colors.warning)
                     }
                 }
+                .buttonStyle(.plain)
+                .onTimeline()
+            } else if calendar.authorization == .denied || calendar.authorization == .restricted {
+                TimelineRow(
+                    badge: Timeline.Badge(
+                        symbolName: "calendar.badge.exclamationmark", tint: Theme.Colors.warning
+                    )
+                ) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+                        Text("Calendar access is denied")
+                            .font(Theme.Text.rowTitle)
+                        Text("Allow access in Settings › Privacy to see meetings here.")
+                            .font(Theme.Text.rowSubtitle)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                    }
+                }
+                .onTimeline()
             }
         }
     }
@@ -258,16 +274,16 @@ private struct TodayContent: View {
         let calendar = services?.dateProvider.calendar ?? .current
         let awareness = plan.awarenessEvents(calendar: calendar)
         if !awareness.isEmpty {
-            Section {
-                ForEach(awareness) { event in
-                    TodayAwarenessRow(dayEvent: event, day: plan.date, calendar: calendar)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            shell.push(.event(event.event.identity.storageKey))
-                        }
-                }
-            } header: {
-                Text("Awareness").accessibilityIdentifier("today.awareness.header")
+            TimelineHeader("Awareness", identifier: "today.awareness.header")
+                .onTimeline()
+
+            ForEach(awareness) { event in
+                TodayAwarenessRow(dayEvent: event, day: plan.date, calendar: calendar)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        shell.push(.event(event.event.identity.storageKey))
+                    }
+                    .onTimeline()
             }
         }
     }
@@ -279,32 +295,31 @@ private struct TodayContent: View {
         let calendar = services?.dateProvider.calendar ?? .current
         let rows = scheduleRows(plan, calendar: calendar)
         if !rows.isEmpty {
-            Section {
-                ForEach(rows) { row in
-                    switch row {
-                    case .event(let event):
-                        TodayEventRow(dayEvent: event)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                shell.push(.event(event.event.identity.storageKey))
+            scheduleHeader.onTimeline()
+
+            ForEach(rows) { row in
+                switch row {
+                case .event(let event):
+                    TodayEventRow(dayEvent: event)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            shell.push(.event(event.event.identity.storageKey))
+                        }
+                        .contextMenu {
+                            if actions.joinLink(for: event) != nil {
+                                Button("Join", systemImage: "video") { actions.join(event) }
                             }
-                            .contextMenu {
-                                if actions.joinLink(for: event) != nil {
-                                    Button("Join", systemImage: "video") { actions.join(event) }
-                                }
-                                Button("Open in Calendar", systemImage: "calendar") {
-                                    shell.push(.calendar)
-                                }
-                                Button("Meeting Notes", systemImage: "note.text") {
-                                    openMeetingNotes(event)
-                                }
+                            Button("Open in Calendar", systemImage: "calendar") {
+                                shell.push(.calendar)
                             }
-                    case .free(let slot):
-                        TodayFreeSlotRow(slot: slot)
-                    }
+                            Button("Meeting Notes", systemImage: "note.text") {
+                                openMeetingNotes(event)
+                            }
+                        }
+                        .onTimeline()
+                case .free(let slot):
+                    TodayFreeSlotRow(slot: slot).onTimeline()
                 }
-            } header: {
-                scheduleHeader
             }
         }
     }
@@ -315,10 +330,7 @@ private struct TodayContent: View {
     /// text — the first test to look for "Schedule" after this button arrived waited ten seconds and
     /// found nothing — so neither the title nor the button is reachable by its words alone.
     private var scheduleHeader: some View {
-        HStack {
-            Text("Schedule")
-                .accessibilityIdentifier("today.schedule.header")
-            Spacer()
+        TimelineHeader(title: "Schedule", identifier: "today.schedule.header") {
             if let preferences = services?.todayPreferences {
                 let isShowing = preferences.filters.showsFreeTime
                 Button {
@@ -389,13 +401,14 @@ private struct TodayContent: View {
     private func tasksSection(_ plan: DayPlan) -> some View {
         let open = model.openTasks(in: plan)
         if !open.isEmpty {
-            Section(plan.isToday ? "To do" : "Due or planned") {
-                ForEach(open, id: \.day.id) { entry in
-                    MobileItemRow(item: entry.item) {
-                        withCalmAnimation(Theme.Motion.standard) {
-                            actions.toggleCompletion(entry.item)
-                        }
+            TimelineHeader(plan.isToday ? "To do" : "Due or planned").onTimeline()
+
+            ForEach(open, id: \.day.id) { entry in
+                TodayTaskRow(task: entry.item, day: entry.day) {
+                    withCalmAnimation(Theme.Motion.standard) {
+                        actions.toggleCompletion(entry.item)
                     }
+                }
                     .contentShape(Rectangle())
                     .onTapGesture { shell.push(.item(entry.item.id)) }
                     .swipeActions(edge: .leading, allowsFullSwipe: true) {
@@ -423,7 +436,7 @@ private struct TodayContent: View {
                         }
                     }
                     .contextMenu { taskMenu(entry.item, plan: plan) }
-                }
+                    .onTimeline()
             }
         }
     }
@@ -468,10 +481,25 @@ private struct TodayContent: View {
     private func completedSection(_ plan: DayPlan) -> some View {
         let completed = model.completedTasks(in: plan)
         if !completed.isEmpty {
-            Section {
+            TimelineRow(
+                badge: Timeline.Badge(
+                    symbolName: "checkmark", tint: Theme.Colors.completed
+                )
+            ) {
                 DisclosureGroup {
                     ForEach(completed) { item in
-                        MobileItemRow(item: item) {
+                        HStack(spacing: Theme.Spacing.small) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(Theme.Colors.completed)
+                            Text(item.displayTitle)
+                                .font(Theme.Text.rowSubtitle)
+                                .strikethrough()
+                                .foregroundStyle(Theme.Colors.secondaryText)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
                             withCalmAnimation(Theme.Motion.standard) {
                                 actions.toggleCompletion(item)
                             }
@@ -483,6 +511,7 @@ private struct TodayContent: View {
                         .foregroundStyle(Theme.Colors.secondaryText)
                 }
             }
+            .onTimeline()
         }
     }
 
@@ -491,46 +520,53 @@ private struct TodayContent: View {
     @ViewBuilder
     private func peopleSection(_ plan: DayPlan) -> some View {
         if !plan.people.isEmpty {
-            Section("People today") {
-                ForEach(plan.people) { person in
-                    TodayPersonRow(person: person)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if let id = person.personID {
-                                shell.push(.person(id))
-                            }
+            TimelineHeader("People today").onTimeline()
+
+            ForEach(plan.people) { person in
+                TodayPersonRow(person: person)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if let id = person.personID {
+                            shell.push(.person(id))
                         }
-                }
+                    }
+                    .onTimeline()
             }
         }
     }
 
     // MARK: - Daily note
 
+    /// The end of the thread: the day's own note.
+    ///
+    /// The rail stops here rather than running off the bottom of the screen, because a line that
+    /// continues past the last entry promises something below it that is not there.
     @ViewBuilder
     private func dailyNoteSection(_ plan: DayPlan) -> some View {
-        Section {
-            Button {
-                openDailyNote(plan)
-            } label: {
-                Label {
-                    if let excerpt = plan.dailyNoteExcerpt, !excerpt.isEmpty {
-                        Text(excerpt)
-                            .font(Theme.Text.rowSubtitle)
-                            .foregroundStyle(Theme.Colors.secondaryText)
-                            .lineLimit(2)
-                    } else {
-                        Text(plan.dailyNoteID == nil ? "Write about this day" : "Open the day's note")
-                            .font(Theme.Text.rowSubtitle)
-                            .foregroundStyle(Theme.Colors.secondaryText)
-                    }
-                } icon: {
-                    Image(systemName: "sun.horizon")
+        Button {
+            openDailyNote(plan)
+        } label: {
+            TimelineRow(
+                railStyle: .tail,
+                badge: Timeline.Badge(
+                    symbolName: "sun.horizon", tint: Theme.Colors.secondaryText
+                ),
+                showsDivider: false
+            ) {
+                if let excerpt = plan.dailyNoteExcerpt, !excerpt.isEmpty {
+                    Text(excerpt)
+                        .font(Theme.Text.rowSubtitle)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                        .lineLimit(2)
+                } else {
+                    Text(plan.dailyNoteID == nil ? "Write about this day" : "Open the day's note")
+                        .font(Theme.Text.rowSubtitle)
                         .foregroundStyle(Theme.Colors.secondaryText)
                 }
             }
-            .buttonStyle(.plain)
         }
+        .buttonStyle(.plain)
+        .onTimeline()
     }
 
     private func openDailyNote(_ plan: DayPlan) {
@@ -574,32 +610,23 @@ private enum ScheduleRow: Identifiable {
 private struct TodayFreeSlotRow: View {
     let slot: DayFreeSlot
 
-    /// The same column the event rows use, so the two line up down the page rather than sitting in
-    /// two slightly different lists. See ``TodayEventRow`` for where the 64 comes from.
-    @ScaledMetric(relativeTo: .caption) private var timeColumnWidth: CGFloat = 64
-
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.medium) {
+        // The thread itself goes dashed. That is the whole idea: free time is not another entry to
+        // read, it is the absence of one, and drawing it as a gap in the line says so before a
+        // single word is read.
+        TimelineRow(railStyle: .dashed) {
             Text(slot.isCurrent ? "Now" : slot.range.lowerBound.formatted(date: .omitted, time: .shortened))
                 .font(Theme.Text.metadata)
                 .monospacedDigit()
                 .foregroundStyle(Theme.Colors.tertiaryText)
-                .frame(width: timeColumnWidth, alignment: .trailing)
-
-            Capsule()
-                .strokeBorder(Theme.Colors.tertiaryText.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                .frame(width: 3)
-
+        } content: {
             // "15m free · until 10:00 AM". Not the whole range: the column to the left has already
             // said when it starts, and "9:45 AM │ 15m free · 9:45 AM – 10:00 AM" says it twice.
             Text("\(slot.durationSummary) free · until \(endLabel)")
                 .font(Theme.Text.rowSubtitle)
                 .foregroundStyle(Theme.Colors.secondaryText)
                 .lineLimit(1)
-
-            Spacer(minLength: 0)
         }
-        .frame(minHeight: 32)
         .accessibilityElement(children: .combine)
         // Spoken with both ends, unlike the drawn row: a combined element is read as one sentence,
         // so there is no column to the left to have already said when it starts.
@@ -654,12 +681,12 @@ private struct TodayAwarenessRow: View {
     let calendar: Calendar
 
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.medium) {
-            Image(systemName: dayEvent.kind.symbolName)
-                .foregroundStyle(Theme.Palette.color(named: dayEvent.event.calendarColorName))
-                .frame(width: 20)
-                .accessibilityHidden(true)
-
+        TimelineRow(
+            badge: Timeline.Badge(
+                symbolName: dayEvent.kind.symbolName,
+                tint: Theme.Palette.color(named: dayEvent.event.calendarColorName)
+            )
+        ) {
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 Text(dayEvent.event.displayTitle)
                     .font(Theme.Text.rowTitle)
@@ -673,10 +700,7 @@ private struct TodayAwarenessRow: View {
                         .lineLimit(1)
                 }
             }
-
-            Spacer(minLength: 0)
         }
-        .frame(minHeight: 44)
         .opacity(dayEvent.event.isCancelled ? 0.6 : 1)
         .accessibilityElement(children: .combine)
     }
@@ -711,18 +735,17 @@ private struct TodayAwarenessRow: View {
     }
 }
 
-/// One event of the day: time column, then what and where, conflict said in words.
+/// One event of the day: when on the left, what kind of thing it is on the rail, the rest beside it.
 private struct TodayEventRow: View {
     let dayEvent: DayEvent
 
-    /// Scales with the text it holds, so an accessibility size widens the column
-    /// rather than wrapping a time mid-digit. 64 points is what "10:00 AM" needs in
-    /// monospaced caption digits at the standard size — 56 fit "9:30 AM" and split
-    /// every double-digit hour onto two lines, which the first live screenshot caught.
-    @ScaledMetric(relativeTo: .caption) private var timeColumnWidth: CGFloat = 64
-
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.medium) {
+        TimelineRow(
+            badge: Timeline.Badge(
+                symbolName: dayEvent.kind.symbolName,
+                tint: Theme.Palette.color(named: dayEvent.event.calendarColorName)
+            )
+        ) {
             VStack(alignment: .trailing, spacing: 0) {
                 if dayEvent.event.isAllDay {
                     Text("All day")
@@ -738,12 +761,7 @@ private struct TodayEventRow: View {
                         .foregroundStyle(Theme.Colors.tertiaryText)
                 }
             }
-            .frame(width: timeColumnWidth, alignment: .trailing)
-
-            Capsule()
-                .fill(Theme.Palette.color(named: dayEvent.event.calendarColorName))
-                .frame(width: 3)
-
+        } content: {
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 Text(dayEvent.event.displayTitle)
                     .font(Theme.Text.rowTitle)
@@ -771,9 +789,63 @@ private struct TodayEventRow: View {
                 }
             }
         }
-        .frame(minHeight: 44)
         .opacity(dayEvent.event.isCancelled ? 0.6 : 1)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// A task on the day, on the thread.
+///
+/// ### Why this is not `MobileItemRow`
+/// The Reminders module's row is owner-polished and stays exactly as it is. Its job is a list of
+/// work; this one's job is to be a *link in a chain* that also holds meetings, gaps and people, and
+/// the two want different skeletons — the same reason a calendar entry does not draw itself as a
+/// task. Nothing about the Reminders module changes because of this.
+private struct TodayTaskRow: View {
+    let task: Item
+    let day: DayTask
+    let toggle: () -> Void
+
+    var body: some View {
+        TimelineRow(
+            badge: Timeline.Badge(
+                symbolName: day.primaryReason?.symbolName ?? "circle",
+                tint: tint
+            )
+        ) {
+            // The completion circle takes the column that a time takes on a meeting: the leading
+            // column is always "when, or who", and for work you have chosen to do today the honest
+            // answer is neither — it is whether it is done.
+            Button(action: toggle) {
+                Image(systemName: "circle")
+                    .font(Theme.Text.rowTitle)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Complete \(task.displayTitle)")
+        } content: {
+            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+                Text(task.displayTitle)
+                    .font(Theme.Text.rowTitle)
+                    .lineLimit(2)
+
+                if let reason = day.primaryReason {
+                    Text(reason.label)
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(tint)
+                }
+            }
+        }
+    }
+
+    private var tint: Color {
+        switch day.primaryReason {
+        case .overdue?: Theme.Colors.overdue
+        case .due?: Theme.Colors.dueToday
+        default: Theme.Colors.secondaryText
+        }
     }
 }
 
@@ -784,7 +856,13 @@ private struct TodayPersonRow: View {
     let person: DayPerson
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.medium) {
+        TimelineRow(
+            badge: Timeline.Badge(
+                symbolName: person.primaryReason?.symbolName ?? "person",
+                tint: Theme.Palette.color(named: person.colorName)
+            )
+        ) {
+            // A face where a time would be. Same column, same promise: this says *who*.
             ZStack {
                 Circle()
                     .fill(Theme.Palette.color(named: person.colorName).opacity(0.2))
@@ -794,34 +872,35 @@ private struct TodayPersonRow: View {
             }
             .frame(width: 32, height: 32)
             .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                Text(person.name)
-                    .font(Theme.Text.rowTitle)
-                if let reason = person.primaryReason, let services {
-                    Text(reason.sentence(calendar: services.dateProvider.calendar))
-                        .font(Theme.Text.rowSubtitle)
-                        .foregroundStyle(Theme.Colors.secondaryText)
-                        .lineLimit(1)
+        } content: {
+            HStack(spacing: Theme.Spacing.small) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+                    Text(person.name)
+                        .font(Theme.Text.rowTitle)
+                    if let reason = person.primaryReason, let services {
+                        Text(reason.sentence(calendar: services.dateProvider.calendar))
+                            .font(Theme.Text.rowSubtitle)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                            .lineLimit(1)
+                    }
+                    if let fact = person.quickFacts.first {
+                        Text(fact)
+                            .font(Theme.Text.metadata)
+                            .foregroundStyle(Theme.Colors.tertiaryText)
+                            .lineLimit(1)
+                    }
                 }
-                if let fact = person.quickFacts.first {
-                    Text(fact)
+
+                Spacer(minLength: 0)
+
+                if person.isKnown {
+                    Image(systemName: "chevron.forward")
                         .font(Theme.Text.metadata)
                         .foregroundStyle(Theme.Colors.tertiaryText)
-                        .lineLimit(1)
+                        .accessibilityHidden(true)
                 }
             }
-
-            Spacer(minLength: 0)
-
-            if person.isKnown {
-                Image(systemName: "chevron.forward")
-                    .font(.caption)
-                    .foregroundStyle(Theme.Colors.tertiaryText)
-                    .accessibilityHidden(true)
-            }
         }
-        .frame(minHeight: 44)
         .accessibilityElement(children: .combine)
     }
 
