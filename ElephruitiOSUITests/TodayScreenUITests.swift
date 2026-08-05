@@ -165,6 +165,44 @@ final class TodayScreenUITests: XCTestCase {
         )
     }
 
+    /// The third offer: a reminder for a moment inside the gap, and nothing on the calendar.
+    ///
+    /// Worth its own method because it is the one offer that must *not* write an event. "Nudge me
+    /// at two" is not an appointment, and an app that quietly turns one into the other is an app
+    /// whose calendar fills up with things nobody agreed to put there.
+    func testAGapCanBecomeAReminderInstead() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ElephruitDevelopmentMode",
+            "-ElephruitUseTemporaryStore",
+            "-ElephruitLoadSampleData",
+            "-ElephruitUseFixtureCalendar",
+            "-ElephruitFixturesAuthorized",
+            "-ElephruitTodayBlockSheet", "gap",
+        ]
+        app.launch()
+
+        let reminder = app.buttons["today.block.reminder"]
+        XCTAssertTrue(reminder.waitForExistence(timeout: 30), "the gap never offered a reminder")
+        reminder.tap()
+
+        let field = app.textFields["today.block.reminder.title"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "there was nowhere to say what to be reminded of")
+        field.tap()
+        field.typeText("Ring the vet")
+
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "today-block-reminder"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        app.buttons["today.block.add"].tap()
+
+        // On the page, in the work — not in the schedule, where an appointment would be.
+        let written = app.staticTexts["Ring the vet"]
+        XCTAssertTrue(written.waitForExistence(timeout: 10), "the reminder was never written")
+    }
+
     /// The same sheet, reached from the work rather than from the room.
     ///
     /// Swipe actions are exactly the class of affordance that silently fails to appear — the row
