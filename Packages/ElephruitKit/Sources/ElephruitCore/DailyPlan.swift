@@ -378,6 +378,51 @@ extension WorkingHours {
     }
 }
 
+/// One unclaimed stretch inside the working window.
+///
+/// ### Why the gaps are values rather than a total
+/// Because "four hours free" is a fact and "eleven-thirty to half twelve is free" is an offer. The
+/// total decides whether a day is worth planning; a named stretch is the only thing somebody can
+/// actually put work into, and a surface that wants to accept a task at a time has to be able to
+/// draw the time. The arithmetic that finds these already ran — see ``FocusTimeRules/focusTime`` —
+/// and used to be discarded on the way out.
+public struct DayFreeSlot: Sendable, Hashable, Identifiable {
+    public var range: Range<Date>
+
+    /// Whether this stretch is happening now, so a row can say "free now" rather than a clock time.
+    public var isCurrent: Bool
+
+    /// The shortest stretch worth calling free.
+    ///
+    /// Five minutes between two meetings is not an opportunity, it is walking. The same floor the
+    /// longest-stretch summary already applies, for the same reason.
+    public static let minimumDuration: TimeInterval = 15 * 60
+
+    public var id: Date { range.lowerBound }
+
+    public init(range: Range<Date>, isCurrent: Bool = false) {
+        self.range = range
+        self.isCurrent = isCurrent
+    }
+
+    public var duration: TimeInterval {
+        range.upperBound.timeIntervalSince(range.lowerBound)
+    }
+
+    /// "1h 30m", rounded down to five minutes for the same reason ``DayFocusTime/summary`` is.
+    public var durationSummary: String {
+        DurationPhrase.rounded(duration)
+    }
+
+    /// "11:30 – 12:30", or "until 12:30" for a stretch already under way — where a start time in the
+    /// past is a number the reader has to subtract from before it means anything.
+    public var rangeSummary: String {
+        let end = range.upperBound.formatted(date: .omitted, time: .shortened)
+        guard !isCurrent else { return "until " + end }
+        return range.lowerBound.formatted(date: .omitted, time: .shortened) + " – " + end
+    }
+}
+
 /// What is left of a day once the calendar has had its share.
 public struct DayFocusTime: Sendable, Hashable {
     /// Total unclaimed time inside the working window.
@@ -387,12 +432,26 @@ public struct DayFocusTime: Sendable, Hashable {
     /// attempted. Four separate twenty-minute gaps are not eighty minutes of work.
     public var longestStretch: Range<Date>?
 
+    /// Every stretch worth offering, in clock order.
+    ///
+    /// Filtered by ``DayFreeSlot/minimumDuration``, which is why these do not necessarily sum to
+    /// ``available``: the total is honest about time that is unclaimed, and this is honest about
+    /// time somebody could use. The two answer different questions and are deliberately not the
+    /// same number.
+    public var slots: [DayFreeSlot]
+
     /// Whether the window has already closed — the working day is over, or the date is in the past.
     public var isClosed: Bool
 
-    public init(available: TimeInterval = 0, longestStretch: Range<Date>? = nil, isClosed: Bool = false) {
+    public init(
+        available: TimeInterval = 0,
+        longestStretch: Range<Date>? = nil,
+        slots: [DayFreeSlot] = [],
+        isClosed: Bool = false
+    ) {
         self.available = available
         self.longestStretch = longestStretch
+        self.slots = slots
         self.isClosed = isClosed
     }
 
@@ -486,7 +545,15 @@ public enum FocusTimeRules {
             $0.upperBound.timeIntervalSince($0.lowerBound) < $1.upperBound.timeIntervalSince($1.lowerBound)
         }
 
-        return DayFocusTime(available: total, longestStretch: longest, isClosed: false)
+        let slots = gaps
+            .filter { $0.upperBound.timeIntervalSince($0.lowerBound) >= DayFreeSlot.minimumDuration }
+            .map { gap in
+                // Only today has a stretch under way. On a future day every slot begins in the
+                // future, and `remaining` has already been floored at `now` for today.
+                DayFreeSlot(range: gap, isCurrent: isToday && gap.contains(now))
+            }
+
+        return DayFocusTime(available: total, longestStretch: longest, slots: slots, isClosed: false)
     }
 }
 
@@ -1170,11 +1237,38 @@ public struct DayPlan: Sendable, Identifiable {
         events.filter { $0.event.occupiesAllDayRow(calendar: calendar) }
     }
 
+    /// Entries that describe the shape of the day rather than claiming a slot in it.
+    ///
+    /// ### Why this is not simply "the all-day ones"
+    /// Because a day of leave marked unavailable says the same kind of thing an all-day entry says —
+    /// *this is what today is* — whether or not whoever created it gave it a time. Both belong above
+    /// the schedule, read once, and then left alone.
+    ///
+    /// A meeting is never here, however long it runs and however it is marked. ``DayEventRules/kind``
+    /// already settles that by letting attendees win over everything else, and a week-long offsite
+    /// with eleven people on it is the case that rule exists for: burying it in an awareness band
+    /// with no guest list would hide the only thing about it worth preparing for.
+    public func awarenessEvents(calendar: Calendar) -> [DayEvent] {
+        events.filter { event in
+            guard !event.kind.hasAttendees else { return false }
+            return event.event.occupiesAllDayRow(calendar: calendar) || event.kind == .away
+        }
+    }
+
     /// Entries with a place on the clock, in order.
     public func timedEvents(calendar: Calendar) -> [DayEvent] {
         events
             .filter { !$0.event.occupiesAllDayRow(calendar: calendar) }
             .sorted { $0.event.startAt < $1.event.startAt }
+    }
+
+    /// The schedule proper: what is left once awareness has taken its share.
+    ///
+    /// The complement of ``awarenessEvents(calendar:)`` over the timed entries, so that nothing is
+    /// drawn twice and nothing is dropped — the two together are every event on the day.
+    public func scheduleEvents(calendar: Calendar) -> [DayEvent] {
+        let awareness = Set(awarenessEvents(calendar: calendar).map(\.id))
+        return timedEvents(calendar: calendar).filter { !awareness.contains($0.id) }
     }
 
     /// The work that genuinely needs attention, as opposed to what is merely available today.

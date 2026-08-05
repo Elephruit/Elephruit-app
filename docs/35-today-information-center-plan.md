@@ -376,17 +376,20 @@ Per the repo's habits and the phone's tooling:
 - Dark appearance and an accessibility text size on the two new row types (free slot, person card),
   which is where the existing `@ScaledMetric` time column was caught getting it wrong.
 
-## 13. Open questions
+## 13. Decisions
 
-1. **Workday hours: app-level default, or make the calendar set mandatory on the phone?** This plan
-   assumes an app-level default with set override (§5), because a phone with no set currently gets a
-   number nobody chose. The alternative — force a set to be picked on first run — is fewer concepts
-   but more setup.
-2. **Should a block written for a todo show as busy or free?** Plan assumes `.free`, matching what
+1. **Workday hours — app-level default, with the calendar set overriding it.** Decided 2026-08-05.
+   Resolution order stands as §5 describes it: active set → app default → `.standard`. Schema 0.0.17.
+2. **7b, real ETA — build it.** Decided 2026-08-05, with the network cost understood: the Settings
+   copy that promises CloudKit is the only network destination has to be rewritten in the same commit
+   that adds the switch. Every guard in §10 holds — off by default, its own switch, only the location
+   string and coordinates ever leave the device, and never automatic.
+
+### Still open
+
+3. **Should a block written for a todo show as busy or free?** Plan assumes `.free`, matching what
    `focusBlock` already means, so colleagues can still book over it. Busy is defensible and is a
-   one-line change.
-3. **Is 7b wanted at all**, given it rewrites the network promise in Settings? 7a delivers "leave by"
-   with none of that cost.
+   one-line change. Needed by Phase 5.
 4. **Blocks view (ask 3, "show blocks")** — the design above treats it as a proportional rendering of
-   the same list rather than the Mac's full `CalendarTimeGrid`. Worth confirming before it is built;
-   the time grid is a large component and a phone-width port of it is its own project.
+   the same list rather than the Mac's full `CalendarTimeGrid`. The time grid is a large component and
+   a phone-width port of it is its own project. Needed by the blocks phase, not before.
