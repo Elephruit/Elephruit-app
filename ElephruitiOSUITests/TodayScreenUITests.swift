@@ -165,6 +165,55 @@ final class TodayScreenUITests: XCTestCase {
         )
     }
 
+    /// The same sheet, reached from the work rather than from the room.
+    ///
+    /// Swipe actions are exactly the class of affordance that silently fails to appear — the row
+    /// draws, the gesture does nothing, and nobody notices until it ships. The task is found by its
+    /// title, which is content and is the test doing its job; everything after the swipe is chrome
+    /// and is found by identifier.
+    func testWorkCanClaimTimeFromItsOwnRow() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ElephruitDevelopmentMode",
+            "-ElephruitUseTemporaryStore",
+            "-ElephruitLoadSampleData",
+            "-ElephruitUseFixtureCalendar",
+            "-ElephruitFixturesAuthorized",
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 20))
+
+        let task = app.staticTexts["Draft the announcement post"]
+        for _ in 0..<10 where !task.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(task.exists, "the sample day never showed the work this test swipes")
+
+        task.swipeLeft()
+
+        // Photographed as well as asserted: a third trailing action is where a row runs out of
+        // width, and a truncated label is not something an assertion notices.
+        let revealed = XCTAttachment(screenshot: app.screenshot())
+        revealed.name = "today-task-swipe-actions"
+        revealed.lifetime = .keepAlways
+        add(revealed)
+
+        let block = app.buttons["Block Time"]
+        XCTAssertTrue(block.waitForExistence(timeout: 5), "a to-do cannot ask for time of its own")
+        block.tap()
+
+        XCTAssertTrue(
+            app.buttons["today.block.add"].waitForExistence(timeout: 10),
+            "the swipe action opened nothing"
+        )
+
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "today-block-for-work"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     /// A gap can be claimed, and the claim can be taken straight back.
     ///
     /// The whole loop in one method because each one relaunches the app: tapping the gap, what it

@@ -507,12 +507,20 @@ private struct TodayContent: View {
     /// user ever sees.
     private func openBlockSheetIfReviewing() {
         guard blocking == nil,
-              TodayReviewLaunch.opensBlockSheet(),
+              let subject = TodayReviewLaunch.blockSheet(),
               services?.calendar.calendars.isEmpty == false,
-              let plan = model.selectedPlan,
-              let slot = plan.briefing.focus.slots.first
+              let plan = model.selectedPlan
         else { return }
-        blocking = .slot(slot, plan)
+
+        switch subject {
+        case .gap:
+            guard let slot = plan.briefing.focus.slots.first else { return }
+            blocking = .slot(slot, plan)
+        case .work:
+            guard let entry = model.openTasks(in: plan).first(where: { $0.day.pinnedAt == nil })
+            else { return }
+            blocking = .task(entry.item, plan)
+        }
     }
 
     private func openMeetingNotes(_ event: DayEvent) {
@@ -563,6 +571,14 @@ private struct TodayContent: View {
                         } label: {
                             Label("This Evening", systemImage: "moon")
                         }
+
+                        // The same sheet the gaps open, arriving from the other direction: from
+                        // work looking for room rather than from room looking for work.
+                        Button {
+                            blocking = .task(entry.item, plan)
+                        } label: {
+                            Label("Block Time", systemImage: "shield")
+                        }
                     }
                     .contextMenu { taskMenu(entry.item, plan: plan) }
                     .onTimeline()
@@ -577,6 +593,9 @@ private struct TodayContent: View {
         }
         Button("Start Timer", systemImage: "play.circle") {
             actions.startTimer(on: task)
+        }
+        Button("Block Time", systemImage: "shield") {
+            blocking = .task(task, plan)
         }
         Button(
             task.isFlagged ? "Remove Flag" : "Flag",

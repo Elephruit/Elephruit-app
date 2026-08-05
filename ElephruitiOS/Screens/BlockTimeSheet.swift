@@ -440,12 +440,28 @@ struct BlockTimeSheet: View {
 /// printed twice — and none of them would have failed a build or a test. A sheet that can only be
 /// opened by a thumb is a sheet nobody looks at until it ships.
 ///
-///     -ElephruitTodayBlockSheet   // open the block sheet on the day's first free stretch
+///     -ElephruitTodayBlockSheet [gap | work]
+///
+/// `gap` — the default — opens it on the day's first free stretch, as a tap on the thread does.
+/// `work` opens it on the first piece of unscheduled work, as the swipe action does. They are
+/// different sheets and both have to be looked at.
 ///
 /// Inert without `-ElephruitDevelopmentMode`, exactly like the store and fixture switches beside it.
 enum TodayReviewLaunch {
-    static func opensBlockSheet(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
-        arguments.contains("-ElephruitDevelopmentMode") && arguments.contains("-ElephruitTodayBlockSheet")
+    enum BlockSubject: String {
+        case gap
+        case work
+    }
+
+    static func blockSheet(arguments: [String] = ProcessInfo.processInfo.arguments) -> BlockSubject? {
+        guard arguments.contains("-ElephruitDevelopmentMode"),
+              let index = arguments.firstIndex(of: "-ElephruitTodayBlockSheet")
+        else { return nil }
+
+        // The token is optional, and a following switch is not one: `-ElephruitTodayBlockSheet
+        // -ElephruitPeopleCount 40` asks for a gap, not for a subject called "-ElephruitPeopleCount".
+        let token = arguments.dropFirst(index + 1).first ?? ""
+        return BlockSubject(rawValue: token) ?? .gap
     }
 }
 
