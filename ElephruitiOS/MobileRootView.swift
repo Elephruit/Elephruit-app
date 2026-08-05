@@ -43,6 +43,9 @@ struct MobileRootView: View {
     /// The live drag offset, in points, while a gesture is in flight.
     @State private var dragTranslation: CGFloat = 0
 
+    /// The running timer, as the Dynamic Island sees it.
+    @State private var liveActivity = TimerLiveActivityController()
+
     var body: some View {
         ZStack(alignment: .leading) {
             contentLayer
@@ -66,6 +69,22 @@ struct MobileRootView: View {
         .onOpenURL { url in
             handleDeepLink(url)
         }
+        // The island is not driven by the commands that change the timer — see
+        // `TimerLiveActivityController`. It is driven by *what the timer is*, read here on every
+        // pass the observation system already wakes this view for, and compared with what the
+        // system is currently showing.
+        .task {
+            liveActivity.adoptExisting()
+            liveActivity.apply(timerActivityState)
+        }
+        .onChange(of: timerActivityState) { _, state in
+            liveActivity.apply(state)
+        }
+    }
+
+    /// What the Dynamic Island should be saying, or `nil` for nothing.
+    private var timerActivityState: ElephruitTimerAttributes.ContentState? {
+        .current(services)
     }
 
     // MARK: - Layers

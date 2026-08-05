@@ -40,6 +40,26 @@ downloads folder, Apple Events, JIT, and any `com.apple.security.temporary-excep
 | `com.apple.security.personal-information.addressbook` | Phase 3 Contacts | Same pattern. |
 | `com.apple.security.application-groups` | Widget / share extension | No user-visible permission. |
 
+### Live Activities (iPhone)
+
+`NSSupportsLiveActivities` is a capability declaration rather than an entitlement: it asks for
+no permission, opens no prompt, and reaches no network. It is listed here anyway, because what
+it does is put app content on a **locked screen** — a surface anybody standing behind the owner
+can read — and that deserves the same accounting as an entitlement does.
+
+One activity exists, for a running timer, and what it may contain is bounded by the shape of
+`Shared/TimerActivityAttributes.swift`: a title, one line of filing (the project, or the typed
+description), a start date, and whether the entry is billable. Deliberately absent, on exactly
+the terms the calendar mirror already refuses them in `docs/29`:
+
+- **People.** Who you are with is a fact about them, and a Lock Screen has an audience they
+  never agreed to.
+- **The note.** Whatever an item says is why it lives in this app rather than in a calendar.
+
+The activity is requested only while an entry is running and ended `.immediate`ly when it
+stops, so a clock never outlives the work it was counting. Turning Live Activities off in
+Settings is honoured silently — the app keeps timing and says nothing about it.
+
 Principle: **an entitlement is added in the same commit as the feature that needs
 it, and no earlier.** A shipped binary should not be able to do things the user has
 not asked for.

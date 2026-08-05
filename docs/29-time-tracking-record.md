@@ -154,6 +154,79 @@ There is no Pause here. Pause belongs to work already under way, the floating wi
 screen both offer it, and a fourth button would be one more decision at the moment whose point is to
 have made none.
 
+### The timer is a fact about the library, not about this process
+
+`TimerService.running` is a snapshot, and the one-second tick only recomputes elapsed time from
+it. That is deliberate — a store read per second is not what a clock face should cost — and it
+was correct exactly as long as this process was the only thing that could close an entry.
+Syncing the library ended that, and the failure was not subtle: a timer stopped on the phone
+left the Mac drawing a clock over an entry that already had an end date, and every total for the
+rest of the day was wrong.
+
+So an import is a cue to re-read. `TimerService.absorbRemoteChange()` runs on the same hook
+`AppServices` already used to recompute badges, and again on wake and on foregrounding, because
+a suspended process hears no notification and the interval it missed is the most likely one for
+the other device to have stopped the timer in.
+
+Three rules, each a way the naive version lies:
+
+- **The invariant is repaired first.** Two offline devices can each start a timer, and the import
+  makes both running at once — the same repair launch has always done, arriving by a different
+  route. The reconciliation count accumulates rather than overwrites, so an unacknowledged notice
+  is not erased by the next import.
+- **Local intentions do not survive their entry.** A focus cycle, a pause and a running total are
+  facts about work happening *here*. When the entry they ride on is closed elsewhere they are
+  about nothing, and a pomodoro that kept counting would ring for a block abandoned ten minutes
+  ago.
+- **A remote ending is announced** through `onEntryFinished`, because this device may hold a
+  calendar event still open on an entry that has finished.
+
+### The phone has the whole tracker
+
+`ElephruitiOS/Components/MobileTimerCard.swift` is `TimeEntryBar`'s argument laid out for a
+thumb: two states rather than two modes, the clock as the largest thing on screen, the filing
+arriving *with* the clock rather than standing in front of it. Naming, subject, project, people,
+tags, billable, pause, restart, discard, the focus cycle and continuing something from earlier
+are all there. What differs from the Mac is arrangement — Stop and Pause are the only two
+buttons on the row, and everything that ends a timer *without* keeping the time sits one tap
+further away in a menu, because on a surface aimed at with a thumb Stop and Discard must not be
+neighbours.
+
+Two things the phone does not have, and cannot honestly fake:
+
+- **Idle detection.** `SystemIdleClock.secondsSinceLastInput` returns zero off macOS; there is no
+  equivalent of "the machine saw nobody for five minutes" on a device that is asleep in a pocket
+  most of the day. No gap is ever raised, so no banner exists to answer one.
+- **A sound when a focus block ends.** Still no notification permission — the same open question
+  §"Phase endings do not use Notification Center" describes, and the phone is where it bites
+  hardest, since a suspended app cannot make a noise at all. `finishedPhase` says what happened
+  when the person comes back.
+
+### A running timer is in the Dynamic Island
+
+The point of a timer is that it runs while you are doing something else, and on a Mac the menu
+bar answers that. A phone has no menu bar, so a timer started on one was visible only inside the
+app that started it — the exact timer somebody forgets is running.
+
+`ElephruitiOSWidgets` is a widget extension holding one `ActivityConfiguration`. What reaches the
+Lock Screen is bounded by `Shared/TimerActivityAttributes.swift` and stated in `docs/06`: a
+title, one line of filing, a start date, billability. Never the people and never the note — a
+Lock Screen has the same problem a shared calendar has.
+
+Three decisions worth keeping:
+
+- **The elapsed time is not in the content state.** It is derived from the start date by
+  `Text(timerInterval:)`, which the system animates on its own. Pushing a state per second would
+  be a rate-limited update per second for a number the widget can work out, and the first thing
+  to break under it would be the clock.
+- **The static attributes are empty.** Anything fixed there — the entry's id, most obviously —
+  would mean ending and restarting the activity every time the timer switched work, which is a
+  dismissal animation for what the user experienced as renaming what they are doing.
+- **Nothing calls the controller from a command.** There are eleven ways to change what is
+  running, and an activity started by ten of them and ended by nine outlives its timer. The
+  timer's state is reduced to one value and the controller's whole job is to make the system's
+  copy equal to it, which covers the paths nobody has written yet.
+
 ---
 
 ## What is deliberately not there

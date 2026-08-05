@@ -98,6 +98,40 @@ final class TimeTrackerUITests: XCTestCase {
         snap(app, "05-stopped")
     }
 
+    /// A running timer reaches the Dynamic Island, and stops appearing there when it stops.
+    ///
+    /// Photographed rather than asserted: the island is drawn by another process from a
+    /// presentation this test cannot reach through the app's accessibility tree. What can be
+    /// checked automatically is that requesting one does not fail — a refusal logs and leaves
+    /// the app running — so the screenshot is the evidence and the walk is the regression.
+    func testTheRunningTimerReachesTheIsland() throws {
+        let app = launch()
+        openTime(app)
+
+        app.buttons["time.start"].tap()
+        XCTAssertTrue(app.buttons["time.stop"].waitForExistence(timeout: 5))
+
+        let description = app.textFields["time.description"]
+        description.tap()
+        description.typeText("Reviewing the contract")
+        // Tapping the bar rather than a keyboard key: the return key's label is the system's to
+        // choose, and a test that types into a field should not also be a test of that choice.
+        app.navigationBars["Time"].tap()
+
+        // The island shows a Live Activity while its app is *not* frontmost.
+        XCUIDevice.shared.press(.home)
+        sleep(3)
+        snapScreen("07-island")
+    }
+
+    /// The whole display, including the parts no application owns.
+    private func snapScreen(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     /// A focus cycle is started from the same card, and says which block is running.
     func testAFocusCycleRunsOverTheTimer() throws {
         let app = launch()
