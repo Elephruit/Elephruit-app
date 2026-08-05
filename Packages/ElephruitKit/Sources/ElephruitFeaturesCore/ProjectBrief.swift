@@ -11,10 +11,14 @@ import Foundation
 /// Deliberately a value-level model with no view code, so every rule here — what becomes a block,
 /// which heading is suppressed, how a wiki link resolves or degrades — is a plain assertion in
 /// `ProjectBriefTests` rather than a screenshot.
-enum ProjectBrief {
+///
+/// It lives in `ElephruitFeaturesCore` rather than beside the Mac's view because the phone reads
+/// briefs too, and a second parser for the same stored Markdown is how two shells end up
+/// disagreeing about what a document says.
+public enum ProjectBrief {
     /// One block of the rendered brief, in document order.
-    struct Block: Identifiable, Equatable {
-        enum Kind: Equatable {
+    public struct Block: Identifiable, Equatable {
+        public enum Kind: Equatable {
             case heading(level: Int)
             case paragraph
             /// `indent` counts nesting below the outermost list, starting at zero.
@@ -23,13 +27,13 @@ enum ProjectBrief {
             case quote
         }
 
-        let id: Int
-        let kind: Kind
-        let text: AttributedString
+        public let id: Int
+        public let kind: Kind
+        public let text: AttributedString
     }
 
     /// The scheme rendered wiki links carry; the view resolves it back to an item identifier.
-    static let wikiScheme = "elephruit-wiki"
+    public static let wikiScheme = "elephruit-wiki"
 
     /// Replaces `[[Wiki Links]]` with Markdown links the renderer can set as names.
     ///
@@ -37,7 +41,7 @@ enum ProjectBrief {
     /// not. A resolved link becomes `[Name](url)`; an unresolved one degrades to its bare name —
     /// readable, unpunctuated, and honestly not a link, because a link to nowhere is a promise
     /// the click cannot keep.
-    static func resolvingWikiLinks(
+    public static func resolvingWikiLinks(
         in source: String,
         resolve: (WikiLink) -> URL?
     ) -> String {
@@ -60,12 +64,12 @@ enum ProjectBrief {
     }
 
     /// A stable URL for a wiki link the library resolved to an item.
-    static func wikiURL(for itemID: UUID) -> URL? {
+    public static func wikiURL(for itemID: UUID) -> URL? {
         URL(string: "\(wikiScheme)://item/\(itemID.uuidString)")
     }
 
     /// The item a rendered wiki link points back to, if `url` is one of ours.
-    static func itemID(from url: URL) -> UUID? {
+    public static func itemID(from url: URL) -> UUID? {
         guard url.scheme == wikiScheme, url.host() == "item" else { return nil }
         return UUID(uuidString: url.lastPathComponent)
     }
@@ -76,7 +80,7 @@ enum ProjectBrief {
     /// structure, the inline intents (emphasis, strong text, links, code) stay in the attributed
     /// text for `Text` to set. A string that fails to parse degrades to one paragraph of itself:
     /// the reading mode must never show less than the stored text.
-    static func blocks(from markdown: String) -> [Block] {
+    public static func blocks(from markdown: String) -> [Block] {
         let trimmed = markdown.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
 
@@ -119,7 +123,7 @@ enum ProjectBrief {
 
     /// Blocks as the Brief section shows them: with a redundant leading `# Brief` suppressed,
     /// because the interface already says "Brief" once, immediately above.
-    static func displayBlocks(from markdown: String) -> [Block] {
+    public static func displayBlocks(from markdown: String) -> [Block] {
         let all = blocks(from: markdown)
         guard let first = all.first,
               case .heading = first.kind,

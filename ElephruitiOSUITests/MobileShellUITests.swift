@@ -69,8 +69,8 @@ final class MobileShellUITests: XCTestCase {
 
     /// The drawer offers every destination, and choosing one lands on it.
     ///
-    /// The drawer's *rows* are asserted here without walking them: thirteen relaunches to prove
-    /// thirteen rows exist costs a minute of every run, and `ScreenshotWalkTests` already
+    /// The drawer's *rows* are asserted here without walking them: fourteen relaunches to prove
+    /// fourteen rows exist costs a minute of every run, and `ScreenshotWalkTests` already
     /// visits every one of them and would fail loudly if any row stopped landing. What this
     /// test owns is the part the walk cannot state — that the drawer lists exactly the
     /// destinations the shell claims to have.
@@ -80,7 +80,7 @@ final class MobileShellUITests: XCTestCase {
 
         openSidebar(app)
         for identifier in [
-            "today", "calendar", "reminders", "records", "notes", "time", "areas",
+            "today", "projects", "calendar", "reminders", "records", "notes", "time", "areas",
             "bookmarks", "inbox", "archive", "trash", "search", "settings",
         ] {
             XCTAssertTrue(

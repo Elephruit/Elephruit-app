@@ -44,7 +44,7 @@ final class ScreenshotWalkTests: XCTestCase {
         snap(app, "02-sidebar")
 
         let walk = [
-            "calendar", "reminders", "records", "notes", "time",
+            "projects", "calendar", "reminders", "records", "notes", "time",
             "areas", "bookmarks", "inbox", "archive", "trash", "search", "settings",
         ]
 

@@ -60,7 +60,7 @@ struct MobileSidebar: View {
             HStack(spacing: Theme.Spacing.medium) {
                 Image(systemName: destination.symbolName)
                     // A fixed glyph column: symbols have wildly different intrinsic widths, and
-                    // labels that start at thirteen different x positions read as thirteen
+                    // labels that start at fourteen different x positions read as fourteen
                     // unrelated controls.
                     .frame(width: 26, alignment: .center)
                     .foregroundStyle(isSelected ? Theme.Colors.onAccent : Theme.Colors.secondaryText)

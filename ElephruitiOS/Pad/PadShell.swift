@@ -6,7 +6,7 @@ import Observation
 
 /// What the iPad's sidebar can select.
 ///
-/// A superset of the drawer's thirteen places, because a resident sidebar can honestly hold what
+/// A superset of the drawer's fourteen places, because a resident sidebar can honestly hold what
 /// a drawer cannot: the user's own project tree, every smart list by name, the library's kinds,
 /// and the tags that reach across all of them — the Mac's own bands, in the Mac's order.
 ///
@@ -96,14 +96,15 @@ enum PadRoot: Hashable, Codable {
     /// Every root has to land somewhere the drawer actually lists, because the drawer is the only
     /// way back at compact width. Where the sidebar is finer-grained than the drawer, the root
     /// becomes a drill-down inside the destination that covers it: a smart list inside Reminders,
-    /// a project inside Areas — which is where the phone's own project navigation lives — and a
-    /// tag inside Notes, whose drawer hint already claims "the tags that reach across it".
+    /// a project inside Projects, an area inside Areas, and a tag inside Notes, whose drawer hint
+    /// already claims "the tags that reach across it".
     var owningDestination: MobileDestination {
         switch self {
         case .today: .today
         case .inbox: .inbox
         case .search, .savedSearch: .search
-        case .project, .area: .areas
+        case .project: .projects
+        case .area: .areas
         case .reminders, .smartList, .builtInSmartList: .reminders
         case .records: .records
         case .kindList(let kind): Self.destination(forKind: kind)
@@ -344,6 +345,12 @@ final class PadShellModel {
     static func homeRoot(for destination: MobileDestination) -> PadRoot {
         switch destination {
         case .today: .today
+        // Projects has no root of its own here, and does not need one. The phone's Projects
+        // screen exists because a drawer cannot hold a tree; the iPad's sidebar holds that tree
+        // permanently, a few points from wherever the stage lands. Widening a window that was on
+        // the list therefore does not lose the list — it promotes it out of the stage and into
+        // the sidebar, which is where it wanted to be.
+        case .projects: .today
         case .calendar: .calendar
         case .reminders: .reminders
         case .records: .records(.all)

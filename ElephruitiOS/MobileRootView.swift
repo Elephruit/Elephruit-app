@@ -13,8 +13,8 @@ import SwiftUI
 /// a different motion than every other destination.
 ///
 /// ### Why the tab bar is gone
-/// `MobileDestination` argues the case: five slots could not hold thirteen places, so seven of
-/// them had been filed behind a row called "Library". The drawer holds all thirteen at their
+/// `MobileDestination` argues the case: five slots could not hold fourteen places, so most of
+/// them had been filed behind a row called "Library". The drawer holds all fourteen at their
 /// real names, and gives the bottom of the screen back to the content and the thumb.
 struct MobileRootView: View {
     @Environment(\.services) private var services
@@ -25,7 +25,7 @@ struct MobileRootView: View {
     /// than a fresh model each time an arrangement appears.
     @Environment(MobileShellModel.self) private var shell
 
-    /// How far the content slides. Wide enough to read a thirteen-row list comfortably,
+    /// How far the content slides. Wide enough to read a fourteen-row list comfortably,
     /// narrow enough that the screen behind it stays visibly *there* rather than replaced —
     /// the drawer is a layer over the app, not another page of it.
     private static let sidebarWidth: CGFloat = 288
@@ -162,6 +162,7 @@ struct MobileDestinationView: View {
     var body: some View {
         switch destination {
         case .today: TodayScreen()
+        case .projects: ProjectsScreen()
         case .calendar: CalendarScreen()
         case .reminders: RemindersScreen()
         case .records: RecordsScreen()
