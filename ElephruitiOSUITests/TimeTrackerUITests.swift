@@ -76,8 +76,20 @@ final class TimeTrackerUITests: XCTestCase {
 
         app.buttons["time.billable"].tap()
         app.buttons["time.subject"].tap()
+        // A chip is tapped with the description still under the cursor, so the keyboard has to
+        // leave before the popup can be anchored to a control it was about to move. Asserted
+        // rather than assumed: presenting over a live keyboard is how this chip used to open
+        // nothing at all, and the symptom was a tap that visibly did nothing.
         XCTAssertTrue(
-            app.staticTexts["Subject"].waitForExistence(timeout: 5),
+            app.keyboards.element.waitForNonExistence(timeout: 5),
+            "opening a filing chip should have put the keyboard away"
+        )
+        // The popup carries its name as a label rather than a heading — the header was taken out
+        // deliberately, because a popup anchored to the control that opened it spends its first
+        // row saying what you just tapped. The name is still there for the reading that needs it,
+        // which is this one.
+        XCTAssertTrue(
+            app.otherElements["Subject"].waitForExistence(timeout: 5),
             "the subject chip opened nothing"
         )
         snap(app, "03-subject")
