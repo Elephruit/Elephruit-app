@@ -32,8 +32,22 @@ final class TimeTrackerUITests: XCTestCase {
         return app
     }
 
+    /// Gets to the Time screen from wherever the app came back to.
+    ///
+    /// Which screen that is is deliberately not asserted. The shell restores the destination
+    /// that was last open, and the store these tests launch against is temporary — so the entries
+    /// do not survive a relaunch but the choice of screen does, and a test that runs after one
+    /// that ended on Time arrives on Time. Waiting for "Today" made every test in this class
+    /// depend on the order it ran in, which is a dependency none of them mean to have. What is
+    /// worth waiting for is the shell itself; the rest is travel, and travel that has already
+    /// happened is travel that can be skipped.
     private func openTime(_ app: XCUIApplication) {
-        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 15))
+        XCTAssertTrue(
+            app.buttons["mobile.sidebar.button"].waitForExistence(timeout: 15),
+            "the app never finished launching into its shell"
+        )
+        guard !app.navigationBars["Time"].exists else { return }
+
         if !app.buttons["mobile.sidebar.time"].exists {
             app.buttons["mobile.sidebar.button"].tap()
         }
@@ -133,8 +147,20 @@ final class TimeTrackerUITests: XCTestCase {
 
         app.buttons["time.billable"].tap()
         app.buttons["time.subject"].tap()
+        // A chip is tapped with the description still under the cursor, so the keyboard has to
+        // leave before the popup can be anchored to a control it was about to move. Asserted
+        // rather than assumed: presenting over a live keyboard is how this chip used to open
+        // nothing at all, and the symptom was a tap that visibly did nothing.
         XCTAssertTrue(
-            app.staticTexts["Subject"].waitForExistence(timeout: 5),
+            app.keyboards.element.waitForNonExistence(timeout: 5),
+            "opening a filing chip should have put the keyboard away"
+        )
+        // The popup carries its name as a label rather than a heading — the header was taken out
+        // deliberately, because a popup anchored to the control that opened it spends its first
+        // row saying what you just tapped. The name is still there for the reading that needs it,
+        // which is this one.
+        XCTAssertTrue(
+            app.otherElements["Subject"].waitForExistence(timeout: 5),
             "the subject chip opened nothing"
         )
         snap(app, "03-subject")
