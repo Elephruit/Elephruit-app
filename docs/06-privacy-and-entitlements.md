@@ -7,27 +7,33 @@ crash reports, not for update checks, not for link previews. That was verifiable
 promised: the app had no `com.apple.security.network.client` entitlement, so an attempted
 outbound connection would fail at the sandbox boundary rather than silently succeed.
 
-**Since then the Mac has grown two endpoints, and the posture is now a list rather than a
-denial.** Kept in the past tense above because the sentence is worth having on the record —
-losing the kernel-enforced version of a guarantee is a thing that should be visible in the
-document, not quietly overwritten.
+**Since then there are three endpoints, and the posture is a list rather than a denial.** Kept in
+the past tense above because the sentence is worth having on the record — losing the
+kernel-enforced version of a guarantee is a thing that should be visible in the document, not
+quietly overwritten.
 
-| Endpoint | Reached when | Carries |
-|---|---|---|
-| Apple's CloudKit | Sync is on, which it is not until somebody turns it on | The user's own library, in the user's own private database |
-| Apple Maps (`MKLocalSearch`) | Somebody is typing into a record's place field, and at no other moment | The typed words, and nothing else — never a note, never who the record is about |
+**No platform has all three**, which is the detail that makes a single sentence of copy impossible
+and is why the Mac's and the iPhone's Settings now say different things:
+
+| Endpoint | Where | Reached when | Carries |
+|---|---|---|---|
+| Apple's CloudKit | Both | Sync is on, which it is not until somebody turns it on | The user's own library, in the user's own private database |
+| Apple Maps venue search (`MKLocalSearch`) | **Mac only** — `MapPlaceSearchField`, reached from the records editor, which the phone does not have | Somebody is typing into a record's place field, and at no other moment | The typed words, and nothing else — never a note, never who the record is about |
+| Apple Maps routing (`MKGeocodingRequest`, `MKDirections.calculateETA`) | **iPhone only** — no macOS switch exists; see `docs/36` §3.5 for why that is a decision rather than an omission | Route estimates is switched on *and* the page is in front of somebody | A location string or coordinate, and the user's own position. Never a title, an attendee, or a note — `RouteSafetyTests` enforces it |
 
 Everything else in the table below is unchanged: no analytics, no telemetry, no crash reporting,
 no third-party service, and no `URLSession` of our own anywhere in the sources.
 
-The Maps search has **no switch**, unlike every integration in `docs/19`, because it is not a
-standing permission — it is a thing that happens while somebody is doing it. That is a defensible
-position and it is also the reason it went uncounted in every place that lists what this app talks
-to: a feature with no toggle appears on no settings screen, so nothing ever prompted anybody to
-write it down, and the copy went on claiming a number that had already changed. A
-third endpoint changes this table, `Configuration/Elephruit.entitlements`, the Sync footer in
-`Elephruit/SyncSettingsSection.swift`, and the Privacy tab in `Elephruit/ElephruitApp.swift`, in
-one commit.
+The venue search has **no switch**, unlike routing and unlike every integration in `docs/19`,
+because it is not a standing permission — it is a thing that happens while somebody is doing it.
+That is a defensible position, and it is also the reason it went uncounted in every place that
+lists what this app talks to: a feature with no toggle appears on no settings screen, so nothing
+ever prompted anybody to write it down, and the copy went on claiming a number that had already
+changed. A fourth endpoint — or an existing one arriving on the platform that does not have it
+yet — changes this table, `Configuration/Elephruit.entitlements`, the Sync footer in
+`Elephruit/SyncSettingsSection.swift`, the Privacy tab in `Elephruit/ElephruitApp.swift`, and the
+iCloud, About and Integrations footers in `ElephruitiOS/Screens/SettingsScreen.swift`, in one
+commit.
 
 | Practice | Position |
 |---|---|

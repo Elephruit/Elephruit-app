@@ -176,8 +176,9 @@ Asked because `TravelPreferences` sits in `ElephruitFeaturesCore` and `MapKitRou
 an afternoon. It should still wait, because **the prerequisite is missing rather than the plumbing.**
 
 Route estimates is not a feature on its own. It is a better answer to "when should I leave", and on
-the Mac nothing asks that question. Every caller of `TravelPreferences` and `TravelRules` is a phone
-file — `ElephruitiOS/Screens/TodayScreen.swift` and `BlockTimeSheet.swift`. The Mac has the whole
+the Mac nothing asks that question. Outside the shared machinery that implements it, every file that
+*asks* `TravelPreferences` or `TravelRules` anything is a phone file — `TodayScreen.swift`,
+`BlockTimeSheet.swift`, `SettingsScreen.swift`, all under `ElephruitiOS/`. The Mac has the whole
 Today feature in `ElephruitFeatures/TodayView.swift` and its rows show an event's location
 (`TodayRows.swift:180`), but no leave-by line, no journey, and no travel block. A switch shipped
 into that would change nothing a user could see, which is the worst kind of privacy control: it

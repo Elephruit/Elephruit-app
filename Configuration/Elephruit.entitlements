@@ -29,6 +29,13 @@
 	  third-party service exists in the binary. Anything that adds a third endpoint changes
 	  this comment, the Sync footer, and the Privacy tab in the same commit, or it has quietly
 	  made a liar of all three.
+
+	  **The obvious way to make a liar of them is already sitting in the build.** Route
+	  estimates shipped on the iPhone, and `MapKitRouteProvider` lives in `ElephruitIntegrations`
+	  — a module this target links. It reaches no network here only because nothing on the Mac
+	  constructs it and no switch offers to. Wiring one up is a two-endpoint app becoming a
+	  three-endpoint one, and it needs the Location entitlement listed as ABSENT above. Read
+	  `docs/36` §3.5 before doing it: the answer there is "not yet", with reasons.
 	-->
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
