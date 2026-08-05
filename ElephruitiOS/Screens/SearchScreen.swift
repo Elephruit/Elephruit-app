@@ -16,6 +16,10 @@ struct SearchScreen: View {
     @Environment(MobileShellModel.self) private var shell
 
     @State private var session: SearchSessionModel?
+    /// Whether the search field holds the keyboard. SwiftUI's focus, not UIKit's responder —
+    /// releasing the responder underneath `.searchable` leaves SwiftUI thinking it is still
+    /// focused, and it takes the keyboard straight back.
+    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         Group {
@@ -34,6 +38,7 @@ struct SearchScreen: View {
             ),
             prompt: "Search everything"
         )
+        .searchFocused($isSearchFocused)
         .task {
             guard session == nil, let services else { return }
             session = SearchSessionModel(engine: services.search)
@@ -204,6 +209,9 @@ struct SearchScreen: View {
     /// Search results push onto the Search tab's own stack, so back always returns to
     /// the results — the journey is preserved, never discarded.
     private func open(_ result: SearchResult) {
+        // Focus first, then the push. The keyboard belongs to SwiftUI's focus state, so
+        // that is what has to be released — and before navigating, not after.
+        isSearchFocused = false
         shell.push(MobileShellModel.route(for: result.item.kind, id: result.item.id))
     }
 }
