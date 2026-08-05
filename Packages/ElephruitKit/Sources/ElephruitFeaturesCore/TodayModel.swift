@@ -44,9 +44,18 @@ public final class TodayModel {
     /// so expanding one event closes the previous one and scrolling cannot create a stack of editors.
     public private(set) var expandedEventID: String?
 
-    static let initialFutureDayCount = 4
+    public static let initialFutureDayCount = 4
     static let previousDayCount = 3
-    static let dayLoadIncrement = 7
+    public static let dayLoadIncrement = 7
+
+    /// How far ahead the window is ever allowed to reach.
+    ///
+    /// A feed that pages on scroll has no button to stop pressing, so the ceiling has to live here
+    /// rather than in the finger. Every extension re-reads the calendar for the *whole* span and
+    /// rebuilds every day in it, so an unbounded window is a page that gets slower the longer
+    /// somebody looks at it. Three months is past the horizon anybody plans against on a phone,
+    /// and it is a span EventKit answers for without complaint.
+    public static let maximumFutureDayCount = 90
 
     // MARK: What it found
 
@@ -155,8 +164,34 @@ public final class TodayModel {
         isShowingPreviousDays = false
     }
 
+    /// Whether there is any more future to ask for.
+    public var canLoadMoreDays: Bool {
+        futureDayCount < Self.maximumFutureDayCount
+    }
+
+    /// Whether a bigger window has been asked for and not yet drawn.
+    ///
+    /// Read from the days themselves rather than kept as a flag, because a flag has to be cleared
+    /// on every path that can end an assembly — including the ones that fail, and the ones where
+    /// the reader moved a day mid-flight — and a flag left set is a feed that stops paging.
+    public var isExtendingFuture: Bool {
+        followingDays.count < futureDayCount
+    }
+
     public func loadMoreDays() {
-        futureDayCount += Self.dayLoadIncrement
+        guard canLoadMoreDays else { return }
+        futureDayCount = min(Self.maximumFutureDayCount, futureDayCount + Self.dayLoadIncrement)
+    }
+
+    /// Ask for another week, if the last week asked for has arrived.
+    ///
+    /// What a scroll calls. The scroll position changes many times a second near the bottom of the
+    /// page and every one of them would otherwise be another week — the whole window would be
+    /// requested in the time it takes to lift a thumb, and each request re-reads the calendar for a
+    /// span that is about to be replaced.
+    public func extendFuture() {
+        guard !isExtendingFuture else { return }
+        loadMoreDays()
     }
 
     // MARK: - Assembly

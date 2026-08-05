@@ -234,17 +234,27 @@ public struct TodayView: View {
         }
     }
 
+    @ViewBuilder
     private func loadMoreControl(_ model: TodayModel) -> some View {
         HStack {
-            Button {
-                model.loadMoreDays()
-            } label: {
-                Label("Show Another Week", systemImage: "chevron.down")
+            // The window has a horizon — see `TodayModel.maximumFutureDayCount`. A button that has
+            // stopped doing anything is worse than no button: it reads as the app having failed
+            // rather than as the page having ended.
+            if model.canLoadMoreDays {
+                Button {
+                    model.loadMoreDays()
+                } label: {
+                    Label("Show Another Week", systemImage: "chevron.down")
+                        .font(Theme.Text.metadata)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .accessibilityIdentifier(AccessibilityID.Today.loadMoreDays)
+            } else {
+                Text("Three months ahead is as far as this looks.")
                     .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.tertiaryText)
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(Theme.Colors.secondaryText)
-            .accessibilityIdentifier(AccessibilityID.Today.loadMoreDays)
 
             Spacer()
         }

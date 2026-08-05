@@ -790,4 +790,65 @@ struct DailyPlanServiceTests {
         #expect(days[1].events.map(\.event.title) == ["Tomorrow's sync"])
         #expect(days[2].events.isEmpty)
     }
+
+    // MARK: - Paging the window forward
+
+    @Test("A scroll near the bottom asks for one more week, not one per frame")
+    func extendingTheFutureIsIdempotentUntilItArrives() async throws {
+        // The feed pages on scroll position, which changes many times a second. Every one of those
+        // would otherwise be another week, and each week re-reads the calendar for the whole span.
+        let services = await Self.fixture()
+        let model = TodayModel(services: services)
+        await model.reload()
+
+        let start = model.followingDays.count
+        #expect(!model.isExtendingFuture, "the window it asked for has arrived")
+
+        for _ in 0..<50 { model.extendFuture() }
+        #expect(model.isExtendingFuture, "asked for more, not yet drawn")
+
+        await model.reload()
+        #expect(
+            model.followingDays.count == start + 7,
+            "fifty scroll events are one week: \(model.followingDays.count) days"
+        )
+    }
+
+    @Test("The feed stops at the horizon rather than reading further and further ahead")
+    func theFutureHasACeiling() async throws {
+        let services = await Self.fixture()
+        let model = TodayModel(services: services)
+        await model.reload()
+
+        // Far more requests than the ceiling allows, each one granted before the next is made.
+        for _ in 0..<40 {
+            model.extendFuture()
+            await model.reload()
+        }
+
+        #expect(!model.canLoadMoreDays)
+        #expect(model.followingDays.count == TodayModel.maximumFutureDayCount)
+
+        // And the marker at the end of a feed that has stopped must not claim to be loading.
+        model.extendFuture()
+        #expect(!model.isExtendingFuture)
+    }
+
+    @Test("Moving to another day starts the run of days again from there")
+    func steppingResetsTheWindow() async throws {
+        let services = await Self.fixture()
+        let model = TodayModel(services: services)
+        await model.reload()
+
+        model.extendFuture()
+        await model.reload()
+        #expect(model.followingDays.count > TodayModel.initialFutureDayCount)
+
+        model.step(days: 1)
+        await model.reload()
+
+        #expect(model.followingDays.count == TodayModel.initialFutureDayCount)
+        #expect(model.followingDays.allSatisfy { $0.date > model.selectedDate })
+        #expect(!model.isExtendingFuture, "a fresh anchor is not a feed mid-load")
+    }
 }
