@@ -42,8 +42,13 @@ final class ProjectsUITests: XCTestCase {
 
     /// A row's label, not its identifier: the rows carry their item's identifier, which a test
     /// running against freshly-seeded sample data has no way to know in advance.
+    ///
+    /// Scoped to static text rather than `descendants(matching: .any)`. Every row here combines
+    /// its children for VoiceOver, which is what makes the whole row one static-text element in
+    /// the first place — and an unscoped predicate query walks the entire hierarchy on every
+    /// evaluation, which is slow enough under a scroll loop to time the automation session out.
     private func element(_ app: XCUIApplication, labelled text: String) -> XCUIElement {
-        app.descendants(matching: .any)
+        app.staticTexts
             .matching(NSPredicate(format: "label CONTAINS[c] %@", text))
             .firstMatch
     }
@@ -57,8 +62,8 @@ final class ProjectsUITests: XCTestCase {
     private func reveal(_ app: XCUIApplication, labelled text: String) -> Bool {
         let target = element(app, labelled: text)
         if target.waitForExistence(timeout: 5) { return true }
-        for _ in 0..<8 {
-            app.swipeUp()
+        for _ in 0..<5 {
+            app.swipeUp(velocity: .fast)
             if target.exists { return true }
         }
         return false
@@ -138,6 +143,32 @@ final class ProjectsUITests: XCTestCase {
         XCTAssertTrue(
             app.navigationBars["Kitchen rewire"].waitForExistence(timeout: 5),
             "Creating a project should open it"
+        )
+    }
+
+    /// Work already written down can be filed into a project afterwards.
+    ///
+    /// The case this is really about is a reminder captured in a queue that turns out to belong
+    /// somewhere. Before this existed the only way to file one from the phone was to not use the
+    /// phone.
+    func testWorkCanBeFiledIntoAProjectAfterTheFact() throws {
+        let app = launch()
+        openProjects(app)
+
+        element(app, labelled: "Q3 Product Launch").tap()
+        XCTAssertTrue(app.navigationBars["Q3 Product Launch"].waitForExistence(timeout: 5))
+
+        XCTAssertTrue(reveal(app, labelled: "Send the revised pricing table"))
+        element(app, labelled: "Send the revised pricing table").tap()
+
+        let picker = app.buttons["item.project"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5), "An item should say which project it is in")
+        picker.tap()
+        app.buttons["House move"].tap()
+
+        XCTAssertTrue(
+            app.buttons["item.project"].staticTexts["House move"].waitForExistence(timeout: 5),
+            "Filing should move the item and say so"
         )
     }
 
