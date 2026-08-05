@@ -44,9 +44,20 @@ struct MeetingDebriefSheet: View {
         var category: QuickFactCategory = .goodToKnow
         var value = ""
         var schoolYearIntent: SchoolYearIntent = .current
+        /// What the user called it, when the category is *Something else*.
+        var customLabel = ""
 
         var cleanedValue: String { value.trimmingCharacters(in: .whitespacesAndNewlines) }
-        var isEmpty: Bool { cleanedValue.isEmpty }
+
+        /// The attribute this becomes, folding a named custom one back into the curated set.
+        var attribute: FactAttribute {
+            guard category == .somethingElse else { return category.attribute }
+            return FactAttribute.custom(customLabel) ?? .quickFact
+        }
+
+        var isEmpty: Bool {
+            cleanedValue.isEmpty || (category == .somethingElse && FactAttribute.custom(customLabel) == nil)
+        }
     }
 
     var body: some View {
@@ -184,7 +195,13 @@ struct MeetingDebriefSheet: View {
             .labelsHidden()
             .frame(width: 150)
 
-            TextField(fact.wrappedValue.category.prompt, text: fact.value)
+            if fact.wrappedValue.category == .somethingElse {
+                TextField("What is it?", text: fact.customLabel)
+                    .frame(width: 140)
+                    .accessibilityIdentifier("calendar.debrief.customLabel")
+            }
+
+            TextField(fact.wrappedValue.attribute.capturePrompt, text: fact.value)
 
             Button {
                 facts[personID]?.removeAll { $0.id == fact.wrappedValue.id }
@@ -263,7 +280,7 @@ struct MeetingDebriefSheet: View {
                 .filter { !$0.isEmpty }
                 .map { fact in
                     ObservationDraft(
-                        attribute: fact.category.attribute,
+                        attribute: fact.attribute,
                         value: fact.cleanedValue,
                         // Stated rather than derived from the date — see `SchoolYearIntent`.
                         schoolYearStart: fact.category == .grade

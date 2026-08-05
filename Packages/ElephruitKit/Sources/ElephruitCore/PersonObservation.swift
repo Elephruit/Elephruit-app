@@ -150,6 +150,83 @@ public struct FactAttribute: RawRepresentable, Codable, Sendable, Hashable {
     public var isAlwaysPrivate: Bool {
         self == .reflection
     }
+
+    // MARK: Anything else
+
+    /// An attribute made from something the user typed.
+    ///
+    /// ### Why this was the missing half of an open type
+    /// This struct has always been open — the doc comment above says so, and gives *allergic to
+    /// shellfish* as the reason. But no interface could construct one: every path went through a
+    /// closed list of curated categories, so the model supported facts the app could not be told.
+    /// An open type reachable only through a closed menu is a closed type with extra steps.
+    ///
+    /// ### Why it folds back into the curated set
+    /// Typing "School" must give ``FactAttribute/school`` rather than a second card beside it that
+    /// happens to read the same. Without that, the escape hatch fragments the very set it exists to
+    /// extend, and a person ends up with two School cards that neither supersede nor merge.
+    ///
+    /// Normalised to lower case with the spacing collapsed, so "Food Allergy" and " food  allergy "
+    /// are one attribute rather than three. Returns `nil` for nothing at all.
+    public static func custom(_ text: String) -> FactAttribute? {
+        let words = text
+            .lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+        guard !words.isEmpty else { return nil }
+
+        let normalised = words.joined(separator: " ")
+        if let existing = curated.first(where: {
+            $0.displayName.lowercased() == normalised || $0.rawValue.lowercased() == normalised
+        }) {
+            return existing
+        }
+        return FactAttribute(normalised)
+    }
+
+    /// Whether this is one of the attributes the interface names for itself.
+    public var isCurated: Bool { Self.curated.contains(self) }
+
+    // MARK: Capture
+
+    /// What kind of control this attribute wants when it is being typed.
+    ///
+    /// Three cases, not fifteen. Nearly everything anybody records about a person is a line of text,
+    /// and the two exceptions are exceptions for reasons the model already states: an age has to
+    /// reach ``AgeEstimator`` as a number, and a grade means a different year depending on whether
+    /// somebody is in it or going into it. Declaring them here is what lets one editor serve every
+    /// attribute — including ones nobody has thought of yet, which get the text field and are none
+    /// the worse for it.
+    public enum CaptureKind: Sendable, Hashable {
+        case text
+        case wholeNumber
+        case schoolGrade
+    }
+
+    public var captureKind: CaptureKind {
+        switch self {
+        case .observedAge: .wholeNumber
+        case .schoolGrade: .schoolGrade
+        default: .text
+        }
+    }
+
+    /// The placeholder in the field, which is where an attribute says what it wants.
+    public var capturePrompt: String {
+        switch self {
+        case .observedAge: "Age now"
+        case .schoolGrade: "Grade — “8th”, “senior”"
+        case .school: "Which school"
+        case .employer: "Where they work"
+        case .role: "What they do"
+        case .location: "Where they live"
+        case .quickFact: "Worth remembering"
+        case .foodAndDrink: "Diet, allergies, what they drink"
+        case .interest: "What they are into"
+        case .conversationTopic: "Worth asking about"
+        default: displayName
+        }
+    }
 }
 
 // MARK: - Confidence

@@ -143,6 +143,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
     case life
     case work
     case goodToKnow
+    case somethingElse
 
     var id: String { rawValue }
 
@@ -160,6 +161,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .life: "Life"
         case .work: "Work"
         case .goodToKnow: "Good to know"
+        case .somethingElse: "Something else"
         }
     }
 
@@ -177,6 +179,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .life: "sparkles"
         case .work: "briefcase.fill"
         case .goodToKnow: "lightbulb.fill"
+        case .somethingElse: "square.and.pencil"
         }
     }
 
@@ -194,6 +197,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .life: Theme.Palette.indigo.color
         case .work: Theme.Colors.workDetail
         case .goodToKnow: Theme.Palette.yellow.color
+        case .somethingElse: Theme.Colors.secondaryText
         }
     }
 
@@ -211,6 +215,9 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .life: .lifeEvent
         case .work: .role
         case .goodToKnow: .quickFact
+        // Replaced by whatever the user names. `.quickFact` is the fallback for a category chosen
+        // and then left unnamed, which is the same place an unlabelled note has always gone.
+        case .somethingElse: .quickFact
         }
     }
 
@@ -228,6 +235,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .life: "Something happening in their life…"
         case .work: "Role, project, goal, or professional context…"
         case .goodToKnow: "Anything useful that does not fit elsewhere…"
+        case .somethingElse: "What is it about? — “allergy”, “team”, “sober since”…"
         }
     }
 
@@ -245,6 +253,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .life: ["Moving", "Planning a trip", "New home"]
         case .work: ["New role", "Hiring", "Launching a project"]
         case .goodToKnow: []
+        case .somethingElse: []
         }
     }
 
@@ -270,6 +279,8 @@ struct AddFactSheet: View {
     @State private var observedOn = Date()
     @State private var showsDetails = false
     @State private var schoolYearIntent: SchoolYearIntent = .current
+    /// What the user called this fact, when they picked *Something else*.
+    @State private var customLabel = ""
     @FocusState private var isValueFocused: Bool
 
     init(
@@ -369,8 +380,33 @@ struct AddFactSheet: View {
                         }
                     }
 
+                    // Naming the fact is the whole of what *Something else* does. `FactAttribute`
+                    // has always been an open type — the model's own doc gives "allergic to
+                    // shellfish" as the reason — and this is the first interface able to make one.
+                    if category == .somethingElse {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                            Text("What is this about?")
+                                .font(.system(.headline, weight: .semibold))
+
+                            TextField("allergy · team · sober since", text: $customLabel)
+                                .textFieldStyle(.roundedBorder)
+                                .accessibilityIdentifier("records.addFact.customLabel")
+
+                            if let attribute = FactAttribute.custom(customLabel), attribute.isCurated {
+                                Label(
+                                    "That is “\(attribute.displayName)”, which Elephruit already "
+                                        + "keeps. It will go on that card.",
+                                    systemImage: "arrow.turn.down.right"
+                                )
+                                .font(Theme.Text.metadata)
+                                .foregroundStyle(Theme.Colors.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+
                     VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-                        Text(category.title)
+                        Text(headingText)
                             .font(.system(.headline, weight: .semibold))
                         Text(category.prompt)
                             .font(Theme.Text.rowSubtitle)
@@ -467,7 +503,7 @@ struct AddFactSheet: View {
                 Button("Add Quick Fact") {
                     onSave(
                         ObservationDraft(
-                            attribute: category.attribute,
+                            attribute: chosenAttribute,
                             value: normalizedValue,
                             // Stated rather than derived from `observedOn`, which is wrong for the
                             // whole of every summer — see `SchoolYearIntent`.
@@ -481,7 +517,10 @@ struct AddFactSheet: View {
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
                 .tint(category.tint)
-                .disabled(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(
+                    value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || (category == .somethingElse && FactAttribute.custom(customLabel) == nil)
+                )
             }
             .padding(.horizontal, Theme.Spacing.section)
             .frame(height: 60)
@@ -497,6 +536,22 @@ struct AddFactSheet: View {
     }
 
     private var calendar: Calendar { services?.dateProvider.calendar ?? .current }
+
+    /// The attribute this will be recorded under.
+    ///
+    /// A named custom attribute folds back into the curated set when it matches one — typing
+    /// "School" gives the School card rather than a second card beside it reading the same.
+    private var chosenAttribute: FactAttribute {
+        guard category == .somethingElse else { return category.attribute }
+        return FactAttribute.custom(customLabel) ?? .quickFact
+    }
+
+    /// The heading over the value field, which is the fact's own name once it has one.
+    private var headingText: String {
+        category == .somethingElse
+            ? (FactAttribute.custom(customLabel)?.displayName ?? category.title)
+            : category.title
+    }
 
     /// The school year the grade being typed refers to.
     private var schoolYear: SchoolYear {
