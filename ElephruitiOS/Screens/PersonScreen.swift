@@ -38,6 +38,7 @@ struct PersonScreen: View {
     /// What the app knows it does not know about them — see `PersonWorkspaceService.thingsToFillIn`.
     @State private var toFillIn: [FillInPrompt] = []
     @State private var isAddingRelatives = false
+    @State private var isAddingFact = false
     @State private var namingPrompt: FillInPrompt?
 
     /// How much of a long history a phone shows before it stops being a summary.
@@ -77,6 +78,11 @@ struct PersonScreen: View {
         .sheet(isPresented: $isAddingRelatives) {
             if let person {
                 RelativesSheet(person: person) { reload() }
+            }
+        }
+        .sheet(isPresented: $isAddingFact) {
+            if let person {
+                AddFactSheet(person: person) { reload() }
             }
         }
         .sheet(item: $namingPrompt) { prompt in
@@ -198,35 +204,43 @@ struct PersonScreen: View {
     /// second, more confident app over the same data.
     @ViewBuilder
     private var factsSection: some View {
-        if let cards = portrait?.cards, !cards.isEmpty {
-            Section("Known") {
-                ForEach(cards) { card in
-                    ForEach(card.values) { value in
-                        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
-                            Text(card.attribute.displayName)
-                                .font(Theme.Text.rowSubtitle)
-                                .foregroundStyle(Theme.Colors.secondaryText)
-                                .frame(width: 110, alignment: .leading)
+        Section("Known") {
+            ForEach(portrait?.cards ?? []) { card in
+                ForEach(card.values) { value in
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
+                        Text(card.attribute.displayName)
+                            .font(Theme.Text.rowSubtitle)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                            .frame(width: 110, alignment: .leading)
 
-                            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                                Text(value.text)
-                                    .font(Theme.Text.rowTitle)
-                                if value.isStale, let clock = services?.dateProvider {
-                                    Text(
-                                        "Last confirmed "
-                                            + RelativeDay.text(for: value.lastConfirmedOn, using: clock)
-                                    )
-                                    .font(Theme.Text.metadata)
-                                    .foregroundStyle(Theme.Colors.warning)
-                                }
+                        VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+                            Text(value.text)
+                                .font(Theme.Text.rowTitle)
+                            if value.isStale, let clock = services?.dateProvider {
+                                Text(
+                                    "Last confirmed "
+                                        + RelativeDay.text(for: value.lastConfirmedOn, using: clock)
+                                )
+                                .font(Theme.Text.metadata)
+                                .foregroundStyle(Theme.Colors.warning)
                             }
-
-                            Spacer(minLength: 0)
                         }
-                        .accessibilityElement(children: .combine)
+
+                        Spacer(minLength: 0)
                     }
+                    .accessibilityElement(children: .combine)
                 }
             }
+
+            // Always offered, empty record or not. A person nobody has recorded anything about is
+            // exactly who this is for, and the section used to disappear in that case — so the one
+            // page that most needed a way in had none.
+            Button {
+                isAddingFact = true
+            } label: {
+                Label("Add a fact", systemImage: "plus.circle")
+            }
+            .accessibilityIdentifier("person.addFact")
         }
     }
 

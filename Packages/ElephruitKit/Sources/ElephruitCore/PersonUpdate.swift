@@ -40,20 +40,46 @@ public struct RelativeCapture: Sendable, Hashable, Identifiable {
     /// Their name, when it was given. `nil` is legal, and ordinary.
     public var name: String?
 
-    /// Whole years, as stated. The estimator turns this into a window that widens on its own.
-    public var age: Int?
+    /// Everything said about them, keyed by what it is about.
+    ///
+    /// ### Why a dictionary rather than fields
+    /// This was five named properties — age, grade, school, note — and each one cost an edit in six
+    /// files, a field in three editors, and a branch in the save path. Which meant the answer to
+    /// "can I record where my colleague's partner works" was no, permanently, for want of a
+    /// `String?`. The fields were also gated on `kind == .child` in four places, so a partner
+    /// finishing a PhD could not have a grade.
+    ///
+    /// Keyed by ``FactAttribute``, which is an open type: what a row can carry is now whatever the
+    /// user names, and the editors ask ``RelationshipKind/suggestedAttributes`` what to *offer*
+    /// rather than deciding what is *possible*.
+    public var facts: [FactAttribute: String]
 
-    /// The grade exactly as the user wrote it — "8th", "senior", "going into second".
-    public var gradeText: String?
-
-    /// Which school year ``gradeText`` referred to.
+    /// Which school year a ``FactAttribute/schoolGrade`` value referred to.
+    ///
+    /// Beside the dictionary rather than in it, because it is not a fact about anybody — it is which
+    /// of two readings of one fact was meant, and storing "starting" as the value of some parallel
+    /// attribute would make it a claim about the child.
     public var schoolYearIntent: SchoolYearIntent
 
-    public var school: String?
+    public init(
+        id: UUID = UUID(),
+        kind: RelationshipKind = .child,
+        existingPersonID: UUID? = nil,
+        label: String? = nil,
+        name: String? = nil,
+        facts: [FactAttribute: String] = [:],
+        schoolYearIntent: SchoolYearIntent = .current
+    ) {
+        self.id = id
+        self.kind = kind
+        self.existingPersonID = existingPersonID
+        self.label = label
+        self.name = name
+        self.facts = facts
+        self.schoolYearIntent = schoolYearIntent
+    }
 
-    /// Anything else worth keeping, recorded as a quick fact on their own record.
-    public var note: String?
-
+    /// The older shape, for callers that only ever wanted a child.
     public init(
         id: UUID = UUID(),
         kind: RelationshipKind = .child,
@@ -66,16 +92,52 @@ public struct RelativeCapture: Sendable, Hashable, Identifiable {
         school: String? = nil,
         note: String? = nil
     ) {
-        self.id = id
-        self.kind = kind
-        self.existingPersonID = existingPersonID
-        self.label = label
-        self.name = name
+        self.init(
+            id: id, kind: kind, existingPersonID: existingPersonID,
+            label: label, name: name, schoolYearIntent: schoolYearIntent
+        )
         self.age = age
         self.gradeText = gradeText
-        self.schoolYearIntent = schoolYearIntent
         self.school = school
         self.note = note
+    }
+
+    // MARK: The named facts, as accessors
+
+    /// What is recorded for one attribute, with the whitespace taken off. Setting `nil` or blank
+    /// removes it, so a field cleared by the user records nothing rather than an empty string.
+    public subscript(attribute: FactAttribute) -> String? {
+        get { Self.cleaned(facts[attribute]) }
+        set {
+            if let cleaned = Self.cleaned(newValue) {
+                facts[attribute] = cleaned
+            } else {
+                facts.removeValue(forKey: attribute)
+            }
+        }
+    }
+
+    /// Whole years, as stated. The estimator turns this into a window that widens on its own.
+    public var age: Int? {
+        get { self[.observedAge].flatMap(Int.init) }
+        set { self[.observedAge] = newValue.map(String.init) }
+    }
+
+    /// The grade exactly as the user wrote it — "8th", "senior", "going into second".
+    public var gradeText: String? {
+        get { self[.schoolGrade] }
+        set { self[.schoolGrade] = newValue }
+    }
+
+    public var school: String? {
+        get { self[.school] }
+        set { self[.school] = newValue }
+    }
+
+    /// Anything else worth keeping, recorded as a quick fact on their own record.
+    public var note: String? {
+        get { self[.quickFact] }
+        set { self[.quickFact] = newValue }
     }
 
     // MARK: What was actually said
@@ -89,13 +151,30 @@ public struct RelativeCapture: Sendable, Hashable, Identifiable {
     /// "to fill in" list.
     public var hasStatedName: Bool { statedName != nil }
 
-    public var statedGradeText: String? { Self.cleaned(gradeText) }
+    public var statedGradeText: String? { gradeText }
 
-    public var statedSchool: String? { Self.cleaned(school) }
+    public var statedSchool: String? { school }
 
-    public var statedNote: String? { Self.cleaned(note) }
+    public var statedNote: String? { note }
 
     public var statedLabel: String? { Self.cleaned(label)?.lowercased() }
+
+    /// Everything actually said, in the order the interface offers it: the suggestions for this
+    /// relationship first, then anything the user named that is not among them.
+    public var statedFacts: [(attribute: FactAttribute, value: String)] {
+        let suggested = kind.suggestedAttributes
+        let present = facts.filter { Self.cleaned($0.value) != nil }
+
+        let inOrder = suggested.compactMap { attribute in
+            present[attribute].map { (attribute: attribute, value: $0) }
+        }
+        let rest = present.keys
+            .filter { !suggested.contains($0) }
+            .sorted { $0.rawValue < $1.rawValue }
+            .compactMap { key in present[key].map { (attribute: key, value: $0) } }
+
+        return inOrder + rest
+    }
 
     /// The grade, if this app can read it. `nil` means the text stands as written and is never
     /// advanced — see the type's note.
@@ -113,15 +192,11 @@ public struct RelativeCapture: Sendable, Hashable, Identifiable {
     /// typed, or it is set by pressing *Add a son*, and either way somebody meant it. An untouched
     /// row has no word and is discarded.
     public var isEmpty: Bool {
-        existingPersonID == nil && statedName == nil && statedLabel == nil && age == nil
-            && statedGradeText == nil && statedSchool == nil && statedNote == nil
+        existingPersonID == nil && statedName == nil && statedLabel == nil && statedFacts.isEmpty
     }
 
     /// How many facts this row records, not counting the relationship itself.
-    public var factCount: Int {
-        (age == nil ? 0 : 1) + (statedGradeText == nil ? 0 : 1)
-            + (statedSchool == nil ? 0 : 1) + (statedNote == nil ? 0 : 1)
-    }
+    public var factCount: Int { statedFacts.count }
 
     /// The phrase that stands in for a name until there is one — "Dave's son".
     public func derivedTitle(subjectName: String) -> String {
@@ -142,33 +217,15 @@ public struct RelativeCapture: Sendable, Hashable, Identifiable {
     /// from the observation date and guesses wrong for the six weeks of summer in which people say
     /// "going into". An intent stated by the user beats a date read by the app.
     public func observations(observedOn: Date, calendar: Calendar) -> [ObservationDraft] {
-        var drafts: [ObservationDraft] = []
-
-        if let age {
-            drafts.append(ObservationDraft(attribute: .observedAge, value: "\(age)"))
-        }
-
-        if let statedGradeText {
-            drafts.append(
-                ObservationDraft(
-                    attribute: .schoolGrade,
-                    value: statedGradeText,
-                    schoolYearStart: schoolYearIntent
-                        .schoolYear(observedOn: observedOn, calendar: calendar)
-                        .startYear
-                )
+        statedFacts.map { entry in
+            ObservationDraft(
+                attribute: entry.attribute,
+                value: entry.value,
+                schoolYearStart: entry.attribute == .schoolGrade
+                    ? schoolYearIntent.schoolYear(observedOn: observedOn, calendar: calendar).startYear
+                    : nil
             )
         }
-
-        if let statedSchool {
-            drafts.append(ObservationDraft(attribute: .school, value: statedSchool))
-        }
-
-        if let statedNote {
-            drafts.append(ObservationDraft(attribute: .quickFact, value: statedNote))
-        }
-
-        return drafts
     }
 
     /// One line saying what will be written, for the preview under the field.
@@ -179,17 +236,23 @@ public struct RelativeCapture: Sendable, Hashable, Identifiable {
         var sentence = statedName.map { "\($0) is \(kind.possessivePhrase(subject: subjectName, label: statedLabel))" }
             ?? "A \(statedLabel ?? kind.displayName) of \(subjectName), name not known yet"
 
-        var clauses: [String] = []
-        if let age {
-            clauses.append("\(age) years old")
-        }
-        if let statedGradeText {
-            let year = schoolYearIntent.schoolYear(observedOn: observedOn, calendar: calendar)
-            let grade = parsedGrade?.displayText ?? statedGradeText
-            clauses.append("\(grade) in \(year.displayText)")
-        }
-        if let statedSchool {
-            clauses.append("at \(statedSchool)")
+        // Three attributes have a phrasing of their own because a sentence reads badly otherwise —
+        // "Age: 8" against "8 years old". Everything else, including attributes nobody has thought
+        // of yet, reads as "Heading: value", which is plain and never wrong.
+        let clauses: [String] = statedFacts.map { entry in
+            switch entry.attribute {
+            case .observedAge:
+                "\(entry.value) years old"
+            case .schoolGrade:
+                {
+                    let year = schoolYearIntent.schoolYear(observedOn: observedOn, calendar: calendar)
+                    return "\(SchoolGrade.parse(entry.value)?.displayText ?? entry.value) in \(year.displayText)"
+                }()
+            case .school:
+                "at \(entry.value)"
+            default:
+                "\(entry.attribute.displayName.lowercased()): \(entry.value)"
+            }
         }
 
         if !clauses.isEmpty {

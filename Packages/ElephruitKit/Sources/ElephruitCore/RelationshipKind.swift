@@ -116,6 +116,37 @@ public enum RelationshipKind: String, Codable, Sendable, Hashable, CaseIterable 
         }
     }
 
+    /// What a capture form offers to record about somebody in this relationship.
+    ///
+    /// ### What this is, and what it very deliberately is not
+    /// It is a list of *suggestions*, and it decides only which fields appear without being asked
+    /// for. It does not decide what a person of this kind is allowed to have: every editor built on
+    /// it also offers "anything else", and ``FactAttribute/custom(_:)`` will make an attribute out
+    /// of whatever the user types. A partner finishing a PhD gets a grade by naming one.
+    ///
+    /// The distinction matters because the version of this that was hard-coded — `kind == .child`,
+    /// in four places — read as a rule about people rather than a guess about forms. It said a
+    /// colleague could not have an age and a partner could not have a job, and it was wrong about
+    /// both while looking like a decision somebody had made.
+    ///
+    /// A `switch` rather than a table, so a kind added later has to be given an answer.
+    public var suggestedAttributes: [FactAttribute] {
+        switch self {
+        case .child:
+            [.observedAge, .schoolGrade, .school, .quickFact]
+        case .partner, .parent, .sibling, .householdMember:
+            [.employer, .quickFact]
+        case .colleague, .manager, .directReport, .worksWith:
+            [.role, .employer, .quickFact]
+        case .pet:
+            // An age, because "Pepper is four" is the commonest thing anybody says about a dog, and
+            // `AgeEstimator` carries it forward for a pet exactly as it does for a child.
+            [.observedAge, .quickFact]
+        case .friend, .introducedBy, .introduced, .petOwner:
+            [.location, .quickFact]
+        }
+    }
+
     /// A gendered word for this relationship, when the user supplied one.
     ///
     /// The app never infers gender — not from a name, not from a pronoun, not from anything. This

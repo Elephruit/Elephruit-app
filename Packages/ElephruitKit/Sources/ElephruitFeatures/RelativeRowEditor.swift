@@ -10,6 +10,13 @@ import SwiftUI
 /// copies of a form whose fields decide how a school year is stored is exactly how the Mac and the
 /// phone came to disagree about people in the first place — see ``ElephruitCore/PersonUpdate``.
 ///
+/// ### The fields are asked for, not written here
+/// This used to hold five hard-coded fields behind `if row.kind == .child`, which meant a colleague
+/// could not have an age, a partner could not have a job, and adding any of it was an edit in six
+/// files. It now asks ``ElephruitCore/RelationshipKind/suggestedAttributes`` what to *offer* and
+/// ``ElephruitCore/FactAttribute/captureKind`` how to draw each one — and offers *Something else*
+/// beneath, so what a row can carry is not a list anybody has to maintain.
+///
 /// Everything it edits lives in the binding. It writes nothing and knows nothing about a store,
 /// which is what lets the family editor and the debrief save on their own terms.
 struct RelativeRowEditor: View {
@@ -25,19 +32,25 @@ struct RelativeRowEditor: View {
 
     @State private var matches: [Item] = []
 
+    /// Attributes the user has asked for but not yet filled in.
+    ///
+    /// Held here rather than in the capture, because an attribute with no value is a field on
+    /// screen rather than a fact about anybody — and ``ElephruitCore/RelativeCapture`` drops empty
+    /// values on purpose, so a row parked in the model would vanish the moment it was drawn.
+    @State private var pendingAttributes: [FactAttribute] = []
+    @State private var customLabel = ""
+    @State private var isNamingCustom = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
             headerRow
             nameField
 
-            if row.kind == .child {
-                schoolFields
+            ForEach(offeredAttributes, id: \.rawValue) { attribute in
+                field(for: attribute)
             }
 
-            TextField(
-                "Worth remembering (optional)",
-                text: Binding(get: { row.note ?? "" }, set: { row.note = $0 })
-            )
+            customAdder
         }
         .padding(Theme.Spacing.medium)
         .background(Theme.Colors.contentBackground, in: RoundedRectangle(cornerRadius: Theme.Radius.large))
@@ -116,29 +129,68 @@ struct RelativeRowEditor: View {
         }
     }
 
-    /// Age, grade and school — and the sentence saying which school year was meant.
+    // MARK: - Facts
+
+    /// What this row draws: the suggestions for the relationship, then anything already recorded or
+    /// asked for that is not among them.
+    private var offeredAttributes: [FactAttribute] {
+        let suggested = row.kind.suggestedAttributes
+        let extra = (Array(row.facts.keys) + pendingAttributes)
+            .filter { !suggested.contains($0) }
+            .reduce(into: [FactAttribute]()) { seen, attribute in
+                if !seen.contains(attribute) { seen.append(attribute) }
+            }
+        return suggested + extra
+    }
+
+    @ViewBuilder
+    private func field(for attribute: FactAttribute) -> some View {
+        switch attribute.captureKind {
+        case .schoolGrade:
+            gradeField(attribute)
+        case .wholeNumber:
+            numberField(attribute)
+        case .text:
+            TextField(
+                "\(attribute.capturePrompt) (optional)",
+                text: binding(for: attribute)
+            )
+            .accessibilityIdentifier("records.addRelative.\(attribute.rawValue)")
+        }
+    }
+
+    /// Age, and the sentence saying what recording one actually means.
+    @ViewBuilder
+    private func numberField(_ attribute: FactAttribute) -> some View {
+        TextField(
+            attribute.capturePrompt,
+            text: Binding(
+                get: { row[attribute] ?? "" },
+                set: { row[attribute] = Self.wholeNumber(from: $0) }
+            )
+        )
+        .frame(width: 120)
+        .accessibilityIdentifier("records.addRelative.\(attribute.rawValue)")
+
+        if attribute == .observedAge, let years = row.age {
+            Text(Self.ageExplanation(years))
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// A grade, the school year it referred to, and what the app made of it.
     ///
     /// The intent control is the important one. "Going into 8th grade" said in July refers to the
     /// year about to begin, and reading that from the date alone is wrong for the whole of the
     /// summer, which is when the sentence is said. The resolved year is shown back so the answer is
     /// visible before it is stored rather than a year later.
     @ViewBuilder
-    private var schoolFields: some View {
+    private func gradeField(_ attribute: FactAttribute) -> some View {
         HStack(spacing: Theme.Spacing.small) {
-            TextField(
-                "Age",
-                text: Binding(
-                    get: { row.age.map(String.init) ?? "" },
-                    set: { row.age = Self.age(from: $0) }
-                )
-            )
-            .frame(width: 60)
-
-            TextField(
-                "Grade — “8th”, “senior”",
-                text: Binding(get: { row.gradeText ?? "" }, set: { row.gradeText = $0 })
-            )
-            .accessibilityIdentifier("records.addRelative.grade")
+            TextField(attribute.capturePrompt, text: binding(for: attribute))
+                .accessibilityIdentifier("records.addRelative.grade")
 
             Picker("", selection: $row.schoolYearIntent) {
                 ForEach(SchoolYearIntent.allCases) { option in
@@ -157,19 +209,44 @@ struct RelativeRowEditor: View {
                 .foregroundStyle(row.parsedGrade == nil ? Theme.Colors.warning : Theme.Colors.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
 
-        TextField(
-            "School (optional)",
-            text: Binding(get: { row.school ?? "" }, set: { row.school = $0 })
-        )
-        .accessibilityIdentifier("records.addRelative.school")
+    /// The escape hatch, and the reason the suggestions above are only suggestions.
+    @ViewBuilder
+    private var customAdder: some View {
+        if isNamingCustom {
+            HStack(spacing: Theme.Spacing.small) {
+                TextField("What is it? — “allergy”, “team”", text: $customLabel)
+                    .accessibilityIdentifier("records.addRelative.customLabel")
+                    .onSubmit(addCustom)
 
-        if let years = row.age {
-            Text(Self.ageExplanation(years))
+                Button("Add", action: addCustom)
+                    .disabled(FactAttribute.custom(customLabel) == nil)
+
+                Button("Cancel", role: .cancel) {
+                    isNamingCustom = false
+                    customLabel = ""
+                }
+            }
+        } else {
+            Button("Something else…", systemImage: "plus") { isNamingCustom = true }
+                .buttonStyle(.borderless)
                 .font(Theme.Text.metadata)
-                .foregroundStyle(Theme.Colors.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("records.addRelative.somethingElse")
         }
+    }
+
+    private func addCustom() {
+        guard let attribute = FactAttribute.custom(customLabel) else { return }
+        if !offeredAttributes.contains(attribute) {
+            pendingAttributes.append(attribute)
+        }
+        customLabel = ""
+        isNamingCustom = false
+    }
+
+    private func binding(for attribute: FactAttribute) -> Binding<String> {
+        Binding(get: { row[attribute] ?? "" }, set: { row[attribute] = $0 })
     }
 
     private var now: Date { services?.dateProvider.now ?? Date() }
@@ -188,15 +265,14 @@ struct RelativeRowEditor: View {
             .map { $0 }
     }
 
-    /// The age typed in, when it is a plausible one.
-    ///
-    /// Nil rather than zero for anything unparseable, so a stray keystroke records nothing instead of
-    /// asserting that somebody is nought. The upper bound is a sanity check on a typo, not a claim
-    /// about how old a child can be.
-    static func age(from text: String) -> Int? {
+    /// Digits only, and within a range that catches a typo rather than making a claim about how old
+    /// anybody can be. Anything unreadable records nothing instead of asserting that somebody is
+    /// nought.
+    static func wholeNumber(from text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let years = Int(trimmed), (0...120).contains(years) else { return nil }
-        return years
+        guard !trimmed.isEmpty else { return nil }
+        guard let value = Int(trimmed), (0...120).contains(value) else { return nil }
+        return String(value)
     }
 
     /// Says what recording an age will actually mean, before it is recorded.

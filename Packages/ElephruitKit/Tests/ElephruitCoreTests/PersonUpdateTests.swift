@@ -190,6 +190,97 @@ struct PersonUpdateTests {
         #expect(sentence.contains("upper sixth in 2026–27"))
     }
 
+    // MARK: - Anything the user names
+
+    /// The model has always been open; until now no interface could reach past the curated list.
+    @Test("A fact can be about something nobody thought of")
+    func customAttributesAreMadeFromWhatWasTyped() throws {
+        let allergy = try #require(FactAttribute.custom("Food allergy"))
+
+        #expect(allergy.rawValue == "food allergy")
+        #expect(allergy.displayName == "Food Allergy")
+        #expect(!allergy.isCurated)
+        #expect(allergy.isMultiValued, "an unknown attribute joins rather than superseding")
+        #expect(allergy.captureKind == .text)
+    }
+
+    /// Otherwise the escape hatch fragments the set it exists to extend, and somebody ends up with
+    /// two School cards that neither supersede nor merge.
+    @Test("Naming something the app already keeps folds back into it")
+    func customAttributesFoldIntoTheCuratedSet() {
+        #expect(FactAttribute.custom("School") == .school)
+        #expect(FactAttribute.custom("  grade ") == .schoolGrade)
+        #expect(FactAttribute.custom("Why they matter") == .significance)
+        #expect(FactAttribute.custom("lives in") == .location)
+    }
+
+    @Test("Spacing and case do not make two attributes out of one")
+    func customAttributesAreNormalised() {
+        #expect(FactAttribute.custom("Food  Allergy ") == FactAttribute.custom("food allergy"))
+        #expect(FactAttribute.custom("   ") == nil)
+        #expect(FactAttribute.custom("") == nil)
+    }
+
+    // MARK: - What a row offers
+
+    /// The hard-coded version of this said a colleague could not have an age and a partner could
+    /// not have a job, and it was wrong about both while looking like a decision somebody had made.
+    @Test("Each relationship suggests what is usually worth recording about it")
+    func suggestionsFitTheRelationship() {
+        #expect(RelationshipKind.child.suggestedAttributes.contains(.schoolGrade))
+        #expect(RelationshipKind.colleague.suggestedAttributes.contains(.role))
+        #expect(RelationshipKind.partner.suggestedAttributes.contains(.employer))
+        #expect(RelationshipKind.pet.suggestedAttributes.contains(.observedAge))
+        #expect(RelationshipKind.allCases.allSatisfy { !$0.suggestedAttributes.isEmpty })
+    }
+
+    /// Suggestions decide what a form shows, never what a person may have.
+    @Test("Anything can be recorded against anybody, suggested or not")
+    func suggestionsDoNotLimitWhatIsRecordable() {
+        var partner = RelativeCapture(kind: .partner, label: "wife")
+        partner[.schoolGrade] = "second year"
+        partner[FactAttribute.custom("thesis") ?? .quickFact] = "on coral bleaching"
+
+        #expect(!RelationshipKind.partner.suggestedAttributes.contains(.schoolGrade))
+        #expect(partner.factCount == 2)
+
+        let drafts = partner.observations(observedOn: Self.conversation, calendar: Self.calendar)
+        #expect(drafts.contains { $0.attribute == .schoolGrade && $0.value == "second year" })
+        #expect(drafts.contains { $0.attribute.rawValue == "thesis" })
+    }
+
+    @Test("A field cleared by hand records nothing rather than an empty string")
+    func blankValuesAreDropped() {
+        var capture = Self.son
+        #expect(capture[.schoolGrade] != nil)
+
+        capture[.schoolGrade] = "   "
+        #expect(capture[.schoolGrade] == nil)
+        #expect(capture.facts[.schoolGrade] == nil, "removed, not stored blank")
+    }
+
+    @Test("A row reads its facts in the order the form offers them")
+    func statedFactsFollowTheSuggestedOrder() {
+        var capture = RelativeCapture(kind: .child, label: "son")
+        capture[FactAttribute.custom("team") ?? .quickFact] = "the Tigers"
+        capture[.school] = "South High"
+        capture[.observedAge] = "17"
+
+        // Suggested attributes first, in their own order; anything else after.
+        #expect(capture.statedFacts.map(\.attribute) == [.observedAge, .school, FactAttribute("team")])
+    }
+
+    @Test("An unrecognised attribute still previews as a readable clause")
+    func summaryReadsUnknownAttributes() {
+        var capture = RelativeCapture(kind: .child, label: "son")
+        capture[FactAttribute.custom("team") ?? .quickFact] = "the Tigers"
+
+        let sentence = capture.summarySentence(
+            subjectName: "Dave", observedOn: Self.conversation, calendar: Self.calendar
+        )
+        #expect(sentence.contains("team: the Tigers"))
+    }
+
     // MARK: - What the app made of the grade
 
     @Test("A grade it can read is said back as a grade")

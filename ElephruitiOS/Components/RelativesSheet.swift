@@ -32,6 +32,11 @@ struct RelativesSheet: View {
 
     @State private var rows: [RelativeCapture] = []
     @State private var saveError: String?
+    /// Attributes asked for but not yet filled in, per row. Not in the capture, because an
+    /// attribute with no value is a field on screen rather than a fact about anybody.
+    @State private var pending: [UUID: [FactAttribute]] = [:]
+    @State private var naming: UUID?
+    @State private var customLabel = ""
 
     var body: some View {
         NavigationStack {
@@ -118,6 +123,23 @@ struct RelativesSheet: View {
 
     // MARK: - One relative
 
+    /// What this row draws: the suggestions for the relationship, then anything already recorded or
+    /// asked for that is not among them.
+    ///
+    /// The fields used to be five hard-coded ones behind `kind == .child`, which meant a colleague
+    /// could not have an age and a partner could not have a job. They are asked for now — see
+    /// `RelationshipKind.suggestedAttributes` — and *Something else* is underneath, so what a row
+    /// can carry is not a list anybody has to maintain.
+    private func offeredAttributes(for row: RelativeCapture) -> [FactAttribute] {
+        let suggested = row.kind.suggestedAttributes
+        let extra = (Array(row.facts.keys) + (pending[row.id] ?? []))
+            .filter { !suggested.contains($0) }
+            .reduce(into: [FactAttribute]()) { seen, attribute in
+                if !seen.contains(attribute) { seen.append(attribute) }
+            }
+        return suggested + extra
+    }
+
     @ViewBuilder
     private func rowFields(_ row: Binding<RelativeCapture>) -> some View {
         Picker("Relationship", selection: row.kind) {
@@ -138,24 +160,36 @@ struct RelativesSheet: View {
         .textInputAutocapitalization(.words)
         .accessibilityIdentifier("person.relatives.name")
 
-        if row.wrappedValue.kind == .child {
+        ForEach(offeredAttributes(for: row.wrappedValue), id: \.rawValue) { attribute in
+            field(row, attribute)
+        }
+
+        customAdder(row)
+    }
+
+    @ViewBuilder
+    private func field(_ row: Binding<RelativeCapture>, _ attribute: FactAttribute) -> some View {
+        switch attribute.captureKind {
+        case .wholeNumber:
             TextField(
-                "Age (optional)",
+                "\(attribute.capturePrompt) (optional)",
                 text: Binding(
-                    get: { row.wrappedValue.age.map(String.init) ?? "" },
-                    set: { row.wrappedValue.age = Self.age(from: $0) }
+                    get: { row.wrappedValue[attribute] ?? "" },
+                    set: { row.wrappedValue[attribute] = Self.wholeNumber(from: $0) }
                 )
             )
             .keyboardType(.numberPad)
+            .accessibilityIdentifier("person.relatives.\(attribute.rawValue)")
 
-            TextField(
-                "Grade — “8th”, “senior”",
-                text: Binding(
-                    get: { row.wrappedValue.gradeText ?? "" },
-                    set: { row.wrappedValue.gradeText = $0 }
-                )
-            )
-            .accessibilityIdentifier("person.relatives.grade")
+            if attribute == .observedAge, let years = row.wrappedValue.age {
+                Text(Self.ageExplanation(years))
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+
+        case .schoolGrade:
+            TextField(attribute.capturePrompt, text: binding(row, attribute))
+                .accessibilityIdentifier("person.relatives.grade")
 
             if row.wrappedValue.statedGradeText != nil {
                 Picker("School year", selection: row.schoolYearIntent) {
@@ -175,33 +209,55 @@ struct RelativesSheet: View {
                 }
             }
 
-            TextField(
-                "School (optional)",
-                text: Binding(
-                    get: { row.wrappedValue.school ?? "" },
-                    set: { row.wrappedValue.school = $0 }
-                )
-            )
-            .textInputAutocapitalization(.words)
+        case .text:
+            TextField("\(attribute.capturePrompt) (optional)", text: binding(row, attribute))
+                .textInputAutocapitalization(.sentences)
+                .accessibilityIdentifier("person.relatives.\(attribute.rawValue)")
+        }
+    }
 
-            if let years = row.wrappedValue.age {
-                Text(Self.ageExplanation(years))
-                    .font(Theme.Text.metadata)
-                    .foregroundStyle(Theme.Colors.secondaryText)
+    /// The escape hatch, and the reason the suggestions above are only suggestions.
+    @ViewBuilder
+    private func customAdder(_ row: Binding<RelativeCapture>) -> some View {
+        let id = row.wrappedValue.id
+
+        if naming == id {
+            TextField("What is it? — “allergy”, “team”", text: $customLabel)
+                .accessibilityIdentifier("person.relatives.customLabel")
+                .onSubmit { addCustom(to: id) }
+
+            Button("Add") { addCustom(to: id) }
+                .disabled(FactAttribute.custom(customLabel) == nil)
+        } else {
+            Button {
+                naming = id
+                customLabel = ""
+            } label: {
+                Label("Something else…", systemImage: "plus.circle")
             }
+            .accessibilityIdentifier("person.relatives.somethingElse")
         }
 
-        TextField(
-            "Worth remembering (optional)",
-            text: Binding(get: { row.wrappedValue.note ?? "" }, set: { row.wrappedValue.note = $0 })
-        )
-
         Button(role: .destructive) {
-            let id = row.wrappedValue.id
             rows.removeAll { $0.id == id }
+            pending[id] = nil
         } label: {
             Label("Remove", systemImage: "trash")
         }
+    }
+
+    private func addCustom(to rowID: UUID) {
+        guard let attribute = FactAttribute.custom(customLabel) else { return }
+        pending[rowID, default: []].append(attribute)
+        customLabel = ""
+        naming = nil
+    }
+
+    private func binding(_ row: Binding<RelativeCapture>, _ attribute: FactAttribute) -> Binding<String> {
+        Binding(
+            get: { row.wrappedValue[attribute] ?? "" },
+            set: { row.wrappedValue[attribute] = $0 }
+        )
     }
 
     // MARK: - Derived
@@ -213,12 +269,13 @@ struct RelativesSheet: View {
     private var now: Date { services?.dateProvider.now ?? Date() }
     private var calendar: Calendar { services?.dateProvider.calendar ?? .current }
 
-    /// The age typed in, when it is a plausible one. Nil rather than zero for anything unparseable,
-    /// so a stray keystroke records nothing instead of asserting that somebody is nought.
-    private static func age(from text: String) -> Int? {
+    /// Digits only, and within a range that catches a typo rather than making a claim about how old
+    /// anybody can be. Anything unreadable records nothing instead of asserting somebody is nought.
+    private static func wholeNumber(from text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let years = Int(trimmed), (0...120).contains(years) else { return nil }
-        return years
+        guard !trimmed.isEmpty else { return nil }
+        guard let value = Int(trimmed), (0...120).contains(value) else { return nil }
+        return String(value)
     }
 
     private static func ageExplanation(_ years: Int) -> String {
