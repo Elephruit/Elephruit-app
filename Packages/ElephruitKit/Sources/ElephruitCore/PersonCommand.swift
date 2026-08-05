@@ -679,7 +679,11 @@ public struct DeterministicPersonCommandParser: PersonCommandParsing {
 
         if let relation = state.consumeRelation() {
             let phrase = relation.label ?? relation.kind.displayName
-            var summary = "\(relation.relatedName) is \(subject.fullName)'s \(phrase)"
+            // Says out loud that nobody was named, rather than reading as a sentence with a hole in
+            // it — " is Maya's son" would look like the parser lost a word.
+            var summary = relation.relatedName.isEmpty
+                ? "A \(phrase) of \(subject.fullName), name not known yet"
+                : "\(relation.relatedName) is \(subject.fullName)'s \(phrase)"
             if !relation.observations.isEmpty {
                 summary += " · " + relation.observations.map(\.value).joined(separator: ", ")
             }

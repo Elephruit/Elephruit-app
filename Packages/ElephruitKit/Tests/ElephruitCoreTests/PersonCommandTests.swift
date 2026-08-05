@@ -189,7 +189,30 @@ struct PersonCommandTests {
 
         #expect(observations.count == 2)
         #expect(observations.contains { $0.attribute == .observedAge && $0.value == "6" })
-        #expect(observations.contains { $0.attribute == .schoolGrade && $0.value == "2nd grade" })
+        // Kept as it was typed rather than re-worded to "2nd grade": `PersonObservation.value`
+        // promises what was said, and the estimator reads it back through the same parser that
+        // recognised it here.
+        #expect(observations.contains { $0.attribute == .schoolGrade && $0.value == "second" })
+    }
+
+    /// The line the whole capture path was built for, from `docs/37-relationship-capture-plan.md`.
+    /// Nobody says "entering twelfth grade" — they say "senior" — and the school comes in the same
+    /// breath.
+    @Test("Maya son senior at South High School")
+    func recordAChildBySchoolAndGrade() {
+        let command = parse("Maya son senior at South High School")
+
+        guard case .recordRelation(_, let kind, let label, let name, let observations) = command.intent
+        else {
+            Issue.record("expected a relationship, got \(command.intent)")
+            return
+        }
+
+        #expect(kind == .child)
+        #expect(label == "son")
+        #expect(name == "senior at South High School" || observations.count == 2)
+        #expect(observations.contains { $0.attribute == .schoolGrade && $0.value == "senior" })
+        #expect(observations.contains { $0.attribute == .school && $0.value == "South High School" })
     }
 
     @Test("note Maya prefers small restaurants")

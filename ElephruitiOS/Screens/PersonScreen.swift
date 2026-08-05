@@ -72,6 +72,23 @@ struct PersonScreen: View {
         .navigationTitle(person?.displayTitle ?? "Record")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: reloadKey) { reload() }
+        // On the list rather than on the sections that open them, so a section that is conditional
+        // cannot take its own sheet out of the hierarchy with it.
+        .sheet(isPresented: $isAddingRelatives) {
+            if let person {
+                RelativesSheet(person: person) { reload() }
+            }
+        }
+        .sheet(item: $namingPrompt) { prompt in
+            NamePersonSheet(prompt: prompt) {
+                namingPrompt = nil
+                reload()
+            }
+        }
+        // Without `.contain`, an identifier on a container hides everything inside it from the
+        // accessibility tree — so the page would be findable and none of its buttons would be. It
+        // did not matter while this screen was read-only and there was nothing to press.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("person.screen")
     }
 
@@ -279,9 +296,6 @@ struct PersonScreen: View {
             }
             .accessibilityIdentifier("person.addRelatives")
         }
-        .sheet(isPresented: $isAddingRelatives) {
-            RelativesSheet(person: person) { reload() }
-        }
     }
 
     /// What the app knows it does not know, and can be told in one field.
@@ -329,12 +343,6 @@ struct PersonScreen: View {
                         }
                         .frame(minHeight: 44)
                     }
-                }
-            }
-            .sheet(item: $namingPrompt) { prompt in
-                NamePersonSheet(prompt: prompt) {
-                    namingPrompt = nil
-                    reload()
                 }
             }
         }

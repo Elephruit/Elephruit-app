@@ -83,6 +83,7 @@ struct RelativesSheet: View {
                         .accessibilityIdentifier("person.relatives.save")
                 }
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("person.relatives.sheet")
         }
     }
