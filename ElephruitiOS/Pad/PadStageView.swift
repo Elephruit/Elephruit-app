@@ -147,6 +147,9 @@ struct PadRootScreen: View {
         case .project(let id):
             // The workspace, not the phone's page — the stage is wide enough for the real answer.
             PadProjectScreen(projectID: id)
+        case .calendar:
+            // The month and agenda the phone draws, plus the time grid its width could not hold.
+            PadCalendarScreen()
         default:
             if let route = root.route {
                 MobileRouteView(route: route)

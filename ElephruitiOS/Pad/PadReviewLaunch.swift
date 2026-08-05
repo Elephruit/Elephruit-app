@@ -75,6 +75,18 @@ enum PadReviewLaunch {
         return PadProjectPresentation(rawValue: arguments[index + 1].lowercased())
     }
 
+    /// The calendar view a review launch asked for.
+    ///
+    ///     -ElephruitPadCalendarView agenda | week | day
+    static var requestedCalendarView: PadCalendarView? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("-ElephruitDevelopmentMode"),
+            let index = arguments.firstIndex(of: "-ElephruitPadCalendarView"),
+            index + 1 < arguments.count
+        else { return nil }
+        return PadCalendarView(rawValue: arguments[index + 1].lowercased())
+    }
+
     /// The record the reading pane should open on, when the arguments asked for one.
     static func requestedDetail(
         for root: PadRoot,
