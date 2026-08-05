@@ -20,7 +20,10 @@ struct MobileRootView: View {
     @Environment(\.services) private var services
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var shell = MobileShellModel()
+    /// Owned by `AdaptiveRootView`, not by this view. A window may change width class mid-session,
+    /// and the journey has to survive the change — which needs one owner above both shells rather
+    /// than a fresh model each time an arrangement appears.
+    @Environment(MobileShellModel.self) private var shell
 
     /// How far the content slides. Wide enough to read a thirteen-row list comfortably,
     /// narrow enough that the screen behind it stays visibly *there* rather than replaced —
@@ -36,35 +39,19 @@ struct MobileRootView: View {
     /// keeps a hesitant thumb from committing to a screen change it did not mean.
     private static let dragCommitDistance: CGFloat = 60
 
-    /// Navigation survives relaunch: the destination and each destination's drill-down.
-    @SceneStorage("mobile.navigation") private var storedNavigation: String?
-    @State private var hasRestored = false
-
     /// The live drag offset, in points, while a gesture is in flight.
     @State private var dragTranslation: CGFloat = 0
 
     var body: some View {
+        @Bindable var shell = shell
+
         ZStack(alignment: .leading) {
             contentLayer
             sidebarLayer
         }
         .background(Theme.Colors.windowBackground)
-        .environment(shell)
         .sheet(isPresented: $shell.isCaptureVisible) {
             CaptureSheet()
-        }
-        .task {
-            guard !hasRestored else { return }
-            hasRestored = true
-            if let storedNavigation {
-                shell.restore(from: storedNavigation)
-            }
-        }
-        .onChange(of: shell.restoration) {
-            storedNavigation = shell.encodedRestoration
-        }
-        .onOpenURL { url in
-            handleDeepLink(url)
         }
     }
 
@@ -111,7 +98,9 @@ struct MobileRootView: View {
     }
 
     private var navigationStack: some View {
-        NavigationStack(path: $shell.path) {
+        @Bindable var shell = shell
+
+        return NavigationStack(path: $shell.path) {
             MobileDestinationView(destination: shell.destination)
                 .navigationDestination(for: MobileRoute.self) { route in
                     MobileRouteView(route: route)
@@ -204,32 +193,6 @@ struct MobileRootView: View {
     private func setSidebar(open: Bool) {
         withCalmAnimation(Theme.Motion.standard) {
             shell.isSidebarOpen = open
-        }
-    }
-
-    /// The `elephruit:` scheme, honoured on the same read-only terms as the Mac: every URL
-    /// navigates, none mutates.
-    private func handleDeepLink(_ url: URL) {
-        guard url.scheme == "elephruit" else { return }
-
-        // A destination named by a link is a destination, not a drill-down: the host alone is
-        // enough to place the user, so the shell steps there and pops whatever was open.
-        if let host = url.host(), let destination = MobileDestination(rawValue: host) {
-            shell.select(destination)
-            return
-        }
-
-        switch url.host() {
-        case "people": shell.select(.records)
-        case "library": shell.select(.today); shell.isSidebarOpen = true
-        case "notes": shell.select(.notes)
-        case "capture": shell.isCaptureVisible = true
-        case "item":
-            if let id = UUID(uuidString: url.lastPathComponent),
-                let item = try? services?.items.item(id: id) {
-                shell.open(MobileShellModel.route(for: item.kind, id: id), in: shell.destination)
-            }
-        default: break
         }
     }
 }
