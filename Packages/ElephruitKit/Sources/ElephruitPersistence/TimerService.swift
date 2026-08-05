@@ -227,6 +227,67 @@ public final class TimerService {
         updateActivityAssertion()
     }
 
+    /// Adopts what another device did to the timer.
+    ///
+    /// ### Why refreshing is not optional
+    /// `running` is a snapshot taken at the last local command, and the tick that follows only
+    /// recomputes the elapsed time from it — deliberately, because a store read per second is not
+    /// what a clock face should cost. That is correct as long as this process is the only thing
+    /// that closes an entry, and it stopped being true the moment the library synced: a timer
+    /// stopped on the phone left the Mac counting an entry that has an end date, showing a clock
+    /// nobody could stop and a menu bar that lied for the rest of the day.
+    ///
+    /// So the import that lands the change is also the cue to re-read. The read is a fetch with
+    /// `endedAt == nil` in the predicate, which means it converges even if the merged object is
+    /// still stale in memory: an entry that has been ended elsewhere simply no longer matches.
+    ///
+    /// Three things follow a change of hands:
+    ///
+    /// - **The invariant is repaired first.** Two devices can each start a timer while offline, and
+    ///   an import makes both of them running at once. ``TimeEntryRepository/reconcileConcurrentTimers()``
+    ///   closes the earlier at the moment the later began — the same repair launch has always done,
+    ///   applied to the same situation arriving by a different route. The count accumulates rather
+    ///   than overwrites, so a notice nobody has acknowledged is not erased by the next import.
+    /// - **Local intentions do not survive their entry.** A focus cycle, a pause, and a running
+    ///   total are facts about work *this* person is doing here. When the entry they ride on is
+    ///   closed from elsewhere they are about nothing, and a pomodoro that went on counting would
+    ///   ring for a block that stopped being worked ten minutes ago.
+    /// - **The ending is announced.** A remote stop closes an entry exactly as a local one does, and
+    ///   anything mirroring it here has to be told — otherwise this device keeps a calendar event
+    ///   open on an entry that finished.
+    public func absorbRemoteChange() {
+        let previous = running?.id
+
+        do {
+            let repaired = try entries.reconcileConcurrentTimers()
+            if repaired > 0 { reconciledTimerCount += repaired }
+        } catch {
+            lastError = error
+        }
+
+        refresh()
+
+        guard running?.id != previous else { return }
+
+        // A new entry is being timed by this process's reckoning, whoever started it. The next
+        // heartbeat is due immediately rather than up to thirty seconds from now.
+        lastHeartbeatWrite = nil
+
+        // Something is running again, so a pause held here is over — the work it offered to carry
+        // on with is being timed.
+        if running != nil { paused = nil }
+
+        guard let previous else { return }
+
+        pomodoro = nil
+        finishedPhase = nil
+        focusSubjectEntryID = nil
+        accumulatedBeforeCurrent = 0
+        if pendingIdle?.id == previous { pendingIdle = nil }
+
+        onEntryFinished?(previous)
+    }
+
     /// Takes the assertion when something starts running, and gives it back when nothing is.
     private func updateActivityAssertion() {
         if running != nil, activityAssertion == nil {
@@ -938,7 +999,11 @@ public final class TimerService {
                 // turn the sleep interval into a question, then recompute the continuously running
                 // timer from its original start date.
                 self.idleDetector.reset()
-                self.refresh()
+                // The full absorb rather than a plain refresh, because the interval that was just
+                // slept through is the most likely one for the *other* device to have stopped the
+                // timer in — and a suspended process hears no import notification. Waking is the
+                // first moment this one can look, and if nothing moved the pass is a fetch.
+                self.absorbRemoteChange()
             }
         }
     }

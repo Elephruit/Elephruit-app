@@ -112,7 +112,12 @@ final class MobileAppEnvironment {
                 services.seedPeople(upTo: count)
             }
 
-            services.timer.start()
+            // The Mac's `RootView` calls the same method for the same reasons, and calling
+            // `timer.start()` directly here was a quiet divergence: the phone got a ticking
+            // clock, but not the stored focus lengths and not the calendar mirror's hook on a
+            // finished entry. Two apps sharing a store must not disagree about what stopping a
+            // timer does.
+            services.startTimeTracking()
             Task { await services.warmSearchIndex() }
             // Everything derived is computed on change and never during a render; at launch
             // this is the change. Without it the project tree and the badges start empty —
