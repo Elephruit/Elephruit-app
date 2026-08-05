@@ -32,6 +32,9 @@ struct PersonScreen: View {
     @State private var photo: Data?
     /// What sort of record this is, read once with everything else rather than in `body`.
     @State private var recordType: RecordType = .person
+    /// The groups this person is in, read with everything else.
+    @State private var groups: [PersonGroupSummary] = []
+    @State private var isEditingGroups = false
 
     /// How much of a long history a phone shows before it stops being a summary.
     private static let timelineLimit = 40
@@ -45,6 +48,7 @@ struct PersonScreen: View {
 
             if let person {
                 headerSection(person)
+                groupsSection(person)
                 factsSection
                 openWorkSection
                 relatedSection
@@ -71,6 +75,51 @@ struct PersonScreen: View {
     }
 
     // MARK: - Sections
+
+    /// The circles this person is in, and the way into changing them.
+    ///
+    /// ### Why the smart ones are shown but not offered
+    /// A fixed group has members somebody chose, so a toggle writes one. A smart group's membership
+    /// is whatever its query matches right now — there is nothing to write, and a toggle that
+    /// silently did nothing would be worse than no toggle. So both are drawn, because both are true
+    /// of this person, and only the fixed ones are editable. The editor says which is which rather
+    /// than leaving a disabled row to be read as broken.
+    @ViewBuilder
+    private func groupsSection(_ person: Item) -> some View {
+        Section("Groups") {
+            if groups.isEmpty {
+                Button {
+                    isEditingGroups = true
+                } label: {
+                    Label("Add to a group", systemImage: "plus.circle")
+                }
+            } else {
+                ForEach(groups) { group in
+                    Button {
+                        shell.push(.records(.group(id: group.id)))
+                    } label: {
+                        HStack(spacing: Theme.Spacing.medium) {
+                            GroupTile(symbolName: group.symbolName, colorName: group.colorName, size: .small)
+                            Text(group.name)
+                                .foregroundStyle(Theme.Colors.primaryText)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(Theme.Text.metadata)
+                                .foregroundStyle(Theme.Colors.tertiaryText)
+                                .accessibilityHidden(true)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Button("Edit Groups", systemImage: "pencil") { isEditingGroups = true }
+            }
+        }
+        .sheet(isPresented: $isEditingGroups) {
+            GroupMembershipSheet(person: person) { reload() }
+        }
+    }
 
     /// Who they are, led by their face.
     ///
@@ -289,6 +338,7 @@ struct PersonScreen: View {
             portrait = try services.personWorkspace.portrait(of: record)
             timeline = try services.personWorkspace.timeline(for: record)
             context = try services.personWorkspace.sidebar(for: record)
+            groups = try services.personGroups.membership().groups(for: record.id)
             loadError = nil
 
             // After the page is on screen, never before it: a face is worth waiting a frame for and

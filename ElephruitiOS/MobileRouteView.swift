@@ -29,6 +29,8 @@ struct MobileRouteView: View {
             ReminderListScreen(source: .builtIn(id))
         case .records(let scope):
             RecordsListScreen(scope: scope)
+        case .groups:
+            GroupsScreen()
         case .tag(let slug):
             ItemListScreen(source: .tag(slug))
         case .kindList(let kind):

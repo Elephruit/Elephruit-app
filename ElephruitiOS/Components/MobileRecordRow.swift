@@ -60,6 +60,11 @@ struct MobileRecordRow: View {
 
             Spacer(minLength: 0)
 
+            // Groups before the star: the star is one bit about this person and the dots are about
+            // their place among everybody else, so the dots sit inboard where the eye scans names
+            // and the star stays pinned to the edge where it always was.
+            GroupDots(groups: entry.groups)
+
             if entry.isFavorite {
                 Image(systemName: "star.fill")
                     .font(Theme.Text.metadata)
@@ -123,8 +128,15 @@ struct MobileRecordRow: View {
     /// The star is drawn but hidden from VoiceOver as a glyph, so it is said here instead — a
     /// favorite that is only a shape is a favorite a screen-reader user cannot know about.
     private var accessibilityLabel: String {
-        [entry.displayName, context, entry.isFavorite ? "Favorite" : nil]
-            .compactMap { $0 }
-            .joined(separator: ", ")
+        [
+            entry.displayName,
+            context,
+            // Every group, not only the drawn ones: the dots are capped because the row is narrow,
+            // and this reader is not. A dot left to announce itself would say "circle".
+            GroupDots.accessibilityText(for: entry.groups),
+            entry.isFavorite ? "Favorite" : nil,
+        ]
+        .compactMap { $0 }
+        .joined(separator: ", ")
     }
 }

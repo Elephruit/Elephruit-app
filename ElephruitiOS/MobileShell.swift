@@ -126,6 +126,8 @@ enum MobileRoute: Hashable, Codable {
     case builtInSmartList(String)
     /// A scoped slice of the Records module — pets, organizations, favorites.
     case records(RecordsScope)
+    /// The groups of people: what they are, what colour, and who is in them.
+    case groups
     /// Everything carrying one tag.
     case tag(String)
     /// The flat list of one kind — notes, bookmarks, areas.

@@ -13,15 +13,40 @@ import SwiftUI
 /// disagree about what "Unsorted" means. Search runs the ranked person-graph search the
 /// Mac's command bar uses, so "maya's manager" finds her here too.
 struct RecordsScreen: View {
+    @Environment(\.services) private var services
+    @Environment(MobileShellModel.self) private var shell
+
     /// People first: the tab inherits the donor People tab's job. The full type menu is
     /// one tap away, which is a hierarchy, not a hiding place.
     @State private var scope: RecordsScope = .people
+
+    /// The groups, for the filter menu. Summaries rather than groups: a menu draws a name, a
+    /// symbol and a colour, and resolving membership for every group — which for a smart group
+    /// means running its search — to decide what to put in a menu nobody has opened yet is work
+    /// for nothing. See `PersonGroupService.allGroupSummaries()`.
+    @State private var groups: [PersonGroupSummary] = []
 
     var body: some View {
         RecordsListBody(scope: scope) {
             scopeMenu
         }
-        .navigationTitle(scope == .people ? "Records" : scope.title)
+        .navigationTitle(title)
+        .task(id: services?.changeToken ?? 0) {
+            groups = (try? services?.personGroups.allGroupSummaries()) ?? []
+        }
+    }
+
+    /// A group scope is titled with the group's own name.
+    ///
+    /// `RecordsScope.group` can only answer "Group" — it holds an identifier and the vocabulary is
+    /// shared with the Mac, so it cannot reach a store to look the name up. The screen that has one
+    /// does it here.
+    private var title: String {
+        switch scope {
+        case .people: "Records"
+        case .group(let id): groups.first { $0.id == id }?.name ?? "Group"
+        default: scope.title
+        }
     }
 
     private var scopeMenu: some View {
@@ -32,6 +57,26 @@ struct RecordsScreen: View {
                 }
                 Label(RecordsScope.favorites.title, systemImage: RecordsScope.favorites.symbolName)
                     .tag(RecordsScope.favorites)
+            }
+
+            // A section rather than a submenu: the whole point of a group filter is to be one tap
+            // from the list, and burying it a level down would make picking a group slower than
+            // scrolling to the person would have been.
+            if !groups.isEmpty {
+                Section("Groups") {
+                    Picker("Group", selection: $scope) {
+                        ForEach(groups) { group in
+                            Label(group.name, systemImage: group.symbolName)
+                                .tag(RecordsScope.group(id: group.id))
+                        }
+                    }
+                }
+            }
+
+            Section {
+                Button("Manage Groups…", systemImage: "person.2.circle") {
+                    shell.push(.groups)
+                }
             }
         } label: {
             Label("Scope", systemImage: scope.symbolName)
@@ -237,11 +282,26 @@ private struct RecordsListBody<TrailingItem: View>: View {
         guard let services else { return }
         do {
             let all = try services.records.allRecords()
+
+            // Once for the list, not once per row. Membership belongs to the group, so the question
+            // "which groups is this person in" can only be answered by asking every group — which is
+            // affordable exactly once. See `PersonGroupMembership`.
+            let membership = try services.personGroups.membership()
+
+            // Resolved before the filter, so scoping to a group costs the same walk that drew the
+            // dots rather than a second one.
+            let groupMembers: Set<UUID>? = if case .group(let id) = scope {
+                Set(try services.personGroups.group(id: id)?.memberIDs ?? [])
+            } else {
+                nil
+            }
+
             let scoped = all.filter { record in
                 switch scope {
                 case .all: true
                 case .unsorted: services.records.isUnsorted(record)
                 case .favorites: record.isFavorite
+                case .group: groupMembers?.contains(record.id) ?? false
                 default:
                     scope.recordType.map { services.records.type(of: record) == $0 } ?? true
                 }
@@ -255,7 +315,10 @@ private struct RecordsListBody<TrailingItem: View>: View {
                     isFavorite: record.isFavorite,
                     colorName: record.colorName,
                     recordType: services.records.type(of: record),
-                    contactIdentifier: record.personProfile?.contactsIdentifier
+                    contactIdentifier: record.personProfile?.contactsIdentifier,
+                    groups: membership.groups(for: record.id).map {
+                        PersonListGroupBadge(id: $0.id, name: $0.name, colorName: $0.colorName)
+                    }
                 )
             }
 
