@@ -27,6 +27,11 @@ struct PersonScreen: View {
     @State private var context: PersonSidebarContext?
     @State private var timeline: [PersonTimelineEntry] = []
     @State private var loadError: String?
+    /// Their photograph, once Contacts has answered. Held here rather than read in `body` for the
+    /// reason given on `ContactPhotoStore`.
+    @State private var photo: Data?
+    /// What sort of record this is, read once with everything else rather than in `body`.
+    @State private var recordType: RecordType = .person
 
     /// How much of a long history a phone shows before it stops being a summary.
     private static let timelineLimit = 40
@@ -67,13 +72,32 @@ struct PersonScreen: View {
 
     // MARK: - Sections
 
+    /// Who they are, led by their face.
+    ///
+    /// It was the record type's SF Symbol at hero size — the same outline of a generic head on every
+    /// person in the library, which is a picture of the *category* at the top of a page about an
+    /// individual. The list already draws people as themselves; a detail screen that did not was the
+    /// one place the app forgot whose page it was on.
     private func headerSection(_ person: Item) -> some View {
         Section {
             HStack(spacing: Theme.Spacing.medium) {
-                Image(systemName: person.effectiveSymbolName)
-                    .font(Theme.Text.heroGlyph)
-                    .foregroundStyle(Theme.Palette.color(named: person.colorName))
-                    .frame(width: Theme.Size.iconTileLarge)
+                // The same rule the list row applies, for the same reason: initials are the picture
+                // of somebody with a name, and a car is not somebody with a name.
+                switch recordType {
+                case .person, .pet:
+                    Avatar(
+                        name: person.displayTitle,
+                        diameter: Theme.Size.iconTileLarge,
+                        tint: Theme.Palette.color(named: person.colorName),
+                        photo: photo
+                    )
+                case .vehicle, .organization, .other:
+                    IconTile(
+                        systemImage: recordType.symbolName,
+                        tint: Theme.Palette.color(named: person.colorName),
+                        size: .large
+                    )
+                }
 
                 VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                     Text(person.displayTitle)
@@ -261,10 +285,19 @@ struct PersonScreen: View {
                 return
             }
             person = record
+            recordType = services.records.type(of: record)
             portrait = try services.personWorkspace.portrait(of: record)
             timeline = try services.personWorkspace.timeline(for: record)
             context = try services.personWorkspace.sidebar(for: record)
             loadError = nil
+
+            // After the page is on screen, never before it: a face is worth waiting a frame for and
+            // is not worth holding the record's own detail back for.
+            let identifier = record.personProfile?.contactsIdentifier
+            photo = services.contacts.cachedPhoto(forContactIdentifier: identifier)
+            if photo == nil {
+                Task { photo = await services.contacts.photo(forContactIdentifier: identifier) }
+            }
         } catch {
             loadError = error.summary
         }
