@@ -117,10 +117,19 @@ public final class SearchSessionModel {
     // MARK: - Running
 
     private func textDidChange() {
-        scheduleRun()
+        scheduleRun(debounced: true)
     }
 
-    private func scheduleRun() {
+    /// Starts a run, optionally after letting the typing settle.
+    ///
+    /// Cancelling the previous task was never enough on its own: cancellation is cooperative,
+    /// and a query handed to the search actor is already queued behind whatever else is in
+    /// there. Typing eight characters put eight searches into that queue and cancelled seven of
+    /// them too late to matter. Waiting first means only the query somebody stopped typing ever
+    /// reaches the engine.
+    ///
+    /// A scope change is not debounced — that is one deliberate act, not a stream of them.
+    private func scheduleRun(debounced: Bool = false) {
         runTask?.cancel()
 
         guard isRunnable else {
@@ -139,6 +148,10 @@ public final class SearchSessionModel {
 
         runTask = Task { [weak self] in
             guard let self else { return }
+            if debounced {
+                try? await Task.sleep(for: .milliseconds(150))
+                guard !Task.isCancelled else { return }
+            }
             await run(generation: mine)
         }
     }
