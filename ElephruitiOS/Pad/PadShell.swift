@@ -33,6 +33,9 @@ enum PadRoot: Hashable, Codable {
     case smartList(UUID)
     case builtInSmartList(String)
 
+    /// A search the user named and kept.
+    case savedSearch(UUID)
+
     case records(RecordsScope)
 
     case kindList(ItemKind)
@@ -58,7 +61,7 @@ enum PadRoot: Hashable, Codable {
     /// surface exists to never ask.
     var shape: PadStageShape {
         switch self {
-        case .today, .search, .project, .calendar, .time, .settings, .reminders:
+        case .today, .search, .savedSearch, .project, .calendar, .time, .settings, .reminders:
             .canvas
         case .inbox, .smartList, .builtInSmartList, .area, .records, .kindList, .tag, .archive,
             .trash:
@@ -76,6 +79,7 @@ enum PadRoot: Hashable, Codable {
         case .area(let id): .item(id)
         case .smartList(let id): .smartList(id)
         case .builtInSmartList(let id): .builtInSmartList(id)
+        case .savedSearch(let id): .savedSearch(id)
         case .records(let scope): .records(scope)
         case .kindList(let kind): .kindList(kind)
         case .tag(let slug): .tag(slug)
@@ -98,7 +102,7 @@ enum PadRoot: Hashable, Codable {
         switch self {
         case .today: .today
         case .inbox: .inbox
-        case .search: .search
+        case .search, .savedSearch: .search
         case .project, .area: .areas
         case .reminders, .smartList, .builtInSmartList: .reminders
         case .records: .records
@@ -131,6 +135,7 @@ enum PadRoot: Hashable, Codable {
         case .project(let id): self = .project(id)
         case .smartList(let id): self = .smartList(id)
         case .builtInSmartList(let id): self = .builtInSmartList(id)
+        case .savedSearch(let id): self = .savedSearch(id)
         case .records(let scope): self = .records(scope)
         case .kindList(let kind): self = .kindList(kind)
         case .tag(let slug): self = .tag(slug)

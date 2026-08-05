@@ -32,12 +32,14 @@ struct PadSidebarView: View {
     /// Collapse state lives per scene, so a second window can be configured differently — the
     /// Mac's rule, for the same reason.
     @SceneStorage("pad.sidebar.tags.expanded") private var isTagsExpanded = false
+    @SceneStorage("pad.sidebar.searches.expanded") private var isSearchesExpanded = false
     @SceneStorage("pad.sidebar.archived.expanded") private var isArchivedExpanded = false
 
     /// Counts and the user's own lists, read on change and never during a render.
     @State private var todayCount = 0
     @State private var inboxCount = 0
     @State private var savedSmartLists: [SmartListModel] = []
+    @State private var savedSearches: [PadSavedSearchRow] = []
 
     /// The Library, in the Mac's own order — `SidebarView.libraryModules`, said in iPad terms.
     /// Areas are absent because they live in the projects tree above, where they already render
@@ -171,25 +173,48 @@ struct PadSidebarView: View {
         }
     }
 
-    /// Tags, which belong to no module because they reach across all of them.
+    /// Tags and saved searches, which belong to no module because they reach across all of them.
+    ///
+    /// A tag goes on a note, a reminder and a bookmark alike, and a saved search runs over the
+    /// whole library; filing either inside a module would be a claim about their scope that is not
+    /// true. Absent entirely when there are none, rather than a header explaining its own emptiness.
     @ViewBuilder
     private var crossModuleBand: some View {
-        if let tags = services?.sidebar.tags, !tags.isEmpty {
+        let tags = services?.sidebar.tags ?? []
+        if !tags.isEmpty || !savedSearches.isEmpty {
             Section("Across Everything") {
-                DisclosureGroup(isExpanded: $isTagsExpanded) {
-                    ForEach(tags) { tag in
-                        row(
-                            .tag(tagSlug(of: tag)),
-                            title: tag.title,
-                            systemImage: "number",
-                            color: Theme.Palette.color(named: tag.colorName),
-                            count: tag.count ?? 0,
-                            indent: tag.depth
-                        )
+                if !tags.isEmpty {
+                    DisclosureGroup(isExpanded: $isTagsExpanded) {
+                        ForEach(tags) { tag in
+                            row(
+                                .tag(tagSlug(of: tag)),
+                                title: tag.title,
+                                systemImage: "number",
+                                color: Theme.Palette.color(named: tag.colorName),
+                                count: tag.count ?? 0,
+                                indent: tag.depth
+                            )
+                        }
+                    } label: {
+                        Label("Tags", systemImage: "number")
+                            .font(Theme.Text.rowTitle)
                     }
-                } label: {
-                    Label("Tags", systemImage: "number")
-                        .font(Theme.Text.rowTitle)
+                }
+
+                if !savedSearches.isEmpty {
+                    DisclosureGroup(isExpanded: $isSearchesExpanded) {
+                        ForEach(savedSearches) { saved in
+                            row(
+                                .savedSearch(saved.id),
+                                title: saved.name,
+                                systemImage: saved.symbolName,
+                                color: Theme.Palette.color(named: saved.colorName)
+                            )
+                        }
+                    } label: {
+                        Label("Saved Searches", systemImage: "magnifyingglass")
+                            .font(Theme.Text.rowTitle)
+                    }
                 }
             }
         }
@@ -363,7 +388,32 @@ struct PadSidebarView: View {
                 symbolName: $0.symbolName ?? "line.3.horizontal.decrease.circle"
             )
         }
+
+        // The other half of the same table: a saved search is one without a task filter, and it
+        // reaches across every module rather than belonging to Reminders.
+        let searches = FetchDescriptor<SavedSearch>(
+            predicate: #Predicate {
+                $0.deletedAt == nil && $0.taskFilterData == nil && $0.showsInSidebar
+            },
+            sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.name)]
+        )
+        savedSearches = ((try? services.context.fetch(searches)) ?? []).map {
+            PadSavedSearchRow(
+                id: $0.id,
+                name: $0.name,
+                symbolName: $0.symbolName ?? "magnifyingglass",
+                colorName: $0.colorName
+            )
+        }
     }
+}
+
+/// A saved search, named without holding the record.
+struct PadSavedSearchRow: Identifiable {
+    let id: UUID
+    let name: String
+    let symbolName: String
+    let colorName: String?
 }
 
 /// A pinned record's row, which routes rather than selects.
@@ -423,6 +473,7 @@ extension PadRoot {
         case .settings: "Settings"
         case .project, .area: "Project"
         case .smartList, .builtInSmartList, .tag: "List"
+        case .savedSearch: "Saved Search"
         }
     }
 
@@ -444,6 +495,7 @@ extension PadRoot {
         case .project: "square.stack.3d.up"
         case .area: "square.grid.2x2"
         case .smartList, .builtInSmartList: "line.3.horizontal.decrease.circle"
+        case .savedSearch: "magnifyingglass"
         case .tag: "number"
         }
     }
@@ -466,6 +518,7 @@ extension PadRoot {
         case .tag(let slug): "pad.sidebar.tag.\(slug)"
         case .smartList(let id): "pad.sidebar.smartList.\(id.uuidString)"
         case .builtInSmartList(let id): "pad.sidebar.smartList.\(id)"
+        case .savedSearch(let id): "pad.sidebar.savedSearch.\(id.uuidString)"
         case .project(let id), .area(let id): "pad.sidebar.container.\(id.uuidString)"
         }
     }

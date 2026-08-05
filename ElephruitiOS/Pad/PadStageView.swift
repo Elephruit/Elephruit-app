@@ -253,7 +253,7 @@ extension PadRoot {
         switch self {
         case .today: 1000
         case .settings: 760
-        case .search: 900
+        case .search, .savedSearch: 900
         // The reminders list is one column of short lines with a composer in it; past this it
         // becomes a field of white with text down the left edge.
         case .reminders: 760

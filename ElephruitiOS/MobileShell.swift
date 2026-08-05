@@ -124,6 +124,8 @@ enum MobileRoute: Hashable, Codable {
     case smartList(UUID)
     /// A built-in smart list, by its stable string id.
     case builtInSmartList(String)
+    /// A search the user named and kept — the text they typed, run again.
+    case savedSearch(UUID)
     /// A scoped slice of the Records module — pets, organizations, favorites.
     case records(RecordsScope)
     /// Everything carrying one tag.
