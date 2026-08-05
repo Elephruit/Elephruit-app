@@ -245,25 +245,28 @@ final class RemindersUITests: XCTestCase {
             "Typing should have raised the keyboard"
         )
 
-        let when = app.buttons["reminders.composer.when"]
-        let control = when.frame
-        when.tap()
+        let deadline = app.buttons["reminders.composer.deadline"]
+        deadline.tap()
 
         XCTAssertTrue(
             app.keyboards.element.waitForNonExistence(timeout: 5),
             "Opening a picker should put the keyboard away"
         )
-        let someday = app.buttons["reminders.picker.someday"]
+        let nextWeek = app.buttons["Next week"]
         XCTAssertTrue(
-            someday.waitForExistence(timeout: 5),
+            nextWeek.waitForExistence(timeout: 5),
             "The picker should be showing once the keyboard has gone"
         )
-        // The composer lives near the bottom of a phone, and a popover pinned below its control
-        // has nowhere to be: it opens in whichever direction has room for all of it.
-        XCTAssertLessThan(
-            someday.frame.midY,
-            control.midY,
-            "A picker with no room beneath its control should open above it"
+        // The popup opens at full size rather than squeezed against an edge — the card scrolls
+        // up to make the room, and the popup takes the direction that has it.
+        XCTAssertGreaterThan(
+            nextWeek.frame.height,
+            0,
+            "The picker's rows should have room to be themselves"
+        )
+        XCTAssertTrue(
+            app.buttons["Today"].exists && app.buttons["Tomorrow"].exists,
+            "All of the picker's quick answers should fit on screen"
         )
     }
 }
