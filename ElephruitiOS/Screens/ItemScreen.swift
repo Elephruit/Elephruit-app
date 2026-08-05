@@ -68,6 +68,7 @@ struct ItemScreen: View {
                 bugSection(item)
             }
 
+            projectSection(item)
             bodySection(item)
             checklistSection(item)
             tagsSection(item)
@@ -128,6 +129,61 @@ struct ItemScreen: View {
                 Label("Priority", systemImage: "exclamationmark.circle")
             }
         }
+    }
+
+    // MARK: - Where this lives
+
+    /// Which project this belongs to, changeable from here.
+    ///
+    /// Capture can file something into a project as it is written (`>project` in the grammar) and
+    /// the Mac can drag a row onto one afterwards. Neither helped the phone with the case that
+    /// actually comes up: a reminder captured in a queue, on a train, that turns out to belong to
+    /// a project. Without this the only way to file it was to open the Mac.
+    ///
+    /// Offered only for work — a project owns its work outright, and archiving one sweeps that
+    /// work with it. A note deliberately cannot be owned that way; it links to the projects it is
+    /// about, which is what lets one note serve three of them. See `ItemKind.canContain`.
+    @ViewBuilder
+    private func projectSection(_ item: Item) -> some View {
+        if item.kind.isWorkItem, let services {
+            Section {
+                Menu {
+                    Button("None") { file(item, into: nil) }
+                    ForEach(services.projectSidebar.rows.filter { !$0.isArea }) { row in
+                        Button {
+                            file(item, into: row.id)
+                        } label: {
+                            Label(row.title, systemImage: row.symbolName)
+                        }
+                    }
+                } label: {
+                    LabeledContent {
+                        Text(item.parentTitle ?? "None")
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                    } label: {
+                        Label("Project", systemImage: "square.stack.3d.up")
+                            .foregroundStyle(Theme.Colors.primaryText)
+                    }
+                }
+                .accessibilityIdentifier("item.project")
+            }
+        }
+    }
+
+    /// Moves the item under a container, or out of one.
+    ///
+    /// Through the undo coordinator, on the same terms as the Mac's drop: filing is a move, and a
+    /// move made by tapping the wrong row in a menu is exactly the move somebody wants back.
+    private func file(_ item: Item, into containerID: UUID?) {
+        guard let services else { return }
+        pending.flush()
+        let container = containerID.flatMap { try? services.items.item(id: $0) }
+        services.perform {
+            try services.undo.setParent([item], to: container)
+            services.noteChange(to: item)
+        }
+        services.refreshDerivedState()
+        load()
     }
 
     private func whenRow(_ item: Item) -> some View {
