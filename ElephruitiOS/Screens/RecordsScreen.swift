@@ -63,6 +63,15 @@ private struct RecordsListBody<TrailingItem: View>: View {
     @State private var results: [RankedPerson] = []
     @State private var searchText = ""
     @State private var loadError: String?
+    /// The search in flight, so the next keystroke can cancel it.
+    @State private var searchTask: Task<Void, Never>?
+    /// Whether the search field holds the keyboard.
+    ///
+    /// SwiftUI owns this, not UIKit. Resigning the first responder underneath `.searchable`
+    /// leaves SwiftUI still believing the field is focused, and it takes the keyboard straight
+    /// back — which is why dismissing from the shell with `UIApplication.sendAction` looks like
+    /// it works and then does not.
+    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         List {
@@ -74,7 +83,7 @@ private struct RecordsListBody<TrailingItem: View>: View {
             if isSearching {
                 ForEach(results) { person in
                     Button {
-                        shell.push(.person(person.id))
+                        open(.person(person.id))
                     } label: {
                         rankedRow(person)
                     }
@@ -83,7 +92,7 @@ private struct RecordsListBody<TrailingItem: View>: View {
             } else {
                 ForEach(records) { record in
                     Button {
-                        shell.push(.person(record.id))
+                        open(.person(record.id))
                     } label: {
                         MobileItemRow(item: record)
                     }
@@ -103,11 +112,13 @@ private struct RecordsListBody<TrailingItem: View>: View {
         }
         .listStyle(.plain)
         .searchable(text: $searchText, prompt: "Search people")
+        .searchFocused($isSearchFocused)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { trailingItem }
         }
         .task(id: reloadKey) { reload() }
-        .onChange(of: searchText) { _, _ in runSearch() }
+        .onChange(of: searchText) { _, _ in scheduleSearch() }
+        .onDisappear { searchTask?.cancel() }
     }
 
     private var isSearching: Bool {
@@ -153,11 +164,42 @@ private struct RecordsListBody<TrailingItem: View>: View {
         }
     }
 
-    private func runSearch() {
-        guard let services, isSearching else {
+    /// Puts the keyboard away, then navigates.
+    ///
+    /// In that order and in the same turn: the keyboard is a consequence of focus, so focus is
+    /// what has to be given up, and it has to happen before the push rather than in reaction to
+    /// the path having already changed. A screen that slides in over a keyboard that is still
+    /// closing is two animations fighting for the same frames.
+    private func open(_ route: MobileRoute) {
+        isSearchFocused = false
+        searchTask?.cancel()
+        shell.push(route)
+    }
+
+    /// Searches once the typing stops, rather than once per character.
+    ///
+    /// `personSearch.search` walks every person and, for each of them, reads the fact ledger,
+    /// the relationships, the celebrations, the promises and the contact context. It is a
+    /// graph scan, it runs on the main actor because that is where the store lives, and it was
+    /// wired to every keystroke — so typing "maya" ran it four times and the fourth answer was
+    /// the only one anybody wanted. While it ran, nothing else on the main actor moved: not the
+    /// keyboard, not a tap, not a push.
+    ///
+    /// Two hundred milliseconds is the pause that separates typing from having typed.
+    private func scheduleSearch() {
+        searchTask?.cancel()
+
+        guard isSearching else {
             results = []
             return
         }
-        results = (try? services.personSearch.search(searchText, limit: 50)) ?? []
+
+        searchTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled, let services else { return }
+            // Re-read rather than capture: by the time this runs the field has moved on, and
+            // the query that matters is the one on screen now.
+            results = (try? services.personSearch.search(searchText, limit: 50)) ?? []
+        }
     }
 }
