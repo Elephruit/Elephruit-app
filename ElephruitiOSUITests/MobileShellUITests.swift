@@ -97,7 +97,7 @@ final class MobileShellUITests: XCTestCase {
         step(app, to: "reminders")
         XCTAssertTrue(app.navigationBars["Reminders"].waitForExistence(timeout: 5))
 
-        app.buttons["mobile.capture.button"].tap()
+        add(app, "reminder")
         XCTAssertTrue(
             app.descendants(matching: .any)["reminders.composer.title"].waitForExistence(timeout: 5)
         )
@@ -197,14 +197,55 @@ final class MobileShellUITests: XCTestCase {
         )
     }
 
+    // MARK: - The plus
+
+    /// Opens the fan and taps one of its choices.
+    ///
+    /// By identifier rather than by label, because a fan of five glass circles has no visible
+    /// text for a label match to find, and because the accessibility labels are prose that
+    /// should be free to change without breaking every test that reaches through them. And by
+    /// `tapCenter` rather than `tap` — see `FloatingControlTaps` for what that buys.
+    private func add(_ app: XCUIApplication, _ action: String) {
+        app.buttons["mobile.capture.button"].tapCenter()
+        let choice = app.buttons["mobile.add.\(action)"]
+        XCTAssertTrue(choice.waitForExistence(timeout: 5), "The plus should fan out")
+        choice.tapCenter()
+    }
+
+    /// The fan is the plus's whole job now: it opens, it offers all five, and it folds away
+    /// again without having done anything.
+    ///
+    /// The closing half matters as much as the opening one. While the fan is up a scrim covers
+    /// the app, so a menu that could be opened and not closed would be a way of locking the
+    /// screen — and the plus is the only control still above that scrim.
+    func testThePlusFansOutAndFoldsBack() throws {
+        let app = launch()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
+
+        app.buttons["mobile.capture.button"].tapCenter()
+        for action in ["reminder", "event", "note", "time", "capture"] {
+            XCTAssertTrue(
+                app.buttons["mobile.add.\(action)"].waitForExistence(timeout: 5),
+                "The fan should offer \(action)"
+            )
+        }
+
+        app.buttons["mobile.capture.button"].tapCenter()
+        XCTAssertTrue(
+            app.buttons["mobile.add.reminder"].waitForNonExistence(timeout: 5),
+            "Tapping the plus again should fold the fan away"
+        )
+        XCTAssertTrue(app.navigationBars["Today"].exists, "And leave the screen where it was")
+    }
+
     // MARK: - Capture
 
-    /// The capture button is never a dead tap, and a cancelled sheet goes away.
+    /// Capture is never a dead tap, and a cancelled sheet goes away.
     func testCaptureSheetOpensAndDismisses() throws {
         let app = launch()
 
         XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
-        app.buttons["mobile.capture.button"].tap()
+        add(app, "capture")
         XCTAssertTrue(app.navigationBars["Capture"].waitForExistence(timeout: 5))
 
         // "Close", not "Cancel": the sheet keeps the draft rather than discarding it, and its

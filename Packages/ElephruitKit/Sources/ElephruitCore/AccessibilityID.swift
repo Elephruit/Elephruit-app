@@ -137,6 +137,14 @@ public enum AccessibilityID {
         /// The period-and-grouping rail, which both Time surfaces draw — see `TimeFilterBar`.
         public static let filterBar = "time.filterBar"
 
+        // The phone's floating clock: a pill over every screen but the Time screen's own card,
+        // which grows into the controls rather than navigating to them.
+        public static let pill = "time.pill"
+        public static let pillPause = "time.pill.pause"
+        public static let pillResume = "time.pill.resume"
+        public static let pillStop = "time.pill.stop"
+        public static let pillOpen = "time.pill.open"
+
         // The floating timer, over every screen in the window.
         public static let floatingTimer = "time.floating"
         public static let floatingPause = "time.floating.pause"
