@@ -64,13 +64,31 @@ public struct PersonListEntry: Sendable, Hashable, Identifiable {
     public var isFavorite: Bool
     public var colorName: String?
 
+    /// What sort of record this is, so a row can tell a person from a car.
+    ///
+    /// A monogram is the right picture of a human being and the wrong picture of a Toyota: "TC" in
+    /// a circle says *somebody called T— C—*. Records that are not people keep their type's glyph,
+    /// and the decision is made here, once, from a value the list already had to compute.
+    public var recordType: RecordType
+
+    /// The linked `CNContact.identifier`, when the person has one.
+    ///
+    /// Here for the same reason the tint is: a photograph is fetched by identifier, and asking the
+    /// record for it inside a row body would fault the contact-link relationship on every row that
+    /// scrolled past — which is precisely the cost the two properties above were moved here to
+    /// avoid. The identifier is a pointer, not a picture; nothing is read from the address book
+    /// until a row is actually on screen. See `ContactPhotoStore`.
+    public var contactIdentifier: String?
+
     public init(
         id: UUID,
         displayName: String,
         organizationName: String? = nil,
         lastInteraction: Date? = nil,
         isFavorite: Bool = false,
-        colorName: String? = nil
+        colorName: String? = nil,
+        recordType: RecordType = .person,
+        contactIdentifier: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -78,6 +96,8 @@ public struct PersonListEntry: Sendable, Hashable, Identifiable {
         self.lastInteraction = lastInteraction
         self.isFavorite = isFavorite
         self.colorName = colorName
+        self.recordType = recordType
+        self.contactIdentifier = contactIdentifier
     }
 }
 

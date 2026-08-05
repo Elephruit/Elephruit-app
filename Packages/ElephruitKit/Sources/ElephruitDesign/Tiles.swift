@@ -65,46 +65,6 @@ public struct IconTile: View {
     }
 }
 
-// MARK: - Avatar
-
-/// A person's monogram in a circle — one algorithm, one look.
-///
-/// Four implementations existed, at four sizes with four fonts and *two different rules* for
-/// deriving the initials, so the same person could carry two monograms on two screens. The
-/// derivation lives here alone.
-public struct Avatar: View {
-    private let name: String
-    private let diameter: CGFloat
-    private let tint: Color
-
-    public init(name: String, diameter: CGFloat = Theme.Size.iconTileMedium, tint: Color = .accentColor) {
-        self.name = name
-        self.diameter = diameter
-        self.tint = tint
-    }
-
-    public var body: some View {
-        Text(Self.initials(from: name))
-            .font(.system(.body, design: .rounded, weight: .semibold))
-            // The monogram tracks the circle, not the text size: an avatar is an image made of
-            // letters, and one that outgrew its circle would clip. Scaling down only, so large
-            // accessibility sizes shrink the monogram into its circle instead of overflowing it.
-            .minimumScaleFactor(0.5)
-            .foregroundStyle(tint)
-            .frame(width: diameter, height: diameter)
-            .background(Circle().fill(Theme.Colors.tintedFill(tint)))
-            .accessibilityHidden(true)
-    }
-
-    /// The first letters of the first and last words — "Amara Okonjo" → "AO", "Cher" → "C".
-    public static func initials(from name: String) -> String {
-        let words = name.split(separator: " ").filter { !$0.isEmpty }
-        let letters = [words.first, words.count > 1 ? words.last : nil]
-            .compactMap { $0?.first }
-        return letters.map(String.init).joined().uppercased()
-    }
-}
-
 // MARK: - Chip
 
 /// A small capsule of metadata — a tag, a person, a token, a state.
