@@ -219,7 +219,9 @@ public final class PersonWorkspaceService {
                         value: observation.value,
                         lastConfirmedOn: observation.lastConfirmedOn
                     ),
-                    prompt: "\(observation.attribute.displayName): \(observation.value). Still true?"
+                    // The question is not in the sentence, because the button beside it already
+                    // asks it. Two askings read as two questions.
+                    prompt: "\(observation.attribute.displayName): \(observation.value)"
                 )
             )
         }
