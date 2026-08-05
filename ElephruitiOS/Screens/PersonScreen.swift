@@ -35,6 +35,10 @@ struct PersonScreen: View {
     /// The groups this person is in, read with everything else.
     @State private var groups: [PersonGroupSummary] = []
     @State private var isEditingGroups = false
+    /// What the app knows it does not know about them — see `PersonWorkspaceService.thingsToFillIn`.
+    @State private var toFillIn: [FillInPrompt] = []
+    @State private var isAddingRelatives = false
+    @State private var namingPrompt: FillInPrompt?
 
     /// How much of a long history a phone shows before it stops being a summary.
     private static let timelineLimit = 40
@@ -51,7 +55,8 @@ struct PersonScreen: View {
                 groupsSection(person)
                 factsSection
                 openWorkSection
-                relatedSection
+                relatedSection(person)
+                fillInSection
                 timelineSection
                 notesSection(person)
             } else if loadError == nil {
@@ -223,10 +228,15 @@ struct PersonScreen: View {
 
     /// Who and what this record connects to. The Mac draws these as charts; a phone draws the
     /// same edges as rows you can walk, which is the part of a graph a thumb can actually use.
+    ///
+    /// ### Why the add button lives here and not in the toolbar
+    /// This screen was read-only, which is backwards: the phone is what is in your pocket when
+    /// somebody mentions their children, and the Mac is what you get back to having forgotten. The
+    /// button sits under the list of who they are connected to, because that is the list it changes.
     @ViewBuilder
-    private var relatedSection: some View {
-        if let context, !context.relatedPeople.isEmpty || !context.sharedProjects.isEmpty {
-            Section("Connected") {
+    private func relatedSection(_ person: Item) -> some View {
+        Section("Connected") {
+            if let context {
                 ForEach(context.relatedPeople, id: \.id) { related in
                     Button {
                         shell.push(.person(related.id))
@@ -259,6 +269,72 @@ struct PersonScreen: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                }
+            }
+
+            Button {
+                isAddingRelatives = true
+            } label: {
+                Label("Add family", systemImage: "figure.2.and.child.holdinghands")
+            }
+            .accessibilityIdentifier("person.addRelatives")
+        }
+        .sheet(isPresented: $isAddingRelatives) {
+            RelativesSheet(person: person) { reload() }
+        }
+    }
+
+    /// What the app knows it does not know, and can be told in one field.
+    ///
+    /// Missing names first. A name is one field with one right answer that the user either has or
+    /// does not; an unconfirmed fact is a judgement, and asking a judgement first is how a list of
+    /// small questions becomes a chore nobody opens. Both are offered — nothing here is filled in by
+    /// the app and nothing is hidden for having gone unanswered.
+    @ViewBuilder
+    private var fillInSection: some View {
+        if !toFillIn.isEmpty {
+            Section("To fill in") {
+                ForEach(toFillIn) { prompt in
+                    switch prompt.kind {
+                    case .missingName:
+                        Button {
+                            namingPrompt = prompt
+                        } label: {
+                            Label(prompt.prompt, systemImage: prompt.symbolName)
+                                .foregroundStyle(Theme.Colors.primaryText)
+                                .frame(minHeight: 44)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("person.fillIn.name")
+
+                    case .unconfirmedFact(_, _, let lastConfirmedOn):
+                        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
+                            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+                                Text(prompt.prompt)
+                                    .font(Theme.Text.rowTitle)
+                                if let clock = services?.dateProvider {
+                                    Text("Last confirmed \(RelativeDay.text(for: lastConfirmedOn, using: clock))")
+                                        .font(Theme.Text.metadata)
+                                        .foregroundStyle(Theme.Colors.secondaryText)
+                                }
+                            }
+
+                            Spacer(minLength: 0)
+
+                            Button("Still true") { confirm(prompt) }
+                                .buttonStyle(.borderless)
+                                .font(Theme.Text.metadata)
+                        }
+                        .frame(minHeight: 44)
+                    }
+                }
+            }
+            .sheet(item: $namingPrompt) { prompt in
+                NamePersonSheet(prompt: prompt) {
+                    namingPrompt = nil
+                    reload()
                 }
             }
         }
@@ -339,6 +415,7 @@ struct PersonScreen: View {
             timeline = try services.personWorkspace.timeline(for: record)
             context = try services.personWorkspace.sidebar(for: record)
             groups = try services.personGroups.membership().groups(for: record.id)
+            toFillIn = try services.personWorkspace.thingsToFillIn(for: record)
             loadError = nil
 
             // After the page is on screen, never before it: a face is worth waiting a frame for and
@@ -350,6 +427,84 @@ struct PersonScreen: View {
             }
         } catch {
             loadError = error.summary
+        }
+    }
+
+    /// Says a fact still holds, without changing it.
+    ///
+    /// `lastConfirmedOn` moves; the stored confidence does not. Rewriting that would destroy the
+    /// difference between "they told me this" and "they told me this a long time ago", which is the
+    /// distinction the whole ledger is built on.
+    private func confirm(_ prompt: FillInPrompt) {
+        guard let services,
+              let person,
+              let record = try? services.persons.observations(for: person).first(where: { $0.id == prompt.id })
+        else { return }
+
+        services.perform { try services.persons.confirm(record) }
+        reload()
+    }
+}
+
+/// Supplying the name of somebody who was recorded before anybody knew it.
+///
+/// One field, because that is the whole of the question. Everything already known about them —
+/// their grade, their school, the conversation it came from — is untouched: this renames a record
+/// rather than making a new one, which is the difference between filling in a blank and starting
+/// again.
+private struct NamePersonSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.services) private var services
+
+    let prompt: FillInPrompt
+    let onFinish: () -> Void
+
+    @State private var name = ""
+    @State private var saveError: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    TextField("Their name", text: $name)
+                        .textInputAutocapitalization(.words)
+                        .accessibilityIdentifier("person.nameSheet.field")
+                } header: {
+                    Text(prompt.prompt)
+                } footer: {
+                    Text("Everything already recorded about them is kept.")
+                }
+
+                if let saveError {
+                    Label(saveError, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(Theme.Colors.warning)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Add a name")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save", action: save)
+                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityIdentifier("person.nameSheet.save")
+                }
+            }
+        }
+    }
+
+    private func save() {
+        guard let services, let record = try? services.items.item(id: prompt.personID) else { return }
+        do {
+            try services.persons.renamePerson(record, to: name)
+            services.noteChange(to: record)
+            onFinish()
+            dismiss()
+        } catch {
+            saveError = error.summary
         }
     }
 }

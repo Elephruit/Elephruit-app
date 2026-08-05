@@ -208,32 +208,6 @@ struct RelativeRowEditor: View {
 
 // MARK: - Adding a row
 
-/// The words on the add buttons, and what each one means.
-///
-/// Gendered words sit beside the neutral one rather than replacing it. The app never infers one —
-/// pressing *Son* is the user saying it, which is the only way a gendered word ever enters a record
-/// here.
-enum RelativeQuickAdd {
-    static let all: [(label: String, kind: RelationshipKind)] = [
-        ("Son", .child),
-        ("Daughter", .child),
-        ("Child", .child),
-        ("Partner", .partner),
-        ("Parent", .parent),
-        ("Sibling", .sibling),
-    ]
-
-    /// A new row, always carrying a word.
-    ///
-    /// The word is what makes a row worth writing — see ``ElephruitCore/RelativeCapture/isEmpty``.
-    /// Every row arrives by somebody pressing a button that says one, so seeding it from the button
-    /// is not a default being invented on the user's behalf; it is what they just pressed. Without
-    /// it, opening the editor from *Add Child…* produces a row the save button refuses.
-    static func row(kind: RelationshipKind, label: String?) -> RelativeCapture {
-        RelativeCapture(kind: kind, label: label ?? kind.displayName)
-    }
-}
-
 /// The row of buttons that adds a relative.
 struct RelativeQuickAddBar: View {
     let onAdd: (RelationshipKind, String?) -> Void
