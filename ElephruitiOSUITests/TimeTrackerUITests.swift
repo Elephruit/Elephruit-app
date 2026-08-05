@@ -63,6 +63,63 @@ final class TimeTrackerUITests: XCTestCase {
         add(attachment)
     }
 
+    /// The clock follows you off the Time screen, and it carries its controls with it.
+    ///
+    /// This is the promise the old bottom strip could not keep. It showed a running timer from
+    /// anywhere and could only stop it, so pausing one — or checking what it was filed against —
+    /// meant walking back to the Time screen and losing whatever you were doing. The pill answers
+    /// both without leaving the page: it is small until asked, and asked, it grows.
+    func testTheClockFollowsYouAndOpensInPlace() throws {
+        let app = launch()
+        openTime(app)
+
+        app.buttons["time.start"].tap()
+        XCTAssertTrue(app.buttons["time.stop"].waitForExistence(timeout: 5))
+
+        // Away from Time, where the screen's own tracker card is not there to do this job.
+        app.buttons["mobile.sidebar.button"].tap()
+        app.buttons["mobile.sidebar.today"].tap()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 5))
+
+        let pill = app.otherElements["time.pill"]
+        XCTAssertTrue(pill.waitForExistence(timeout: 5), "A running timer should float over Today")
+        XCTAssertFalse(
+            app.buttons["time.pill.stop"].exists,
+            "At rest the pill is a readout, not a row of controls"
+        )
+        snap(app, "08-pill-resting")
+
+        pill.tap()
+        XCTAssertTrue(
+            app.buttons["time.pill.stop"].waitForExistence(timeout: 5),
+            "Tapping the pill should grow it into its controls"
+        )
+        XCTAssertTrue(app.buttons["time.pill.pause"].exists, "and offer a pause")
+        XCTAssertTrue(
+            app.navigationBars["Today"].exists,
+            "and do it in place, without leaving the page"
+        )
+        snap(app, "09-pill-open")
+
+        // Paused rather than stopped: the pill has to survive a pause, because a paused timer is
+        // the one that is easiest to forget and the pill is the only thing still saying it exists.
+        // And the card stays open around it — pause and resume are one decision seen twice, so
+        // the way back must not cost a second tap to get the controls back.
+        app.buttons["time.pill.pause"].tap()
+        XCTAssertTrue(
+            app.buttons["time.pill.resume"].waitForExistence(timeout: 5),
+            "Pausing should leave the card open, with Resume where Pause was"
+        )
+
+        let stop = app.buttons["time.pill.stop"]
+        XCTAssertTrue(stop.exists)
+        stop.tap()
+        XCTAssertTrue(
+            app.otherElements["time.pill"].waitForNonExistence(timeout: 5),
+            "Stopping should take the clock off the screen entirely"
+        )
+    }
+
     /// Start, name, file, pause, resume, stop — the whole sitting, in the order somebody does it.
     func testTheSittingCanBeRunFromThePhone() throws {
         let app = launch()

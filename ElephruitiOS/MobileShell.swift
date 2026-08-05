@@ -141,6 +141,8 @@ enum MobileRoute: Hashable, Codable {
     case savedSearch(UUID)
     /// A scoped slice of the Records module — pets, organizations, favorites.
     case records(RecordsScope)
+    /// The groups of people: what they are, what colour, and who is in them.
+    case groups
     /// Everything carrying one tag.
     case tag(String)
     /// The flat list of one kind — notes, bookmarks, areas.
@@ -182,6 +184,22 @@ final class MobileShellModel {
     /// Whether the quick-capture sheet is up.
     var isCaptureVisible = false
 
+    /// Whether the plus has fanned out into what it can make.
+    var isAddMenuOpen = false
+
+    /// Whether the floating clock has grown into its controls.
+    ///
+    /// On the shell rather than inside the pill because two things outside the pill have a view
+    /// about it: the plus folds it before fanning out over the same corner of the screen, and a
+    /// timer that stops takes its own card with it.
+    var isTimerExpanded = false
+
+    /// Whether the event editor is up, opened from the plus rather than from the calendar.
+    var isEventEditorVisible = false
+
+    /// Whether the sheet for time that happened off the clock is up.
+    var isManualTimeVisible = false
+
     /// How many times the shell's button has been asked for a new reminder.
     ///
     /// A count rather than a flag, because the interesting event is the *press* and a flag
@@ -190,10 +208,38 @@ final class MobileShellModel {
     /// it until something else lowered the flag. Nobody reads the number; they watch it change.
     private(set) var newReminderRequests = 0
 
-    /// Asks the Reminders screen for a composer. The shell does not know how to open one —
-    /// the composer belongs to the list, at the end of it, where the next reminder goes.
+    /// A request made from somewhere the Reminders screen was not yet listening.
+    ///
+    /// The counter above only works for a screen that is already on the stack, because a screen
+    /// mounting for the first time has nothing to compare the count against and sees no change.
+    /// Asking for a reminder from the Calendar is exactly that case: the shell steps to Reminders
+    /// and the screen arrives *after* the request. So the request waits here instead, and the
+    /// screen collects it on the way in.
+    private var awaitedReminder = false
+
+    /// Asks for a composer, from anywhere.
+    ///
+    /// The shell does not know how to open one — the composer belongs to the list, at the end of
+    /// it, where the next reminder goes. What it does know is whether the list is on screen: if
+    /// it is, this is the press the counter was built for, and if it is not, going to Reminders
+    /// is half of what "new reminder" means and has to happen first.
     func requestNewReminder() {
-        newReminderRequests += 1
+        if destination == .reminders && path.isEmpty {
+            newReminderRequests += 1
+        } else {
+            awaitedReminder = true
+            popToRoot(of: .reminders)
+            select(.reminders)
+        }
+    }
+
+    /// Collects a request made before the Reminders screen existed, once.
+    ///
+    /// Consuming rather than reading: a request that survived being honoured would open a
+    /// composer every time the user came back to Reminders for the rest of the session.
+    func takeAwaitedReminder() -> Bool {
+        defer { awaitedReminder = false }
+        return awaitedReminder
     }
 
     /// The one search session, kept when the user leaves and returns.

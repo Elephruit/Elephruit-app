@@ -13,3 +13,6 @@ Package.resolved
 
 # macOS
 .DS_Store
+
+# Per-worktree Xcode state — see Scripts/xctest.sh
+.xcode-local/

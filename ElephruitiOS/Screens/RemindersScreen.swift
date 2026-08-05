@@ -119,6 +119,12 @@ struct RemindersScreen: View {
         // only place that can honour it is here, because the composer opens at the end of the
         // list rather than over it.
         .onChange(of: shell.newReminderRequests) { startNewReminder(at: .top) }
+        // And the same request made from somewhere else, which arrived before this screen did.
+        // `onChange` cannot see it — a view mounting has no previous value to differ from — so
+        // the shell held it and this collects it on the way in.
+        .onAppear {
+            if shell.takeAwaitedReminder() { startNewReminder(at: .top) }
+        }
         // Leaving the screen is a way of closing the editor, and every way of closing it keeps
         // what is in it. Without this, walking out of Reminders with a half-written card open
         // was the one exit that threw the words away.
