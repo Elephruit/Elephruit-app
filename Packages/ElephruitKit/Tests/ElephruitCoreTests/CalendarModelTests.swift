@@ -389,4 +389,71 @@ struct CalendarEventShapeTests {
         #expect(anonymous.initials == "JB")
         #expect(EventAttendee(name: "Maya Chen").initials == "MC")
     }
+
+    // MARK: - Putting the organizer back
+
+    /// The shape an Exchange invitation arrives in when it lands in an iCloud calendar: one attendee,
+    /// who is you, and the person who called the meeting reachable only as the organizer.
+    @Test("An organizer who is not on the attendee list is added to it")
+    func organizerJoinsTheAttendeeList() {
+        let merged = EventAttendee.merging(
+            organizer: EventAttendee(
+                name: "Harbinder Raina",
+                emailAddress: "harbinder.raina@example.com",
+                isOrganizer: true
+            ),
+            into: [EventAttendee(name: "me@example.com", emailAddress: "me@example.com", isCurrentUser: true)]
+        )
+
+        #expect(merged.count == 2)
+        #expect(merged.first?.name == "Harbinder Raina")
+        #expect(merged.first?.isOrganizer == true)
+        #expect(merged.first?.isCurrentUser == false)
+    }
+
+    @Test("An organizer already on the attendee list is not duplicated")
+    func organizerAlreadyInvited() {
+        let attendees = [
+            EventAttendee(name: "Maya Chen", emailAddress: "Maya@Example.com ", isOrganizer: true),
+            EventAttendee(name: "You", emailAddress: "me@example.com", isCurrentUser: true),
+        ]
+        let merged = EventAttendee.merging(
+            organizer: EventAttendee(name: "Maya Chen", emailAddress: "maya@example.com", isOrganizer: true),
+            into: attendees
+        )
+        #expect(merged == attendees)
+    }
+
+    /// Some accounts hand over a name and no address at all, which is still enough to know the
+    /// organizer is the person already sitting in the list.
+    @Test("An organizer with no address is matched on name")
+    func organizerMatchedOnName() {
+        let attendees = [EventAttendee(name: "Maya Chen", emailAddress: "maya@example.com")]
+        let merged = EventAttendee.merging(organizer: EventAttendee(name: "maya chen"), into: attendees)
+        #expect(merged == attendees)
+    }
+
+    @Test("An event with no organizer is left alone")
+    func noOrganizer() {
+        let attendees = [EventAttendee(name: "Maya Chen", emailAddress: "maya@example.com")]
+        #expect(EventAttendee.merging(organizer: nil, into: attendees) == attendees)
+    }
+
+    /// The whole point of the merge: this event is a meeting with somebody, and every surface
+    /// downstream reads that from the attendee list.
+    @Test("An invitation whose only listed attendee is the user is still a meeting")
+    func organizerMakesItAMeeting() {
+        var event = Self.event(start: Self.midnight, hours: 1)
+        event.attendees = EventAttendee.merging(
+            organizer: EventAttendee(
+                name: "Harbinder Raina",
+                emailAddress: "harbinder.raina@example.com",
+                isOrganizer: true
+            ),
+            into: [EventAttendee(name: "me@example.com", emailAddress: "me@example.com", isCurrentUser: true)]
+        )
+
+        #expect(DayEventRules.kind(of: event) == .meeting)
+        #expect(event.attendeeNames == ["Harbinder Raina"])
+    }
 }

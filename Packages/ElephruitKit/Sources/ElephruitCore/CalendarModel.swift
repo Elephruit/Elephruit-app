@@ -427,4 +427,41 @@ public struct EventAttendee: Sendable, Hashable, Identifiable, Codable {
         let letters = words.compactMap { $0.first.map(String.init) }
         return letters.joined().uppercased()
     }
+
+    /// The invitation's people, with the organizer among them.
+    ///
+    /// ### Why the organizer has to be put back
+    /// EventKit keeps the organizer *beside* the attendee list rather than in it, and whether they
+    /// also appear as an attendee depends entirely on the account the invitation came through. An
+    /// Exchange invitation landing in an iCloud calendar arrives as one attendee — you — with the
+    /// person who called the meeting reachable only through `organizer`. Calendar.app draws them
+    /// anyway, tagged "(organizer)", which is why the invitation looks complete there.
+    ///
+    /// Reading only the attendee list means a two-person meeting looks like an appointment nobody
+    /// else is going to: it is not classified as a meeting, it grows no guest list, and the one
+    /// person the meeting is *with* never reaches the day's roster. So the organizer is folded in
+    /// here, once, at the point where an invitation becomes a value — every surface downstream then
+    /// agrees about who is in the room without knowing anything about EventKit's shape.
+    ///
+    /// Matched on address, and on name only when there is no address to match on, because an
+    /// organizer who is already an attendee must not become a second copy of themselves.
+    public static func merging(organizer: EventAttendee?, into attendees: [EventAttendee]) -> [EventAttendee] {
+        guard let organizer else { return attendees }
+
+        let organizerEmail = organizer.emailAddress.map(ContactDetailRecognizer.normalizedEmail)
+        let organizerName = TextNormalizer.foldedForMatching(organizer.displayName)
+
+        let alreadyThere = attendees.contains { attendee in
+            if let organizerEmail, !organizerEmail.isEmpty,
+               let email = attendee.emailAddress.map(ContactDetailRecognizer.normalizedEmail) {
+                return email == organizerEmail
+            }
+            return !organizerName.isEmpty
+                && TextNormalizer.foldedForMatching(attendee.displayName) == organizerName
+        }
+        guard !alreadyThere else { return attendees }
+
+        // First, the order Calendar.app uses and the order the day's roster sorts into anyway.
+        return [organizer] + attendees
+    }
 }
