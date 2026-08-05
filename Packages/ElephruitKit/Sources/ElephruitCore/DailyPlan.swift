@@ -440,6 +440,16 @@ public struct DayFocusTime: Sendable, Hashable {
     /// same number.
     public var slots: [DayFreeSlot]
 
+    /// How long the stretch was that ``available`` was measured against.
+    ///
+    /// ### Why this is what is left rather than the whole working day
+    /// Because it is the denominator of a fraction somebody reads to decide what to attempt, and
+    /// "thirty minutes free of eight hours" at four in the afternoon is a true sentence that means
+    /// nothing — the eight hours are mostly spent. "Thirty minutes free of one hour left" is the
+    /// same fact said usefully. For a day that is not today the two are the same number, because
+    /// none of it has been spent yet.
+    public var windowLength: TimeInterval
+
     /// Whether the window has already closed — the working day is over, or the date is in the past.
     public var isClosed: Bool
 
@@ -447,11 +457,13 @@ public struct DayFocusTime: Sendable, Hashable {
         available: TimeInterval = 0,
         longestStretch: Range<Date>? = nil,
         slots: [DayFreeSlot] = [],
+        windowLength: TimeInterval = 0,
         isClosed: Bool = false
     ) {
         self.available = available
         self.longestStretch = longestStretch
         self.slots = slots
+        self.windowLength = windowLength
         self.isClosed = isClosed
     }
 
@@ -462,6 +474,22 @@ public struct DayFocusTime: Sendable, Hashable {
     public var summary: String {
         guard hasAny else { return isClosed ? "Day's done" : "Nothing free" }
         return DurationPhrase.rounded(available) + " free"
+    }
+
+    /// "3h 20m free of 8h" — the figure with the thing it is a fraction of.
+    ///
+    /// ### Why the denominator earns its place
+    /// Because "three hours free" is two different days depending on how long the day is, and the
+    /// reader is the only one who knows which. Twenty minutes free out of half an hour left is an
+    /// afternoon that is over; twenty minutes free out of six hours is an afternoon that has been
+    /// taken from you. The bare number cannot tell those apart and the interface was showing the
+    /// bare number.
+    ///
+    /// Falls back to ``summary`` when the working day has no length to speak of, rather than
+    /// printing "of 0m".
+    public var proportionSummary: String {
+        guard hasAny, windowLength >= 60 else { return summary }
+        return summary + " of " + DurationPhrase.rounded(windowLength)
     }
 
     public var longestStretchSummary: String? {
@@ -553,7 +581,13 @@ public enum FocusTimeRules {
                 DayFreeSlot(range: gap, isCurrent: isToday && gap.contains(now))
             }
 
-        return DayFocusTime(available: total, longestStretch: longest, slots: slots, isClosed: false)
+        return DayFocusTime(
+            available: total,
+            longestStretch: longest,
+            slots: slots,
+            windowLength: remaining.upperBound.timeIntervalSince(remaining.lowerBound),
+            isClosed: false
+        )
     }
 }
 
@@ -1325,6 +1359,14 @@ public struct TodayFilters: Sendable, Hashable, Codable {
     /// are wrong is not a feature.
     public var usesIntegratedAgenda: Bool
 
+    /// Whether the gaps between the day's commitments are drawn as rows of their own.
+    ///
+    /// On by default, because the room left in a day is the thing this page exists to make visible
+    /// and hiding it would be hiding the answer. Off is for somebody whose calendar is the record
+    /// rather than the plan — a day of six meetings has five gaps, and five rows saying so is noise
+    /// to a reader who was never going to work in them.
+    public var showsFreeTime: Bool
+
     /// Calendars the reader has muted here specifically, by identifier.
     ///
     /// Separate from the calendar module's own visibility, and deliberately: hiding the family
@@ -1342,6 +1384,7 @@ public struct TodayFilters: Sendable, Hashable, Codable {
         showsDailyNote: Bool = true,
         showsCompleted: Bool = true,
         usesIntegratedAgenda: Bool = true,
+        showsFreeTime: Bool = true,
         hiddenCalendarIdentifiers: Set<String> = [],
         hiddenContainerIDs: Set<UUID> = []
     ) {
@@ -1351,8 +1394,40 @@ public struct TodayFilters: Sendable, Hashable, Codable {
         self.showsDailyNote = showsDailyNote
         self.showsCompleted = showsCompleted
         self.usesIntegratedAgenda = usesIntegratedAgenda
+        self.showsFreeTime = showsFreeTime
         self.hiddenCalendarIdentifiers = hiddenCalendarIdentifiers
         self.hiddenContainerIDs = hiddenContainerIDs
+    }
+
+    /// Decoded field by field, with anything absent taking its default.
+    ///
+    /// ### Why this is written out rather than synthesized
+    /// Swift's synthesized `init(from:)` does **not** fall back to a property's default when a key
+    /// is missing — it throws. So adding a switch here would have made every stored preference
+    /// undecodable, and `TodayPreferences` would have quietly reset everybody's filters to standard
+    /// on the next launch. That fallback exists to stop a bad preference breaking the page, not to
+    /// absorb a schema change nobody noticed.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let standard = TodayFilters()
+
+        func flag(_ key: CodingKeys, _ fallback: Bool) throws -> Bool {
+            try container.decodeIfPresent(Bool.self, forKey: key) ?? fallback
+        }
+
+        showsTasks = try flag(.showsTasks, standard.showsTasks)
+        showsMeetings = try flag(.showsMeetings, standard.showsMeetings)
+        showsPeople = try flag(.showsPeople, standard.showsPeople)
+        showsDailyNote = try flag(.showsDailyNote, standard.showsDailyNote)
+        showsCompleted = try flag(.showsCompleted, standard.showsCompleted)
+        usesIntegratedAgenda = try flag(.usesIntegratedAgenda, standard.usesIntegratedAgenda)
+        showsFreeTime = try flag(.showsFreeTime, standard.showsFreeTime)
+        hiddenCalendarIdentifiers = try container.decodeIfPresent(
+            Set<String>.self, forKey: .hiddenCalendarIdentifiers
+        ) ?? []
+        hiddenContainerIDs = try container.decodeIfPresent(
+            Set<UUID>.self, forKey: .hiddenContainerIDs
+        ) ?? []
     }
 
     public static let standard = TodayFilters()

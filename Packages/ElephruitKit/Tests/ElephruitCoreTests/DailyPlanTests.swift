@@ -305,6 +305,41 @@ struct DailyPlanTests {
         #expect(focus.slots[1].durationSummary == "1h")
     }
 
+    @Test("Free time is said as a fraction of the time it is free out of")
+    func freeTimeCarriesItsDenominator() {
+        let events = [Self.event("Review", from: Self.at(10), minutes: 60, attendees: ["Maya"])]
+
+        let wholeDay = FocusTimeRules.focusTime(
+            on: Self.today, events: events, workingHours: Self.workingHours,
+            now: Self.at(9, dayOffset: -1), calendar: Self.calendar
+        )
+        #expect(wholeDay.windowLength == 8 * 3_600)
+        #expect(wholeDay.proportionSummary == "7h free of 8h")
+
+        // Late in the day the denominator is what is left, not the eight hours mostly spent — "30m
+        // free of 8h" at four in the afternoon is true and useless.
+        let lateOn = FocusTimeRules.focusTime(
+            on: Self.today, events: [], workingHours: Self.workingHours,
+            now: Self.at(16), calendar: Self.calendar
+        )
+        #expect(lateOn.windowLength == 3_600)
+        #expect(lateOn.proportionSummary == "1h free of 1h")
+    }
+
+    @Test("A day with nothing free says so rather than saying nothing of nothing")
+    func anEmptyDenominatorFallsBack() {
+        let focus = FocusTimeRules.focusTime(
+            on: Self.today,
+            events: [Self.event("All of it", from: Self.at(9), minutes: 480, attendees: ["Maya"])],
+            workingHours: Self.workingHours,
+            now: Self.at(9, dayOffset: -1), calendar: Self.calendar
+        )
+
+        #expect(!focus.hasAny)
+        #expect(focus.proportionSummary == focus.summary)
+        #expect(focus.proportionSummary == "Nothing free")
+    }
+
     @Test("A day with no working window offers nothing to fill")
     func closedDaysOfferNoSlots() {
         let weekdaysOnly = WorkingHours(startMinutes: 9 * 60, endMinutes: 17 * 60, weekdays: [])
@@ -791,5 +826,29 @@ struct DailyPlanTests {
 
         let data = try JSONEncoder().encode(filters)
         #expect(try JSONDecoder().decode(TodayFilters.self, from: data) == filters)
+    }
+
+    /// The preference written by an older build, which knew nothing about free time.
+    ///
+    /// Synthesized `Decodable` throws on a missing key rather than taking the property's default, so
+    /// without a hand-written initialiser adding one switch would have made every stored preference
+    /// undecodable — and `TodayPreferences` would have silently reset everybody's filters on the
+    /// next launch. The fallback there is for a corrupt preference, not for a field somebody added.
+    @Test("A preference saved before a switch existed keeps every switch it did set")
+    func olderPreferencesDecodeWithoutLosingWhatTheySaid() throws {
+        let older = """
+        {
+            "showsTasks": true, "showsMeetings": false, "showsPeople": true,
+            "showsDailyNote": true, "showsCompleted": false, "usesIntegratedAgenda": true,
+            "hiddenCalendarIdentifiers": ["work"], "hiddenContainerIDs": []
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(TodayFilters.self, from: Data(older.utf8))
+
+        #expect(!decoded.showsMeetings, "what they did say survives")
+        #expect(!decoded.showsCompleted)
+        #expect(decoded.hiddenCalendarIdentifiers == ["work"])
+        #expect(decoded.showsFreeTime, "what they never said takes its default")
     }
 }

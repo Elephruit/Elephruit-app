@@ -185,8 +185,10 @@ private struct TodayContent: View {
 
                 if plan.briefing.focus.hasAny, let stretch = plan.briefing.focus.longestStretchSummary {
                     Label {
-                        // `summary` already says "free" — "3h 20m free · 1h from 2:00 PM".
-                        Text("\(plan.briefing.focus.summary) · \(stretch)")
+                        // `proportionSummary` already says "free" and says what of — "3h 20m free
+                        // of 8h · 1h from 2:00 PM". The denominator is the working day the reader
+                        // set in Settings, which is what makes the first number mean anything.
+                        Text("\(plan.briefing.focus.proportionSummary) · \(stretch)")
                             .font(Theme.Text.rowSubtitle)
                             .foregroundStyle(Theme.Colors.secondaryText)
                     } icon: {
@@ -256,7 +258,7 @@ private struct TodayContent: View {
         let calendar = services?.dateProvider.calendar ?? .current
         let awareness = plan.awarenessEvents(calendar: calendar)
         if !awareness.isEmpty {
-            Section("Awareness") {
+            Section {
                 ForEach(awareness) { event in
                     TodayAwarenessRow(dayEvent: event, day: plan.date, calendar: calendar)
                         .contentShape(Rectangle())
@@ -264,6 +266,8 @@ private struct TodayContent: View {
                             shell.push(.event(event.event.identity.storageKey))
                         }
                 }
+            } header: {
+                Text("Awareness").accessibilityIdentifier("today.awareness.header")
             }
         }
     }
@@ -273,27 +277,99 @@ private struct TodayContent: View {
     @ViewBuilder
     private func eventsSection(_ plan: DayPlan) -> some View {
         let calendar = services?.dateProvider.calendar ?? .current
-        let schedule = plan.scheduleEvents(calendar: calendar)
-        if !schedule.isEmpty {
-            Section("Schedule") {
-                ForEach(schedule) { event in
-                    TodayEventRow(dayEvent: event)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            shell.push(.event(event.event.identity.storageKey))
-                        }
-                        .contextMenu {
-                            if actions.joinLink(for: event) != nil {
-                                Button("Join", systemImage: "video") { actions.join(event) }
+        let rows = scheduleRows(plan, calendar: calendar)
+        if !rows.isEmpty {
+            Section {
+                ForEach(rows) { row in
+                    switch row {
+                    case .event(let event):
+                        TodayEventRow(dayEvent: event)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                shell.push(.event(event.event.identity.storageKey))
                             }
-                            Button("Open in Calendar", systemImage: "calendar") {
-                                shell.push(.calendar)
+                            .contextMenu {
+                                if actions.joinLink(for: event) != nil {
+                                    Button("Join", systemImage: "video") { actions.join(event) }
+                                }
+                                Button("Open in Calendar", systemImage: "calendar") {
+                                    shell.push(.calendar)
+                                }
+                                Button("Meeting Notes", systemImage: "note.text") {
+                                    openMeetingNotes(event)
+                                }
                             }
-                            Button("Meeting Notes", systemImage: "note.text") {
-                                openMeetingNotes(event)
-                            }
-                        }
+                    case .free(let slot):
+                        TodayFreeSlotRow(slot: slot)
+                    }
                 }
+            } header: {
+                scheduleHeader
+            }
+        }
+    }
+
+    /// The section title, with the one control the schedule has of its own.
+    ///
+    /// Both parts are named. A header holding a control stops exposing its title as a plain piece of
+    /// text — the first test to look for "Schedule" after this button arrived waited ten seconds and
+    /// found nothing — so neither the title nor the button is reachable by its words alone.
+    private var scheduleHeader: some View {
+        HStack {
+            Text("Schedule")
+                .accessibilityIdentifier("today.schedule.header")
+            Spacer()
+            if let preferences = services?.todayPreferences {
+                let isShowing = preferences.filters.showsFreeTime
+                Button {
+                    withCalmAnimation(Theme.Motion.standard) { preferences.toggleFreeTime() }
+                } label: {
+                    // An `Image` with a measured frame rather than a `Label` with `.iconOnly`.
+                    // A section header applies its own text styling to whatever it holds, and the
+                    // label came out with no intrinsic size at all — the accessibility tree had this
+                    // button at zero by zero, which is a control nobody can press, by hand or
+                    // otherwise. The frame and the content shape are what make it a target.
+                    Image(systemName: isShowing ? "hourglass" : "hourglass.slash")
+                        .font(Theme.Text.metadata)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(isShowing ? Theme.Colors.selection : Theme.Colors.secondaryText)
+                .accessibilityLabel(isShowing ? "Hide free time" : "Show free time")
+                .accessibilityIdentifier("today.freeTime.toggle")
+            }
+        }
+        // Without this the header is one element and the button inside it is unreachable — the rule
+        // `SwiftUI` applies everywhere: a container that owns an identifier hides its children.
+        .accessibilityElement(children: .contain)
+    }
+
+    /// The day against the clock: what is booked, and — unless switched off — what is not.
+    ///
+    /// ### Why the gaps are rows rather than a figure at the top
+    /// Because "four hours free" is something to know and "eleven-thirty to half twelve is free" is
+    /// something to use, and only the second one is in the place where a person is already deciding
+    /// what to do next. The briefing keeps the total; this is where it becomes an offer.
+    ///
+    /// The gaps come from ``DayFocusTime/slots``, which is already bounded by the working day and
+    /// already starts at *now* for today, so nothing here has to re-derive either. A day in the past
+    /// produces none, which is right: a gap in a day that is over is not an opportunity.
+    private func scheduleRows(_ plan: DayPlan, calendar: Calendar) -> [ScheduleRow] {
+        var rows = plan.scheduleEvents(calendar: calendar).map(ScheduleRow.event)
+
+        if services?.todayPreferences.filters.showsFreeTime ?? true {
+            rows += plan.briefing.focus.slots.map(ScheduleRow.free)
+        }
+
+        return rows.sorted { left, right in
+            if left.startAt != right.startAt { return left.startAt < right.startAt }
+            // A commitment before the gap it opens onto, when a meeting ends exactly where a free
+            // stretch begins — which is most of them.
+            switch (left, right) {
+            case (.event, .free): return true
+            case (.free, .event): return false
+            default: return left.id < right.id
             }
         }
     }
@@ -469,6 +545,75 @@ private struct TodayContent: View {
 }
 
 // MARK: - Small pieces
+
+/// One line of the schedule: something booked, or the room between two things.
+private enum ScheduleRow: Identifiable {
+    case event(DayEvent)
+    case free(DayFreeSlot)
+
+    var id: String {
+        switch self {
+        case .event(let event): "event:\(event.id)"
+        case .free(let slot): "free:\(slot.range.lowerBound.timeIntervalSinceReferenceDate)"
+        }
+    }
+
+    var startAt: Date {
+        switch self {
+        case .event(let event): event.event.startAt
+        case .free(let slot): slot.range.lowerBound
+        }
+    }
+}
+
+/// A stretch of the working day with nothing in it.
+///
+/// Drawn quietly and drawn differently: a dashed rule rather than a calendar's colour, because this
+/// is the absence of an event rather than a pale one. The row has to be legible as *space* at a
+/// glance, or a day of five gaps reads as a day of ten meetings.
+private struct TodayFreeSlotRow: View {
+    let slot: DayFreeSlot
+
+    /// The same column the event rows use, so the two line up down the page rather than sitting in
+    /// two slightly different lists. See ``TodayEventRow`` for where the 64 comes from.
+    @ScaledMetric(relativeTo: .caption) private var timeColumnWidth: CGFloat = 64
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Theme.Spacing.medium) {
+            Text(slot.isCurrent ? "Now" : slot.range.lowerBound.formatted(date: .omitted, time: .shortened))
+                .font(Theme.Text.metadata)
+                .monospacedDigit()
+                .foregroundStyle(Theme.Colors.tertiaryText)
+                .frame(width: timeColumnWidth, alignment: .trailing)
+
+            Capsule()
+                .strokeBorder(Theme.Colors.tertiaryText.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                .frame(width: 3)
+
+            // "15m free · until 10:00 AM". Not the whole range: the column to the left has already
+            // said when it starts, and "9:45 AM │ 15m free · 9:45 AM – 10:00 AM" says it twice.
+            Text("\(slot.durationSummary) free · until \(endLabel)")
+                .font(Theme.Text.rowSubtitle)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+        }
+        .frame(minHeight: 32)
+        .accessibilityElement(children: .combine)
+        // Spoken with both ends, unlike the drawn row: a combined element is read as one sentence,
+        // so there is no column to the left to have already said when it starts.
+        .accessibilityLabel("\(slot.durationSummary) free, \(slot.rangeSummary)")
+        // Named so a test can count the gaps without matching on their text. Scanning labels for
+        // "free" finds the briefing's line at the top of the page as well, and a predicate walking
+        // the whole hierarchy of a long list is slow enough to time the test out.
+        .accessibilityIdentifier("today.freeSlot")
+    }
+
+    private var endLabel: String {
+        slot.range.upperBound.formatted(date: .omitted, time: .shortened)
+    }
+}
 
 /// One briefing figure — "2 overdue", "3 meetings" — as a quiet chip.
 private struct BriefingFigureChip: View {
