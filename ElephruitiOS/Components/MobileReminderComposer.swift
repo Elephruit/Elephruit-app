@@ -48,7 +48,6 @@ struct MobileReminderComposer: View {
     var opening: ComposerField?
 
     @FocusState private var focus: Field?
-    @State private var vocabulary = CaptureVocabulary.empty
     @State private var activePopover: ComposerField?
     /// The field whose search sheet is up. Separate from `activePopover` because they are two
     /// presentations and the popover has to be gone before the sheet can arrive.
@@ -81,8 +80,6 @@ struct MobileReminderComposer: View {
         )
         .elevation(.floating)
         .task {
-            vocabulary = (try? services?.capture.vocabulary()) ?? .empty
-
             guard let opening else {
                 focus = .title
                 return
@@ -412,10 +409,24 @@ struct MobileReminderComposer: View {
     /// Opens one field. Five of them are popovers; the checklist is a row inside the card, so
     /// "open" means something different for it and this is the one place that knows so.
     private func open(_ field: ComposerField) {
-        if field == .checklist {
+        // The checklist is the one field that wants the keyboard — it is a row you type into.
+        guard field != .checklist else {
             withCalmAnimation { isAddingStep = true }
             focus = .step
-        } else {
+            return
+        }
+
+        // Everything else is chosen by tapping, so the keyboard goes away first. It is not
+        // enough to let it fall away on its own: while it is up it owns half the screen, and a
+        // popover anchored to a control that is about to move is a popover pointing at nothing.
+        guard focus != nil else {
+            activePopover = field
+            return
+        }
+
+        focus = nil
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(220))
             activePopover = field
         }
     }
