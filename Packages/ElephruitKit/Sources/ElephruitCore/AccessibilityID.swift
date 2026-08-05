@@ -322,6 +322,9 @@ public enum AccessibilityID {
         public static let dayPopover = "calendar.dayPopover"
         public static let offlineBanner = "calendar.offline"
 
+        /// Opens the debrief that records facts against the people in a meeting.
+        public static let logMeeting = "calendar.logMeeting"
+
         // Creating and editing.
         public static let quickEntry = "calendar.quickEntry"
         public static let quickEntryField = "calendar.quickEntry.field"
