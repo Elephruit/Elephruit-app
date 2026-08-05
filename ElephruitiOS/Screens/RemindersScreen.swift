@@ -130,7 +130,27 @@ struct RemindersScreen: View {
         .accessibilityIdentifier("reminders.lists")
     }
 
+    /// The anchor the open editor scrolls itself to. One constant because there is only ever
+    /// one editor.
+    private static let composerAnchor = "reminders.composer.anchor"
+
     private var list: some View {
+        ScrollViewReader { scroller in
+            listContent
+                .onChange(of: composing) { _, current in
+                    guard current != nil else { return }
+                    // The editor is at the end of a list that is usually taller than the
+                    // screen, so opening one can put it — and the × that closes it — below the
+                    // fold or behind the keyboard. An editor you have to go looking for is an
+                    // editor that has trapped you.
+                    withCalmAnimation {
+                        scroller.scrollTo(Self.composerAnchor, anchor: .center)
+                    }
+                }
+        }
+    }
+
+    private var listContent: some View {
         ScrollView {
             // Lazy again. It was made eager so a UI test could find an off-screen row by its
             // text, which bought one assertion and cost every row on the screen a full render
@@ -167,6 +187,7 @@ struct RemindersScreen: View {
                 // that answers a tap by scrolling somewhere else has moved the conversation.
                 if composing == .newReminder {
                     composer(quickCommitKeepsOpen: true)
+                        .id(Self.composerAnchor)
                 } else if composing == nil {
                     newReminderTail
 
@@ -197,6 +218,7 @@ struct RemindersScreen: View {
         Group {
             if composing == .editing(model.id) {
                 composer(quickCommitKeepsOpen: false)
+                    .id(Self.composerAnchor)
             } else {
                 rowBody(model)
             }
