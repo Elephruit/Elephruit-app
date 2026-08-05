@@ -55,8 +55,19 @@ struct RemindersScreen: View {
     /// a reminder written by the composer landed in the store and never appeared on screen.
     /// Loading on `changeToken` is what every other screen in this target does, and it is the
     /// only version where the list is a picture of the library rather than of the last render.
-    @State private var sections: [ReminderStore.SectionGroup] = []
-    @State private var completed: [Item] = []
+    /// The rows, built once per change rather than derived on every render.
+    ///
+    /// Everything a row draws — its title, its facts, the colour of its deadline — used to be
+    /// read off the `Item` inside `body`. That put model access on the render path: `checklist`
+    /// decodes JSON on every access, `tags` and `parent` fault relationships, and `body` runs
+    /// again for every keystroke in the composer. A screen of reminders was re-reading the
+    /// store from scratch on each character typed. These are plain values now, computed when
+    /// the library changes and only then.
+    @State private var sections: [ReminderSectionModel] = []
+    @State private var completed: [ReminderRowModel] = []
+    /// The user's saved rules, loaded rather than fetched from `body` — the menu that shows
+    /// them is in the toolbar, so a computed property here meant a database query per render.
+    @State private var smartLists: [SmartListModel] = []
 
     var body: some View {
         ZStack {
@@ -104,13 +115,10 @@ struct RemindersScreen: View {
                 }
             }
 
-            if !savedSmartLists.isEmpty {
+            if !smartLists.isEmpty {
                 Section("Saved") {
-                    ForEach(savedSmartLists, id: \.id) { saved in
-                        Button(
-                            saved.name,
-                            systemImage: saved.symbolName ?? "line.3.horizontal.decrease.circle"
-                        ) {
+                    ForEach(smartLists) { saved in
+                        Button(saved.name, systemImage: saved.symbolName) {
                             shell.push(.smartList(saved.id))
                         }
                     }
@@ -122,19 +130,12 @@ struct RemindersScreen: View {
         .accessibilityIdentifier("reminders.lists")
     }
 
-    /// The user's own saved rules, in the order the Mac's sidebar puts them.
-    private var savedSmartLists: [SavedSearch] {
-        guard let services else { return [] }
-        let descriptor = FetchDescriptor<SavedSearch>(
-            predicate: #Predicate { $0.deletedAt == nil && $0.taskFilterData != nil },
-            sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.name)]
-        )
-        return (try? services.context.fetch(descriptor)) ?? []
-    }
-
     private var list: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            // Lazy again. It was made eager so a UI test could find an off-screen row by its
+            // text, which bought one assertion and cost every row on the screen a full render
+            // pass on every keystroke. The tests scroll now, like a person does.
+            LazyVStack(alignment: .leading, spacing: Theme.Spacing.small) {
                 if let actionError {
                     Label(actionError, systemImage: "exclamationmark.triangle")
                         .font(Theme.Text.metadata)
@@ -142,16 +143,16 @@ struct RemindersScreen: View {
                 }
 
                 ForEach(sections) { group in
-                    sectionHeader(group.section)
-                    ForEach(group.reminders) { reminder in
-                        row(reminder)
+                    sectionHeader(title: group.title)
+                    ForEach(group.rows) { model in
+                        row(model)
                     }
                 }
 
                 if showsCompleted, !completed.isEmpty {
                     sectionHeader(title: "Completed")
-                    ForEach(completed) { reminder in
-                        row(reminder)
+                    ForEach(completed) { model in
+                        row(model)
                     }
                 }
 
@@ -192,92 +193,95 @@ struct RemindersScreen: View {
     // MARK: - Rows
 
     @ViewBuilder
-    private func row(_ reminder: Item) -> some View {
-        if composing == .editing(reminder.id) {
-            composer(quickCommitKeepsOpen: false)
-        } else {
-            HStack(alignment: .top, spacing: Theme.Spacing.small) {
-                Button {
-                    toggleCompletion(of: reminder)
-                } label: {
-                    Image(systemName: reminder.isCompleted ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
-                        .foregroundStyle(
-                            reminder.isCompleted
-                                ? Theme.Colors.completed
-                                : Theme.Colors.secondaryText
-                        )
-                        // A 44-point target around a 20-point glyph: the circle is the control
-                        // people hit most on this screen and the one they hit while walking.
-                        .frame(width: 32, height: 44)
-                        .contentShape(Rectangle())
+    private func row(_ model: ReminderRowModel) -> some View {
+        Group {
+            if composing == .editing(model.id) {
+                composer(quickCommitKeepsOpen: false)
+            } else {
+                rowBody(model)
+            }
+        }
+    }
+
+    /// Drawn entirely from `model`. Nothing here reads the `Item`, which is what keeps a
+    /// keystroke in the composer from re-reading the store once per visible reminder.
+    private func rowBody(_ model: ReminderRowModel) -> some View {
+        HStack(alignment: .top, spacing: Theme.Spacing.small) {
+            Button {
+                toggleCompletion(of: model.item)
+            } label: {
+                Image(systemName: model.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(
+                        model.isCompleted ? Theme.Colors.completed : Theme.Colors.secondaryText
+                    )
+                    // A 44-point target around a 20-point glyph: the circle is the control
+                    // people hit most on this screen and the one they hit while walking.
+                    .frame(width: 32, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(model.isCompleted ? "Completed" : "Not completed")
+            .accessibilityHint("Double-tap to toggle")
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                Text(model.title)
+                    .font(Theme.Text.rowTitle)
+                    .strikethrough(model.isCompleted, color: Theme.Colors.tertiaryText)
+                    .foregroundStyle(
+                        model.isCompleted ? Theme.Colors.secondaryText : Theme.Colors.primaryText
+                    )
+                    .multilineTextAlignment(.leading)
+
+                if !model.notes.isEmpty {
+                    Text(model.notes)
+                        .font(Theme.Text.rowSubtitle)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                        .lineLimit(2)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(reminder.isCompleted ? "Completed" : "Not completed")
-                .accessibilityHint("Double-tap to toggle")
 
-                VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-                    Text(reminder.displayTitle)
-                        .font(Theme.Text.rowTitle)
-                        .strikethrough(reminder.isCompleted, color: Theme.Colors.tertiaryText)
-                        .foregroundStyle(
-                            reminder.isCompleted
-                                ? Theme.Colors.secondaryText
-                                : Theme.Colors.primaryText
-                        )
-                        .multilineTextAlignment(.leading)
-
-                    if !reminder.body.isEmpty {
-                        Text(reminder.body)
-                            .font(Theme.Text.rowSubtitle)
-                            .foregroundStyle(Theme.Colors.secondaryText)
-                            .lineLimit(2)
-                    }
-
-                    ReminderFactRow(reminder: reminder) { field in
-                        startEditing(reminder, opening: field)
-                    }
+                ReminderFactRow(facts: model.facts) { field in
+                    startEditing(model.item, opening: field)
                 }
-                .padding(.vertical, Theme.Spacing.small)
+            }
+            .padding(.vertical, Theme.Spacing.small)
 
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, Theme.Spacing.tight)
-            // A hairline under the row instead of a card around it. On one white sheet the
-            // separator is all the structure a list of sentences needs, and it costs a pixel
-            // where a rounded card costs a border, a fill and a shadow.
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(Theme.Colors.separator)
-                    .frame(height: 0.5)
-                    .padding(.leading, Self.separatorInset)
-            }
-            .contentShape(Rectangle())
-            // One tap edits. The Mac needs a double-click because a single click there means
-            // "select"; nothing on this screen is selectable, so the cheapest gesture goes to
-            // the only thing a row can do.
-            .onTapGesture { startEditing(reminder) }
-            // `.contain` before the identifier — the third place in this target that needed
-            // it. An identifier on a container is inherited by every child without one, and an
-            // element that has an identifier stops answering to its label, so naming the row
-            // had made every reminder's *title* unfindable by the words it says.
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("reminders.row")
-            .contextMenu {
-                Button("Edit", systemImage: "pencil") { startEditing(reminder) }
-                Button("Delete", systemImage: "trash", role: .destructive) { delete(reminder) }
-            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, Theme.Spacing.tight)
+        // A hairline under the row instead of a card around it. On one white sheet the
+        // separator is all the structure a list of sentences needs, and it costs a pixel
+        // where a rounded card costs a border, a fill and a shadow.
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Theme.Colors.separator)
+                .frame(height: 0.5)
+                .padding(.leading, Self.separatorInset)
+        }
+        .contentShape(Rectangle())
+        // One tap edits. The Mac needs a double-click because a single click there means
+        // "select"; nothing on this screen is selectable, so the cheapest gesture goes to
+        // the only thing a row can do.
+        .onTapGesture { startEditing(model.item) }
+        // `.contain` before the identifier — an identifier on a container is inherited by
+        // every child without one, and an element that has an identifier stops answering to
+        // its label, which had made every reminder's title unfindable by the words it says.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("reminders.row")
+        .contextMenu {
+            Button("Edit", systemImage: "pencil") { startEditing(model.item) }
+            Button("Delete", systemImage: "trash", role: .destructive) { delete(model.item) }
         }
     }
 
     /// The end of the list, which is also the start of the next reminder.
     ///
     /// The background alone was "tap anywhere" only while there was anywhere: a screen full of
-    /// reminders is exactly the screen with no empty space left, and that is also the screen
-    /// where you are most likely to be adding another one. So the affordance travels with the
-    /// content instead of depending on a gap — it is always the last thing in the list,
-    /// reachable by the same scroll that reads the list, and it is a row rather than a button
-    /// floating over one because the next reminder genuinely does go there.
+    /// reminders is exactly the screen with no empty space left, and also the screen where you
+    /// are most likely to be adding another. So the affordance travels with the content instead
+    /// of depending on a gap — always the last thing in the list, reachable by the same scroll
+    /// that reads it, and a row rather than a button floating over one because the next
+    /// reminder genuinely does go there.
     private var newReminderTail: some View {
         Button(action: startNewReminder) {
             HStack(spacing: Theme.Spacing.small) {
@@ -295,10 +299,6 @@ struct RemindersScreen: View {
         .buttonStyle(.plain)
         .padding(.top, Theme.Spacing.small)
         .accessibilityIdentifier("reminders.new")
-    }
-
-    private func sectionHeader(_ section: ReminderStore.Section) -> some View {
-        sectionHeader(title: section.title)
     }
 
     private func sectionHeader(title: String) -> some View {
@@ -509,9 +509,35 @@ struct RemindersScreen: View {
 
     // MARK: - What the list shows
 
+    /// The one place this screen reads the store.
     private func reload() {
-        sections = services?.reminderStore.sections ?? []
-        completed = services?.reminderStore.completed ?? []
+        guard let services else {
+            sections = []
+            completed = []
+            smartLists = []
+            return
+        }
+
+        sections = services.reminderStore.sections.map { group in
+            ReminderSectionModel(
+                id: group.section.id,
+                title: group.section.title,
+                rows: ReminderRowBuilder.rows(group.reminders, services: services)
+            )
+        }
+        completed = ReminderRowBuilder.rows(services.reminderStore.completed, services: services)
+
+        let descriptor = FetchDescriptor<SavedSearch>(
+            predicate: #Predicate { $0.deletedAt == nil && $0.taskFilterData != nil },
+            sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.name)]
+        )
+        smartLists = ((try? services.context.fetch(descriptor)) ?? []).map {
+            SmartListModel(
+                id: $0.id,
+                name: $0.name,
+                symbolName: $0.symbolName ?? "line.3.horizontal.decrease.circle"
+            )
+        }
     }
 
     private var isEmpty: Bool {
@@ -525,25 +551,24 @@ struct RemindersScreen: View {
 
 /// A reminder's facts, as chips: what it is attached to and when it matters.
 ///
-/// The Mac's `metadataFacts` vocabulary, said in the same words, symbols and colours. A phone
-/// shows fewer of them only because it has fewer points across, never different ones.
+/// The Mac's `metadataFacts` vocabulary, said in the same words, symbols and colours — but
+/// computed once when the list loads rather than on every render. Building them here meant
+/// decoding the checklist's JSON and faulting the tag and project relationships for every row
+/// on screen, every time anything on the screen changed.
 ///
-/// Each chip is also the way in to the thing it names. A chip that reads "Jul 21" is already
-/// pointing at the deadline; making it open the editor *on some other field* — or worse, open
-/// the editor and then wait to be told again which field was meant — spends two taps and an
-/// animation getting back to where the first tap was already aimed.
+/// Each chip is also the way in to the thing it names. A chip reading "Jul 21" is already
+/// pointing at the deadline; making it open the editor on some other field — or open the editor
+/// and then wait to be told again which field was meant — spends two taps and an animation
+/// getting back to where the first tap was already aimed.
 private struct ReminderFactRow: View {
-    @Environment(\.services) private var services
-
-    let reminder: Item
+    let facts: [ReminderFact]
     /// Opens this reminder's editor on one field.
     var onEdit: (ComposerField) -> Void
 
     var body: some View {
-        let facts = facts
         if !facts.isEmpty {
             FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
-                ForEach(facts, id: \.id) { fact in
+                ForEach(facts) { fact in
                     Button {
                         onEdit(fact.field)
                     } label: {
@@ -555,9 +580,7 @@ private struct ReminderFactRow: View {
                         .foregroundStyle(fact.tint)
                         .padding(.horizontal, Theme.Spacing.small)
                         .padding(.vertical, Theme.Spacing.hairline)
-                        .background(
-                            Capsule().fill(Theme.Colors.tintedFill(fact.tint))
-                        )
+                        .background(Capsule().fill(Theme.Colors.tintedFill(fact.tint)))
                         .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -567,28 +590,79 @@ private struct ReminderFactRow: View {
             }
         }
     }
+}
 
-    private struct Fact {
-        let id: String
-        let symbol: String
-        let text: String
-        let tint: Color
-        /// Which field of the editor this chip is a door to.
-        let field: ComposerField
+// MARK: - What a row is, before it is a view
+
+/// One chip under a reminder's title.
+struct ReminderFact: Identifiable {
+    let id: String
+    let symbol: String
+    let text: String
+    let tint: Color
+    /// Which field of the editor this chip is a door to.
+    let field: ComposerField
+}
+
+/// One reminder, reduced to what drawing it needs.
+///
+/// Holds the `Item` for the actions — completing, deleting, opening the editor — and nothing
+/// else about it. Reading a model property while rendering is what put a JSON decode and a
+/// relationship fault behind every keystroke.
+struct ReminderRowModel: Identifiable {
+    let id: UUID
+    let item: Item
+    let title: String
+    let notes: String
+    let isCompleted: Bool
+    let facts: [ReminderFact]
+}
+
+/// One of the store's buckets, already turned into rows.
+struct ReminderSectionModel: Identifiable {
+    let id: String
+    let title: String
+    let rows: [ReminderRowModel]
+}
+
+/// A saved smart list, named without holding the record.
+struct SmartListModel: Identifiable {
+    let id: UUID
+    let name: String
+    let symbolName: String
+}
+
+/// Turns the store's reminders into rows.
+///
+/// Every model access on this screen happens in here, once per change to the library, on the
+/// main actor before anything is drawn.
+@MainActor
+enum ReminderRowBuilder {
+    static func rows(_ reminders: [Item], services: AppServices) -> [ReminderRowModel] {
+        reminders.map { reminder in
+            ReminderRowModel(
+                id: reminder.id,
+                item: reminder,
+                title: reminder.displayTitle,
+                notes: reminder.body,
+                isCompleted: reminder.isCompleted,
+                facts: facts(for: reminder, services: services)
+            )
+        }
     }
 
-    private var facts: [Fact] {
-        guard let clock = services?.dateProvider else { return [] }
-        var facts: [Fact] = []
+    private static func facts(for reminder: Item, services: AppServices) -> [ReminderFact] {
+        let clock = services.dateProvider
+        var facts: [ReminderFact] = []
 
         if reminder.isSomeday {
             facts.append(
-                Fact(id: "someday", symbol: "archivebox", text: "Someday",
-                     tint: Theme.Colors.secondaryText, field: .when)
+                ReminderFact(id: "someday", symbol: "archivebox", text: "Someday",
+                             tint: Theme.Colors.secondaryText, field: .when)
             )
         } else if let startAt = reminder.startAt {
             facts.append(
-                Fact(
+                ReminderFact(
                     id: "scheduled",
                     symbol: "calendar",
                     text: RelativeDay.text(for: startAt, using: clock),
@@ -600,7 +674,7 @@ private struct ReminderFactRow: View {
 
         if let dueAt = reminder.dueAt {
             facts.append(
-                Fact(
+                ReminderFact(
                     id: "deadline",
                     symbol: "calendar.badge.exclamationmark",
                     text: RelativeDay.text(for: dueAt, using: clock),
@@ -616,7 +690,7 @@ private struct ReminderFactRow: View {
 
         if let project = reminder.parent, project.kind == .project {
             facts.append(
-                Fact(
+                ReminderFact(
                     id: "project",
                     symbol: "folder",
                     text: project.displayTitle,
@@ -630,7 +704,7 @@ private struct ReminderFactRow: View {
             $0.slug.localizedStandardCompare($1.slug) == .orderedAscending
         }) {
             facts.append(
-                Fact(
+                ReminderFact(
                     id: "tag-\(tag.slug)",
                     symbol: "number",
                     text: tag.slug,
@@ -640,13 +714,14 @@ private struct ReminderFactRow: View {
             )
         }
 
+        // Read once: `checklist` decodes JSON every time it is touched.
         let checklist = reminder.checklist
         if !checklist.isEmpty {
             let text = checklist.completed > 0
                 ? "\(checklist.completed) of \(checklist.total) steps"
                 : (checklist.total == 1 ? "1 step" : "\(checklist.total) steps")
             facts.append(
-                Fact(
+                ReminderFact(
                     id: "checklist",
                     symbol: "checklist",
                     text: text,
