@@ -52,6 +52,10 @@ private struct TodayContent: View {
     let model: TodayModel
     let actions: TodayActions
 
+    /// Which gatherings have been opened out into their people. Keyed by the gathering's own
+    /// identifier so it survives a reassembly — a reload must not close what somebody opened.
+    @State private var expandedGatherings: Set<String> = []
+
     var body: some View {
         List {
             if let failure = model.failure {
@@ -517,20 +521,62 @@ private struct TodayContent: View {
 
     // MARK: - People
 
+    /// Who the day puts you with, grouped by the thing that puts you with them.
+    ///
+    /// ### Why the meeting is the row and the person is not
+    /// Because five people in one Roadmap sync were five rows, each repeating "4:00 PM · Roadmap
+    /// sync" underneath a different name. The interesting fact there is the *meeting* — one thing,
+    /// at one time, with five faces on it — and stating its time and title five times pushes the
+    /// rest of the day off the screen to say one thing badly.
+    ///
+    /// So a meeting is one row: when, who, and what. The faces are the content, because who is in
+    /// the room is what the row is for. Opening it puts the person-by-person detail underneath,
+    /// which is the only place the role, the last contact and the quick facts have room to be
+    /// useful anyway.
+    ///
+    /// Everybody the day names for some *other* reason — a birthday, a chase, a task about them —
+    /// keeps a row of their own. There is no shared interaction to gather them under, and inventing
+    /// one would be grouping for the sake of it.
     @ViewBuilder
     private func peopleSection(_ plan: DayPlan) -> some View {
-        if !plan.people.isEmpty {
+        let groups = TodayPeopleGrouping.groups(in: plan)
+        if !groups.isEmpty {
             TimelineHeader("People today").onTimeline()
 
-            ForEach(plan.people) { person in
-                TodayPersonRow(person: person)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        if let id = person.personID {
-                            shell.push(.person(id))
-                        }
-                    }
+            ForEach(groups) { group in
+                switch group.kind {
+                case .gathering(let title, let startAt, let isAllDay):
+                    TodayGatheringRow(
+                        title: title,
+                        startAt: startAt,
+                        isAllDay: isAllDay,
+                        people: group.people,
+                        isExpanded: expandedGatherings.contains(group.id),
+                        toggle: {
+                            withCalmAnimation(Theme.Motion.standard) {
+                                if expandedGatherings.contains(group.id) {
+                                    expandedGatherings.remove(group.id)
+                                } else {
+                                    expandedGatherings.insert(group.id)
+                                }
+                            }
+                        },
+                        open: { shell.push(.person($0)) }
+                    )
                     .onTimeline()
+
+                case .alone:
+                    ForEach(group.people) { person in
+                        TodayPersonRow(person: person)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if let id = person.personID {
+                                    shell.push(.person(id))
+                                }
+                            }
+                            .onTimeline()
+                    }
+                }
             }
         }
     }
@@ -850,34 +896,48 @@ private struct TodayTaskRow: View {
 }
 
 /// A person on the day: who, why, and the one fact worth walking in with.
-private struct TodayPersonRow: View {
+struct TodayPersonRow: View {
     @Environment(\.services) private var services
 
     let person: DayPerson
 
+    /// Whether to say why they are here.
+    ///
+    /// Off underneath a gathering, where the meeting one row up has already said the time and the
+    /// title and repeating it against every face is the redundancy the grouping exists to remove.
+    var showsReason: Bool = true
+
+    /// Whether this person sits underneath the gathering that named them.
+    ///
+    /// A nested row gives up its badge. The meeting one row up already carries the people symbol,
+    /// and repeating it against every face says "who" twice while making a child look like a
+    /// sibling — the rail runs plain behind them instead, which is what subordinate reads as.
+    var isNested: Bool = false
+
     var body: some View {
         TimelineRow(
-            badge: Timeline.Badge(
-                symbolName: person.primaryReason?.symbolName ?? "person",
-                tint: Theme.Palette.color(named: person.colorName)
-            )
+            badge: isNested
+                ? nil
+                : Timeline.Badge(
+                    symbolName: person.primaryReason?.symbolName ?? "person",
+                    tint: Theme.Palette.color(named: person.colorName)
+                )
         ) {
             // A face where a time would be. Same column, same promise: this says *who*.
-            ZStack {
-                Circle()
-                    .fill(Theme.Palette.color(named: person.colorName).opacity(0.2))
-                Text(initials)
-                    .font(Theme.Text.metadata.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.color(named: person.colorName))
-            }
-            .frame(width: 32, height: 32)
-            .accessibilityHidden(true)
+            PersonAvatar(name: person.name, colorName: person.colorName)
+                .accessibilityHidden(true)
         } content: {
             HStack(spacing: Theme.Spacing.small) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                     Text(person.name)
                         .font(Theme.Text.rowTitle)
-                    if let reason = person.primaryReason, let services {
+                    if let role = person.roleLine {
+                        Text(role)
+                            .font(Theme.Text.rowSubtitle)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                            .lineLimit(1)
+                    }
+                    if showsReason, let reason = person.primaryReason, let services {
                         Text(reason.sentence(calendar: services.dateProvider.calendar))
                             .font(Theme.Text.rowSubtitle)
                             .foregroundStyle(Theme.Colors.secondaryText)
@@ -902,12 +962,5 @@ private struct TodayPersonRow: View {
             }
         }
         .accessibilityElement(children: .combine)
-    }
-
-    private var initials: String {
-        let parts = person.name.split(separator: " ")
-        let letters = [parts.first, parts.count > 1 ? parts.last : nil]
-            .compactMap { $0?.first.map(String.init) }
-        return letters.isEmpty ? "?" : letters.joined()
     }
 }

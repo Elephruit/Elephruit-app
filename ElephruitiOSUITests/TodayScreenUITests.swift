@@ -72,6 +72,52 @@ final class TodayScreenUITests: XCTestCase {
         add(attachment)
     }
 
+    /// People in one meeting are one row, and opening it names them.
+    ///
+    /// The fixture puts three people in Roadmap sync, which used to be three rows each repeating
+    /// the same time and title.
+    func testAMeetingsPeopleAreOneRowUntilOpened() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ElephruitDevelopmentMode",
+            "-ElephruitUseTemporaryStore",
+            "-ElephruitLoadSampleData",
+            "-ElephruitUseFixtureCalendar",
+            "-ElephruitFixturesAuthorized",
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 30))
+
+        let gatherings = app.descendants(matching: .any).matching(identifier: "today.gathering")
+        for _ in 0..<12 where gatherings.count == 0 {
+            app.swipeUp()
+        }
+        XCTAssertGreaterThan(gatherings.count, 0, "no meeting gathered its people")
+
+        let closed = XCTAttachment(screenshot: app.screenshot())
+        closed.name = "today-people-gathered"
+        closed.lifetime = .keepAlways
+        add(closed)
+
+        // Counted by identifier rather than by looking for a particular name: which meeting is
+        // first depends on the fixture's clock, and the first version of this tapped the ten
+        // o'clock and then asserted on somebody who is in the four o'clock.
+        let named = app.descendants(matching: .any).matching(identifier: "today.gathering.person")
+        XCTAssertEqual(named.count, 0, "the people are named before the meeting was opened")
+
+        gatherings.firstMatch.tap()
+        XCTAssertTrue(
+            named.firstMatch.waitForExistence(timeout: 5),
+            "opening the meeting did not name its people"
+        )
+
+        let opened = XCTAttachment(screenshot: app.screenshot())
+        opened.name = "today-people-expanded"
+        opened.lifetime = .keepAlways
+        add(opened)
+    }
+
     /// The gaps are rows, and the switch that hides them actually hides them.
     ///
     /// Asserted rather than only photographed, because "free" appearing on screen is not proof the
