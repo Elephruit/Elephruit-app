@@ -354,6 +354,7 @@ struct RemindersScreen: View {
     private var completedToggle: some View {
         Button {
             withCalmAnimation { showsCompleted.toggle() }
+            reload()
         } label: {
             Image(systemName: showsCompleted ? "checkmark.circle.fill" : "checkmark.circle")
         }
@@ -547,7 +548,12 @@ struct RemindersScreen: View {
                 rows: ReminderRowBuilder.rows(group.reminders, services: services)
             )
         }
-        completed = ReminderRowBuilder.rows(services.reminderStore.completed, services: services)
+        // Only when they are on screen. Building these means a fact row per finished reminder —
+        // a JSON decode and a relationship fault each — for a section that is hidden by default
+        // and, in a library of any age, is the largest one there is.
+        completed = showsCompleted
+            ? ReminderRowBuilder.rows(services.reminderStore.completed, services: services)
+            : []
 
         let descriptor = FetchDescriptor<SavedSearch>(
             predicate: #Predicate { $0.deletedAt == nil && $0.taskFilterData != nil },
