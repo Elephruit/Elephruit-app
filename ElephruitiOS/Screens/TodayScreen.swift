@@ -242,7 +242,11 @@ private struct TodayContent: View {
         }
         .sheet(item: $blocking) { subject in
             BlockTimeSheet(
-                actions: actions, plan: subject.plan, slot: subject.slot, task: subject.task
+                actions: actions,
+                plan: subject.plan,
+                slot: subject.slot,
+                task: subject.task,
+                travel: subject.travel
             )
         }
         // The same two-token drive as the Mac: the window token reloads the calendar,
@@ -646,7 +650,11 @@ private struct TodayContent: View {
             ForEach(rows) { row in
                 switch row {
                 case .event(let event):
-                    TodayEventRow(dayEvent: event)
+                    TodayEventRow(
+                        dayEvent: event,
+                        travelMinutes: travelMinutes(for: event),
+                        onTravel: { blocking = .travel(event, plan) }
+                    )
                         .contentShape(Rectangle())
                         .onTapGesture {
                             shell.push(.event(event.event.identity.storageKey))
@@ -763,6 +771,19 @@ private struct TodayContent: View {
             blocking = .task(entry.item, plan)
         }
         hasOpenedReviewSheet = true
+    }
+
+    /// How long to allow for getting to an event, or `nil` when the page should say nothing.
+    ///
+    /// Nothing is said for a video call, for an all-day entry, or once the moment to leave has
+    /// passed — a "leave by 9:45" under a meeting you are already late for is a reproach rather
+    /// than a plan. See ``TravelRules`` for why each of those is a refusal rather than an omission.
+    private func travelMinutes(for event: DayEvent) -> Int? {
+        guard let services else { return nil }
+        let minutes = services.travel.minutes(to: event.event.locationName)
+        guard TravelRules.isWorthSaying(event.event, minutes: minutes, now: services.dateProvider.now)
+        else { return nil }
+        return minutes
     }
 
     private func openMeetingNotes(_ event: DayEvent) {
@@ -1162,6 +1183,12 @@ private struct TodayAwarenessRow: View {
 private struct TodayEventRow: View {
     let dayEvent: DayEvent
 
+    /// How long the user says it takes to get there, when this is somewhere to go and there is
+    /// still time to set off. `nil` draws no line at all.
+    var travelMinutes: Int?
+
+    var onTravel: () -> Void = {}
+
     var body: some View {
         TimelineRow(
             badge: Timeline.Badge(
@@ -1190,6 +1217,25 @@ private struct TodayEventRow: View {
                         .lineLimit(1)
                 }
 
+                if let travelMinutes {
+                    // Subordinate to the meeting rather than a row of its own: it is a fact *about*
+                    // this entry, and giving it a place on the thread would make a day of four
+                    // meetings look like a day of eight things.
+                    Button(action: onTravel) {
+                        Label(
+                            TravelRules.summary(
+                                leavingAt: TravelRules.leaveBy(dayEvent.event, minutes: travelMinutes),
+                                minutes: travelMinutes
+                            ),
+                            systemImage: "figure.walk"
+                        )
+                        .font(Theme.Text.metadata)
+                        .foregroundStyle(Theme.Colors.selection)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("today.travel")
+                }
+
                 if dayEvent.hasConflict {
                     Label("Overlaps another event", systemImage: "exclamationmark.triangle")
                         .font(Theme.Text.metadata)
@@ -1205,7 +1251,10 @@ private struct TodayEventRow: View {
             }
         }
         .opacity(dayEvent.event.isCancelled ? 0.6 : 1)
-        .accessibilityElement(children: .combine)
+        // Contained rather than combined, because the row now holds a control. A container that owns
+        // its children speaks as one sentence and takes their controls with it, which is a "leave
+        // by" line nobody can press.
+        .accessibilityElement(children: .contain)
     }
 
     /// "9:30 AM – 9:45 AM", or the one word an all-day entry has instead.

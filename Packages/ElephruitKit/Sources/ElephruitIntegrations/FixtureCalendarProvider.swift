@@ -338,9 +338,18 @@ public enum CalendarFixtures {
                            minutes: 2 * 24 * 60, calendar: calendars[1], allDay: true,
                            availability: .unavailable))
 
+        // Somewhere to actually go, late enough in the day that the "leave by" line is reviewable
+        // in an afternoon as well as a morning. A named building with a street address is the case
+        // that matters: a room number is a place you are already in, and a conferencing link in the
+        // location field is not a place at all.
+        events.append(make("Studio visit", identifier: "fixture.studio", start: at(0, 18),
+                           minutes: 60, calendar: calendars[0],
+                           location: "Northwind Studio, 40 Rivington Street"))
+
         // An evening event outside working hours.
         events.append(make("Dinner at Aba", identifier: "fixture.dinner", start: at(1, 19),
-                           minutes: 120, calendar: calendars[1], location: "Aba"))
+                           minutes: 120, calendar: calendars[1],
+                           location: "Aba, 302 North Green Street"))
 
         // A read-only holiday, so a refusal is demonstrable.
         events.append(make("Summer Bank Holiday", identifier: "fixture.holiday", start: at(9, 0),

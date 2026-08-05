@@ -92,6 +92,39 @@ final class TodayFeedUITests: XCTestCase {
         )
     }
 
+    /// A meeting somewhere says when to leave, and the line writes the journey.
+    ///
+    /// Asserted against a day that has not happened yet, on purpose. A "leave by" line disappears
+    /// once the moment has passed, so a test aimed at today's meetings proves the feature before
+    /// lunch and fails after it — which is a test reporting the clock. Tomorrow evening is always
+    /// still ahead.
+    func testAMeetingSomewhereSaysWhenToLeave() throws {
+        let app = launch()
+
+        let tomorrowKey = key(daysFromToday: 1)
+        scroll(app, to: tomorrowKey)
+        let tomorrow = app.descendants(matching: .any)[tomorrowKey]
+        XCTAssertTrue(tomorrow.waitForExistence(timeout: 10))
+        tomorrow.tap()
+
+        // Scrolled until it can be *pressed*, not merely until it exists: a list realises rows about
+        // a screen beyond the fold, so the first `exists` is true while the line is still below the
+        // bottom of the screen — and a screenshot taken then proves nothing.
+        let travel = app.buttons["today.travel"]
+        for _ in 0..<8 where !travel.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(travel.exists, "a meeting with an address said nothing about getting to it")
+        snap(app, "07-leave-by")
+
+        travel.tap()
+        XCTAssertTrue(
+            app.buttons["today.block.add"].waitForExistence(timeout: 10),
+            "the leave-by line offered no way to claim the time"
+        )
+        snap(app, "08-the-journey-as-a-block")
+    }
+
     /// The feed runs backwards too, and today can be got back to.
     ///
     /// ### What is actually being proved

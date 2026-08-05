@@ -37,6 +37,9 @@ struct BlockTimeSheet: View {
     /// the question is still open.
     var task: Item?
 
+    /// The meeting being travelled to, when the sheet was opened from a "leave by" line.
+    var travel: DayEvent?
+
     /// The lengths a block can be set to, in the units people actually think in.
     private static let standardLengths: [TimeInterval] = [
         15 * 60, 30 * 60, 45 * 60, 60 * 60, 90 * 60, 120 * 60,
@@ -324,6 +327,7 @@ struct BlockTimeSheet: View {
     private var navigationTitle: String {
         if written != nil { return "Added" }
         if isNamingReminder { return "New Reminder" }
+        if travel != nil { return "Travel" }
         guard let slot else { return "Block Time" }
         return slot.durationSummary + " free"
     }
@@ -374,7 +378,15 @@ struct BlockTimeSheet: View {
     private func prepare() {
         guard proposal == nil, written == nil else { return }
         chosenTask = task
-        proposal = actions.proposal(blocking: task, in: slot, on: plan)
+
+        guard let travel else {
+            proposal = actions.proposal(blocking: task, in: slot, on: plan)
+            return
+        }
+        proposal = actions.proposal(
+            travellingTo: travel,
+            minutes: services?.travel.minutes(to: travel.event.locationName) ?? TravelRules.defaultMinutes
+        )
     }
 
     /// Picks what the block is for, keeping the choices already made about it.
@@ -401,6 +413,15 @@ struct BlockTimeSheet: View {
             isWorking = false
             switch outcome {
             case .success(let event):
+                // The length somebody settled on is their answer for that place, and the second
+                // meeting in Room 2 should not have to ask again. Remembered on the write rather
+                // than while the picker is being scrolled: every number passed on the way to the
+                // answer is not the answer.
+                if let travel {
+                    services?.travel.remember(
+                        minutes: Int(proposal.length / 60), to: travel.event.locationName
+                    )
+                }
                 withCalmAnimation(Theme.Motion.standard) { written = event }
             case .failure(let reason):
                 // The sheet stays exactly as it was: a refused write must never eat the answers
@@ -488,11 +509,13 @@ enum TodayReviewLaunch {
 enum BlockTimeSubject: Identifiable {
     case slot(DayFreeSlot, DayPlan)
     case task(Item, DayPlan)
+    case travel(DayEvent, DayPlan)
 
     var id: String {
         switch self {
         case .slot(let slot, _): "slot:\(slot.range.lowerBound.timeIntervalSinceReferenceDate)"
         case .task(let task, _): "task:\(task.id)"
+        case .travel(let event, _): "travel:\(event.id)"
         }
     }
 
@@ -501,7 +524,7 @@ enum BlockTimeSubject: Identifiable {
     /// must be Thursday's.
     var plan: DayPlan {
         switch self {
-        case .slot(_, let plan), .task(_, let plan): plan
+        case .slot(_, let plan), .task(_, let plan), .travel(_, let plan): plan
         }
     }
 
@@ -513,5 +536,10 @@ enum BlockTimeSubject: Identifiable {
     var task: Item? {
         guard case .task(let task, _) = self else { return nil }
         return task
+    }
+
+    var travel: DayEvent? {
+        guard case .travel(let event, _) = self else { return nil }
+        return event
     }
 }

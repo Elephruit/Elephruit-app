@@ -348,6 +348,26 @@ public struct TodayActions {
         )
     }
 
+    /// What to write to get to something on the day, before writing it.
+    ///
+    /// A block that ends where the meeting starts, named after the place rather than the meeting —
+    /// see ``TravelRules/blockTitle(to:)`` for why the two are not the same choice. The length is
+    /// the user's own answer for that place and nothing else; nothing here consults a map, a network
+    /// or a location.
+    public func proposal(travellingTo event: DayEvent, minutes: Int) -> TimeBlockProposal? {
+        guard let calendarIdentifier = services.calendar.defaultCalendarIdentifier,
+              let location = event.event.locationName,
+              TravelRules.isJourney(to: event.event)
+        else { return nil }
+
+        return TimeBlockProposal(
+            title: TravelRules.blockTitle(to: location),
+            startAt: TravelRules.leaveBy(event.event, minutes: minutes),
+            length: TimeInterval(max(1, minutes) * 60),
+            calendarIdentifier: calendarIdentifier
+        )
+    }
+
     /// Writes the block, and remembers locally what it was for.
     ///
     /// The link back to the task is the second half of this and not an optional extra: without it a
