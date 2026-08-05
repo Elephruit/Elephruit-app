@@ -58,7 +58,7 @@ struct GroupsScreen: View {
                     symbolName: "person.2.circle",
                     headline: "No groups yet",
                     message: "Put people into circles — family, work, the book club. "
-                        + "Somebody can be in as many as you like, and each group gets a colour "
+                        + "Somebody can be in as many as you like, and each group gets a color "
                         + "that shows up beside their name."
                 )
                 .listRowBackground(Color.clear)

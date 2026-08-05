@@ -46,7 +46,7 @@ struct GroupMembershipSheet: View {
                         Button("New Group", systemImage: "plus.circle") { isCreating = true }
                     } footer: {
                         Text("Groups are yours to invent — family, work, the book club. "
-                            + "Each one gets a colour that shows up beside this person's name in the list.")
+                            + "Each one gets a color that shows up beside this person's name in the list.")
                     }
                 } else {
                     Section("Groups") {

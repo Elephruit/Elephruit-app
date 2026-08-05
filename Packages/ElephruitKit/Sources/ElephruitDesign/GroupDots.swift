@@ -102,9 +102,9 @@ public struct GroupTile: View {
         GroupDots(groups: [badge("Family", "blue"), badge("Work", "purple")])
         GroupDots(groups: [
             badge("Family", "blue"), badge("Work", "purple"), badge("Cycling", "green"),
-            badge("Book club", "orange"), badge("Neighbours", "pink"), badge("Choir", "teal"),
+            badge("Book club", "orange"), badge("Neighbors", "pink"), badge("Choir", "teal"),
         ])
-        GroupDots(groups: [badge("Uncoloured", nil)])
+        GroupDots(groups: [badge("Uncolored", nil)])
 
         HStack(spacing: Theme.Spacing.medium) {
             GroupTile(symbolName: "figure.2.and.child.holdinghands", colorName: "blue")
