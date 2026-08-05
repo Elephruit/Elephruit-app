@@ -92,6 +92,68 @@ final class TodayFeedUITests: XCTestCase {
         )
     }
 
+    /// The feed runs backwards too, and today can be got back to.
+    ///
+    /// ### What is actually being proved
+    /// That the past is *not* there until it is asked for — the first thing checked, because the
+    /// cost of getting this wrong is a calendar read every morning for a question nobody put — that
+    /// asking produces the days behind today, and that once today is off the screen there is a way
+    /// back to it that says which way it went.
+    func testTheFeedRunsBackwardsAndFindsItsWayHome() throws {
+        let app = launch()
+
+        let yesterdayKey = key(daysFromToday: -1)
+        XCTAssertFalse(
+            app.descendants(matching: .any)[yesterdayKey].exists,
+            "yesterday is a record, not a plan, and must not be loaded before it is asked for"
+        )
+
+        let earlier = app.buttons["today.showPreviousDays"]
+        XCTAssertTrue(earlier.waitForExistence(timeout: 20), "there was no way into the days behind")
+        earlier.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)[yesterdayKey].waitForExistence(timeout: 15),
+            "asking for the earlier days produced none"
+        )
+        snap(app, "05-the-days-behind-today")
+    }
+
+    /// From weeks back, there is a way home, and it says which way home is.
+    ///
+    /// Launched into the past rather than swiped into it. Getting there by gesture takes a reveal
+    /// and half a dozen flicks whose distance depends on how tall the days happen to be, which is a
+    /// test that reports the fixture's weather; the launch switch puts the page in the state under
+    /// test and leaves the assertions to say something.
+    func testThereIsAWayBackFromWeeksAgo() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ElephruitDevelopmentMode",
+            "-ElephruitUseTemporaryStore",
+            "-ElephruitLoadSampleData",
+            "-ElephruitUseFixtureCalendar",
+            "-ElephruitFixturesAuthorized",
+            "-ElephruitTodayEarlierDays", "21",
+        ]
+        app.launch()
+
+        let home = app.buttons["today.backToNow"]
+        XCTAssertTrue(
+            home.waitForExistence(timeout: 30),
+            "today scrolled away and left nothing to get back with"
+        )
+        snap(app, "06-the-way-back-to-now")
+
+        // Both ways back, and the toolbar's is the one somebody looks for.
+        XCTAssertTrue(app.buttons["today.return"].exists, "the toolbar forgot the way back")
+
+        home.tap()
+        XCTAssertTrue(
+            app.staticTexts["today.schedule.header"].waitForExistence(timeout: 10),
+            "the way back did not land on today"
+        )
+    }
+
     /// The accessibility identifier a day marker carries, which is `DayKey`'s `yyyy-MM-dd`.
     private func key(daysFromToday days: Int) -> String {
         let calendar = Calendar.current

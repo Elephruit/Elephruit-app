@@ -95,18 +95,23 @@ struct TodayFeedDayHeader: View {
         plan.date.formatted(.dateTime.day())
     }
 
-    /// "Tomorrow" once, and the weekday every day after.
+    /// "Yesterday" and "Tomorrow" once each, and the weekday every day beyond them.
     ///
-    /// Deliberately not "In 3 days" or "Next Thursday". A weekday is the name somebody already
-    /// plans in — a meeting is on Thursday, not on day four — and relative counting past tomorrow
-    /// makes the reader do arithmetic to find the day they were looking for. The month underneath
-    /// carries the rest, which is what keeps a bare weekday unambiguous ninety days out.
+    /// Deliberately not "In 3 days" or "Last Thursday". A weekday is the name somebody already
+    /// plans in — a meeting is on Thursday, not on day four — and relative counting past the two
+    /// neighbours makes the reader do arithmetic to find the day they were looking for. The date
+    /// underneath carries the rest, which is what keeps a bare weekday unambiguous either way.
     private var dayName: String {
-        guard let today = services?.dateProvider.startOfToday,
-              let tomorrow = calendar.date(byAdding: .day, value: 1, to: today),
-              calendar.isDate(plan.date, inSameDayAs: tomorrow)
-        else { return plan.date.formatted(.dateTime.weekday(.wide)) }
-        return "Tomorrow"
+        guard let today = services?.dateProvider.startOfToday else {
+            return plan.date.formatted(.dateTime.weekday(.wide))
+        }
+        for (offset, name) in [(1, "Tomorrow"), (-1, "Yesterday")] {
+            guard let neighbour = calendar.date(byAdding: .day, value: offset, to: today),
+                  calendar.isDate(plan.date, inSameDayAs: neighbour)
+            else { continue }
+            return name
+        }
+        return plan.date.formatted(.dateTime.weekday(.wide))
     }
 
     /// The date, and the one word a glance needs when there is nothing under it.
@@ -218,6 +223,64 @@ struct TodayFeedTaskLine: View {
     private var accessibilityLabel: String {
         guard let reason = task.primaryReason else { return item.displayTitle }
         return "\(item.displayTitle), \(reason.label)"
+    }
+}
+
+// MARK: - The start of the run
+
+/// What sits above today: the way into the days behind it, or the far end of them.
+///
+/// ### Why the first one is a press and the rest are a scroll
+/// Because today is the top of this page. There is nothing above it to scroll *through*, so the
+/// gesture that would ask for the past — dragging down at the top — is already spoken for by pull
+/// to refresh, and a page where one drag means two things is a page that does the wrong one. So the
+/// first step back is a control, and once there is history above, reaching the top of it pages the
+/// way the bottom of the feed does.
+struct TodayFeedHeader: View {
+    let isShowingPast: Bool
+    let isExtending: Bool
+    let canLoadMore: Bool
+    let reveal: () -> Void
+
+    var body: some View {
+        // No line at all until there is history above: this row sits above the briefing, which is
+        // about the day rather than in it, and the thread does not start until the first entry. Once
+        // days *are* above, the line starts here and runs down into them.
+        TimelineRow(railStyle: isShowingPast ? .head : .none, showsDivider: false) {
+            HStack {
+                Spacer()
+                content
+                Spacer()
+            }
+            .contentShape(Rectangle())
+        }
+        .opacity(isShowingPast && !isExtending && canLoadMore ? 0.4 : 1)
+        // Named on the control, and the row told to keep its children reachable: a container that
+        // owns an identifier hides everything inside it, which is exactly where the button is.
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if !isShowingPast {
+            Button(action: reveal) {
+                Label("Earlier days", systemImage: "chevron.up")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(AccessibilityID.Today.showPreviousDays)
+        } else if !canLoadMore {
+            // Said, rather than left as a scroll that silently stops.
+            Text("Three months back is as far as this looks.")
+                .font(Theme.Text.metadata)
+                .foregroundStyle(Theme.Colors.tertiaryText)
+                .multilineTextAlignment(.center)
+        } else {
+            ProgressView()
+                .controlSize(.small)
+                .accessibilityLabel("Loading earlier days")
+        }
     }
 }
 

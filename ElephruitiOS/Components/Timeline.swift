@@ -66,6 +66,11 @@ enum Timeline {
         /// Time with nothing in it. The line goes dashed, so free time is legible as a gap in the
         /// day at a glance rather than as another row to read.
         case dashed
+        /// The first entry: the line starts at the badge and runs on down.
+        ///
+        /// The mirror of ``tail``, and it says the same thing at the other end — a thread that
+        /// begins at the top of the screen promises something above it that is not there.
+        case head
         /// The last entry: the line runs in from above and stops at the badge.
         ///
         /// A thread that runs on past its final row promises something below it that is not there,
@@ -147,6 +152,22 @@ enum Timeline {
     }
 }
 
+/// Whether these rows belong to a day that is over.
+///
+/// An environment value rather than a parameter on every row, because it is a fact about a *run* of
+/// rows — a whole day behind today — and threading it through eight row types would mean eight
+/// chances to forget it on one of them.
+private struct TimelinePastKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var timelineIsPast: Bool {
+        get { self[TimelinePastKey.self] }
+        set { self[TimelinePastKey.self] = newValue }
+    }
+}
+
 /// One entry on the thread.
 ///
 /// The rail is drawn to the row's full height and the padding lives on the columns beside it, so
@@ -168,6 +189,8 @@ struct TimelineRow<Content: View>: View {
     /// Whether a hairline closes the row off. The last row of the day does not need one.
     var showsDivider: Bool = true
     @ViewBuilder var content: () -> Content
+
+    @Environment(\.timelineIsPast) private var isPast
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -211,6 +234,15 @@ struct TimelineRow<Content: View>: View {
         .background(Theme.Colors.contentBackground)
     }
 
+    /// The line's own colour, fainter behind a day that is over.
+    ///
+    /// Dimming the rows is not enough on its own: the thread is what makes the page one thing, and a
+    /// full-strength line running up through three greyed days says the days are the same and
+    /// somebody turned the lights down. A fading line says the thread is *older* up there.
+    private var railColor: Color {
+        isPast ? Theme.Colors.separator.opacity(0.4) : Theme.Colors.separator
+    }
+
     @ViewBuilder
     private var rail: some View {
         switch railStyle {
@@ -219,21 +251,28 @@ struct TimelineRow<Content: View>: View {
         case .solid:
             TimelineLine()
                 .stroke(
-                    Theme.Colors.separator,
+                    railColor,
                     style: StrokeStyle(lineWidth: Timeline.lineWidth)
                 )
                 .frame(maxHeight: .infinity)
         case .dashed:
             TimelineLine()
                 .stroke(
-                    Theme.Colors.separator,
+                    railColor,
                     style: StrokeStyle(lineWidth: Timeline.lineWidth, dash: [3, 4])
+                )
+                .frame(maxHeight: .infinity)
+        case .head:
+            TimelineLine(startingAt: Timeline.badgeCentreY)
+                .stroke(
+                    railColor,
+                    style: StrokeStyle(lineWidth: Timeline.lineWidth)
                 )
                 .frame(maxHeight: .infinity)
         case .tail:
             TimelineLine(stoppingAt: Timeline.badgeCentreY)
                 .stroke(
-                    Theme.Colors.separator,
+                    railColor,
                     style: StrokeStyle(lineWidth: Timeline.lineWidth)
                 )
                 .frame(maxHeight: .infinity)
@@ -248,12 +287,15 @@ struct TimelineRow<Content: View>: View {
 /// variants from the same path is also what guarantees the solid and dashed rails sit on exactly
 /// the same axis — a half-point of drift between them would read as a kink in the thread.
 private struct TimelineLine: Shape {
+    /// How far down to begin. `nil` starts at the top of the row.
+    var startingAt: CGFloat?
+
     /// How far down to draw. `nil` runs the whole height.
     var stoppingAt: CGFloat?
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.move(to: CGPoint(x: rect.midX, y: startingAt.map { rect.minY + $0 } ?? rect.minY))
         path.addLine(to: CGPoint(x: rect.midX, y: stoppingAt.map { rect.minY + $0 } ?? rect.maxY))
         return path
     }
@@ -270,10 +312,15 @@ struct TimelineHeader<Trailing: View>: View {
     var identifier: String?
     @ViewBuilder var trailing: () -> Trailing
 
+    @Environment(\.timelineIsPast) private var isPast
+
     var body: some View {
         HStack(alignment: .center, spacing: 0) {
             TimelineLine()
-                .stroke(Theme.Colors.separator, style: StrokeStyle(lineWidth: Timeline.lineWidth))
+                .stroke(
+                    isPast ? Theme.Colors.separator.opacity(0.4) : Theme.Colors.separator,
+                    style: StrokeStyle(lineWidth: Timeline.lineWidth)
+                )
                 .frame(width: Timeline.railWidth)
                 .padding(.leading, Timeline.railInset)
 

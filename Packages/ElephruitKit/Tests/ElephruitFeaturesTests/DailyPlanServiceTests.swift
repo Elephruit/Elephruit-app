@@ -899,4 +899,82 @@ struct DailyPlanServiceTests {
         #expect(model.followingDays.allSatisfy { $0.date > model.selectedDate })
         #expect(!model.isExtendingFuture, "a fresh anchor is not a feed mid-load")
     }
+
+    // MARK: - Paging the window backward
+
+    @Test("Arriving at the page loads no history at all")
+    func thePastIsNotLoadedUntilItIsAskedFor() async throws {
+        let services = await Self.fixture()
+        let model = TodayModel(services: services)
+        await model.reload()
+
+        // The asymmetry is deliberate. Tomorrow is part of planning today, so the future arrives
+        // loaded; yesterday is a record, and reading it into memory every morning spends a calendar
+        // read on a question nobody asked.
+        #expect(model.previousDays.isEmpty)
+        #expect(model.pastDayCount == 0)
+        #expect(!model.isExtendingPast, "nothing was asked for, so nothing is outstanding")
+    }
+
+    @Test("Scrolling up opens the past, then lengthens it a week at a time")
+    func extendingThePastOpensThenGrows() async throws {
+        let services = await Self.fixture()
+        let model = TodayModel(services: services)
+        await model.reload()
+
+        // The first call opens the past at all — a deliberate act, not a page of scroll events.
+        model.extendPast()
+        #expect(model.isShowingPreviousDays)
+        #expect(model.isExtendingPast, "asked for, not yet drawn")
+
+        await model.reload()
+        #expect(model.previousDays.count == TodayModel.previousDayCount)
+        #expect(model.previousDays.allSatisfy { $0.date < model.selectedDate })
+
+        // And then it pages like the future does: fifty scroll events are one week, because every
+        // extension re-reads the calendar for the whole span.
+        for _ in 0..<50 { model.extendPast() }
+        await model.reload()
+        #expect(model.previousDays.count == TodayModel.previousDayCount + TodayModel.dayLoadIncrement)
+    }
+
+    @Test("The past stops at its own horizon")
+    func thePastHasACeiling() async throws {
+        let services = await Self.fixture()
+        let model = TodayModel(services: services)
+        await model.reload()
+
+        for _ in 0..<40 {
+            model.extendPast()
+            await model.reload()
+        }
+
+        #expect(!model.canLoadEarlierDays)
+        #expect(model.previousDays.count == TodayModel.maximumPastDayCount)
+
+        // A feed that has stopped must not claim to be loading, or the marker at the top of it
+        // spins forever.
+        model.extendPast()
+        #expect(!model.isExtendingPast)
+    }
+
+    @Test("Going back to today closes the past behind you")
+    func returningToTodayForgetsTheHistory() async throws {
+        let services = await Self.fixture()
+        let model = TodayModel(services: services)
+        await model.reload()
+
+        model.extendPast()
+        await model.reload()
+        #expect(!model.previousDays.isEmpty)
+
+        model.returnToToday()
+        await model.reload()
+
+        #expect(model.previousDays.isEmpty, """
+            Three weeks of history left loaded is three weeks re-read on every reassembly, for a \
+            stretch of page nobody is looking at any more.
+            """)
+        #expect(!model.isShowingPreviousDays)
+    }
 }

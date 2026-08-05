@@ -148,7 +148,13 @@ final class TodayScreenUITests: XCTestCase {
             "free time is meant to start shown — the room left in a day is the answer this page exists to give"
         )
 
+        // Scrolled to. Which gaps a day has depends on the hour the suite runs at — late in the
+        // afternoon the first one is well below the schedule's first screenful — and a `List` does
+        // not realise cells it has not reached. This passed for weeks by being run before lunch.
         let gaps = app.descendants(matching: .any).matching(identifier: "today.freeSlot")
+        for _ in 0..<6 where gaps.count == 0 {
+            app.swipeUp()
+        }
         XCTAssertGreaterThan(
             gaps.count, 0, "no gap was drawn on a day the fixture leaves room in"
         )
@@ -158,6 +164,10 @@ final class TodayScreenUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
 
+        // Back up to the header, which holds the switch.
+        for _ in 0..<6 where !toggle.isHittable {
+            app.swipeDown()
+        }
         toggle.tap()
         XCTAssertTrue(
             gaps.firstMatch.waitForNonExistence(timeout: 5),

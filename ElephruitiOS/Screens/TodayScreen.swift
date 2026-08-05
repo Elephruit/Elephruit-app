@@ -59,6 +59,13 @@ private struct TodayContent: View {
     /// The gap or the task the block sheet is up about, if it is up.
     @State private var blocking: BlockTimeSubject?
 
+    /// Whether a development launch has already been given the history it asked for.
+    ///
+    /// One-shot for the same reason the sheet below is: pressing "Today" closes the past again, the
+    /// window token changes, and a flag-driven reveal that re-reads the argument would open it
+    /// straight back up — a page that cannot be returned to now, which is exactly what it broke.
+    @State private var hasOpenedReviewPast = false
+
     /// Whether a development launch has already had its sheet.
     ///
     /// Once per launch, not once per change. Without this, writing anything from the sheet changes
@@ -72,7 +79,46 @@ private struct TodayContent: View {
     /// was never going to reach the bottom has already spent a calendar read.
     private static let pagingReach: CGFloat = 600
 
+    /// How much of the page's strength a day that is over keeps.
+    private static let pastDimming: CGFloat = 0.55
+
+    /// Whether today's first and last rows have been drawn.
+    ///
+    /// Both start false, and that is the fix rather than the cautious default. Today is taller than
+    /// the window, so its *end* is below the fold on arrival and a list never realises it — a flag
+    /// that started true therefore stayed true forever, and the page believed today was on screen
+    /// from a month away. What keeps the pill from flashing at launch is the day below, which is
+    /// unset until something has actually been seen.
+    @State private var topEdgeVisible = false
+    @State private var bottomEdgeVisible = false
+
+    /// The day that most recently came into view.
+    ///
+    /// ### Why this and not the geometry
+    /// The first version measured where today's edges sat in the scroll view and compared that with
+    /// the window's height. It reported that today was on screen from three weeks away, because a
+    /// `List` recycles the rows it has scrolled past: the markers stopped being asked, their last
+    /// answers stayed in state, and the page went on believing them. Anything derived from a row's
+    /// *position* has that hole in it.
+    ///
+    /// What a recycled row can still say is "I have just come into view", which is the one event it
+    /// is guaranteed to be alive for. So each day says so as it arrives, and the page keeps the last
+    /// one — which also answers *which way* today is, by comparing dates instead of offsets.
+    @State private var visibleDay: Date?
+
+    /// Whether the next arrival of earlier days is the first, which is the one time the page moves.
+    @State private var isFirstRevealOfPast = false
+
+    private static let todayTopID = "today.anchor.top"
+    private static let todayBottomID = "today.anchor.bottom"
+
     var body: some View {
+        ScrollViewReader { proxy in
+            page(proxy)
+        }
+    }
+
+    private func page(_ proxy: ScrollViewProxy) -> some View {
         List {
             if let failure = model.failure {
                 TimelineRow(
@@ -89,7 +135,10 @@ private struct TodayContent: View {
             }
 
             if let plan = model.selectedPlan {
+                earlierFeed
+                todayEdge(id: Self.todayTopID) { topEdgeVisible = $0 }
                 daySections(plan, isAnchor: true)
+                todayEdge(id: Self.todayBottomID) { bottomEdgeVisible = $0 }
                 upcomingFeed
             } else if model.isLoadingInitially {
                 HStack {
@@ -125,18 +174,55 @@ private struct TodayContent: View {
             guard remaining < Self.pagingReach else { return }
             model.extendFuture()
         }
+        // Days arriving above the viewport move nothing under the thumb, and that is the *List's*
+        // doing rather than this page's — it holds the visible row still and grows upward behind it.
+        // Proved by accident: the first version of this reveal scrolled to yesterday by hand and
+        // appeared to do nothing at all, because the list had already stayed exactly where it was.
+        // A hand-written restore on top of that is worse than redundant — it re-pins the reader to
+        // one row every time a week loads, which turns scrolling into the past into hitting a wall.
+        //
+        // What does need saying is the first reveal: somebody who pressed "Earlier days" has to see
+        // the days they asked for, so the page steps up to the oldest of them.
+        .onChange(of: model.previousDays.count) { _, _ in
+            // A development launch asking for a deeper past keeps asking until it has one — and
+            // only while its one reveal is still in progress.
+            if let wanted = TodayReviewLaunch.earlierDays(),
+               hasOpenedReviewPast, model.isShowingPreviousDays, model.pastDayCount < wanted {
+                askForEarlierDays()
+            }
+
+            guard isFirstRevealOfPast, let earliest = model.previousDays.first else { return }
+            isFirstRevealOfPast = false
+
+            // Deferred by a frame: the rows exist as values the moment the count changes, but the
+            // list has not laid out the ones above the viewport yet, and a `scrollTo` aimed at a row
+            // it has not realised does nothing — silently, which is how this first read as "the
+            // button is broken".
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(80))
+                withCalmAnimation(Theme.Motion.standard) {
+                    proxy.scrollTo(dayRowID(earliest.date), anchor: .top)
+                }
+            }
+        }
         .refreshable {
             // Honest refresh: re-reads the calendar, which genuinely can have changed
             // underneath the app. The library itself needs no pulling — it is local.
             await model.reload()
         }
+        // Two ways back, because they answer at different moments. The toolbar is where somebody
+        // *looks* for it; the pill is under the thumb that scrolled away, and it says which way.
+        .overlay(alignment: .bottom) {
+            if !isTodayOnScreen { backToNow(proxy) }
+        }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                if !model.isOnToday {
-                    Button("Today") {
-                        withCalmAnimation(Theme.Motion.standard) { model.returnToToday() }
-                    }
-                    .accessibilityIdentifier("today.return")
+                // Shown when the page is standing on another day *or* when today has been scrolled
+                // out of sight. The second case is new and is most of them: the anchor has not
+                // changed, the reader has simply run three weeks down the feed.
+                if !model.isOnToday || !isTodayOnScreen {
+                    Button("Today") { returnToNow(proxy) }
+                        .accessibilityIdentifier("today.return")
                 }
                 Menu {
                     Button("Previous Day", systemImage: "chevron.backward") {
@@ -161,7 +247,13 @@ private struct TodayContent: View {
         }
         // The same two-token drive as the Mac: the window token reloads the calendar,
         // the source token reassembles from memory. See `TodayModel` for why they differ.
-        .task(id: model.windowToken) { await model.reload() }
+        .task(id: model.windowToken) {
+            await model.reload()
+            if TodayReviewLaunch.earlierDays() != nil, !hasOpenedReviewPast, !model.isShowingPreviousDays {
+                hasOpenedReviewPast = true
+                askForEarlierDays()
+            }
+        }
         // Animated, because one of the things that changes the source token is this page writing to
         // the calendar. A block written as busy takes back the free time it was made from, so the
         // thread reassembles under the thumb that just wrote it. That is honest, and it must not
@@ -170,16 +262,88 @@ private struct TodayContent: View {
             withCalmAnimation(Theme.Motion.standard) { model.assemble() }
             openBlockSheetIfReviewing()
         }
-        // A day is a horizontal thing: swipe back and forward through it.
-        .gesture(
-            DragGesture(minimumDistance: 40)
-                .onEnded { value in
-                    guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                    withCalmAnimation(Theme.Motion.standard) {
-                        model.step(days: value.translation.width < 0 ? 1 : -1)
-                    }
-                }
-        )
+        // The horizontal day-swipe is gone, and the feed is why. It existed when this page showed
+        // one day and moving to another meant replacing it; now tomorrow is simply further down and
+        // yesterday is further up, so the swipe was a second, less obvious way to do what the scroll
+        // already does — while competing for the same gesture as the rows' own swipe actions. The
+        // toolbar's Previous and Next Day remain for anyone who wants to *stand on* another day.
+    }
+
+    /// Whether any part of the anchor day is on screen.
+    ///
+    /// Three ways of being on screen, and the third is the one a single flag would miss: today is
+    /// taller than the window, so somebody reading the middle of it can see neither end. What they
+    /// *have* seen most recently is today, and that is what the last visible day says.
+    private var isTodayOnScreen: Bool {
+        if topEdgeVisible || bottomEdgeVisible { return true }
+        guard let visibleDay, let calendar = services?.dateProvider.calendar else { return true }
+        return calendar.isDate(visibleDay, inSameDayAs: model.selectedDate)
+    }
+
+    /// Whether today lies below what is on screen, which is what makes the pill's arrow honest.
+    private var isTodayBelow: Bool {
+        guard let visibleDay else { return false }
+        return visibleDay < model.selectedDate
+    }
+
+    /// A one-point row marking where today begins and ends, so the page can tell whether the day is
+    /// on screen without asking every row in it.
+    private func todayEdge(id: String, report: @escaping (Bool) -> Void) -> some View {
+        Color.clear
+            .frame(height: 1)
+            .id(id)
+            // Realisation, not visibility. `onScrollVisibilityChange` never fired once for these
+            // rows — a `List` is not the scroll view the modifier is documented against — and the
+            // page spent three attempts believing a signal that was never sent. Appearing and
+            // disappearing is the one thing a list cell definitely does.
+            .onAppear {
+                report(true)
+                visibleDay = model.selectedDate
+            }
+            .onDisappear { report(false) }
+            .onTimeline()
+    }
+
+    /// The pill that says which way now is.
+    ///
+    /// It says the direction because "Today" alone is a button whose result is a surprise: from
+    /// three weeks ahead the page has to travel up, from last month it has to travel down, and an
+    /// arrow is the cheapest possible way to stop that being a guess.
+    private func backToNow(_ proxy: ScrollViewProxy) -> some View {
+        Button {
+            returnToNow(proxy)
+        } label: {
+            Label("Today", systemImage: isTodayBelow ? "arrow.down" : "arrow.up")
+                .font(Theme.Text.metadata.weight(.semibold))
+                .padding(.horizontal, Theme.Spacing.medium)
+                .padding(.vertical, Theme.Spacing.small)
+                .background(Theme.Colors.selection, in: Capsule())
+                .foregroundStyle(Theme.Colors.onAccent)
+        }
+        .buttonStyle(.plain)
+        .elevation(.floating)
+        // Clear of the shell's floating plus, which owns the bottom trailing corner.
+        .padding(.bottom, Theme.Spacing.section)
+        .transition(.opacity)
+        .accessibilityIdentifier("today.backToNow")
+    }
+
+    /// Takes the reader back to now, which is usually a scroll rather than a change of day.
+    ///
+    /// ### Why the history is left loaded
+    /// Because "back to today" is a statement about where you are *looking*, not a request to
+    /// forget what you opened. Resetting the window at the same time removed every row above today
+    /// while the scroll to it was still in flight, and the page landed wherever the collapse left
+    /// it — which was never today. Standing on another day is the one case that really is a
+    /// different page, and only that one rebuilds.
+    private func returnToNow(_ proxy: ScrollViewProxy) {
+        guard model.isOnToday else {
+            withCalmAnimation(Theme.Motion.standard) { model.returnToToday() }
+            return
+        }
+        withCalmAnimation(Theme.Motion.standard) {
+            proxy.scrollTo(Self.todayTopID, anchor: .top)
+        }
     }
 
     // MARK: - A day, in full
@@ -232,26 +396,7 @@ private struct TodayContent: View {
         }
 
         ForEach(model.followingDays) { plan in
-            TodayFeedDayHeader(plan: plan, isExpanded: model.isExpanded(plan)) {
-                withCalmAnimation(Theme.Motion.standard) { model.toggleExpanded(plan) }
-            }
-            .onTimeline()
-
-            // Closed, the day is its own summary. Open, the full sections carry it — drawing both
-            // would put every meeting on the screen twice.
-            if model.isExpanded(plan) {
-                daySections(plan, isAnchor: false)
-            } else {
-                let calendar = services?.dateProvider.calendar ?? .current
-
-                ForEach(plan.scheduleEvents(calendar: calendar)) { event in
-                    TodayFeedEventLine(dayEvent: event).onTimeline()
-                }
-
-                ForEach(model.openTasks(in: plan), id: \.day.id) { entry in
-                    TodayFeedTaskLine(task: entry.day, item: entry.item).onTimeline()
-                }
-            }
+            feedDay(plan)
         }
 
         if model.selectedPlan != nil {
@@ -261,6 +406,94 @@ private struct TodayContent: View {
             )
             .onTimeline()
         }
+    }
+
+    // MARK: - The days before it
+
+    /// The run of days above the one you are standing on.
+    ///
+    /// ### Why the past is dimmed and the line with it
+    /// Because it is the same page and it is not the same *kind* of information. A day that is over
+    /// cannot be planned, only read, and drawing it at full strength above today makes the page open
+    /// on a record rather than on a plan. Dimming the rows says "this is behind you"; fading the
+    /// rail says the thread itself is older up there, which the rows alone cannot say — a
+    /// full-strength line running up through three grey days reads as somebody having turned the
+    /// lights down rather than as time.
+    @ViewBuilder
+    private var earlierFeed: some View {
+        TodayFeedHeader(
+            isShowingPast: model.isShowingPreviousDays,
+            isExtending: model.isExtendingPast,
+            canLoadMore: model.canLoadEarlierDays,
+            reveal: { askForEarlierDays() }
+        )
+        .environment(\.timelineIsPast, true)
+        // The top of the page pages itself, but on *reaching* it rather than on being near it.
+        //
+        // The feed below uses proximity, and doing the same here ran the window straight back to
+        // its ninety-day ceiling in one gesture: each load leaves the reader where they were with
+        // the new days above them, so "near the top" is true again immediately, and a week of clear
+        // days is barely four hundred points tall. Reaching this row converges instead — after a
+        // load it is a week further up, and asking again means scrolling to it again.
+        .onAppear {
+            guard model.isShowingPreviousDays else { return }
+            askForEarlierDays()
+        }
+        .onTimeline()
+
+        ForEach(model.previousDays) { plan in
+            feedDay(plan)
+                .opacity(Self.pastDimming)
+                .environment(\.timelineIsPast, true)
+        }
+    }
+
+    /// One day of a feed: its marker, and either its summary or the whole day opened out.
+    ///
+    /// The same builder above today and below it. A day behind you and a day ahead of you are the
+    /// same object read in two directions, and giving them two renderings is how a page ends up
+    /// meaning different things at its two ends.
+    @ViewBuilder
+    private func feedDay(_ plan: DayPlan) -> some View {
+        TodayFeedDayHeader(plan: plan, isExpanded: model.isExpanded(plan)) {
+            withCalmAnimation(Theme.Motion.standard) { model.toggleExpanded(plan) }
+        }
+        .id(dayRowID(plan.date))
+        // Each day says when it arrives, which is how the page knows where the reader is without
+        // asking a recycled row where it used to be.
+        .onAppear { visibleDay = plan.date }
+        .onTimeline()
+
+        // Closed, the day is its own summary. Open, the full sections carry it — drawing both
+        // would put every meeting on the screen twice.
+        if model.isExpanded(plan) {
+            daySections(plan, isAnchor: false)
+        } else {
+            let calendar = services?.dateProvider.calendar ?? .current
+
+            ForEach(plan.scheduleEvents(calendar: calendar)) { event in
+                TodayFeedEventLine(dayEvent: event).onTimeline()
+            }
+
+            ForEach(model.openTasks(in: plan), id: \.day.id) { entry in
+                TodayFeedTaskLine(task: entry.day, item: entry.item).onTimeline()
+            }
+        }
+    }
+
+    /// Asks for the days behind, noting whether this is the first time.
+    ///
+    /// The guard against asking twice for the same week is the model's, so a run of scroll events
+    /// costs one calendar read rather than one each.
+    private func askForEarlierDays() {
+        guard model.canLoadEarlierDays, !model.isExtendingPast else { return }
+
+        isFirstRevealOfPast = !model.isShowingPreviousDays
+        model.extendPast()
+    }
+
+    private func dayRowID(_ date: Date) -> String {
+        "day:" + (services?.dateProvider.dayKey(for: date) ?? "\(date.timeIntervalSinceReferenceDate)")
     }
 
     // MARK: - Briefing

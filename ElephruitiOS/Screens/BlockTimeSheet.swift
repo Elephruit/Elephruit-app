@@ -440,6 +440,7 @@ struct BlockTimeSheet: View {
 /// printed twice — and none of them would have failed a build or a test. A sheet that can only be
 /// opened by a thumb is a sheet nobody looks at until it ships.
 ///
+///     -ElephruitTodayEarlierDays <count>   // open with that much history already behind today
 ///     -ElephruitTodayBlockSheet [gap | work]
 ///
 /// `gap` — the default — opens it on the day's first free stretch, as a tap on the thread does.
@@ -451,6 +452,20 @@ enum TodayReviewLaunch {
     enum BlockSubject: String {
         case gap
         case work
+    }
+
+    /// How many days of history to open with, so the page can be photographed *in* the past.
+    ///
+    /// Reaching that state by hand costs a tap and half a dozen swipes, which is a thing no
+    /// screenshot script can do and a thing a UI test can only do slowly and blind — its result
+    /// bundle is unreadable when the test fails, which is exactly when the picture is wanted.
+    static func earlierDays(arguments: [String] = ProcessInfo.processInfo.arguments) -> Int? {
+        guard arguments.contains("-ElephruitDevelopmentMode"),
+              let index = arguments.firstIndex(of: "-ElephruitTodayEarlierDays"),
+              let count = arguments.dropFirst(index + 1).first.flatMap({ Int($0) }),
+              count > 0
+        else { return nil }
+        return count
     }
 
     static func blockSheet(arguments: [String] = ProcessInfo.processInfo.arguments) -> BlockSubject? {
