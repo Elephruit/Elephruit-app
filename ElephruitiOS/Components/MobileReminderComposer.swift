@@ -14,12 +14,15 @@ import SwiftUI
 /// card. Same six fields, same order, same words, and the same rule that a chosen value is
 /// shown twice: once as a chip you can take off, and once on the control that set it.
 ///
+/// The controls are glyphs, not glyphs-and-words, for the Mac's reason: the chips above
+/// already say what each field holds, so a label on the button spends the row saying it twice.
+///
 /// ### What changes, and why
-/// The Mac drives all of it from the keyboard — eight focus stops, popovers anchored to each
-/// control, a date search answering `we` and `8`. A thumb has no Tab key, so each control opens
-/// a sheet instead of a popover, and the sheets are lists rather than query fields. The
-/// *arrangement* is what makes the two apps recognisable as one app; the input method is what
-/// makes each of them usable on its own machine.
+/// The Mac drives all of it from the keyboard — eight focus stops, a date search answering `we`
+/// and `8`. A thumb has no Tab key, so the popovers hold lists rather than query fields. They
+/// are still popovers, anchored to the control that opened them: a full-screen sheet for
+/// choosing one tag covers the sentence you are in the middle of writing, which is the one
+/// thing you need to see while deciding how to file it.
 struct MobileReminderComposer: View {
     @Environment(\.services) private var services
 
@@ -27,21 +30,19 @@ struct MobileReminderComposer: View {
 
     /// Saves and stays open, for writing several in a row.
     var onQuickCommit: () -> Void
-    /// Saves and closes.
-    var onCommitAndClose: () -> Void
-    /// Closes without saving.
-    var onCancel: () -> Void
+    /// Saves and closes. The only way out, because there is no other kind.
+    var onDismiss: () -> Void
 
     @FocusState private var focus: Field?
     @State private var vocabulary = CaptureVocabulary.empty
-    @State private var sheet: Sheet?
+    @State private var activePopover: Popover?
     /// Whether the checklist's entry row is showing, mirroring the Mac's `.checklist` stop.
     @State private var isAddingStep = false
 
     private enum Field: Hashable { case title, notes, step }
 
-    /// Which picker is up. One piece of state for all five, because only one can be.
-    private enum Sheet: String, Identifiable {
+    /// Which popover is up. One piece of state for all five, because only one can be.
+    private enum Popover: String, Identifiable {
         case when, deadline, tags, people, project
         var id: String { rawValue }
     }
@@ -68,13 +69,9 @@ struct MobileReminderComposer: View {
                 .strokeBorder(Theme.Colors.separator)
         )
         .elevation(.floating)
-        .toolbar { keyboardBar }
         .task {
             vocabulary = (try? services?.capture.vocabulary()) ?? .empty
             focus = .title
-        }
-        .sheet(item: $sheet) { which in
-            picker(for: which)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("reminders.composer")
@@ -84,9 +81,12 @@ struct MobileReminderComposer: View {
 
     /// The title, and the one control that is not a field: the way out.
     ///
-    /// Top-trailing because that is where a card's dismiss lives on this platform, and because
-    /// the alternative — making the only exit a button below the fold, under the keyboard — is
-    /// how a composer opened by a stray tap becomes a trap.
+    /// Top-trailing, where a card's dismiss lives on this platform. It *saves* — there is no
+    /// discard on this screen and no Done either, because both were asking a question the
+    /// editor already knows the answer to. Everything that closes the editor keeps what is in
+    /// it: this ×, Return, tapping another reminder, tapping the background. A reminder is a
+    /// sentence you were part-way through writing, and no way of leaving it is a request to
+    /// throw it away.
     private var titleLine: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.small) {
             TextField("New reminder", text: $draft.title, axis: .vertical)
@@ -99,7 +99,7 @@ struct MobileReminderComposer: View {
                 .onSubmit(onQuickCommit)
                 .accessibilityIdentifier("reminders.composer.title")
 
-            Button(action: onCancel) {
+            Button(action: onDismiss) {
                 Image(systemName: "xmark")
                     .font(Theme.Text.metadata.weight(.semibold))
                     .foregroundStyle(Theme.Colors.tertiaryText)
@@ -107,7 +107,7 @@ struct MobileReminderComposer: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Discard this reminder")
+            .accessibilityLabel("Close this reminder")
             .accessibilityIdentifier("reminders.composer.dismiss")
         }
     }
@@ -272,141 +272,131 @@ struct MobileReminderComposer: View {
 
     /// The Mac's action row: Project on the leading edge, then the five that qualify it.
     ///
-    /// Horizontally scrollable because six controls do not fit across a phone. The order is the
-    /// Mac's rather than a fitted subset — a control moved for space is a control somebody has
-    /// to find twice.
-    /// The six controls, in the Mac's order.
-    ///
-    /// Done is deliberately not among them. It began inside this scroller, which put the button
-    /// that finishes the job off the right-hand edge of the screen; moving it beside the
-    /// scroller only moved the problem, because this row sits *below* the title field and the
-    /// keyboard covers it the entire time you are typing. A commit action you cannot reach
-    /// while writing is not a commit action, so it lives on the keyboard's own bar — see
-    /// `keyboardBar`, which is where iOS puts exactly this.
+    /// Six fields and no seventh button. Done used to sit at the end of this row and was a
+    /// mistake twice over — off the right edge of the screen when the row scrolled, and behind
+    /// the keyboard once it did not — but the deeper problem was that it existed at all. Every
+    /// other way of leaving this editor already saves, so a button whose only job was to save
+    /// was a second answer to a question with one answer.
     private var actionRow: some View {
         controlScroller
             .background(Theme.Colors.subtleFill)
     }
 
+    /// Project keeps its name; the other five are glyphs.
+    ///
+    /// The Mac's rule, and the reason it works: what a control *holds* is already said by the
+    /// chips above it, so repeating the value on the button spends a third of the row saying
+    /// something twice. Project is the exception there and here, because it is the one field
+    /// that says where the reminder lives rather than something about it — and with all six
+    /// down to icons, the row stops needing to scroll at all.
     private var controlScroller: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: Theme.Spacing.small) {
-                control(
-                    title: draft.projectTitle ?? "Project",
-                    symbol: "square.stack.3d.up",
-                    isActive: draft.projectTitle != nil,
-                    identifier: "project"
-                ) { sheet = .project }
+        HStack(spacing: Theme.Spacing.small) {
+            Button { activePopover = .project } label: {
+                HStack(spacing: Theme.Spacing.hairline) {
+                    Image(systemName: "square.stack.3d.up")
+                    if let project = draft.projectTitle {
+                        Text(project).lineLimit(1)
+                    }
+                }
+                .font(Theme.Text.chip)
+                .foregroundStyle(
+                    draft.projectTitle == nil ? Theme.Colors.secondaryText : Theme.Colors.link
+                )
+                .frame(minHeight: 32)
+                .frame(maxWidth: 160, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(draft.projectTitle.map { "Project: \($0)" } ?? "Choose a project")
+            .accessibilityIdentifier("reminders.composer.project")
+            .popover(isPresented: showing(.project), arrowEdge: .top) {
+                MobileProjectPicker(selected: $draft.projectTitle).asComposerPopover()
+            }
 
-                control(
-                    title: draft.isSomeday ? "Someday" : draft.startAt.map(shortDate) ?? "When",
-                    symbol: "calendar",
-                    isActive: draft.startAt != nil || draft.isSomeday,
-                    identifier: "when"
-                ) { sheet = .when }
+            Spacer(minLength: 0)
 
-                control(
-                    title: draft.tagSlugs.isEmpty ? "Tags" : "\(draft.tagSlugs.count) tags",
-                    symbol: "tag",
-                    isActive: !draft.tagSlugs.isEmpty,
-                    identifier: "tags"
-                ) { sheet = .tags }
-
-                control(
-                    title: draft.personNames.isEmpty ? "People" : "\(draft.personNames.count) people",
-                    symbol: "person",
-                    isActive: !draft.personNames.isEmpty,
-                    identifier: "people"
-                ) { sheet = .people }
-
-                control(
-                    title: draft.checklist.isEmpty ? "Checklist" : "\(draft.checklist.count) items",
-                    symbol: "checklist",
-                    isActive: !draft.checklist.isEmpty,
-                    identifier: "checklist"
-                ) {
-                    withCalmAnimation { isAddingStep = true }
-                    focus = .step
+            control(symbol: "calendar", isActive: draft.startAt != nil || draft.isSomeday,
+                    label: "When", identifier: "when") { activePopover = .when }
+                .popover(isPresented: showing(.when), arrowEdge: .top) {
+                    MobileDayPicker(
+                        title: "When",
+                        selection: $draft.startAt,
+                        isSomeday: $draft.isSomeday
+                    )
+                    .asComposerPopover()
                 }
 
-                control(
-                    title: draft.dueAt.map(shortDate) ?? "Deadline",
-                    symbol: "flag",
-                    isActive: draft.dueAt != nil,
-                    identifier: "deadline"
-                ) { sheet = .deadline }
+            control(symbol: "tag", isActive: !draft.tagSlugs.isEmpty,
+                    label: "Tags", identifier: "tags") { activePopover = .tags }
+                .popover(isPresented: showing(.tags), arrowEdge: .top) {
+                    MobileTagPicker(selected: $draft.tagSlugs).asComposerPopover()
+                }
+
+            control(symbol: "person", isActive: !draft.personNames.isEmpty,
+                    label: "People", identifier: "people") { activePopover = .people }
+                .popover(isPresented: showing(.people), arrowEdge: .top) {
+                    MobilePeoplePicker(selected: $draft.personNames).asComposerPopover()
+                }
+
+            control(symbol: "checklist", isActive: !draft.checklist.isEmpty,
+                    label: "Checklist", identifier: "checklist") {
+                withCalmAnimation { isAddingStep = true }
+                focus = .step
             }
-            .padding(.horizontal, Theme.Spacing.medium)
-            .padding(.vertical, Theme.Spacing.small)
+
+            control(symbol: "flag", isActive: draft.dueAt != nil,
+                    label: "Deadline", identifier: "deadline") { activePopover = .deadline }
+                .popover(isPresented: showing(.deadline), arrowEdge: .top) {
+                    MobileDayPicker(title: "Deadline", selection: $draft.dueAt, isSomeday: nil)
+                        .asComposerPopover()
+                }
         }
-        .scrollIndicators(.hidden)
+        .padding(.horizontal, Theme.Spacing.medium)
+        .padding(.vertical, Theme.Spacing.small)
     }
 
-    /// Done, on the bar above the keyboard — the only place on this screen that is guaranteed
-    /// to be visible while the keyboard is up, which is the whole time a reminder is being
-    /// written.
-    @ToolbarContentBuilder
-    private var keyboardBar: some ToolbarContent {
-        ToolbarItemGroup(placement: .keyboard) {
-            Spacer()
-            Button("Done", action: onCommitAndClose)
-                .font(Theme.Text.rowTitle.weight(.semibold))
-                .disabled(draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .accessibilityIdentifier("reminders.composer.done")
-        }
+    /// Whether one picker is showing, as a binding a popover can also close.
+    private func showing(_ which: Popover) -> Binding<Bool> {
+        Binding(
+            get: { activePopover == which },
+            set: { isShowing in
+                if isShowing {
+                    activePopover = which
+                } else if activePopover == which {
+                    activePopover = nil
+                }
+            }
+        )
     }
 
+    /// One glyph, tinted when the field holds something.
+    ///
+    /// The word it stands for moves to the accessibility label rather than disappearing: a
+    /// screen reader has no icon to look at, and "tag" is not a thing a glyph can say out loud.
     private func control(
-        title: String,
         symbol: String,
         isActive: Bool,
+        label: String,
         identifier: String,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: Theme.Spacing.hairline) {
-                Image(systemName: symbol)
-                Text(title).lineLimit(1)
-            }
-            .font(Theme.Text.chip)
-            .foregroundStyle(isActive ? Theme.Colors.selection : Theme.Colors.secondaryText)
-            .padding(.horizontal, Theme.Spacing.small)
-            // 32 rather than 44: these sit inside a card that is itself inside a list, and a
-            // 44-point rule here would make the composer taller than the rows it edits. The
-            // targets are still comfortably above the visual size of their labels.
-            .frame(minHeight: 32)
-            .background(
-                Capsule().fill(
-                    isActive ? Theme.Colors.selectionFill : Theme.Colors.contentBackground
+            Image(systemName: symbol)
+                .font(Theme.Text.rowSubtitle)
+                .foregroundStyle(isActive ? Theme.Colors.selection : Theme.Colors.secondaryText)
+                // Square rather than a capsule around a word: with the label gone, a pill would
+                // be a lozenge of background around a 14-point glyph.
+                .frame(width: 34, height: 32)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                        .fill(isActive ? Theme.Colors.selectionFill : .clear)
                 )
-            )
-            .contentShape(Capsule())
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(label)
         .accessibilityAddTraits(isActive ? .isSelected : [])
         .accessibilityIdentifier("reminders.composer.\(identifier)")
-    }
-
-    // MARK: - The pickers
-
-    @ViewBuilder
-    private func picker(for which: Sheet) -> some View {
-        switch which {
-        case .when:
-            MobileDayPickerSheet(
-                title: "When",
-                selection: $draft.startAt,
-                isSomeday: $draft.isSomeday
-            )
-        case .deadline:
-            MobileDayPickerSheet(title: "Deadline", selection: $draft.dueAt, isSomeday: nil)
-        case .tags:
-            MobileTagPickerSheet(selected: $draft.tagSlugs)
-        case .people:
-            MobilePeoplePickerSheet(selected: $draft.personNames)
-        case .project:
-            MobileProjectPickerSheet(selected: $draft.projectTitle)
-        }
     }
 
     private func shortDate(_ date: Date) -> String {
@@ -424,7 +414,7 @@ struct MobileReminderComposer: View {
 /// A day rather than an instant: every scheduling decision this app makes is about which day
 /// something belongs to, and a picker offering 3:47 PM would offer precision the model does not
 /// keep. The quick rows come first because they answer the question most of the time.
-struct MobileDayPickerSheet: View {
+struct MobileDayPicker: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
 
@@ -487,7 +477,6 @@ struct MobileDayPickerSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
     }
 
     private func quickRow(_ label: String, daysFromToday: Int) -> some View {
@@ -502,7 +491,7 @@ struct MobileDayPickerSheet: View {
 // MARK: - Tags
 
 /// The library's tags, plus room to coin one.
-struct MobileTagPickerSheet: View {
+struct MobileTagPicker: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
 
@@ -551,7 +540,6 @@ struct MobileTagPickerSheet: View {
             }
             .task { tags = (try? services?.tags.allTags()) ?? [] }
         }
-        .presentationDetents([.medium, .large])
     }
 
     private var normalizedQuery: String {
@@ -575,7 +563,7 @@ struct MobileTagPickerSheet: View {
 // MARK: - People
 
 /// Who this reminder is about. The same records the Records module lists.
-struct MobilePeoplePickerSheet: View {
+struct MobilePeoplePicker: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
 
@@ -615,7 +603,6 @@ struct MobilePeoplePickerSheet: View {
             }
             .task { records = (try? services?.records.allRecords()) ?? [] }
         }
-        .presentationDetents([.medium, .large])
     }
 
     private var matching: [Item] {
@@ -638,7 +625,7 @@ struct MobilePeoplePickerSheet: View {
 // MARK: - Project
 
 /// Which project this belongs to. One, or none — the model allows a single parent.
-struct MobileProjectPickerSheet: View {
+struct MobileProjectPicker: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
 
@@ -688,7 +675,6 @@ struct MobileProjectPickerSheet: View {
                 projects = (try? services?.items.items(matching: ItemQuery.kind(.project))) ?? []
             }
         }
-        .presentationDetents([.medium, .large])
     }
 
     private var matching: [Item] {
@@ -697,5 +683,22 @@ struct MobileProjectPickerSheet: View {
         return projects.filter {
             TextNormalizer.foldedForMatching($0.displayTitle).contains(wanted)
         }
+    }
+}
+
+// MARK: - Popover presentation
+
+extension View {
+    /// Presents a composer picker as a small popup anchored to its control, on the phone too.
+    ///
+    /// Without `.presentationCompactAdaptation(.popover)`, iOS turns every popover in a compact
+    /// width into a full-screen sheet — which is precisely the thing being avoided here. The
+    /// point of anchoring is that choosing a tag should not cover the sentence you are tagging.
+    ///
+    /// The size is fixed rather than fitted: a popover that grew and shrank as a search
+    /// narrowed the list would move under the thumb between one keystroke and the next.
+    func asComposerPopover() -> some View {
+        frame(width: 320, height: 380)
+            .presentationCompactAdaptation(.popover)
     }
 }
