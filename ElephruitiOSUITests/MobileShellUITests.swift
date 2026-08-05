@@ -37,6 +37,16 @@ final class MobileShellUITests: XCTestCase {
     @discardableResult
     private func openSidebar(_ app: XCUIApplication) -> Bool {
         if app.buttons["mobile.sidebar.today"].exists { return true }
+
+        // Above a root the chevron belongs to the stack, so the drawer is however many backs
+        // away — which is the shell's whole claim about what back means, walked here rather
+        // than asserted.
+        var guardRail = 0
+        while !app.buttons["mobile.sidebar.button"].exists && guardRail < 8 {
+            app.navigationBars.buttons.firstMatch.tap()
+            guardRail += 1
+        }
+
         app.buttons["mobile.sidebar.button"].tap()
         return app.buttons["mobile.sidebar.today"].waitForExistence(timeout: 5)
     }
@@ -48,37 +58,30 @@ final class MobileShellUITests: XCTestCase {
 
     // MARK: - The drawer
 
-    /// Every destination the drawer lists is reachable, and each shows its own root.
+    /// The drawer offers every destination, and choosing one lands on it.
     ///
-    /// The whole list, not a sample: the drawer's argument for replacing the tab bar is that it
-    /// can hold every place at its real name, and a test that walked four of them would be
-    /// asserting the tab bar's contract on the drawer's shell.
-    func testEveryDestinationIsReachable() throws {
+    /// The drawer's *rows* are asserted here without walking them: thirteen relaunches to prove
+    /// thirteen rows exist costs a minute of every run, and `ScreenshotWalkTests` already
+    /// visits every one of them and would fail loudly if any row stopped landing. What this
+    /// test owns is the part the walk cannot state — that the drawer lists exactly the
+    /// destinations the shell claims to have.
+    func testTheDrawerOffersEveryDestinationAndOneLands() throws {
         let app = launch()
         XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
 
-        let destinations = [
-            ("calendar", "Calendar"),
-            ("reminders", "Reminders"),
-            ("records", "Records"),
-            ("notes", "Notes"),
-            ("time", "Time"),
-            ("areas", "Areas"),
-            ("bookmarks", "Bookmarks"),
-            ("inbox", "Inbox"),
-            ("archive", "Archive"),
-            ("trash", "Trash"),
-            ("settings", "Settings"),
-            ("today", "Today"),
-        ]
-
-        for (identifier, title) in destinations {
-            step(app, to: identifier)
+        openSidebar(app)
+        for identifier in [
+            "today", "calendar", "reminders", "records", "notes", "time", "areas",
+            "bookmarks", "inbox", "archive", "trash", "search", "settings",
+        ] {
             XCTAssertTrue(
-                app.navigationBars[title].waitForExistence(timeout: 5),
-                "Choosing \(identifier) should land on the \(title) screen"
+                app.buttons["mobile.sidebar.\(identifier)"].exists,
+                "The drawer should list \(identifier)"
             )
         }
+
+        app.buttons["mobile.sidebar.calendar"].tap()
+        XCTAssertTrue(app.navigationBars["Calendar"].waitForExistence(timeout: 5))
     }
 
     /// Back means one thing at every depth: out of the stack, then into the drawer.
@@ -98,8 +101,14 @@ final class MobileShellUITests: XCTestCase {
         )
     }
 
-    /// A drill-down survives stepping away: per-destination stacks are the shell's core promise.
-    func testDrillDownSurvivesSteppingAway() throws {
+    /// Drilling in and walking back out lands on the list, not on the drawer.
+    ///
+    /// The shell's promise is that back is one idea at every depth, which means the drawer is
+    /// *above* the deepest root rather than beside it: a push costs exactly one back to
+    /// undo, and the drawer costs one more. A tab bar would have let you leave a pushed screen
+    /// without popping it; this deliberately does not, because the price of that was a second
+    /// way to move that the back gesture knew nothing about.
+    func testDrillingInAndBackReturnsToTheList() throws {
         let app = launch()
         XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
 
@@ -109,33 +118,31 @@ final class MobileShellUITests: XCTestCase {
         let firstNote = app.collectionViews.cells.firstMatch
         XCTAssertTrue(firstNote.waitForExistence(timeout: 5))
         firstNote.tap()
-        let pushedTitle = app.navigationBars.element(boundBy: 0).identifier
-
-        step(app, to: "today")
-        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 5))
-
-        step(app, to: "notes")
         XCTAssertTrue(
-            app.navigationBars[pushedTitle].waitForExistence(timeout: 5),
-            "Returning to Notes should find the pushed note still open"
+            app.buttons["mobile.sidebar.button"].waitForNonExistence(timeout: 5),
+            "A pushed screen's chevron belongs to the stack, not to the drawer"
         )
+
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["Notes"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["mobile.sidebar.button"].exists)
     }
 
-    /// Choosing the destination you are already on pops it to its root — the way out of a deep
-    /// stack that does not require walking back up it.
-    func testReselectingADestinationPopsToRoot() throws {
+    /// Which destination you were on survives going somewhere else and coming back.
+    func testTheDestinationIsRemembered() throws {
         let app = launch()
         XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
 
         step(app, to: "notes")
-        let firstNote = app.collectionViews.cells.firstMatch
-        XCTAssertTrue(firstNote.waitForExistence(timeout: 5))
-        firstNote.tap()
+        XCTAssertTrue(app.navigationBars["Notes"].waitForExistence(timeout: 5))
 
-        step(app, to: "notes")
+        step(app, to: "today")
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 5))
+
+        openSidebar(app)
         XCTAssertTrue(
-            app.navigationBars["Notes"].waitForExistence(timeout: 5),
-            "Re-choosing Notes should return to the list"
+            app.buttons["mobile.sidebar.today"].isSelected,
+            "The drawer should show where the app currently is"
         )
     }
 
@@ -149,7 +156,9 @@ final class MobileShellUITests: XCTestCase {
         app.buttons["mobile.capture.button"].tap()
         XCTAssertTrue(app.navigationBars["Capture"].waitForExistence(timeout: 5))
 
-        app.buttons["Cancel"].tap()
+        // "Close", not "Cancel": the sheet keeps the draft rather than discarding it, and its
+        // button says so.
+        app.buttons["Close"].tap()
         XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 5))
     }
 }

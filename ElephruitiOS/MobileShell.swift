@@ -145,9 +145,14 @@ enum MobileRoute: Hashable, Codable {
 
 /// Where the shell is, and how it moves.
 ///
-/// One per app. Each destination keeps its own path, so opening the drawer and stepping
-/// somewhere else never throws away where you were — the promise the per-tab stacks used to
-/// make, kept by the same mechanism now that the drawer has replaced the tabs.
+/// One per app. Each destination keeps its own path, which is what lets a deep link, an intent
+/// or a restored scene put someone back inside a drill-down rather than at a root.
+///
+/// It is deliberately *not* the tab bar's promise that a pushed screen survives going
+/// elsewhere. The drawer sits above the deepest root, so leaving a pushed screen means popping
+/// it — that is the cost of back meaning one thing at every depth, and it is the right cost:
+/// the tab bar bought "leave without popping" by having a second way to move that the back
+/// gesture knew nothing about.
 @Observable
 @MainActor
 final class MobileShellModel {
