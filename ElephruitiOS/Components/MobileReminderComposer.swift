@@ -326,7 +326,7 @@ struct MobileReminderComposer: View {
             .accessibilityLabel(draft.projectTitle.map { "Project: \($0)" } ?? "Choose a project")
             .accessibilityIdentifier("reminders.composer.project")
             .popover(isPresented: showing(.project), arrowEdge: .top) {
-                MobileProjectPicker(selected: $draft.projectTitle).asComposerPopover()
+                MobileProjectPicker(selected: $draft.projectTitle)
             }
 
             Spacer(minLength: 0)
@@ -339,19 +339,18 @@ struct MobileReminderComposer: View {
                         selection: $draft.startAt,
                         isSomeday: $draft.isSomeday
                     )
-                    .asComposerPopover()
                 }
 
             control(symbol: "tag", isActive: !draft.tagSlugs.isEmpty,
                     label: "Tags", identifier: "tags") { activePopover = .tags }
                 .popover(isPresented: showing(.tags), arrowEdge: .top) {
-                    MobileTagPicker(selected: $draft.tagSlugs).asComposerPopover()
+                    MobileTagPicker(selected: $draft.tagSlugs)
                 }
 
             control(symbol: "person", isActive: !draft.personNames.isEmpty,
                     label: "People", identifier: "people") { activePopover = .people }
                 .popover(isPresented: showing(.people), arrowEdge: .top) {
-                    MobilePeoplePicker(selected: $draft.personNames).asComposerPopover()
+                    MobilePeoplePicker(selected: $draft.personNames)
                 }
 
             control(symbol: "checklist", isActive: !draft.checklist.isEmpty,
@@ -361,7 +360,6 @@ struct MobileReminderComposer: View {
                     label: "Deadline", identifier: "deadline") { activePopover = .deadline }
                 .popover(isPresented: showing(.deadline), arrowEdge: .top) {
                     MobileDayPicker(title: "Deadline", selection: $draft.dueAt, isSomeday: nil)
-                        .asComposerPopover()
                 }
         }
         .padding(.horizontal, Theme.Spacing.medium)
@@ -428,301 +426,5 @@ struct MobileReminderComposer: View {
             return date.formatted(.dateTime.day().month(.abbreviated))
         }
         return RelativeDay.text(for: date, using: clock)
-    }
-}
-
-// MARK: - Day
-
-/// One day, chosen.
-///
-/// A day rather than an instant: every scheduling decision this app makes is about which day
-/// something belongs to, and a picker offering 3:47 PM would offer precision the model does not
-/// keep. The quick rows come first because they answer the question most of the time.
-struct MobileDayPicker: View {
-    @Environment(\.services) private var services
-    @Environment(\.dismiss) private var dismiss
-
-    let title: String
-    @Binding var selection: Date?
-    /// Bound only for When: Someday is a *kind* of when, and a deadline cannot be someday.
-    var isSomeday: Binding<Bool>?
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    quickRow("Today", daysFromToday: 0)
-                    quickRow("Tomorrow", daysFromToday: 1)
-                    quickRow("Next week", daysFromToday: 7)
-
-                    if let isSomeday {
-                        Button {
-                            isSomeday.wrappedValue = true
-                            selection = nil
-                            dismiss()
-                        } label: {
-                            Label("Someday", systemImage: "archivebox")
-                        }
-                        .accessibilityIdentifier("reminders.picker.someday")
-                    }
-                }
-
-                Section {
-                    DatePicker(
-                        title,
-                        selection: Binding(
-                            get: { selection ?? services?.dateProvider.startOfToday ?? Date() },
-                            set: {
-                                selection = $0
-                                isSomeday?.wrappedValue = false
-                            }
-                        ),
-                        displayedComponents: .date
-                    )
-                    .datePickerStyle(.graphical)
-                    .labelsHidden()
-                }
-
-                if selection != nil || isSomeday?.wrappedValue == true {
-                    Section {
-                        Button("Clear", role: .destructive) {
-                            selection = nil
-                            isSomeday?.wrappedValue = false
-                            dismiss()
-                        }
-                    }
-                }
-            }
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
-    }
-
-    private func quickRow(_ label: String, daysFromToday: Int) -> some View {
-        Button(label) {
-            selection = services?.dateProvider.startOfDay(daysFromToday: daysFromToday)
-            isSomeday?.wrappedValue = false
-            dismiss()
-        }
-    }
-}
-
-// MARK: - Tags
-
-/// The library's tags, plus room to coin one.
-struct MobileTagPicker: View {
-    @Environment(\.services) private var services
-    @Environment(\.dismiss) private var dismiss
-
-    @Binding var selected: [String]
-
-    @State private var query = ""
-    @State private var tags: [Tag] = []
-
-    var body: some View {
-        NavigationStack {
-            List {
-                // A tag that does not exist yet is the common case for a new reminder, so
-                // coining one is a row rather than a separate mode.
-                if !normalizedQuery.isEmpty, !tags.contains(where: { $0.slug == normalizedQuery }) {
-                    Button {
-                        toggle(normalizedQuery)
-                    } label: {
-                        Label("Add #\(normalizedQuery)", systemImage: "plus.circle")
-                    }
-                }
-
-                ForEach(matching, id: \.id) { tag in
-                    Button {
-                        toggle(tag.slug)
-                    } label: {
-                        HStack {
-                            TagChip(slug: tag.slug, colorName: tag.colorName)
-                            Spacer(minLength: 0)
-                            if selected.contains(tag.slug) {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(Theme.Colors.selection)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .searchable(text: $query, prompt: "Find or add a tag")
-            .navigationTitle("Tags")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-            .task { tags = (try? services?.tags.allTags()) ?? [] }
-        }
-    }
-
-    private var normalizedQuery: String {
-        TextNormalizer.slug(query)
-    }
-
-    private var matching: [Tag] {
-        guard !normalizedQuery.isEmpty else { return tags }
-        return tags.filter { $0.slug.contains(normalizedQuery) }
-    }
-
-    private func toggle(_ slug: String) {
-        if let index = selected.firstIndex(of: slug) {
-            selected.remove(at: index)
-        } else {
-            selected.append(slug)
-        }
-    }
-}
-
-// MARK: - People
-
-/// Who this reminder is about. The same records the Records module lists.
-struct MobilePeoplePicker: View {
-    @Environment(\.services) private var services
-    @Environment(\.dismiss) private var dismiss
-
-    @Binding var selected: [String]
-
-    @State private var query = ""
-    @State private var records: [Item] = []
-
-    var body: some View {
-        NavigationStack {
-            List {
-                ForEach(matching) { record in
-                    Button {
-                        toggle(record.displayTitle)
-                    } label: {
-                        HStack {
-                            Label(record.displayTitle, systemImage: record.effectiveSymbolName)
-                                .foregroundStyle(Theme.Colors.primaryText)
-                            Spacer(minLength: 0)
-                            if selected.contains(record.displayTitle) {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(Theme.Colors.selection)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .searchable(text: $query, prompt: "Find a person")
-            .navigationTitle("People")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-            .task { records = (try? services?.records.allRecords()) ?? [] }
-        }
-    }
-
-    private var matching: [Item] {
-        let wanted = TextNormalizer.foldedForMatching(query)
-        guard !wanted.isEmpty else { return records }
-        return records.filter {
-            TextNormalizer.foldedForMatching($0.displayTitle).contains(wanted)
-        }
-    }
-
-    private func toggle(_ name: String) {
-        if let index = selected.firstIndex(of: name) {
-            selected.remove(at: index)
-        } else {
-            selected.append(name)
-        }
-    }
-}
-
-// MARK: - Project
-
-/// Which project this belongs to. One, or none — the model allows a single parent.
-struct MobileProjectPicker: View {
-    @Environment(\.services) private var services
-    @Environment(\.dismiss) private var dismiss
-
-    @Binding var selected: String?
-
-    @State private var query = ""
-    @State private var projects: [Item] = []
-
-    var body: some View {
-        NavigationStack {
-            List {
-                if selected != nil {
-                    Button("None", role: .destructive) {
-                        selected = nil
-                        dismiss()
-                    }
-                }
-
-                ForEach(matching) { project in
-                    Button {
-                        selected = project.displayTitle
-                        dismiss()
-                    } label: {
-                        HStack {
-                            Label(project.displayTitle, systemImage: "square.stack.3d.up")
-                                .foregroundStyle(Theme.Colors.primaryText)
-                            Spacer(minLength: 0)
-                            if selected == project.displayTitle {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(Theme.Colors.selection)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .searchable(text: $query, prompt: "Find a project")
-            .navigationTitle("Project")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-            .task {
-                projects = (try? services?.items.items(matching: ItemQuery.kind(.project))) ?? []
-            }
-        }
-    }
-
-    private var matching: [Item] {
-        let wanted = TextNormalizer.foldedForMatching(query)
-        guard !wanted.isEmpty else { return projects }
-        return projects.filter {
-            TextNormalizer.foldedForMatching($0.displayTitle).contains(wanted)
-        }
-    }
-}
-
-// MARK: - Popover presentation
-
-extension View {
-    /// Presents a composer picker as a small popup anchored to its control, on the phone too.
-    ///
-    /// Without `.presentationCompactAdaptation(.popover)`, iOS turns every popover in a compact
-    /// width into a full-screen sheet — which is precisely the thing being avoided here. The
-    /// point of anchoring is that choosing a tag should not cover the sentence you are tagging.
-    ///
-    /// The size is fixed rather than fitted: a popover that grew and shrank as a search
-    /// narrowed the list would move under the thumb between one keystroke and the next.
-    func asComposerPopover() -> some View {
-        frame(width: 320, height: 380)
-            .presentationCompactAdaptation(.popover)
     }
 }
