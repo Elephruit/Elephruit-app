@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// The Reminders screen's own promises, driven for real.
@@ -9,6 +10,14 @@ import XCTest
 final class RemindersUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
+        // The drawer shell only exists at compact width. Skipping says that out loud; running
+        // on an iPad and finding no `mobile.sidebar.button` would report the shell as broken when
+        // what is actually true is that this device draws the other one. The iPad's own suite is
+        // `PadNavigationUITests`, which skips on iPhone for the mirror-image reason.
+        try XCTSkipUnless(
+            UIDevice.current.userInterfaceIdiom == .phone,
+            "The drawer shell only exists on iPhone."
+        )
     }
 
     private func launchOnReminders(sampleData: Bool = true) -> XCUIApplication {
@@ -198,5 +207,75 @@ final class RemindersUITests: XCTestCase {
         // The navigation bar is still the list's, which is what "inline" means: nothing was
         // pushed and nothing was presented over the screen.
         XCTAssertTrue(app.navigationBars["Reminders"].exists)
+    }
+
+    /// The shell's floating button means "another reminder" here, not "capture into the Inbox" —
+    /// and it opens the card at the top, where it can be read and typed into.
+    ///
+    /// A plus held over a list of reminders that files its answer somewhere else is a plus
+    /// answering a question nobody asked. And the button is not a place in the list: it floats
+    /// over the bottom-right corner, so answering it at the *end* of the list would put a card
+    /// you are about to type into behind the keyboard, under the button that opened it.
+    func testTheShellButtonWritesAReminderAtTheTop() throws {
+        let app = launchOnReminders()
+
+        app.buttons["mobile.capture.button"].tap()
+        let title = composerTitle(app)
+        XCTAssertTrue(
+            title.waitForExistence(timeout: 5),
+            "The shell's button should open this screen's composer"
+        )
+        XCTAssertTrue(
+            app.navigationBars["Reminders"].exists,
+            "It should compose in place rather than presenting the capture sheet"
+        )
+        XCTAssertLessThan(
+            title.frame.midY,
+            app.frame.height / 2,
+            "The card should arrive in the top half of the screen, clear of the keyboard"
+        )
+    }
+
+    /// A picker is chosen from by tapping, so the keyboard goes before the picker arrives.
+    ///
+    /// Five of the six controls used to present their popover directly, over a keyboard that was
+    /// still up and anchored to a control the keyboard was about to move. What that looks like
+    /// in the hand is a tap that freezes the screen for a second and a keyboard that will not go
+    /// away, which is exactly how it was reported.
+    func testOpeningAPickerPutsTheKeyboardAway() throws {
+        let app = launchOnReminders()
+
+        startNewReminder(app)
+        let title = composerTitle(app)
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        title.typeText("Book the dentist")
+        XCTAssertTrue(
+            app.keyboards.element.waitForExistence(timeout: 5),
+            "Typing should have raised the keyboard"
+        )
+
+        let deadline = app.buttons["reminders.composer.deadline"]
+        deadline.tap()
+
+        XCTAssertTrue(
+            app.keyboards.element.waitForNonExistence(timeout: 5),
+            "Opening a picker should put the keyboard away"
+        )
+        let nextWeek = app.buttons["Next week"]
+        XCTAssertTrue(
+            nextWeek.waitForExistence(timeout: 5),
+            "The picker should be showing once the keyboard has gone"
+        )
+        // The popup opens at full size rather than squeezed against an edge — the card scrolls
+        // up to make the room, and the popup takes the direction that has it.
+        XCTAssertGreaterThan(
+            nextWeek.frame.height,
+            0,
+            "The picker's rows should have room to be themselves"
+        )
+        XCTAssertTrue(
+            app.buttons["Today"].exists && app.buttons["Tomorrow"].exists,
+            "All of the picker's quick answers should fit on screen"
+        )
     }
 }

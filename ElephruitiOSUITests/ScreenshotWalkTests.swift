@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// Walks the whole app and photographs every major screen into the result bundle.
@@ -11,6 +12,14 @@ import XCTest
 final class ScreenshotWalkTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = true
+        // The drawer shell only exists at compact width. Skipping says that out loud; running
+        // on an iPad and finding no `mobile.sidebar.button` would report the shell as broken when
+        // what is actually true is that this device draws the other one. The iPad's own suite is
+        // `PadNavigationUITests`, which skips on iPhone for the mirror-image reason.
+        try XCTSkipUnless(
+            UIDevice.current.userInterfaceIdiom == .phone,
+            "The drawer shell only exists on iPhone."
+        )
     }
 
     func testWalkEveryScreen() throws {

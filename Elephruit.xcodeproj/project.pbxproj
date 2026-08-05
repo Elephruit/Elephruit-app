@@ -22,6 +22,9 @@
 		E7C10000000000000000000B /* SafariServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E7C10000000000000000001B /* SafariServices.framework */; };
 		E7C10000000000000000000C /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = E7C10000000000000000001C /* background.js */; };
 		E7C10000000000000000000D /* panel.js in Resources */ = {isa = PBXBuildFile; fileRef = E7C10000000000000000001D /* panel.js */; };
+		E7D1000000000000000000A6 /* TimerActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7D1000000000000000000A5 /* TimerActivityAttributes.swift */; };
+		E7D1000000000000000000A7 /* TimerActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7D1000000000000000000A5 /* TimerActivityAttributes.swift */; };
+		E7D1000000000000000000A8 /* ElephruitiOSWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E7D1000000000000000000A0 /* ElephruitiOSWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,6 +42,13 @@
 			remoteGlobalIDString = E7B2000000000000000000B3;
 			remoteInfo = ElephruitiOS;
 		};
+		E7D1000000000000000000B9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E7A1000000000000000000F1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E7D1000000000000000000B0;
+			remoteInfo = ElephruitiOSWidgets;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -51,6 +61,17 @@
 				E7C100000000000000000001 /* Elephruit Web Clipper.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E7D1000000000000000000B7 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				E7D1000000000000000000A8 /* ElephruitiOSWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -78,6 +99,10 @@
 		E7C10000000000000000001C /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = background.js; sourceTree = "<group>"; };
 		E7C10000000000000000001D /* panel.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = panel.js; sourceTree = "<group>"; };
 		E7C3000000000000000000C5 /* ElephruitiOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ElephruitiOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E7D1000000000000000000A0 /* ElephruitiOSWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ElephruitiOSWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		E7D1000000000000000000A2 /* ElephruitiOSWidgets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = ElephruitiOSWidgets.xcconfig; sourceTree = "<group>"; };
+		E7D1000000000000000000A3 /* ElephruitiOSWidgets-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "ElephruitiOSWidgets-Info.plist"; sourceTree = "<group>"; };
+		E7D1000000000000000000A5 /* TimerActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerActivityAttributes.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -94,6 +119,11 @@
 		E7C3000000000000000000C4 /* ElephruitiOSUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = ElephruitiOSUITests;
+			sourceTree = "<group>";
+		};
+		E7D1000000000000000000A1 /* ElephruitiOSWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ElephruitiOSWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -148,7 +178,9 @@
 			children = (
 				E7A1000000000000000000F6 /* Elephruit */,
 				E7B2000000000000000000B4 /* ElephruitiOS */,
+				E7D1000000000000000000A1 /* ElephruitiOSWidgets */,
 				E7C3000000000000000000C4 /* ElephruitiOSUITests */,
+				E7D1000000000000000000A4 /* Shared */,
 				E7C100000000000000000020 /* ElephruitClipperExtension */,
 				E7A1000000000000000000F7 /* Configuration */,
 				E7A1000000000000000000F3 /* Products */,
@@ -163,6 +195,7 @@
 				E7B2000000000000000000B5 /* Elephruit.app */,
 				E7C3000000000000000000C5 /* ElephruitiOSUITests.xctest */,
 				E7C100000000000000000010 /* Elephruit Web Clipper.appex */,
+				E7D1000000000000000000A0 /* ElephruitiOSWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -176,6 +209,8 @@
 				E7A1000000000000000000FA /* Elephruit.entitlements */,
 				E7B2000000000000000000B8 /* ElephruitiOS.xcconfig */,
 				E7B2000000000000000000B9 /* ElephruitiOS-Info.plist */,
+				E7D1000000000000000000A2 /* ElephruitiOSWidgets.xcconfig */,
+				E7D1000000000000000000A3 /* ElephruitiOSWidgets-Info.plist */,
 			);
 			path = Configuration;
 			sourceTree = "<group>";
@@ -204,6 +239,14 @@
 				E7C10000000000000000001A /* Assets/elephruit-icon.png */,
 			);
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		E7D1000000000000000000A4 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				E7D1000000000000000000A5 /* TimerActivityAttributes.swift */,
+			);
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -241,10 +284,12 @@
 				E7B2000000000000000000BB /* Sources */,
 				E7B2000000000000000000BC /* Frameworks */,
 				E7B2000000000000000000BD /* Resources */,
+				E7D1000000000000000000B7 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				E7D1000000000000000000B8 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				E7B2000000000000000000B4 /* ElephruitiOS */,
@@ -275,6 +320,28 @@
 			);
 			productName = "Elephruit Web Clipper";
 			productReference = E7C100000000000000000010 /* Elephruit Web Clipper.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		E7D1000000000000000000B0 /* ElephruitiOSWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E7D1000000000000000000B4 /* Build configuration list for PBXNativeTarget "ElephruitiOSWidgets" */;
+			buildPhases = (
+				E7D1000000000000000000B1 /* Sources */,
+				E7D1000000000000000000B2 /* Frameworks */,
+				E7D1000000000000000000B3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				E7D1000000000000000000A1 /* ElephruitiOSWidgets */,
+			);
+			name = ElephruitiOSWidgets;
+			packageProductDependencies = (
+			);
+			productName = ElephruitiOSWidgets;
+			productReference = E7D1000000000000000000A0 /* ElephruitiOSWidgets.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 		E7C3000000000000000000C3 /* ElephruitiOSUITests */ = {
@@ -322,6 +389,9 @@
 						CreatedOnToolsVersion = 27.0;
 						TestTargetID = E7B2000000000000000000B3;
 					};
+					E7D1000000000000000000B0 = {
+						CreatedOnToolsVersion = 27.0;
+					};
 				};
 			};
 			buildConfigurationList = E7A1000000000000000000FE /* Build configuration list for PBXProject "Elephruit" */;
@@ -343,6 +413,7 @@
 			targets = (
 				E7A1000000000000000000F4 /* Elephruit */,
 				E7B2000000000000000000B3 /* ElephruitiOS */,
+				E7D1000000000000000000B0 /* ElephruitiOSWidgets */,
 				E7C3000000000000000000C3 /* ElephruitiOSUITests */,
 				E7C100000000000000000040 /* Elephruit Web Clipper */,
 			);
@@ -358,6 +429,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		E7B2000000000000000000BD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E7D1000000000000000000B3 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -393,6 +471,22 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E7D1000000000000000000A6 /* TimerActivityAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E7D1000000000000000000B1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E7D1000000000000000000A7 /* TimerActivityAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E7D1000000000000000000B2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -423,6 +517,11 @@
 			isa = PBXTargetDependency;
 			target = E7B2000000000000000000B3 /* ElephruitiOS */;
 			targetProxy = E7C3000000000000000000C8 /* PBXContainerItemProxy */;
+		};
+		E7D1000000000000000000B8 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E7D1000000000000000000B0 /* ElephruitiOSWidgets */;
+			targetProxy = E7D1000000000000000000B9 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -515,6 +614,30 @@
 			};
 			name = Release;
 		};
+		E7D1000000000000000000B5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E7D1000000000000000000A2 /* ElephruitiOSWidgets.xcconfig */;
+			buildSettings = {
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E7D1000000000000000000B6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E7D1000000000000000000A2 /* ElephruitiOSWidgets.xcconfig */;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		E7C3000000000000000000C0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -527,7 +650,7 @@
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = ElephruitiOS;
 			};
 			name = Debug;
@@ -544,7 +667,7 @@
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = ElephruitiOS;
 			};
 			name = Release;
@@ -584,6 +707,15 @@
 			buildConfigurations = (
 				E7C100000000000000000050 /* Debug */,
 				E7C100000000000000000051 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E7D1000000000000000000B4 /* Build configuration list for PBXNativeTarget "ElephruitiOSWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E7D1000000000000000000B5 /* Debug */,
+				E7D1000000000000000000B6 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

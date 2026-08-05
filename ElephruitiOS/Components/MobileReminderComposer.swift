@@ -7,12 +7,17 @@ import SwiftUI
 
 /// The reminder editor, inline in the list — the Mac's card, laid out for a thumb.
 ///
-/// ### The same six things, in the same order
+/// ### The Mac's card, one field shorter
 /// The Mac's composer is a card in two halves: what you wrote on top — title, notes, the
 /// checklist, and chips summarising everything chosen — and a rule of controls underneath,
 /// Project on the leading edge and then When, Tags, People, Checklist, Deadline. This is that
-/// card. Same six fields, same order, same words, and the same rule that a chosen value is
-/// shown twice: once as a chip you can take off, and once on the control that set it.
+/// card without When: same order, same words, and the same rule that a chosen value is shown
+/// twice, once as a chip you can take off and once on the control that set it.
+///
+/// When goes because two date pickers on one card ask everyone who opens it to decide which
+/// kind of date they mean, and on a phone the answer is nearly always the deadline. A start
+/// date the reminder already has is still shown as a chip and can still be taken off — what is
+/// gone is a second calendar to choose one from.
 ///
 /// The controls are glyphs, not glyphs-and-words, for the Mac's reason: the chips above
 /// already say what each field holds, so a label on the button spends the row saying it twice.
@@ -28,8 +33,13 @@ import SwiftUI
 /// At file scope rather than nested in the composer because the *list* needs to say which one
 /// it means: tapping a reminder's deadline is a request to change that deadline, and the
 /// request has to survive the trip from the row to the editor that opens.
+/// There were six. `when` — the day a reminder is *for*, as distinct from the day it is due —
+/// is gone: two date pickers on one card asked everyone who opened it to decide which kind of
+/// date they meant, and on a phone the answer is nearly always the deadline. What a reminder
+/// already carries is still kept and still shown; there is simply no longer a control here for
+/// setting it.
 enum ComposerField: String, Identifiable, Hashable {
-    case project, when, tags, people, checklist, deadline
+    case project, tags, people, checklist, deadline
     var id: String { rawValue }
 }
 
@@ -47,6 +57,10 @@ struct MobileReminderComposer: View {
     /// reminder's deadline chip is a request to change the deadline, not to look at the editor.
     var opening: ComposerField?
 
+    /// Said when the card needs to be fully on screen: the keyboard has arrived, or a popup is
+    /// about to. The composer knows what is about to cover it; only the list can scroll.
+    var onNeedsRoom: () -> Void = {}
+
     @FocusState private var focus: Field?
     @State private var activePopover: ComposerField?
     /// The field whose search sheet is up. Separate from `activePopover` because they are two
@@ -56,6 +70,10 @@ struct MobileReminderComposer: View {
     @State private var isAddingStep = false
 
     private enum Field: Hashable { case title, notes, step }
+
+    /// How long the keyboard takes to arrive or leave. Two waits are timed off it: the card
+    /// asking for room once the keyboard has landed, and a picker waiting for it to be gone.
+    private let keyboardArrival = Duration.milliseconds(350)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -80,13 +98,39 @@ struct MobileReminderComposer: View {
         )
         .elevation(.floating)
         .task {
+            // The card arrives before anything is asked of the keyboard.
+            //
+            // Taking focus in the same turn as the appearance meant the tap that opened the
+            // editor bought the whole text-input stack as well: the first `becomeFirstResponder`
+            // of a session connects to the keyboard's own process, and that connection has been
+            // measured at over a second on a real phone. Spent here, it is spent *before the
+            // card has drawn* — so the list sits there, apparently ignoring the tap, and the row
+            // and the keyboard finally appear together two seconds later.
+            //
+            // Waiting the length of the appearance costs the keyboard a tenth of a second and
+            // buys the tap an immediate answer. `KeyboardWarmup` pays the rest of the bill, at
+            // launch, where nobody is waiting.
+            try? await Task.sleep(for: .milliseconds(150))
+            // The wait is cancellable and the sleep swallows its own cancellation, so this is
+            // the check that keeps a closed editor from summoning a keyboard on its way out.
+            guard !Task.isCancelled else { return }
             guard let opening else {
                 focus = .title
+                // And then get out from under the keyboard.
+                //
+                // The card is often the last thing in the list, and the keyboard takes the
+                // bottom half of the screen without asking whether anything was there — the
+                // controls sit about five points below where it lands, so the whole row of
+                // them becomes untappable while a reminder is being typed. Nothing in the
+                // system will scroll for this: the focused field is the *title*, which is
+                // above the keyboard, so as far as UIKit is concerned nothing is covered.
+                try? await Task.sleep(for: keyboardArrival)
+                guard !Task.isCancelled else { return }
+                onNeedsRoom()
                 return
             }
-            // One turn of the run loop before presenting: the card is arriving, and a popover
-            // anchored to a control that has not been laid out yet has nothing to point at.
-            await Task.yield()
+            // A popover anchored to a control that has not been laid out yet has nothing to
+            // point at, so this waits for the same reason and then some.
             open(opening)
         }
         .sheet(item: $searchingField) { field in
@@ -228,9 +272,15 @@ struct MobileReminderComposer: View {
                     }
                 }
 
+                // The date chips say the date and nothing else. "Deadline: Jul 21" spends two
+                // thirds of a chip on a word the flag beside it already means, on the one row
+                // of the card where four chips have to fit across a phone. The symbol carries
+                // which date it is; the accessibility label says it out loud for the reading
+                // that has no symbol to look at.
                 if let start = draft.startAt {
                     removableChip(
-                        "When: \(shortDate(start))",
+                        shortDate(start),
+                        spoken: "Scheduled for \(shortDate(start))",
                         symbol: "calendar",
                         tint: Theme.Colors.selection
                     ) {
@@ -249,7 +299,8 @@ struct MobileReminderComposer: View {
 
                 if let deadline = draft.dueAt {
                     removableChip(
-                        "Deadline: \(shortDate(deadline))",
+                        shortDate(deadline),
+                        spoken: "Deadline \(shortDate(deadline))",
                         symbol: "flag",
                         // The deadline chip carries urgency, the same as the row's does: a
                         // deadline is the only date here that can make anything late.
@@ -264,8 +315,11 @@ struct MobileReminderComposer: View {
         }
     }
 
+    /// - Parameter spoken: What the chip means when the symbol cannot be seen. A date chip reads
+    ///   "Jul 21" beside a flag; out loud that is a date with no job.
     private func removableChip(
         _ label: String,
+        spoken: String? = nil,
         symbol: String,
         tint: Color,
         remove: @escaping () -> Void
@@ -273,12 +327,13 @@ struct MobileReminderComposer: View {
         HStack(spacing: Theme.Spacing.hairline) {
             Image(systemName: symbol)
             Text(label).lineLimit(1)
+                .accessibilityLabel(spoken ?? label)
             Button(action: remove) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(tint.opacity(0.7))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Remove \(label)")
+            .accessibilityLabel("Remove \(spoken ?? label)")
         }
         .font(Theme.Text.chip)
         .foregroundStyle(tint)
@@ -289,9 +344,9 @@ struct MobileReminderComposer: View {
 
     // MARK: - The controls
 
-    /// The Mac's action row: Project on the leading edge, then the five that qualify it.
+    /// The Mac's action row: Project on the leading edge, then the four that qualify it.
     ///
-    /// Six fields and no seventh button. Done used to sit at the end of this row and was a
+    /// Five fields and no sixth button. Done used to sit at the end of this row and was a
     /// mistake twice over — off the right edge of the screen when the row scrolled, and behind
     /// the keyboard once it did not — but the deeper problem was that it existed at all. Every
     /// other way of leaving this editor already saves, so a button whose only job was to save
@@ -301,16 +356,16 @@ struct MobileReminderComposer: View {
             .background(Theme.Colors.subtleFill)
     }
 
-    /// Project keeps its name; the other five are glyphs.
+    /// Project keeps its name; the other four are glyphs.
     ///
     /// The Mac's rule, and the reason it works: what a control *holds* is already said by the
     /// chips above it, so repeating the value on the button spends a third of the row saying
     /// something twice. Project is the exception there and here, because it is the one field
-    /// that says where the reminder lives rather than something about it — and with all six
+    /// that says where the reminder lives rather than something about it — and with the rest
     /// down to icons, the row stops needing to scroll at all.
     private var controlScroller: some View {
         HStack(spacing: Theme.Spacing.small) {
-            Button { activePopover = .project } label: {
+            Button { open(.project) } label: {
                 HStack(spacing: Theme.Spacing.hairline) {
                     Image(systemName: "square.stack.3d.up")
                     if let project = draft.projectTitle {
@@ -328,7 +383,14 @@ struct MobileReminderComposer: View {
             .buttonStyle(.plain)
             .accessibilityLabel(draft.projectTitle.map { "Project: \($0)" } ?? "Choose a project")
             .accessibilityIdentifier("reminders.composer.project")
-            .popover(isPresented: showing(.project), arrowEdge: .top) {
+            // `nil` rather than `.top`, here and on all five: the edge is a *requirement*, and
+            // requiring the popup to hang below its control is a promise the bottom of a screen
+            // cannot keep. The composer sits at the end of the list, so the row of controls is
+            // usually a couple of hundred points from the bottom — below it there is room for a
+            // date grid on no phone ever made, and the system answered by squeezing the popup
+            // into whatever was left. Left to choose, it opens upward, at full size, over the
+            // list it came from. Which is what Reminders does.
+            .popover(isPresented: showing(.project), arrowEdge: nil) {
                 MobileProjectPicker(
                     selected: $draft.projectTitle,
                     onRequestSearch: { requestSearch(.project) }
@@ -337,19 +399,9 @@ struct MobileReminderComposer: View {
 
             Spacer(minLength: 0)
 
-            control(symbol: "calendar", isActive: draft.startAt != nil || draft.isSomeday,
-                    label: "When", identifier: "when") { activePopover = .when }
-                .popover(isPresented: showing(.when), arrowEdge: .top) {
-                    MobileDayPicker(
-                        title: "When",
-                        selection: $draft.startAt,
-                        isSomeday: $draft.isSomeday
-                    )
-                }
-
             control(symbol: "tag", isActive: !draft.tagSlugs.isEmpty,
-                    label: "Tags", identifier: "tags") { activePopover = .tags }
-                .popover(isPresented: showing(.tags), arrowEdge: .top) {
+                    label: "Tags", identifier: "tags") { open(.tags) }
+                .popover(isPresented: showing(.tags), arrowEdge: nil) {
                     MobileTagPicker(
                         selected: $draft.tagSlugs,
                         onRequestSearch: { requestSearch(.tags) }
@@ -357,8 +409,8 @@ struct MobileReminderComposer: View {
                 }
 
             control(symbol: "person", isActive: !draft.personNames.isEmpty,
-                    label: "People", identifier: "people") { activePopover = .people }
-                .popover(isPresented: showing(.people), arrowEdge: .top) {
+                    label: "People", identifier: "people") { open(.people) }
+                .popover(isPresented: showing(.people), arrowEdge: nil) {
                     MobilePeoplePicker(
                         selected: $draft.personNames,
                         onRequestSearch: { requestSearch(.people) }
@@ -369,8 +421,8 @@ struct MobileReminderComposer: View {
                     label: "Checklist", identifier: "checklist") { open(.checklist) }
 
             control(symbol: "flag", isActive: draft.dueAt != nil,
-                    label: "Deadline", identifier: "deadline") { activePopover = .deadline }
-                .popover(isPresented: showing(.deadline), arrowEdge: .top) {
+                    label: "Deadline", identifier: "deadline") { open(.deadline) }
+                .popover(isPresented: showing(.deadline), arrowEdge: nil) {
                     MobileDayPicker(title: "Deadline", selection: $draft.dueAt, isSomeday: nil)
                 }
         }
@@ -400,7 +452,7 @@ struct MobileReminderComposer: View {
             MobilePeoplePicker(selected: $draft.personNames, style: .search)
         case .project:
             MobileProjectPicker(selected: $draft.projectTitle, style: .search)
-        case .when, .deadline, .checklist:
+        case .deadline, .checklist:
             // Nothing here is typed into, so nothing here escalates.
             EmptyView()
         }
@@ -408,6 +460,15 @@ struct MobileReminderComposer: View {
 
     /// Opens one field. Five of them are popovers; the checklist is a row inside the card, so
     /// "open" means something different for it and this is the one place that knows so.
+    ///
+    /// *Every* way of opening a field comes through here — the six controls, and an arrival that
+    /// already knows which field it means. It did not: the controls used to set `activePopover`
+    /// themselves and only the checklist and the arriving tap called this, so five of the six
+    /// buttons skipped the part that puts the keyboard away. Tapping one while the title still
+    /// held focus presented a popover over a live keyboard, anchored to a control the keyboard
+    /// was about to move, and the phone spent the next second sorting out which of the two owned
+    /// the bottom half of the screen. That is the freeze, and this is why there is no second
+    /// door.
     private func open(_ field: ComposerField) {
         // The checklist is the one field that wants the keyboard — it is a row you type into.
         guard field != .checklist else {
@@ -416,17 +477,18 @@ struct MobileReminderComposer: View {
             return
         }
 
-        // Everything else is chosen by tapping, so the keyboard goes away first. It is not
-        // enough to let it fall away on its own: while it is up it owns half the screen, and a
-        // popover anchored to a control that is about to move is a popover pointing at nothing.
-        guard focus != nil else {
-            activePopover = field
-            return
-        }
-
+        // Everything else is chosen by tapping, so two things move out of the way first: the
+        // keyboard, which while it is up owns half the screen, and the card itself, which asks
+        // the list to bring it up the screen so the popup has room to open at full size instead
+        // of being squeezed against an edge.
+        //
+        // Both move the control the popup will point at, so the popup waits for both. One path
+        // rather than a shortcut for when the keyboard happens to be down: a popover anchored to
+        // a control that is still travelling is a popover pointing at nothing.
+        onNeedsRoom()
         focus = nil
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(220))
+            try? await Task.sleep(for: keyboardArrival)
             activePopover = field
         }
     }

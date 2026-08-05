@@ -37,6 +37,12 @@
 		<string>remote-notification</string>
 	</array>
 
+	<!-- A running timer appears in the Dynamic Island and on the Lock Screen. Nothing else in
+	     this app posts one, and what it may say is bounded in `Shared/TimerActivityAttributes.swift`:
+	     a title, a project, a start date. No people, and no note. -->
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

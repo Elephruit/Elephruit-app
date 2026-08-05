@@ -120,6 +120,13 @@ public enum AccessibilityID {
         public static let durationField = "time.duration"
         public static let discardButton = "time.discard"
 
+        // Pausing, and the two ways back into work that is already under way. On the Mac these
+        // live on the floating widget; on the phone they are on the card itself, because there
+        // is no second window to put them in.
+        public static let pauseButton = "time.pause"
+        public static let resumeButton = "time.resume"
+        public static let continueMenu = "time.continue"
+
         public static let groupingToggle = "time.groupSimilar"
         public static let manualSheet = "time.manualSheet"
         public static let manualAddButton = "time.manualSheet.add"

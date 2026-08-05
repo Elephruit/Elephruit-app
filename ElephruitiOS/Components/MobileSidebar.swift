@@ -53,7 +53,9 @@ struct MobileSidebar: View {
     private func row(_ destination: MobileDestination) -> some View {
         let isSelected = shell.destination == destination
         return Button {
-            withCalmAnimation { shell.select(destination) }
+            // The drawer's own spring: choosing a place from the drawer closes the drawer, and
+            // that is the same movement a thumb makes, so it had better be the same movement.
+            withCalmAnimation(Theme.Motion.drawer) { shell.select(destination) }
         } label: {
             HStack(spacing: Theme.Spacing.medium) {
                 Image(systemName: destination.symbolName)

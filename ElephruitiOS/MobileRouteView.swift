@@ -27,6 +27,8 @@ struct MobileRouteView: View {
             ReminderListScreen(source: .smartList(id))
         case .builtInSmartList(let id):
             ReminderListScreen(source: .builtIn(id))
+        case .savedSearch(let id):
+            SearchScreen(savedSearchID: id)
         case .records(let scope):
             RecordsListScreen(scope: scope)
         case .tag(let slug):

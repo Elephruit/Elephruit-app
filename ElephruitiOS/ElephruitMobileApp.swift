@@ -1,11 +1,14 @@
+import ElephruitCore
 import ElephruitFeaturesCore
 import SwiftUI
 
-/// The iPhone app.
+/// The iPhone and iPad app.
 ///
-/// One scene, one tab shell. The Mac's other scenes — menu bar extras, floating panels, a
-/// Settings window — are desktop furniture; their jobs live inside the shell here (the
-/// timer accessory above the tab bar, the capture button, a Settings screen in Library).
+/// One shell per window, chosen by width — `AdaptiveRootView` is where that choice and the handoff
+/// between the two live. The Mac's other scenes are desktop furniture; their jobs live inside the
+/// shell here (the timer accessory, the capture button, a Settings screen in the sidebar), except
+/// the keyboard, which the iPad genuinely has: `ElephruitMobileCommands` puts the Mac's own
+/// shortcut registry behind the ⌘-hold overlay.
 @main
 struct ElephruitMobileApp: App {
     @State private var environment = MobileAppEnvironment()
@@ -16,13 +19,22 @@ struct ElephruitMobileApp: App {
             MobileRootWindow(environment: environment)
                 .task { environment.start() }
                 .onChange(of: scenePhase) { _, phase in
-                    // Backgrounding is the iPhone's "the machine may vanish now": pending
-                    // editor debounces are flushed so nothing typed is lost to a suspension,
-                    // exactly as the Mac flushes before quit.
+                    // Backgrounding is the phone's "the machine may vanish now": pending editor
+                    // debounces are flushed so nothing typed is lost to a suspension, exactly as
+                    // the Mac flushes before quit.
                     if phase == .background || phase == .inactive {
                         environment.services?.flushForSuspension()
                     }
                 }
+        }
+        .commands { ElephruitMobileCommands() }
+
+        // A second window, opened onto one record — the iPad's answer to the Mac's "Open in New
+        // Window". Only the sidebar offers it, and only where the platform supports more than one
+        // window, so a phone never advertises a scene it cannot show.
+        WindowGroup(for: MobileRoute.self) { route in
+            MobileRootWindow(environment: environment, initialRoute: route.wrappedValue)
+                .task { environment.start() }
         }
     }
 }
@@ -30,6 +42,7 @@ struct ElephruitMobileApp: App {
 /// Switches on the boot outcome, exactly as the Mac's `RootWindow` does.
 private struct MobileRootWindow: View {
     let environment: MobileAppEnvironment
+    var initialRoute: MobileRoute?
 
     var body: some View {
         switch environment.state {
@@ -38,7 +51,7 @@ private struct MobileRootWindow: View {
             Color.clear
 
         case .ready(let services):
-            MobileRootView()
+            AdaptiveRootView(initialRoute: initialRoute)
                 .appServices(services)
 
         case .failed(let error):

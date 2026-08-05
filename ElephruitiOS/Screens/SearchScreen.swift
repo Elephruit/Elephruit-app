@@ -4,6 +4,7 @@ import ElephruitFeaturesCore
 import ElephruitModel
 import ElephruitPersistence
 import ElephruitSearch
+import SwiftData
 import SwiftUI
 
 /// Global search: the same engine, grammar, and grouping as the Mac's ⌘⇧F.
@@ -15,7 +16,16 @@ struct SearchScreen: View {
     @Environment(\.services) private var services
     @Environment(MobileShellModel.self) private var shell
 
+    /// The saved search this screen opened on, if any.
+    ///
+    /// A saved search is the *text somebody typed*, kept — not a second kind of query — so
+    /// opening one seeds this same session and leaves it fully editable. That is the whole
+    /// argument for `SavedSearch.queryString` storing raw text, and honouring it here is what
+    /// keeps "a saved search is a search" true rather than a claim.
+    var savedSearchID: UUID?
+
     @State private var session: SearchSessionModel?
+    @State private var savedSearchName: String?
     /// Whether the search field holds the keyboard. SwiftUI's focus, not UIKit's responder —
     /// releasing the responder underneath `.searchable` leaves SwiftUI thinking it is still
     /// focused, and it takes the keyboard straight back.
@@ -29,7 +39,7 @@ struct SearchScreen: View {
                 Color.clear
             }
         }
-        .navigationTitle("Search")
+        .navigationTitle(savedSearchName ?? "Search")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(
             text: Binding(
@@ -41,7 +51,12 @@ struct SearchScreen: View {
         .searchFocused($isSearchFocused)
         .task {
             guard session == nil, let services else { return }
-            session = SearchSessionModel(engine: services.search)
+            let session = SearchSessionModel(engine: services.search)
+            if let savedSearchID, let saved = savedSearch(id: savedSearchID, services: services) {
+                savedSearchName = saved.name
+                session.text = saved.queryString
+            }
+            self.session = session
         }
     }
 
@@ -52,6 +67,7 @@ struct SearchScreen: View {
 
             switch session.vacancy {
             case .idle:
+                savedSearchesSection
                 suggestionsSection
 
             case .tooShort:
@@ -119,6 +135,63 @@ struct SearchScreen: View {
                 }
             }
         }
+    }
+
+    /// The searches the user named and kept.
+    ///
+    /// Only where the shell has no sidebar listing them — on the iPad they are a band of the
+    /// sidebar, and a second copy inside the results would be the same list twice.
+    @ViewBuilder
+    private var savedSearchesSection: some View {
+        if savedSearchID == nil, !savedSearches.isEmpty {
+            Section("Saved") {
+                ForEach(savedSearches, id: \.id) { saved in
+                    Button {
+                        isSearchFocused = false
+                        shell.push(.savedSearch(saved.id))
+                    } label: {
+                        HStack(spacing: Theme.Spacing.medium) {
+                            Image(systemName: saved.symbolName ?? "magnifyingglass")
+                                .foregroundStyle(
+                                    Theme.Palette.color(named: saved.colorName, neutral: Theme.Colors.secondaryText)
+                                )
+                                .frame(width: Theme.Size.rowGlyph)
+                            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
+                                Text(saved.name)
+                                    .font(Theme.Text.rowTitle)
+                                    .foregroundStyle(Theme.Colors.primaryText)
+                                // The rule, under the name. A saved search that shows six of your
+                                // eleven overdue notes and does not say why is one you stop
+                                // trusting.
+                                Text(saved.queryString)
+                                    .font(Theme.Text.metadata)
+                                    .foregroundStyle(Theme.Colors.secondaryText)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("search.saved.\(saved.id.uuidString)")
+                }
+            }
+        }
+    }
+
+    /// The ordinary saved searches — a smart list is a `SavedSearch` carrying a task filter, and
+    /// it belongs to Reminders rather than here.
+    private var savedSearches: [SavedSearch] {
+        guard let services else { return [] }
+        let descriptor = FetchDescriptor<SavedSearch>(
+            predicate: #Predicate { $0.deletedAt == nil && $0.taskFilterData == nil && $0.showsInSidebar },
+            sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.name)]
+        )
+        return (try? services.context.fetch(descriptor)) ?? []
+    }
+
+    private func savedSearch(id: UUID, services: AppServices) -> SavedSearch? {
+        let descriptor = FetchDescriptor<SavedSearch>(predicate: #Predicate { $0.id == id })
+        return (try? services.context.fetch(descriptor))?.first
     }
 
     /// What an empty search offers: the grammar, so the narrowing tokens are learnable.
