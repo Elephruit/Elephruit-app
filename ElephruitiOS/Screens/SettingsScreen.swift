@@ -101,11 +101,15 @@ struct SettingsScreen: View {
 
     /// How long the app should assume a journey takes, until it is told otherwise about a place.
     ///
-    /// ### Why this is a setting and not a lookup
-    /// Because the alternative is a route lookup, which means a location permission, a network call
-    /// and somebody's whereabouts leaving the device — three promises this app makes about itself,
-    /// spent to turn "fifteen minutes" into "twelve". The number is the user's, and the app
-    /// remembers it per place so nobody has to give it twice for the same room.
+    /// ### The number here is the floor, not the fallback
+    /// It needs no permission and no network, it is never wrong in a way its owner cannot fix, and
+    /// it is what every journey is measured against until somebody switches on route estimates in
+    /// Integrations. Even then it is what answers for a place that will not geocode — which, in a
+    /// calendar full of meeting rooms, is most of them. So it stays first on this screen.
+    ///
+    /// The footer changes when estimates are on, because the sentence it used to end with —
+    /// "nothing about where you are ever leaves this device" — stops being true at that moment, and
+    /// a privacy claim that survives the feature contradicting it is worse than no claim.
     @ViewBuilder
     private var travelSection: some View {
         if let services {
@@ -119,6 +123,18 @@ struct SettingsScreen: View {
                 }
                 .accessibilityIdentifier("settings.travel.default")
 
+                // Only when something is actually routing, because until then there is nothing for
+                // the answer to be about: a number somebody typed is the same number whether they
+                // walked or drove to earn it.
+                if travel.isEstimating {
+                    Picker("Usually", selection: $travel.transport) {
+                        ForEach(RouteTransport.allCases, id: \.self) { transport in
+                            Label(transport.label, systemImage: transport.symbolName).tag(transport)
+                        }
+                    }
+                    .accessibilityIdentifier("settings.travel.transport")
+                }
+
                 if travel.rememberedPlaceCount > 0 {
                     Button("Forget remembered places", role: .destructive) {
                         travel.forgetAllPlaces()
@@ -128,21 +144,28 @@ struct SettingsScreen: View {
             } header: {
                 Text("Getting there")
             } footer: {
-                Text(
-                    travel.rememberedPlaceCount > 0
-                        ? """
-                        Used for a place Elephruit has not been told about. It remembers what you \
-                        allow for each place — \(travel.rememberedPlaceCount) so far. Nothing about \
-                        where you are or where you are going ever leaves this device.
-                        """
-                        : """
-                        Used to say when to leave for a meeting somewhere. It remembers what you \
-                        allow for each place. Nothing about where you are or where you are going \
-                        ever leaves this device.
-                        """
-                )
+                Text(travelFooter(travel))
             }
         }
+    }
+
+    private func travelFooter(_ travel: TravelPreferences) -> String {
+        let remembered = travel.rememberedPlaceCount > 0
+            ? "It remembers what you allow for each place — \(travel.rememberedPlaceCount) so far."
+            : "It remembers what you allow for each place."
+
+        guard travel.isEstimating else {
+            return """
+                Used to say when to leave for a meeting somewhere. \(remembered) Nothing about where \
+                you are or where you are going ever leaves this device.
+                """
+        }
+
+        return """
+            Used for a place Elephruit could not look up — a meeting room, or anywhere without an \
+            address. \(remembered) Everywhere else, the time comes from Apple Maps; see Route \
+            estimates below.
+            """
     }
 
     /// Seven toggles, as a row of initials rather than a list of seven switches.
@@ -246,12 +269,17 @@ struct SettingsScreen: View {
         } header: {
             Text("iCloud")
         } footer: {
+            // This used to end "Apple's CloudKit is the only thing this app talks to on the
+            // network", which stopped being true the day route estimates shipped. Rewritten to be
+            // true in *both* states rather than to follow the switch: a claim about privacy that
+            // changes as you toggle something is a claim you have to watch, and the point of one is
+            // that you do not.
             Text(
                 """
                 Sync keeps this \(DeviceName.thisDevice) and your Mac looking at one library, through your \
-                own private iCloud database. Apple's CloudKit is the only thing this app \
-                talks to on the network — no account with us, no analytics, no third-party \
-                service.
+                own private iCloud database. No account with us, no analytics, no third-party \
+                service: the only things this app ever talks to are your own iCloud, and Apple \
+                Maps if you switch on route estimates.
                 """
             )
         }
@@ -293,10 +321,31 @@ struct SettingsScreen: View {
                     enable: { _ = await services.contacts.enable() },
                     disable: { services.contacts.disable() }
                 )
+                // Last, and set apart by its own footnote, because it is the only one that is not
+                // a permission to read something already on the phone. This one sends an address
+                // somewhere, and a row that looked exactly like Calendar's would be hiding that.
+                integrationRow(
+                    title: "Route estimates",
+                    symbol: "location",
+                    isEnabled: services.travel.isEstimating,
+                    authorization: services.travel.authorization,
+                    enable: { _ = await services.travel.enableEstimates() },
+                    disable: { services.travel.disableEstimates() }
+                )
+                .accessibilityIdentifier("settings.integration.routes")
             } header: {
                 Text("Integrations")
             } footer: {
-                Text("Each integration is off until you turn it on, and asks the system for permission only then. Turning one off leaves your Elephruit records exactly as they are.")
+                Text("""
+                    Each integration is off until you turn it on, and asks the system for permission \
+                    only then. Turning one off leaves your Elephruit records exactly as they are.
+
+                    Route estimates is the only one that uses the network. With it on, Elephruit \
+                    asks Apple Maps how long it takes to get to a meeting, sending the meeting's \
+                    address and your location — and nothing else. Never its name, never who is \
+                    coming, never your notes. Your location is not saved, and nothing is looked up \
+                    unless Elephruit is open in front of you.
+                    """)
             }
         }
     }
@@ -510,7 +559,15 @@ struct SettingsScreen: View {
         } header: {
             Text("About")
         } footer: {
-            Text("Your library is yours: no account with us, no analytics, no third-party service. With sync off, the network is never used at all; with it on, your own iCloud is the only place anything goes.")
+            // "With sync off, the network is never used at all" was true until route estimates
+            // gave it a second way to be used. Both conditions are now named, because the sentence
+            // is worth nothing if a reader has to know which features count.
+            Text("""
+                Your library is yours: no account with us, no analytics, no third-party service. \
+                With sync and route estimates both off, the network is never used at all. With \
+                sync on, your own iCloud is the only place your library goes; with route estimates \
+                on, an address and your location go to Apple Maps and nothing else does.
+                """)
         }
     }
 }

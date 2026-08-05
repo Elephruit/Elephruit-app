@@ -473,6 +473,12 @@ enum TodayReviewLaunch {
     enum BlockSubject: String {
         case gap
         case work
+
+        /// The journey sheet, which is otherwise several swipes down a page and behind a line that
+        /// only exists at certain times of day. Worth a token of its own for the same reason the
+        /// other two have one: a state that can only be reached by a thumb is a state nobody looks
+        /// at until it ships.
+        case travel
     }
 
     /// How many days of history to open with, so the page can be photographed *in* the past.

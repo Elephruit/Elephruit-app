@@ -7,8 +7,9 @@ it plus what has been decided since.
 Branch: `claude/today-view-remaining-work-62cc78`, off `013ed730` (the merge of PR
 [#75](https://github.com/Elephruit/Elephruit-app/pull/75)).
 
-**One thing is left to build: §3.5, travel with a real ETA.** Everything else this document asked
-for is done. §3.6 is still blocked on a decision that is not mine to make.
+**Everything this document asked for is now built.** §3.5 shipped on
+`claude/travel-real-eta-631378`; see §3.5 below for what it actually became. §3.6 is still blocked on
+a decision that is not mine to make, and is the only thing left in this file.
 
 ---
 
@@ -125,36 +126,48 @@ remembers what was allowed **per place**, written when a block is created rather
 is scrolled. The line writes a real block through §3.1's machinery, named after the place rather than
 the meeting.
 
-### 3.5 Travel, 7b — real ETA, opt-in — **the one thing left**
+### 3.5 Travel, 7b — real ETA, opt-in — **done**
 
-Approved, with the cost understood.
+Built as planned, on `claude/travel-real-eta-631378`. `MKGeocodingRequest` rather than
+`MKLocalSearch` — it is the iOS 26 API for turning an address into a place — and the optional
+coordinate carry became compulsory, because skipping the geocode for a place the organizer already
+resolved is strictly less guessing. It rides on `CalendarEventSummary`; `EventDraft`'s allowlist is
+untouched, so the app can be *told* where a meeting is and still cannot write a coordinate.
 
-- **Needs:** `NSLocationWhenInUseUsageDescription`, `CoreLocation`, `MKLocalSearch` to resolve the
-  location string, `MKDirections.calculateETA`. Optionally carry EventKit's `structuredLocation`
-  coordinate onto `CalendarEventSummary` — a *read* type, so `EventDraft`'s allowlist is untouched —
-  to skip geocoding when the organizer set a real place.
-- **Its own switch**, off by default, in Integrations beside Calendar and Reminders. When off, none
-  of the frameworks are touched.
-- **Only the location string and coordinates ever leave the device.** Never a title, an attendee, a
-  note.
-- **The Settings copy has to be rewritten in the same commit.** Two places, and both are false the
-  moment this ships: the iCloud section's *"Apple's CloudKit is the only thing this app talks to on
-  the network"*, and the About section's *"With sync off, the network is never used at all"*. Find
-  them in `ElephruitiOS/Screens/SettingsScreen.swift`.
-- Never automatic. Travel is a proposal like everything else here.
+`TravelPreferences.minutes(to:)` kept its signature exactly. The ordering lives in one method — a
+fresh measurement, then what the user said, then the default — and every step down is silent.
+`travel(to:)` is the richer answer for the one caller that needs the provenance.
 
-**How to make it verifiable**, which is the part that needs deciding before any code: the simulator
-has no real location, so nothing here can be checked by screenshot the way the rest of this page was.
-Follow the calendar's shape — a `RouteProviding` protocol in `ElephruitIntegrations` with a MapKit
-adapter and a `FixtureRouteProvider`, chosen by launch argument exactly as
-`-ElephruitUseFixtureCalendar` chooses one. Then the arithmetic and the refusals are unit-testable,
-and the adapter is the only untested file. A safety test in the shape of
-`CalendarWriteSafetyTests` — the integrations module cannot import the store, and the route adapter
-never sees anything but a string and a coordinate — is what keeps the privacy promise structural.
+| File | What it is |
+|---|---|
+| `Packages/.../ElephruitCore/Route.swift` | `RoutePlace` (the closed query), `RouteRules`, `RouteEstimate`, `RouteFailure`, `TravelNumber`, `RouteTransport` |
+| `Packages/.../ElephruitIntegrations/Routing.swift` | `RouteProviding` + `NoRouteProvider` |
+| `Packages/.../ElephruitIntegrations/MapKitRouteProvider.swift` | The adapter. The only file no test reaches |
+| `Packages/.../ElephruitIntegrations/FixtureRouteProvider.swift` | Answers for street addresses, refuses for rooms |
+| `Packages/.../ElephruitFeaturesCore/TravelPreferences.swift` | The ordering, the estimate cache, the remembered refusals, the switch |
+| `Tests/ElephruitCoreTests/RouteSafetyTests.swift` | The field list, the query's arguments, the confined import |
 
-Where it plugs in: `TravelPreferences.minutes(to:)` is the single question the page asks today.
-An ETA should arrive as a *better answer to that question*, not as a second code path — the row, the
-sheet and the block already read it.
+Four things worth carrying forward:
+
+1. **Refusals must be remembered, not just successes.** A `List` redraws on every scroll, a meeting
+   room never geocodes, and the room is what appears in a calendar five days a week. Caching only
+   the answers leaves the commonest case asking forever. Half a day for a place that does not exist,
+   five minutes for a service that was merely unreachable.
+2. **Measure the whole day, never per row.** Per row looks right — `.task` follows the row's life —
+   but a `List` does not realise cells below the fold, so an evening journey stays unmeasured until
+   it is scrolled to and then changes under the thumb. Worse, the block sheet reads the number when
+   it opens, so a journey reached any other way books the guess. Trap 4 again, in a new costume.
+3. **A review launch has to open its sheet after the work, not alongside the assembly.** The travel
+   sheet was photographing the guess the page was about to replace.
+4. **Giving a `Toggle` an accessibility identifier collapses the row into one wide `Switch`**, so
+   `tap()` aims at the label and nothing happens. See `flip` in `RouteEstimateSettingsUITests`.
+
+The Settings copy was rewritten in the same commit, as required. The iCloud and About claims are now
+true in *both* states rather than following the switch — a privacy claim you have to watch is not
+worth having. **The Mac's `Elephruit/SyncSettingsSection.swift` still carries the old claim, and it
+was already false there** for an unrelated reason: `MapPlaceSearchField` searches Apple Maps when
+somebody types a venue into an event. Route estimates have no macOS switch and cannot be turned on
+there, so this is a pre-existing inaccuracy rather than a new one — but it is still wrong.
 
 #### Should the Mac get this switch too? Not yet, and the reason is not caution
 
@@ -206,13 +219,23 @@ Scripts/shot.sh /tmp/today.png
 state that can only be reached by a thumb is a state nobody looks at until it ships:
 
 ```bash
-Scripts/shot.sh /tmp/sheet.png -ElephruitTodayBlockSheet gap    # or: work
+Scripts/shot.sh /tmp/sheet.png -ElephruitTodayBlockSheet gap    # or: work, travel
 Scripts/shot.sh /tmp/past.png  -ElephruitTodayEarlierDays 21
+Scripts/shot.sh /tmp/eta.png   -ElephruitUseFixtureRoutes       # measured travel, no real location
 ```
 
-Each is **one-shot per launch**. Both were written as flag-driven and both broke something: a sheet
-that reopened over the page it was meant to reveal, and a past that reopened when somebody pressed
-"Today". Anything added here must fire once.
+The first two are **one-shot per launch**. Both were written as flag-driven and both broke something:
+a sheet that reopened over the page it was meant to reveal, and a past that reopened when somebody
+pressed "Today". Anything that *opens* something must fire once.
+`-ElephruitUseFixtureRoutes` is a different kind of switch — it chooses a provider for the whole run,
+exactly as `-ElephruitUseFixtureCalendar` does — and so is deliberately not one-shot.
+
+**`shot.sh` cannot scroll**, which is most of why the launch switches exist. For a screen it cannot
+reach on the phone, the iPad shell routes by name and draws the same views:
+
+```bash
+ELEPHRUIT_SIM="iPad Pro 11-inch (M5)" Scripts/shot.sh /tmp/settings.png -ElephruitPadRoot settings
+```
 
 **Tests go through the harness**, which serialises against every other worktree:
 
@@ -222,9 +245,19 @@ ELEPHRUIT_SCHEME=ElephruitiOS ELEPHRUIT_DESTINATION='platform=iOS Simulator,name
 ```
 
 Redirect the output to a file rather than piping it through `head` — `head` closes the pipe, the run
-dies on SIGPIPE, and the result bundle is left unfinalised and unreadable. **A failing UI test's
-result bundle cannot be exported at all**, which is exactly when the screenshots are wanted; that is
-the argument for the launch switches above.
+dies on SIGPIPE, and the result bundle is left unfinalised and unreadable.
+
+**Correction to an earlier note here: a failing UI test's result bundle *can* be exported.** This
+document previously said it could not, and that cost the travel work two blind runs. It works:
+
+```bash
+xcrun xcresulttool export attachments --path <newest>.xcresult --output-path /tmp/att
+```
+
+Read `/tmp/att/manifest.json` for the mapping from exported filename to attachment name. It carries
+the screenshots *and* — the thing that actually solved the toggle — the "Debug description for
+`<element>`" text files, which print each element's frame. When a tap lands and nothing happens, that
+frame is the answer.
 
 `swift test` in `Packages/ElephruitKit` needs none of this. `SearchSessionTests` fail under the full
 package run and pass alone — a known flake, nothing to do with this page.

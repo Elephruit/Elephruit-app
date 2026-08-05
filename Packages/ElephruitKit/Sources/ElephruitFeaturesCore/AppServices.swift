@@ -84,9 +84,20 @@ public final class AppServices {
     @ObservationIgnored
     public private(set) lazy var todayPreferences = TodayPreferences(defaults: defaults)
 
-    /// How long the user says it takes them to get places. Never measured, only told.
+    /// How long it takes the user to get places — what they said, or what was measured if they
+    /// turned that on. See ``TravelPreferences`` for why those are one question and not two.
     @ObservationIgnored
-    public private(set) lazy var travel = TravelPreferences(defaults: defaults)
+    public private(set) lazy var travel = TravelPreferences(
+        defaults: defaults,
+        dateProvider: dateProvider,
+        makeProvider: makeRouteProvider
+    )
+
+    /// Held rather than resolved at construction, because ``travel`` is lazy: the provider must not
+    /// be built — and on the real adapter that means a `CLLocationManager` existing — until
+    /// something actually asks about a journey.
+    @ObservationIgnored
+    private let makeRouteProvider: @Sendable () -> any RouteProviding
 
     /// Where this machine's preferences live.
     ///
@@ -348,6 +359,10 @@ public final class AppServices {
     ///   - remindersProvider: How to build the Reminders adapter, on the same terms. A test passes
     ///     a ``ElephruitIntegrations/FixtureRemindersProvider``, which is what lets the whole sync
     ///     flow be exercised without `EKEventStore` ever being constructed.
+    ///   - routeProvider: How to build the routing adapter, on the same terms — and with a sharper
+    ///     need for it than the rest: a simulator has no location and no route to anywhere, so
+    ///     without a ``ElephruitIntegrations/FixtureRouteProvider`` the travel feature cannot be
+    ///     seen at all, let alone asserted about.
     ///   - textRecognizer: On-device image text recognition. Tests can provide a deterministic
     ///     recognizer; the app uses Vision by default.
     ///   - defaults: Where per-device preferences live. A test passes a scratch suite so that
@@ -362,10 +377,12 @@ public final class AppServices {
         contactsProvider: (@Sendable () -> any ContactsProviding)? = nil,
         calendarProvider: (@Sendable () -> any CalendarProviding)? = nil,
         remindersProvider: (@Sendable () -> any RemindersProviding)? = nil,
+        routeProvider: (@Sendable () -> any RouteProviding)? = nil,
         textRecognizer: (any TextRecognizing)? = nil,
         defaults: UserDefaults = .standard,
         audit: FetchAudit? = nil
     ) {
+        self.makeRouteProvider = routeProvider ?? { MapKitRouteProvider() }
         self.fetchAudit = audit
         self.stack = stack
         self.dateProvider = dateProvider
@@ -738,6 +755,7 @@ public final class AppServices {
         // synthetic one rather than reaching `EKEventStore`.
         calendarProvider: (@Sendable () -> any CalendarProviding)? = nil,
         remindersProvider: (@Sendable () -> any RemindersProviding)? = nil,
+        routeProvider: (@Sendable () -> any RouteProviding)? = nil,
         defaults: UserDefaults = .standard,
         audit: FetchAudit? = nil
     ) -> AppServices {
@@ -755,6 +773,7 @@ public final class AppServices {
             contactsProvider: contactsProvider,
             calendarProvider: calendarProvider,
             remindersProvider: remindersProvider,
+            routeProvider: routeProvider,
             defaults: defaults,
             audit: audit
         )

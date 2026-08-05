@@ -95,6 +95,7 @@ final class MobileAppEnvironment {
             var contactsProvider: (@Sendable () -> any ContactsProviding)?
             var calendarProvider: (@Sendable () -> any CalendarProviding)?
             var remindersProvider: (@Sendable () -> any RemindersProviding)?
+            var routeProvider: (@Sendable () -> any RouteProviding)?
 
             if isDevelopmentMode, arguments.contains("-ElephruitUseFixtureContacts") {
                 contactsProvider = {
@@ -111,6 +112,13 @@ final class MobileAppEnvironment {
             if isDevelopmentMode, arguments.contains("-ElephruitUseFixtureReminders") {
                 remindersProvider = { FixtureRemindersProvider(authorization: fixtureAuthorization) }
             }
+            // Without this the travel feature cannot be looked at: a simulator has no location and
+            // no route to anywhere, so the real adapter answers "no" to everything and the page
+            // shows the told number forever — which is indistinguishable from the feature not
+            // being wired up at all.
+            if isDevelopmentMode, arguments.contains("-ElephruitUseFixtureRoutes") {
+                routeProvider = { FixtureRouteProvider(authorization: fixtureAuthorization) }
+            }
 
             let services = AppServices(
                 stack: stack,
@@ -119,6 +127,7 @@ final class MobileAppEnvironment {
                 contactsProvider: contactsProvider,
                 calendarProvider: calendarProvider,
                 remindersProvider: remindersProvider,
+                routeProvider: routeProvider,
                 defaults: preferences
             )
 
@@ -158,6 +167,9 @@ final class MobileAppEnvironment {
                 }
                 if contactsProvider != nil {
                     Task { _ = await services.contacts.enable() }
+                }
+                if routeProvider != nil {
+                    Task { await services.travel.enableEstimates() }
                 }
             }
 
