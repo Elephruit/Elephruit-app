@@ -73,6 +73,11 @@
 	<string>Elephruit shows your calendar and lets you create and change events. Your own notes about a meeting stay in Elephruit and are never added to a calendar event.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>Elephruit can show your Reminders lists alongside your own tasks, and keep linked reminders up to date in both directions. It only touches reminders you link, and only when you ask. Areas, projects, people, notes, and everything else private to Elephruit are never written into a reminder.</string>
+	<!-- When-in-use only. Elephruit never asks for "always", has no background location mode, and
+	     never stores a position: MapKit resolves "from here" inside the routing request, so the
+	     coordinate is never a value this app holds. See `MapKitRouteProvider`. -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Elephruit can work out when to leave for a meeting somewhere, using your location and the meeting's address. This is off until you turn it on, only happens while you have Elephruit open, and only the address is looked up — never the meeting's name, who is coming, or your notes. Your location is never saved.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>Elephruit can link the people you keep notes about to your existing contacts, so you do not type their details twice. It changes a contact only when you edit that person in Elephruit and confirm the change, and only their name, nickname, birthday, email addresses, phone numbers, websites, job title, department, and company. It never touches their photo, postal address, or notes, and it never creates or deletes contacts. Your own notes, reflections, and relationship history stay in Elephruit and are never written back.</string>
 </dict>

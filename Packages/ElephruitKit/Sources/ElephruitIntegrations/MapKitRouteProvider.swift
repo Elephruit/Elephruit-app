@@ -52,7 +52,9 @@ public final class MapKitRouteProvider: RouteProviding {
 
             // The geocoder found a Room 2, just not this one. See `RouteRules.implausibleMinutes`.
             guard RouteRules.isPlausible(minutes: minutes) else {
-                Diagnostics.integrations.debug("Discarded an implausible route of \(minutes) minutes")
+                Diagnostics.integrations.debug(
+                    "Discarded an implausible route of \(minutes, privacy: .public) minutes"
+                )
                 return .failure(.implausible)
             }
 
