@@ -60,6 +60,21 @@ enum PadReviewLaunch {
         }
     }
 
+    /// The project view a review launch asked for.
+    ///
+    /// A project's five presentations are five screens, and a review that can only ever photograph
+    /// the board is a review of one fifth of the workspace.
+    ///
+    ///     -ElephruitPadProjectView overview | board | list | table | bugs
+    static var requestedProjectView: PadProjectPresentation? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("-ElephruitDevelopmentMode"),
+            let index = arguments.firstIndex(of: "-ElephruitPadProjectView"),
+            index + 1 < arguments.count
+        else { return nil }
+        return PadProjectPresentation(rawValue: arguments[index + 1].lowercased())
+    }
+
     /// The record the reading pane should open on, when the arguments asked for one.
     static func requestedDetail(
         for root: PadRoot,

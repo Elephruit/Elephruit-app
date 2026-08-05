@@ -144,6 +144,9 @@ struct PadRootScreen: View {
             SearchScreen()
         case .reminders:
             RemindersScreen()
+        case .project(let id):
+            // The workspace, not the phone's page — the stage is wide enough for the real answer.
+            PadProjectScreen(projectID: id)
         default:
             if let route = root.route {
                 MobileRouteView(route: route)
