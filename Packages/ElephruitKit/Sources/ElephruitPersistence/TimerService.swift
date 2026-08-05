@@ -999,7 +999,11 @@ public final class TimerService {
                 // turn the sleep interval into a question, then recompute the continuously running
                 // timer from its original start date.
                 self.idleDetector.reset()
-                self.refresh()
+                // The full absorb rather than a plain refresh, because the interval that was just
+                // slept through is the most likely one for the *other* device to have stopped the
+                // timer in — and a suspended process hears no import notification. Waking is the
+                // first moment this one can look, and if nothing moved the pass is a fetch.
+                self.absorbRemoteChange()
             }
         }
     }
