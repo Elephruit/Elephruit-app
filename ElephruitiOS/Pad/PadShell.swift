@@ -146,6 +146,11 @@ enum PadRoot: Hashable, Codable {
         case .archive: self = .archive
         case .trash: self = .trash
         case .settings: self = .settings
+        // Groups is a management screen reached from the records list's own scope menu, not a
+        // place the sidebar names — and tapping a group there opens `records(.group)`, which *is*
+        // a root. So the legend stays beside the list it explains rather than becoming a rival to
+        // it in the sidebar.
+        case .groups: return nil
         case .item, .person, .event: return nil
         }
     }
@@ -156,7 +161,7 @@ extension MobileRoute {
     var owningDestinationForWindow: MobileDestination {
         if let promoted = PadRoot(promoting: self) { return promoted.owningDestination }
         switch self {
-        case .person: return .records
+        case .person, .groups: return .records
         case .event: return .calendar
         default: return .today
         }
@@ -296,7 +301,9 @@ final class PadShellModel {
         case .calendar: .calendar
         case .time: .time
         case .settings: .settings
-        case .today, .reminders, .records, .search: nil
+        // Projects' screen is the tree itself, which no route names — a project has a route, the
+        // list of them does not — so nothing the sidebar sends there can land on top of itself.
+        case .today, .projects, .reminders, .records, .search: nil
         }
     }
 
