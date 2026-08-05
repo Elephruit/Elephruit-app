@@ -885,6 +885,18 @@ public final class AppServices {
         refreshDerivedState()
     }
 
+    /// Says a time entry was written, so anything listing them re-asks its own question.
+    ///
+    /// Only the token: entries carry no badge and are not in the search index, so the derived
+    /// pass would be work for nothing. It exists because a log is a *fetch* — a plain call
+    /// SwiftUI cannot see going stale — and the surfaces that draw one were, until this,
+    /// relying on the ticking clock beside them to invalidate the view every second. That
+    /// re-read the whole day's entries once a second while a timer ran, and stopped re-reading
+    /// them at all the moment the clock moved into a child view.
+    public func noteTimeChange() {
+        changeToken &+= 1
+    }
+
     /// Captures a line of text **and** keeps derived state current.
     ///
     /// The whole of a capture, from any entry point. ``CaptureService`` writes the item; this adds

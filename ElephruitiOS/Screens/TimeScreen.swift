@@ -79,45 +79,12 @@ struct TimeScreen: View {
 
     // MARK: - Timer
 
-    @ViewBuilder
     private var timerSection: some View {
-        if let services {
-            let timer = services.timer
-            Section {
-                if let running = timer.running {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                                Text(running.displayTitle)
-                                    .font(Theme.Text.rowTitle)
-                                    .lineLimit(1)
-                                Text(timer.elapsedDisplay)
-                                    .font(.system(.title2, design: .rounded, weight: .semibold))
-                                    .monospacedDigit()
-                                    .contentTransition(.numericText())
-                            }
-                            Spacer()
-                            Button {
-                                _ = timer.stop()
-                            } label: {
-                                Image(systemName: "stop.fill")
-                                    .font(.title3)
-                                    .frame(width: 44, height: 44)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .accessibilityLabel("Stop timer")
-                        }
-                    }
-                    .padding(.vertical, Theme.Spacing.tight)
-                } else {
-                    Button {
-                        _ = services.timer.start(item: nil)
-                    } label: {
-                        Label("Start a Timer", systemImage: "play.fill")
-                    }
-                    .accessibilityIdentifier("time.start")
-                }
-            }
+        // The whole tracker, not a summary of it: naming, filing, pausing and discarding are
+        // what turn a stretch of time into a record worth keeping, and a phone that could only
+        // start and stop produced entries somebody had to reconstruct at a desk later.
+        Section {
+            MobileTimerCard()
         }
     }
 
@@ -166,7 +133,7 @@ struct TimeScreen: View {
     private var logSections: some View {
         if let services {
             let range = TimePeriod.window(window).range(using: services.dateProvider)
-            let entries = (try? services.timeEntries.entries(in: range, limit: 500)) ?? []
+            let entries = loggedEntries(in: range, services: services)
 
             Section {
                 ForEach(entries, id: \.id) { entry in
@@ -187,6 +154,29 @@ struct TimeScreen: View {
                 }
             }
         }
+    }
+
+    /// The day's entries, re-read whenever anything could have changed them.
+    ///
+    /// ### Why the two reads above the fetch are load-bearing
+    /// A fetch is a plain function call. SwiftUI has no way to know its answer went stale, so a
+    /// list built from one only refreshes when something *else* the body read changes. This body
+    /// used to read the timer's ticking `elapsedDisplay`, which invalidated it every second — so
+    /// the log looked live while costing a full re-read of the day once a second, and stopped
+    /// looking live the moment the clock moved into the card. Reading the change token and the
+    /// running entry's identity says exactly what this list actually depends on: a write
+    /// somebody made, and a timer starting or stopping.
+    private func loggedEntries(in range: Range<Date>, services: AppServices) -> [TimeEntry] {
+        _ = services.changeToken
+        _ = services.timer.running?.id
+        return (try? services.timeEntries.entries(in: range, limit: 500)) ?? []
+    }
+
+    /// The same subscription the log takes out, for the same reason.
+    private func reportSnapshots(in range: Range<Date>, services: AppServices) -> [TimeEntrySnapshot] {
+        _ = services.changeToken
+        _ = services.timer.running?.id
+        return (try? services.timeEntries.snapshots(in: range, limit: nil)) ?? []
     }
 
     private func logRow(_ entry: TimeEntry, services: AppServices) -> some View {
@@ -223,6 +213,7 @@ struct TimeScreen: View {
             if entry.endedAt != nil {
                 Button {
                     _ = services.timer.resume(entry)
+                    services.noteTimeChange()
                 } label: {
                     Label("Resume", systemImage: "play.fill")
                 }
@@ -232,6 +223,7 @@ struct TimeScreen: View {
         .swipeActions(edge: .trailing) {
             Button {
                 services.perform { try services.timeEntries.delete(entry) }
+                services.noteTimeChange()
             } label: {
                 Label("Delete", systemImage: "trash")
             }
@@ -240,14 +232,19 @@ struct TimeScreen: View {
         .contextMenu {
             Button("Edit", systemImage: "pencil") { editingEntry = entry }
             if entry.endedAt != nil {
-                Button("Resume", systemImage: "play.fill") { _ = services.timer.resume(entry) }
+                Button("Resume", systemImage: "play.fill") {
+                    _ = services.timer.resume(entry)
+                    services.noteTimeChange()
+                }
                 Button("Duplicate", systemImage: "plus.square.on.square") {
                     services.perform { _ = try services.timeEntries.duplicate(entry) }
+                    services.noteTimeChange()
                 }
             }
             Divider()
             Button("Delete", systemImage: "trash", role: .destructive) {
                 services.perform { try services.timeEntries.delete(entry) }
+                services.noteTimeChange()
             }
         }
     }
@@ -258,7 +255,7 @@ struct TimeScreen: View {
     private var reportSections: some View {
         if let services {
             let range = TimePeriod.window(window).range(using: services.dateProvider)
-            let snapshots = (try? services.timeEntries.snapshots(in: range, limit: nil)) ?? []
+            let snapshots = reportSnapshots(in: range, services: services)
             let report = TimeReporting.report(
                 entries: snapshots,
                 grouping: grouping,
@@ -367,6 +364,7 @@ struct ManualEntrySheet: View {
                 isBillable: false
             )
         }
+        services.noteTimeChange()
         dismiss()
     }
 }
@@ -427,6 +425,7 @@ struct EditEntrySheet: View {
             }
         }
         services.timer.refresh()
+        services.noteTimeChange()
         dismiss()
     }
 }
