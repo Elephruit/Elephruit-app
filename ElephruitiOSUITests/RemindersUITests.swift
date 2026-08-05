@@ -43,6 +43,23 @@ final class RemindersUITests: XCTestCase {
         app.descendants(matching: .any)["reminders.composer.title"]
     }
 
+    /// Closes the editor, once it has stopped moving.
+    ///
+    /// Opening an editor scrolls it into view, and a tap dispatched while the card is still
+    /// travelling lands where the control used to be — which does nothing, and looks exactly
+    /// like a dismiss control that does not work. Existence is not enough here; hittability is
+    /// the thing being waited for.
+    private func tapDismiss(_ app: XCUIApplication) {
+        let dismiss = app.buttons["reminders.composer.dismiss"]
+        XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
+
+        let deadline = Date().addingTimeInterval(5)
+        while !dismiss.isHittable && Date() < deadline {
+            usleep(100_000)
+        }
+        dismiss.tap()
+    }
+
     /// Starts a new reminder the way the screen intends: from the end of the list.
     private func startNewReminder(_ app: XCUIApplication) {
         let tail = app.buttons["reminders.new"]
@@ -90,7 +107,7 @@ final class RemindersUITests: XCTestCase {
         let title = composerTitle(app)
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         title.typeText("Take the cat to the vet")
-        app.buttons["reminders.composer.dismiss"].tap()
+        tapDismiss(app)
 
         // The composer has to be gone before the list can be asked what is in it: while the
         // card animates out its own title field still holds the words, and a search would find
@@ -118,7 +135,7 @@ final class RemindersUITests: XCTestCase {
             let field = composerTitle(app)
             XCTAssertTrue(field.waitForExistence(timeout: 5))
             field.typeText(title)
-            app.buttons["reminders.composer.dismiss"].tap()
+            tapDismiss(app)
             XCTAssertTrue(app.staticTexts[title].firstMatch.waitForExistence(timeout: 5))
         }
 
@@ -152,7 +169,7 @@ final class RemindersUITests: XCTestCase {
         let title = composerTitle(app)
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         title.typeText("Return the library books")
-        app.buttons["reminders.composer.dismiss"].tap()
+        tapDismiss(app)
 
         // `.firstMatch`: a row is an accessibility container, so its title matches both the
         // element that holds it and the text inside it.
