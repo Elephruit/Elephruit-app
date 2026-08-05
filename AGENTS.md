@@ -42,6 +42,23 @@ These rules apply to every task in this repository.
 - Result bundles are off by default, being both rarely read and implicated in that hang. Set
   `ELEPHRUIT_RESULT_BUNDLE=1` when you actually need one to diagnose a failure.
 
+## Build the merge, not just the branch
+
+- Run `Scripts/premerge.sh` before opening a pull request, and again before merging one that has
+  been open long enough for `main` to have moved. It merges `origin/main` into a throwaway
+  worktree, builds both apps, and throws the worktree away. It never touches your branch.
+- A branch can build, `main` can build, and the merge of the two can fail, because git merges
+  text and the compiler checks meaning. Nothing else in the loop ever compiles that combination.
+- **The iPad is the reliable victim, and for a structural reason.** `ElephruitiOS/Pad/` reuses
+  views written for the phone; it is the newest part of the app, so a branch cut before a Pad
+  file exists does not contain it; and a `grep` for a view's callers in that worktree finds
+  nothing and reports the view as unused. Deleting it is then a perfectly reasonable local
+  decision that breaks a target the branch has never seen. This has happened twice.
+- So: before removing or renaming any view, component, accessibility identifier or model in
+  `ElephruitiOS/`, check `ElephruitiOS/Pad/` in *up-to-date* `main`, not only in your worktree.
+  `git grep <name> origin/main` answers that in one command and does not care how old the branch
+  is.
+
 ## Commit incrementally
 
 - Commit every coherent, verified step before starting the next step.
