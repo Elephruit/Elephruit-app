@@ -37,6 +37,10 @@ struct RemindersScreen: View {
     /// the list finds the target rather than the edge of it.
     private static let tapTargetTail: CGFloat = 220
 
+    /// Where a row's separator starts: under the title, not under the completion circle, so
+    /// the circles read as one column rather than as the first cell of a table.
+    private static let separatorInset: CGFloat = 44
+
     @State private var composing: Composing?
     @State private var draft = ReminderComposerDraft()
     @State private var showsCompleted = false
@@ -57,7 +61,13 @@ struct RemindersScreen: View {
             // Beneath the scroller, catching every tap the content did not want. This is the
             // "anywhere" in "tap anywhere": the background is not decoration, it is the
             // control.
-            Theme.Colors.windowBackground
+            // White, not the window's grey. The grey existed to make each reminder's card
+            // float above it, and cards on a phone list are chrome the content has to be read
+            // through: thirteen rounded rectangles stacked down a 400-point column is thirteen
+            // borders competing with thirteen titles. One white sheet, hairlines between the
+            // rows, and the only card left is the composer — which is the one thing that
+            // genuinely *is* floating above the list.
+            Theme.Colors.contentBackground
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
                 .onTapGesture(perform: startNewReminder)
@@ -228,11 +238,16 @@ struct RemindersScreen: View {
 
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, Theme.Spacing.medium)
-            .background(
-                Theme.Colors.contentBackground,
-                in: RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
-            )
+            .padding(.horizontal, Theme.Spacing.tight)
+            // A hairline under the row instead of a card around it. On one white sheet the
+            // separator is all the structure a list of sentences needs, and it costs a pixel
+            // where a rounded card costs a border, a fill and a shadow.
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(Theme.Colors.separator)
+                    .frame(height: 0.5)
+                    .padding(.leading, Self.separatorInset)
+            }
             .contentShape(Rectangle())
             // One tap edits. The Mac needs a double-click because a single click there means
             // "select"; nothing on this screen is selectable, so the cheapest gesture goes to
@@ -339,7 +354,8 @@ struct RemindersScreen: View {
     }
 
     private func startNewReminder() {
-        guard composing == nil else { return }
+        guard composing != .newReminder else { return }
+        settleOpenEditor()
         draft.reset()
         withCalmAnimation(Theme.Motion.appearance) {
             composing = .newReminder
@@ -347,11 +363,26 @@ struct RemindersScreen: View {
     }
 
     private func startEditing(_ reminder: Item) {
-        guard composing == nil else { return }
+        guard composing != .editing(reminder.id) else { return }
+        settleOpenEditor()
         draft = ReminderComposerDraft(reminder: reminder)
         withCalmAnimation(Theme.Motion.appearance) {
             composing = .editing(reminder.id)
         }
+    }
+
+    /// Puts away whatever editor is already open, so tapping a second reminder just moves the
+    /// editor to it.
+    ///
+    /// Saving rather than discarding, and without asking. The alternative — refusing the tap
+    /// until Done or Cancel is pressed — makes the list stop responding for a reason that is
+    /// invisible while it is happening, and there is nothing to confirm: the words are already
+    /// typed, and moving to another reminder is not a statement about wanting to lose them.
+    /// An untouched editor writes nothing, because a blank title is not a save.
+    private func settleOpenEditor() {
+        guard composing != nil else { return }
+        draft.commitPendingStep()
+        saveDraft()
     }
 
     private func closeComposer() {
@@ -368,13 +399,25 @@ struct RemindersScreen: View {
     /// likely thing to happen on a screen where the background opens the composer.
     private func commit(keepsOpen: Bool) {
         draft.commitPendingStep()
+        let editingID: UUID? = if case .editing(let id) = composing { id } else { nil }
+        saveDraft()
 
+        if keepsOpen && editingID == nil {
+            draft.reset()
+        } else {
+            closeComposer()
+        }
+    }
+
+    /// Writes the draft, creating or updating according to what the composer was opened on.
+    ///
+    /// An empty title writes nothing and is not an error: it is someone who opened the composer
+    /// by tapping the background and changed their mind, which is the likeliest thing to happen
+    /// on a screen where the background opens the composer.
+    private func saveDraft() {
         guard let services,
               !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else {
-            if !keepsOpen { closeComposer() }
-            return
-        }
+        else { return }
 
         var committed = draft
         // The grammar is read here rather than while typing, so a half-typed `#foll` never
@@ -384,9 +427,16 @@ struct RemindersScreen: View {
             knowing: (try? services.capture.vocabulary()) ?? .empty
         )
         committed.title = extraction.text
-        committed.tagSlugs = extraction.tagSlugs
-        committed.personNames = extraction.personNames
-        committed.projectTitle = extraction.projectTitle ?? draft.projectTitle
+        // Merged, not replaced. What the pickers hold was chosen deliberately; what the parser
+        // found was typed into the title. Assigning the parser's result was silently throwing
+        // away every tag and person picked from a sheet the moment the reminder was saved.
+        committed.tagSlugs = draft.tagSlugs + extraction.tagSlugs.filter {
+            !draft.tagSlugs.contains($0)
+        }
+        committed.personNames = draft.personNames + extraction.personNames.filter {
+            !draft.personNames.contains($0)
+        }
+        committed.projectTitle = draft.projectTitle ?? extraction.projectTitle
 
         let editingID: UUID? = if case .editing(let id) = composing { id } else { nil }
 
@@ -402,12 +452,6 @@ struct RemindersScreen: View {
             }
         } catch {
             actionError = error.summary
-        }
-
-        if keepsOpen && editingID == nil {
-            draft.reset()
-        } else {
-            closeComposer()
         }
     }
 

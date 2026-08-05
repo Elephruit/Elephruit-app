@@ -87,10 +87,50 @@ final class RemindersUITests: XCTestCase {
         let title = composerTitle(app)
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         title.typeText("Never meant to write this")
-        app.buttons["reminders.composer.cancel"].tap()
+        app.buttons["reminders.composer.dismiss"].tap()
 
-        XCTAssertFalse(composerTitle(app).exists)
+        // The thing that actually matters, asserted first and without a clock: nothing was
+        // written. The composer's disappearance is an animation, and timing it at five seconds
+        // made this test fail on one run and pass on the next for no change in behaviour.
         XCTAssertFalse(app.staticTexts["Never meant to write this"].exists)
+        XCTAssertTrue(
+            composerTitle(app).waitForNonExistence(timeout: 10),
+            "The dismiss control should close the composer"
+        )
+    }
+
+    /// The editor moves to whichever reminder you tap, with nothing to dismiss first.
+    ///
+    /// The behaviour a list of rows implies: rows are things you point at, and an open editor
+    /// that refuses the next tap makes the list stop responding for a reason invisible while it
+    /// is happening. What was typed in the first one is kept, not dropped.
+    func testTappingAnotherReminderMovesTheEditor() throws {
+        let app = launchOnReminders()
+
+        for title in ["Alpha one reminder", "Beta two reminder"] {
+            startNewReminder(app)
+            let field = composerTitle(app)
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            field.typeText(title)
+            app.buttons["reminders.composer.done"].tap()
+            XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5))
+        }
+
+        app.staticTexts["Alpha one reminder"].firstMatch.tap()
+        XCTAssertTrue(composerTitle(app).waitForExistence(timeout: 5))
+        XCTAssertEqual(composerTitle(app).value as? String, "Alpha one reminder")
+
+        // The second tap goes straight through — no Done, no Cancel.
+        app.staticTexts["Beta two reminder"].firstMatch.tap()
+        XCTAssertEqual(
+            composerTitle(app).value as? String,
+            "Beta two reminder",
+            "Tapping another reminder should move the editor to it"
+        )
+        XCTAssertTrue(
+            app.staticTexts["Alpha one reminder"].waitForExistence(timeout: 5),
+            "The reminder the editor left should still be in the list"
+        )
     }
 
     /// The round trip: what is typed is saved, appears in the list, and opens in place.
@@ -108,12 +148,20 @@ final class RemindersUITests: XCTestCase {
         title.typeText("Return the library books")
         app.buttons["reminders.composer.done"].tap()
 
-        let row = app.staticTexts["Return the library books"]
+        // `.firstMatch`: a row is an accessibility container, so its title matches both the
+        // element that holds it and the text inside it.
+        let row = app.staticTexts["Return the library books"].firstMatch
         XCTAssertTrue(
             row.waitForExistence(timeout: 5),
             "A committed reminder should appear in the list"
         )
-        XCTAssertFalse(composerTitle(app).exists, "Done should close the composer")
+        // Waiting rather than asking once: the composer animates out, and `.exists` sampled on
+        // the frame after the tap is asking whether the animation has finished, not whether the
+        // editor closed.
+        XCTAssertTrue(
+            composerTitle(app).waitForNonExistence(timeout: 5),
+            "Done should close the composer"
+        )
 
         row.tap()
 
