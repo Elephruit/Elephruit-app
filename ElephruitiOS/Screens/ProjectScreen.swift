@@ -40,7 +40,6 @@ struct ProjectScreen: View {
     @State private var pendingBrief = PendingSave()
 
     @State private var isAddingWork = false
-    @State private var draftWorkTitle = ""
     @State private var isConfirmingDeletion = false
 
     var body: some View {
@@ -72,7 +71,6 @@ struct ProjectScreen: View {
             if let project {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        draftWorkTitle = ""
                         isAddingWork = true
                     } label: {
                         Label("Add work", systemImage: "plus")
@@ -90,11 +88,14 @@ struct ProjectScreen: View {
                 }
             }
         }
-        .alert("Add Work", isPresented: $isAddingWork) {
-            TextField("What needs doing?", text: $draftWorkTitle)
-                .accessibilityIdentifier("project.addWork.title")
-            Button("Add") { addWork() }
-            Button("Cancel", role: .cancel) { draftWorkTitle = "" }
+        .sheet(isPresented: $isAddingWork) {
+            MobileNameSheet(
+                title: "Add Work",
+                prompt: "What needs doing?",
+                subtitle: project.map { "Filed under \($0.displayTitle)." },
+                confirmTitle: "Add",
+                onConfirm: addWork
+            )
         }
         .confirmationDialog(
             "Move “\(project?.displayTitle ?? "this project")” to Trash?",
@@ -481,9 +482,8 @@ struct ProjectScreen: View {
     /// a project is a thing to do, and the kind is one tap to change on the item's own screen.
     /// It goes to the project itself rather than into a stage — putting new work in a column is a
     /// board gesture, and there is no board here to have dragged it from.
-    private func addWork() {
-        defer { draftWorkTitle = "" }
-        guard let services, let title = draftWorkTitle.nilIfBlank else { return }
+    private func addWork(titled title: String) {
+        guard let services else { return }
         services.perform {
             let created = try services.items.create(
                 ItemDraft(kind: .reminder, title: title, parentID: projectID)
@@ -491,6 +491,10 @@ struct ProjectScreen: View {
             services.noteChange(to: created)
         }
         services.refreshDerivedState()
+        // Explicitly, rather than trusting the change token to bring the `task(id:)` round: the
+        // list has to be right the moment the sheet leaves, and this screen is the only thing
+        // that knows it was the one that changed.
+        reload()
     }
 
     // MARK: - Loading
@@ -539,6 +543,7 @@ struct ProjectScreen: View {
             try services.items.toggleCompletion(item)
             services.noteChange(to: item)
         }
+        reload()
     }
 
     private func moveToTrash(_ item: Item) {
@@ -548,6 +553,7 @@ struct ProjectScreen: View {
             try services.items.moveToTrash(item)
             services.noteRemoval(of: id)
         }
+        reload()
     }
 
     private func act(_ work: @escaping (AppServices) throws -> Void) {

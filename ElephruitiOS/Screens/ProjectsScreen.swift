@@ -28,16 +28,20 @@ struct ProjectsScreen: View {
 
     @State private var showsArchived = false
     @State private var creation: Creation?
-    @State private var draftName = ""
     @State private var renaming: ProjectSidebarRow?
     @State private var pendingDeletion: ProjectSidebarRow?
+
+    /// The project just made, waiting for the naming sheet to finish going away.
+    ///
+    /// Pushing a screen while a presentation is still dismissing is a push the navigation stack is
+    /// entitled to drop, and intermittently did: the project was created and the app stayed on the
+    /// list. `onDismiss` is the moment that is definitively after, so the push happens there.
+    @State private var pendingOpen: UUID?
 
     /// A project being named, and the area it will land in.
     ///
     /// The Mac types the name into a row that appears in the tree. A phone cannot: the keyboard
-    /// takes half the screen and the row it is editing would be behind it. An alert with one field
-    /// is the platform's answer to "name this before it exists", and it keeps the template choice
-    /// and the name in one uninterrupted motion.
+    /// takes half the screen and the row it is editing would be behind it.
     private struct Creation: Identifiable {
         let template: ProjectTemplate
         let area: ProjectSidebarRow?
@@ -108,19 +112,26 @@ struct ProjectsScreen: View {
                 .accessibilityIdentifier("projects.new")
             }
         }
-        .alert("New Project", isPresented: creationBinding, presenting: creation) { pending in
-            TextField("Project name", text: $draftName)
-                .accessibilityIdentifier("projects.new.name")
-            Button("Create") { commitCreation(pending) }
-            Button("Cancel", role: .cancel) { draftName = "" }
-        } message: { pending in
-            Text(creationMessage(pending))
+        .sheet(item: $creation, onDismiss: openPendingProject) { pending in
+            MobileNameSheet(
+                title: "New Project",
+                prompt: "Project name",
+                subtitle: creationMessage(pending),
+                confirmTitle: "Create"
+            ) { name in
+                commitCreation(pending, named: name)
+            }
         }
-        .alert("Rename", isPresented: renameBinding, presenting: renaming) { row in
-            TextField("Name", text: $draftName)
-                .accessibilityIdentifier("projects.rename.name")
-            Button("Save") { commitRename(row) }
-            Button("Cancel", role: .cancel) { draftName = "" }
+        .sheet(item: $renaming) { row in
+            MobileNameSheet(
+                title: "Rename",
+                prompt: "Name",
+                subtitle: nil,
+                confirmTitle: "Save",
+                initialText: row.title
+            ) { name in
+                commitRename(row, to: name)
+            }
         }
         .confirmationDialog(
             deletionTitle,
@@ -254,12 +265,7 @@ struct ProjectsScreen: View {
 
     // MARK: - Creating
 
-    private var creationBinding: Binding<Bool> {
-        Binding(get: { creation != nil }, set: { if !$0 { creation = nil } })
-    }
-
     private func begin(_ pending: Creation) {
-        draftName = ""
         creation = pending
     }
 
@@ -268,9 +274,8 @@ struct ProjectsScreen: View {
         return "\(pending.template.summary), in \(area.title)."
     }
 
-    private func commitCreation(_ pending: Creation) {
-        defer { draftName = "" }
-        guard let services, let name = draftName.nilIfBlank else { return }
+    private func commitCreation(_ pending: Creation, named name: String) {
+        guard let services else { return }
         let area = pending.area.flatMap { try? services.items.item(id: $0.id) }
         guard let project = try? services.projectTemplates.createProject(
             named: name,
@@ -279,28 +284,25 @@ struct ProjectsScreen: View {
         ) else { return }
 
         services.refreshDerivedState()
-        // Straight into what was just made: a create that leaves you looking at a list is a
-        // create you have to go and find.
-        shell.push(.project(project.id))
+        pendingOpen = project.id
+    }
+
+    /// Straight into what was just made: a create that leaves you looking at a list is a create
+    /// you then have to go and find.
+    private func openPendingProject() {
+        guard let id = pendingOpen else { return }
+        pendingOpen = nil
+        shell.push(.project(id))
     }
 
     // MARK: - Renaming
 
-    private var renameBinding: Binding<Bool> {
-        Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })
-    }
-
     private func beginRename(_ row: ProjectSidebarRow) {
-        draftName = row.title
         renaming = row
     }
 
-    private func commitRename(_ row: ProjectSidebarRow) {
-        defer { draftName = "" }
-        guard let services,
-              let item = try? services.items.item(id: row.id),
-              let name = draftName.nilIfBlank
-        else { return }
+    private func commitRename(_ row: ProjectSidebarRow, to name: String) {
+        guard let services, let item = try? services.items.item(id: row.id) else { return }
         services.perform {
             try services.items.update(item) { $0.title = name }
             services.noteChange(to: item)
