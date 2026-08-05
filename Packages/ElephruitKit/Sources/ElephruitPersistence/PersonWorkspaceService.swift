@@ -178,6 +178,55 @@ public final class PersonWorkspaceService {
         )
     }
 
+    /// What the app knows it does not know about somebody, in the order worth asking.
+    ///
+    /// ### Why missing names come before unconfirmed facts
+    /// A name is a single field with a single right answer that the user either has or does not, and
+    /// supplying it turns a phrase into a person everywhere at once. An unconfirmed fact is a
+    /// judgement — *is this still true?* — and asking a judgement first is how a list of small
+    /// questions becomes a chore nobody opens.
+    ///
+    /// Both are *offered*, never acted on. Nothing here is filled in by the app, and nothing here is
+    /// hidden because it has gone unanswered for long enough.
+    public func thingsToFillIn(for person: Item) throws(AppError) -> [FillInPrompt] {
+        var prompts: [FillInPrompt] = []
+
+        for relationship in try people.relationships(of: person) {
+            guard let other = relationship.other,
+                  other.personProfile?.hasStatedName == false
+            else { continue }
+
+            prompts.append(
+                FillInPrompt(
+                    id: other.id,
+                    personID: other.id,
+                    personName: other.displayTitle,
+                    kind: .missingName(relationLabel: relationship.displayLabel),
+                    prompt: "What is \(person.displayTitle)'s \(relationship.displayLabel) called?"
+                )
+            )
+        }
+
+        let now = dateProvider.now
+        for observation in try people.ledger(for: person).stale(asOf: now, calendar: dateProvider.calendar) {
+            prompts.append(
+                FillInPrompt(
+                    id: observation.id,
+                    personID: person.id,
+                    personName: person.displayTitle,
+                    kind: .unconfirmedFact(
+                        attribute: observation.attribute,
+                        value: observation.value,
+                        lastConfirmedOn: observation.lastConfirmedOn
+                    ),
+                    prompt: "\(observation.attribute.displayName): \(observation.value). Still true?"
+                )
+            )
+        }
+
+        return prompts
+    }
+
     /// How old somebody is: exactly if a birthday is recorded, estimated if an age ever was.
     ///
     /// A recorded birthday always wins. That is the whole point of scenario 12 — adding one turns
@@ -495,6 +544,44 @@ public final class PersonWorkspaceService {
 // MARK: - Values
 
 /// A person's structured facts, ready to render.
+/// One thing the app knows it does not know, phrased as a question it can ask in a single field.
+public struct FillInPrompt: Sendable, Hashable, Identifiable {
+    public enum Kind: Sendable, Hashable {
+        /// Somebody recorded before their name was known — "Dave's son".
+        case missingName(relationLabel: String)
+
+        /// A fact old enough that the app has stopped vouching for it.
+        case unconfirmedFact(attribute: FactAttribute, value: String, lastConfirmedOn: Date)
+    }
+
+    /// The person or observation this is about, so a list of these is stable across reloads.
+    public var id: UUID
+
+    /// Whose record answering it would change.
+    public var personID: UUID
+    public var personName: String
+
+    public var kind: Kind
+
+    /// The question, as it is put to the user.
+    public var prompt: String
+
+    public init(id: UUID, personID: UUID, personName: String, kind: Kind, prompt: String) {
+        self.id = id
+        self.personID = personID
+        self.personName = personName
+        self.kind = kind
+        self.prompt = prompt
+    }
+
+    public var symbolName: String {
+        switch kind {
+        case .missingName: "person.badge.questionmark"
+        case .unconfirmedFact: "questionmark.circle"
+        }
+    }
+}
+
 public struct PersonPortrait: Sendable {
     public var personID: UUID
     public var name: String

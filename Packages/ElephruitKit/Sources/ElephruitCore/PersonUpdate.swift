@@ -24,6 +24,16 @@ public struct RelativeCapture: Sendable, Hashable, Identifiable {
 
     public var kind: RelationshipKind
 
+    /// The record this row is about, when the caller already knows.
+    ///
+    /// ### Why the repository is not allowed to work this out
+    /// Two rows saying "son" with no name are either one child recorded twice or two children, and
+    /// nothing in the data distinguishes them. Guessing *reuse* silently merges two people, which is
+    /// unrecoverable and invisible; guessing *new* leaves a duplicate, which is visible and one tap
+    /// to fix. So the repository always creates, and identity is stated here by the one caller that
+    /// actually has it — the editor that opened an existing relative in order to change them.
+    public var existingPersonID: UUID?
+
     /// The user's own word — "son", "step-mother". Never inferred from a name or a pronoun.
     public var label: String?
 
@@ -47,6 +57,7 @@ public struct RelativeCapture: Sendable, Hashable, Identifiable {
     public init(
         id: UUID = UUID(),
         kind: RelationshipKind = .child,
+        existingPersonID: UUID? = nil,
         label: String? = nil,
         name: String? = nil,
         age: Int? = nil,
@@ -57,6 +68,7 @@ public struct RelativeCapture: Sendable, Hashable, Identifiable {
     ) {
         self.id = id
         self.kind = kind
+        self.existingPersonID = existingPersonID
         self.label = label
         self.name = name
         self.age = age
@@ -101,7 +113,7 @@ public struct RelativeCapture: Sendable, Hashable, Identifiable {
     /// typed, or it is set by pressing *Add a son*, and either way somebody meant it. An untouched
     /// row has no word and is discarded.
     public var isEmpty: Bool {
-        statedName == nil && statedLabel == nil && age == nil
+        existingPersonID == nil && statedName == nil && statedLabel == nil && age == nil
             && statedGradeText == nil && statedSchool == nil && statedNote == nil
     }
 
