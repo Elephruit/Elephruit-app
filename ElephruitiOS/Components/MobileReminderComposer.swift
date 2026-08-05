@@ -23,6 +23,16 @@ import SwiftUI
 /// are still popovers, anchored to the control that opened them: a full-screen sheet for
 /// choosing one tag covers the sentence you are in the middle of writing, which is the one
 /// thing you need to see while deciding how to file it.
+/// One of the composer's six fields, nameable from outside it.
+///
+/// At file scope rather than nested in the composer because the *list* needs to say which one
+/// it means: tapping a reminder's deadline is a request to change that deadline, and the
+/// request has to survive the trip from the row to the editor that opens.
+enum ComposerField: String, Identifiable, Hashable {
+    case project, when, tags, people, checklist, deadline
+    var id: String { rawValue }
+}
+
 struct MobileReminderComposer: View {
     @Environment(\.services) private var services
 
@@ -33,19 +43,17 @@ struct MobileReminderComposer: View {
     /// Saves and closes. The only way out, because there is no other kind.
     var onDismiss: () -> Void
 
+    /// The field to open on, for arrivals that already know which one they mean — a tap on a
+    /// reminder's deadline chip is a request to change the deadline, not to look at the editor.
+    var opening: ComposerField?
+
     @FocusState private var focus: Field?
     @State private var vocabulary = CaptureVocabulary.empty
-    @State private var activePopover: Popover?
+    @State private var activePopover: ComposerField?
     /// Whether the checklist's entry row is showing, mirroring the Mac's `.checklist` stop.
     @State private var isAddingStep = false
 
     private enum Field: Hashable { case title, notes, step }
-
-    /// Which popover is up. One piece of state for all five, because only one can be.
-    private enum Popover: String, Identifiable {
-        case when, deadline, tags, people, project
-        var id: String { rawValue }
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -71,7 +79,15 @@ struct MobileReminderComposer: View {
         .elevation(.floating)
         .task {
             vocabulary = (try? services?.capture.vocabulary()) ?? .empty
-            focus = .title
+
+            guard let opening else {
+                focus = .title
+                return
+            }
+            // One turn of the run loop before presenting: the card is arriving, and a popover
+            // anchored to a control that has not been laid out yet has nothing to point at.
+            await Task.yield()
+            open(opening)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("reminders.composer")
@@ -339,10 +355,7 @@ struct MobileReminderComposer: View {
                 }
 
             control(symbol: "checklist", isActive: !draft.checklist.isEmpty,
-                    label: "Checklist", identifier: "checklist") {
-                withCalmAnimation { isAddingStep = true }
-                focus = .step
-            }
+                    label: "Checklist", identifier: "checklist") { open(.checklist) }
 
             control(symbol: "flag", isActive: draft.dueAt != nil,
                     label: "Deadline", identifier: "deadline") { activePopover = .deadline }
@@ -355,8 +368,19 @@ struct MobileReminderComposer: View {
         .padding(.vertical, Theme.Spacing.small)
     }
 
+    /// Opens one field. Five of them are popovers; the checklist is a row inside the card, so
+    /// "open" means something different for it and this is the one place that knows so.
+    private func open(_ field: ComposerField) {
+        if field == .checklist {
+            withCalmAnimation { isAddingStep = true }
+            focus = .step
+        } else {
+            activePopover = field
+        }
+    }
+
     /// Whether one picker is showing, as a binding a popover can also close.
-    private func showing(_ which: Popover) -> Binding<Bool> {
+    private func showing(_ which: ComposerField) -> Binding<Bool> {
         Binding(
             get: { activePopover == which },
             set: { isShowing in

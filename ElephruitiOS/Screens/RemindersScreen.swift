@@ -42,6 +42,8 @@ struct RemindersScreen: View {
     private static let separatorInset: CGFloat = 44
 
     @State private var composing: Composing?
+    /// Which field the editor should arrive on, when the tap that opened it said so.
+    @State private var openingField: ComposerField?
     @State private var draft = ReminderComposerDraft()
     @State private var showsCompleted = false
     @State private var actionError: String?
@@ -232,7 +234,9 @@ struct RemindersScreen: View {
                             .lineLimit(2)
                     }
 
-                    ReminderFactRow(reminder: reminder)
+                    ReminderFactRow(reminder: reminder) { field in
+                        startEditing(reminder, opening: field)
+                    }
                 }
                 .padding(.vertical, Theme.Spacing.small)
 
@@ -344,8 +348,13 @@ struct RemindersScreen: View {
         MobileReminderComposer(
             draft: $draft,
             onQuickCommit: { commit(keepsOpen: quickCommitKeepsOpen) },
-            onDismiss: { commit(keepsOpen: false) }
+            onDismiss: { commit(keepsOpen: false) },
+            opening: openingField
         )
+        // Identity by target *and* field, so tapping a different chip on the reminder already
+        // being edited builds a fresh card that opens on the new field rather than reusing the
+        // old one, which would keep showing the popover the first tap asked for.
+        .id(composingIdentity)
         // The Mac's transition, to the token: the editor grows into place from the top edge of
         // where it will sit, so it reads as the list making room rather than a card landing on
         // it.
@@ -356,15 +365,22 @@ struct RemindersScreen: View {
         guard composing != .newReminder else { return }
         settleOpenEditor()
         draft.reset()
+        openingField = nil
         withCalmAnimation(Theme.Motion.appearance) {
             composing = .newReminder
         }
     }
 
-    private func startEditing(_ reminder: Item) {
-        guard composing != .editing(reminder.id) else { return }
+    /// Opens a reminder's editor, optionally already on one field.
+    ///
+    /// `opening` is what makes a tap on a deadline chip land *in* the deadline rather than in
+    /// the editor beside it. Re-tapping the same chip while that reminder is already open still
+    /// opens the field, because the second tap means the same thing the first one did.
+    private func startEditing(_ reminder: Item, opening field: ComposerField? = nil) {
+        guard composing != .editing(reminder.id) || openingField != field else { return }
         settleOpenEditor()
         draft = ReminderComposerDraft(reminder: reminder)
+        openingField = field
         withCalmAnimation(Theme.Motion.appearance) {
             composing = .editing(reminder.id)
         }
@@ -388,7 +404,18 @@ struct RemindersScreen: View {
         withCalmAnimation(Theme.Motion.appearance) {
             composing = nil
         }
+        openingField = nil
         draft.reset()
+    }
+
+    /// What makes one presentation of the composer distinct from another.
+    private var composingIdentity: String {
+        let target: String = switch composing {
+        case .newReminder: "new"
+        case .editing(let id): id.uuidString
+        case nil: "none"
+        }
+        return "\(target)-\(openingField?.rawValue ?? "")"
     }
 
     /// Saves what was typed, and either stays open for the next one or closes.
@@ -500,28 +527,42 @@ struct RemindersScreen: View {
 ///
 /// The Mac's `metadataFacts` vocabulary, said in the same words, symbols and colours. A phone
 /// shows fewer of them only because it has fewer points across, never different ones.
+///
+/// Each chip is also the way in to the thing it names. A chip that reads "Jul 21" is already
+/// pointing at the deadline; making it open the editor *on some other field* — or worse, open
+/// the editor and then wait to be told again which field was meant — spends two taps and an
+/// animation getting back to where the first tap was already aimed.
 private struct ReminderFactRow: View {
     @Environment(\.services) private var services
 
     let reminder: Item
+    /// Opens this reminder's editor on one field.
+    var onEdit: (ComposerField) -> Void
 
     var body: some View {
         let facts = facts
         if !facts.isEmpty {
             FlowLayout(spacing: Theme.Spacing.tight, lineSpacing: Theme.Spacing.tight) {
                 ForEach(facts, id: \.id) { fact in
-                    HStack(spacing: Theme.Spacing.hairline) {
-                        Image(systemName: fact.symbol)
-                        Text(fact.text).lineLimit(1)
+                    Button {
+                        onEdit(fact.field)
+                    } label: {
+                        HStack(spacing: Theme.Spacing.hairline) {
+                            Image(systemName: fact.symbol)
+                            Text(fact.text).lineLimit(1)
+                        }
+                        .font(Theme.Text.chip)
+                        .foregroundStyle(fact.tint)
+                        .padding(.horizontal, Theme.Spacing.small)
+                        .padding(.vertical, Theme.Spacing.hairline)
+                        .background(
+                            Capsule().fill(Theme.Colors.tintedFill(fact.tint))
+                        )
+                        .contentShape(Capsule())
                     }
-                    .font(Theme.Text.chip)
-                    .foregroundStyle(fact.tint)
-                    .padding(.horizontal, Theme.Spacing.small)
-                    .padding(.vertical, Theme.Spacing.hairline)
-                    .background(
-                        Capsule().fill(Theme.Colors.tintedFill(fact.tint))
-                    )
+                    .buttonStyle(.plain)
                     .accessibilityElement(children: .combine)
+                    .accessibilityHint("Opens this reminder's \(fact.field.rawValue)")
                 }
             }
         }
@@ -532,6 +573,8 @@ private struct ReminderFactRow: View {
         let symbol: String
         let text: String
         let tint: Color
+        /// Which field of the editor this chip is a door to.
+        let field: ComposerField
     }
 
     private var facts: [Fact] {
@@ -541,7 +584,7 @@ private struct ReminderFactRow: View {
         if reminder.isSomeday {
             facts.append(
                 Fact(id: "someday", symbol: "archivebox", text: "Someday",
-                     tint: Theme.Colors.secondaryText)
+                     tint: Theme.Colors.secondaryText, field: .when)
             )
         } else if let startAt = reminder.startAt {
             facts.append(
@@ -549,7 +592,8 @@ private struct ReminderFactRow: View {
                     id: "scheduled",
                     symbol: "calendar",
                     text: RelativeDay.text(for: startAt, using: clock),
-                    tint: Theme.Colors.secondaryText
+                    tint: Theme.Colors.secondaryText,
+                    field: .when
                 )
             )
         }
@@ -564,7 +608,8 @@ private struct ReminderFactRow: View {
                     // open — the Mac's rule, kept.
                     tint: reminder.isCompleted
                         ? Theme.Colors.secondaryText
-                        : DateUrgency.color(for: dueAt, using: clock)
+                        : DateUrgency.color(for: dueAt, using: clock),
+                    field: .deadline
                 )
             )
         }
@@ -575,7 +620,8 @@ private struct ReminderFactRow: View {
                     id: "project",
                     symbol: "folder",
                     text: project.displayTitle,
-                    tint: Theme.Palette.color(named: project.colorName)
+                    tint: Theme.Palette.color(named: project.colorName),
+                    field: .project
                 )
             )
         }
@@ -588,7 +634,8 @@ private struct ReminderFactRow: View {
                     id: "tag-\(tag.slug)",
                     symbol: "number",
                     text: tag.slug,
-                    tint: Theme.Palette.color(named: tag.colorName, neutral: Theme.Colors.secondaryText)
+                    tint: Theme.Palette.color(named: tag.colorName, neutral: Theme.Colors.secondaryText),
+                    field: .tags
                 )
             )
         }
@@ -605,7 +652,8 @@ private struct ReminderFactRow: View {
                     text: text,
                     tint: checklist.completed == checklist.total
                         ? Theme.Colors.completed
-                        : Theme.Colors.secondaryText
+                        : Theme.Colors.secondaryText,
+                    field: .checklist
                 )
             )
         }
