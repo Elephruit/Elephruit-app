@@ -66,6 +66,32 @@ public enum RouteRules {
     public static func isPlausible(minutes: Int) -> Bool {
         minutes > 0 && minutes <= implausibleMinutes
     }
+
+    /// How long to leave a refusal alone before asking again.
+    ///
+    /// ### Why a refusal must be remembered at all
+    /// Because without this the feature geocodes "Room 2" every time the page redraws. A route that
+    /// failed still costs a network call, a `List` re-renders on every scroll, and the place that
+    /// fails is precisely the place that appears in somebody's calendar five times a week. A cache
+    /// of successes alone would leave the commonest case — the one that never succeeds — asking
+    /// forever.
+    ///
+    /// The delay depends on what kind of "no" it was, because they are genuinely different claims:
+    ///
+    /// - **A place that does not exist, has no route, or is on another continent** is a fact about
+    ///   the string somebody typed. It will not become true later in the afternoon, so this is left
+    ///   alone for the rest of the day.
+    /// - **A service that was unreachable** is a fact about the moment. Five minutes.
+    ///
+    /// ``RouteFailure/notAuthorized`` is absent on purpose: that is not a refusal to cache but a
+    /// switch to respect, and it is the caller's business rather than a timer's.
+    public static func retryDelay(after failure: RouteFailure) -> TimeInterval {
+        switch failure {
+        case .placeNotFound, .noRoute, .implausible: 12 * 60 * 60
+        case .unavailable, .failed: 5 * 60
+        case .notAuthorized: 0
+        }
+    }
 }
 
 // MARK: - The place
