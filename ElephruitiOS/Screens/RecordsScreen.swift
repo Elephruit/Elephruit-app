@@ -103,6 +103,10 @@ private struct RecordsListBody<TrailingItem: View>: View {
                 }
         }
         .listStyle(.plain)
+        // A heading belongs to the names under it. At the default spacing each letter floated in the
+        // middle of a band of empty list, closer to the section above it than to its own first
+        // person — which is a heading that has stopped labelling anything.
+        .listSectionSpacing(.compact)
         .searchable(text: $searchText, prompt: "Search people")
         .searchFocused($isSearchFocused)
         .toolbar {
@@ -139,6 +143,19 @@ private struct RecordsListBody<TrailingItem: View>: View {
                                 MobileRecordRow(entry: entry)
                             }
                             .buttonStyle(.plain)
+                            // The row's own breathing room, in one place. A `List` row's default
+                            // vertical padding is generous enough for a line of text and far too
+                            // much around a 44-point face: it made a row of a person ninety-six
+                            // points tall, which is half again what any address book on the
+                            // platform uses and a third fewer people per screen.
+                            .listRowInsets(
+                                EdgeInsets(
+                                    top: Theme.Spacing.small,
+                                    leading: Theme.Spacing.large,
+                                    bottom: Theme.Spacing.small,
+                                    trailing: Theme.Spacing.large
+                                )
+                            )
                         }
                     } header: {
                         Text(section.title)

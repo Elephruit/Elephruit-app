@@ -67,9 +67,10 @@ struct MobileRecordRow: View {
                     .accessibilityHidden(true)
             }
         }
-        // The face plus a half-step above and below it. Written as the sum rather than as a number,
-        // because it is a consequence of the avatar's size and should follow it if that changes.
-        .frame(minHeight: Self.faceDiameter + Theme.Spacing.medium)
+        // The face and nothing more. The breathing room is the list's row insets, which is the only
+        // place it can live without being counted twice — a minimum height that already included it
+        // put a 44-point avatar in a 96-point row.
+        .frame(minHeight: Self.faceDiameter)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
