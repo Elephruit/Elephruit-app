@@ -296,7 +296,10 @@ final class PadShellModel {
         case .calendar: .calendar
         case .time: .time
         case .settings: .settings
-        case .today, .reminders, .records, .search: nil
+        // Projects is here rather than among the routes because its screen is not one: the
+        // drawer row draws `ProjectsScreen`, which has no `MobileRoute` that names it, so
+        // there is nothing for a collapse to find already showing underneath.
+        case .today, .projects, .reminders, .records, .search: nil
         }
     }
 
