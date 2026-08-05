@@ -2,7 +2,7 @@
 #
 # Photograph a screen of the iOS app without running a test.
 #
-#     scripts/shot.sh out.png [extra launch arguments…]
+#     Scripts/shot.sh out.png [extra launch arguments…]
 #
 # ## Why this exists
 #
@@ -17,7 +17,7 @@
 # Assertions still belong in `ElephruitiOSUITests`; this does not replace them. It replaces running
 # them when nothing is being asserted.
 #
-# The build is your business — run `xcodebuild build` (or let `xctest.sh` do it) first. This uses
+# The build is your business — run `xcodebuild build` (or let `Scripts/xctest.sh` do it) first. This uses
 # whatever is in the worktree's derived data.
 
 set -euo pipefail

@@ -489,7 +489,12 @@ public final class DailyPlanService {
                     event: event,
                     kind: kind,
                     conflictingEventIDs: clashes[event.id] ?? [],
-                    participants: kind.hasAttendees
+                    // Hand-linked people count whether or not the invitation does. Somebody who
+                    // said "this one is with Harbinder" has stated who is in the room, and an
+                    // event EventKit did not classify as a meeting is exactly the case they were
+                    // correcting — throwing the link away there is the app disagreeing with an
+                    // instruction it was given.
+                    participants: kind.hasAttendees || !context.linkedPersonIDs.isEmpty
                         ? participants(of: event, linkedPersonIDs: context.linkedPersonIDs)
                         : [],
                     preparation: context.preparation
@@ -692,8 +697,10 @@ public final class DailyPlanService {
         var roster = DayPeopleRoster()
 
         // Meetings first, so somebody you are about to sit down with is the identity everything else
-        // merges into.
-        for event in events where event.kind.hasAttendees {
+        // merges into. Driven by the participants rather than by the kind, because the two can
+        // legitimately disagree: an entry the calendar calls an appointment is still an entry the
+        // user has said somebody is in.
+        for event in events where !event.participants.isEmpty {
             for participant in event.participants {
                 roster.add(
                     personID: participant.personID,

@@ -101,6 +101,9 @@ public final class ContactsService {
         accounts = []
         searchResults = []
         authorization = .notRequested
+        // Faces read while the integration was on stop being drawn the moment it is off. They were
+        // never the app's to keep — see `ContactPhotoStore`.
+        photos.forgetAll()
 
         // The token is dropped because it describes a store this app has stopped reading, and a
         // stale one would produce a wrong delta if access came back much later. Nothing in the CRM
@@ -187,6 +190,41 @@ public final class ContactsService {
     public func thumbnail(forIdentifier identifier: String) async -> Data? {
         guard isEnabled else { return nil }
         return await provider.thumbnail(forIdentifier: identifier)
+    }
+
+    // MARK: - Faces
+
+    /// Contact photographs already read, and the bookkeeping that keeps them from being read twice.
+    ///
+    /// Owned here rather than by the view layer because this is the object that knows when they
+    /// stop being allowed: ``disable()`` empties it in the same breath as it drops the provider.
+    public let photos = ContactPhotoStore()
+
+    /// The photograph already held for a linked contact. Never fetches, never waits.
+    ///
+    /// For a row's `body`, which cannot await anything and is run again every time the row is
+    /// recycled: a face that has been read once is drawn in the first frame rather than fading in
+    /// again on every flick past. Pair it with ``photo(forContactIdentifier:)`` in a `.task`, which
+    /// is what turns the first `nil` into bytes.
+    ///
+    /// `nil` means *draw the monogram*, and it is the right answer to all three of "not fetched
+    /// yet", "this person has no picture", and "the address book is switched off". The caller does
+    /// not have to tell those apart, because the fallback is the same and is already correct.
+    public func cachedPhoto(forContactIdentifier identifier: String?) -> Data? {
+        guard isEnabled, let identifier, !identifier.isEmpty else { return nil }
+        return photos.cached(identifier)
+    }
+
+    /// The photograph for a linked contact, read from the address book at most once.
+    ///
+    /// Safe to call from every row that shows the person and on every appearance: an answer already
+    /// held comes back without touching Contacts, and concurrent callers join one read rather than
+    /// starting several.
+    public func photo(forContactIdentifier identifier: String?) async -> Data? {
+        guard isEnabled, let identifier, !identifier.isEmpty else { return nil }
+        return await photos.photo(for: identifier) { [provider] in
+            await provider.thumbnail(forIdentifier: identifier)
+        }
     }
 
     // MARK: - Change tracking

@@ -12,7 +12,7 @@ struct RecordsModuleSidebar: View {
     let navigation: NavigationModel
 
     @State private var records: [Item] = []
-    @State private var groups: [PersonGroup] = []
+    @State private var groups: [PersonGroupSummary] = []
     @State private var searchText = ""
     @State private var isShowingContactImport = false
     @State private var loadError: AppError?
@@ -132,7 +132,20 @@ struct RecordsModuleSidebar: View {
                             Button {
                                 navigation.select(.records(.group(id: group.id)))
                             } label: {
-                                Label(group.name, systemImage: group.symbolName)
+                                // Tinted, because the colour is what identifies a group anywhere it
+                                // is not spelled out — the dots beside a name in the list mean
+                                // nothing unless this menu is where they were learned.
+                                Label {
+                                    Text(group.name)
+                                } icon: {
+                                    Image(systemName: group.symbolName)
+                                        .foregroundStyle(
+                                            Theme.Palette.color(
+                                                named: group.colorName,
+                                                neutral: Theme.Colors.secondaryText
+                                            )
+                                        )
+                                }
                             }
                         }
                     }
@@ -202,7 +215,7 @@ struct RecordsModuleSidebar: View {
         guard let services else { return }
         do {
             records = try records(in: scope, services: services)
-            groups = try services.personGroups.allGroups()
+            groups = try services.personGroups.allGroupSummaries()
             loadError = nil
             if let id { navigation.selectItem(id) }
             if navigation.selectedItemID == nil

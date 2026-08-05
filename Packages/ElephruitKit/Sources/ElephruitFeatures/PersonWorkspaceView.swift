@@ -574,59 +574,35 @@ struct PersonHeaderView: View {
     }
 }
 
-/// Initials in a tinted circle. No photo is stored, and none is read from Contacts.
+/// A person's circle, addressed the way the Mac's call sites already address it — by colour name.
 ///
-/// Contact photos are the largest thing Contacts holds and the app displays none of them, so the key
-/// is never fetched — see `ContactsWriteSafetyTests`. Initials are legible, cost nothing, and cannot
-/// leak.
+/// ### Why this is now a wrapper
+/// It had its own monogram rule: the first letters of the first *two* words, so "Rosa María de la
+/// Cruz" came out "RM" here and "RC" from ``ElephruitDesign/Avatar``, which is the same person
+/// carrying two monograms on two screens — the exact fault `Avatar` was consolidated to end, left
+/// in place because this type was written before it. There is one derivation now, and it is
+/// `Avatar`'s: first word and last word.
 ///
-/// ### Why it watches the row's prominence
-/// The palette tint is a pale wash with the same colour written over it, which is legible on the
-/// list's own background and nowhere near legible on the accent fill of a selected row — the circle
-/// all but vanishes and the initials go muddy. On a selected row the avatar drops the colour and
-/// borrows the system's own selected-row styles, which resolve against whatever accent the user
-/// chose. This is the ``SwiftUICore/View/rowForeground(_:)`` rule applied to a shape: the colour is
-/// worth less than being readable, and it comes straight back the moment the row is deselected.
+/// What stays here is the argument this file's callers pass — a stored palette *name* rather than a
+/// resolved `Color` — and the placeholder for a record with no name at all, which a monogram of ""
+/// would otherwise draw as an empty circle.
+///
+/// Photographs are `Avatar`'s too, and this passes them straight through: see
+/// ``ElephruitFeaturesCore/ContactPhotoStore`` for where the bytes come from and why the address
+/// book is not read until a row is on screen.
 struct PersonAvatar: View {
-    @Environment(\.backgroundProminence) private var prominence
-
     let name: String
     let colorName: String?
-    var size: CGFloat = 32
+    var size: CGFloat = Theme.Size.iconTileMedium
+    var photo: Data?
 
     var body: some View {
-        Circle()
-            .fill(fill)
-            .overlay {
-                Text(initials)
-                    .font(.system(.body, design: .rounded, weight: .semibold))
-                    .minimumScaleFactor(0.5)
-                    .foregroundStyle(foreground)
-            }
-            .frame(width: size, height: size)
-            .accessibilityHidden(true)
-    }
-
-    /// True only while the row is selected *and* the window is focused — the same condition under
-    /// which the row is painted with the accent colour rather than an inert grey.
-    private var isOnSelectedRow: Bool { prominence == .increased }
-
-    private var fill: AnyShapeStyle {
-        isOnSelectedRow
-            ? AnyShapeStyle(.quaternary)
-            : AnyShapeStyle(Theme.Palette.color(named: colorName).opacity(0.18))
-    }
-
-    private var foreground: AnyShapeStyle {
-        isOnSelectedRow
-            ? AnyShapeStyle(.primary)
-            : AnyShapeStyle(Theme.Palette.color(named: colorName))
-    }
-
-    private var initials: String {
-        let words = name.split(separator: " ").prefix(2)
-        let letters = words.compactMap { $0.first.map(String.init) }
-        return letters.isEmpty ? "?" : letters.joined().uppercased()
+        Avatar(
+            name: name.isEmpty ? "?" : name,
+            diameter: size,
+            tint: Theme.Palette.color(named: colorName),
+            photo: photo
+        )
     }
 }
 

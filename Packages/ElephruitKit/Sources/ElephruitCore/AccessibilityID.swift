@@ -147,6 +147,14 @@ public enum AccessibilityID {
         /// asserting on a row that had been taken away.
         public static let pickerPopup = "time.pickerPopup"
 
+        // The phone's floating clock: a pill over every screen but the Time screen's own card,
+        // which grows into the controls rather than navigating to them.
+        public static let pill = "time.pill"
+        public static let pillPause = "time.pill.pause"
+        public static let pillResume = "time.pill.resume"
+        public static let pillStop = "time.pill.stop"
+        public static let pillOpen = "time.pill.open"
+
         // The floating timer, over every screen in the window.
         public static let floatingTimer = "time.floating"
         public static let floatingPause = "time.floating.pause"

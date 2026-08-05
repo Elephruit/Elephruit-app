@@ -356,7 +356,7 @@ struct MobileTimerCard: View {
                     title: running.itemTitle,
                     label: "Subject",
                     identifier: AccessibilityID.Time.subjectPicker
-                ) { activePopover = .subject }
+                ) { open(.subject) }
                     .popover(isPresented: showing(.subject), arrowEdge: .top) {
                         subjectPicker(style: .popover, onRequestSearch: { requestSearch(.subject) })
                     }
@@ -366,7 +366,7 @@ struct MobileTimerCard: View {
                     title: running.projectTitle,
                     label: "Project",
                     identifier: AccessibilityID.Time.projectPicker
-                ) { activePopover = .project }
+                ) { open(.project) }
                     .popover(isPresented: showing(.project), arrowEdge: .top) {
                         projectPicker(style: .popover, onRequestSearch: { requestSearch(.project) })
                     }
@@ -376,7 +376,7 @@ struct MobileTimerCard: View {
                     title: peopleSummary(running),
                     label: "People",
                     identifier: AccessibilityID.Time.peoplePicker
-                ) { activePopover = .people }
+                ) { open(.people) }
                     .popover(isPresented: showing(.people), arrowEdge: .top) {
                         peoplePicker(style: .popover, onRequestSearch: { requestSearch(.people) })
                     }
@@ -386,7 +386,7 @@ struct MobileTimerCard: View {
                     title: running.tagSlugs.isEmpty ? nil : running.tagSlugs.joined(separator: " "),
                     label: "Tags",
                     identifier: AccessibilityID.Time.tagPicker
-                ) { activePopover = .tags }
+                ) { open(.tags) }
                     .popover(isPresented: showing(.tags), arrowEdge: .top) {
                         MobileTagPicker(
                             selected: tagBinding(running),
@@ -553,6 +553,39 @@ struct MobileTimerCard: View {
             get: { activePopover == filing },
             set: { if !$0 { activePopover = nil } }
         )
+    }
+
+    /// How long the keyboard takes to leave. The same figure the reminder composer waits, for
+    /// the same reason and out of the same measurement.
+    private static let keyboardExit = Duration.milliseconds(350)
+
+    /// Opens one filing question, with the keyboard out of the way first.
+    ///
+    /// Every chip comes through here, and the reason is the bug this replaced: they each set
+    /// `activePopover` where they stood, so a chip tapped while the description still held focus
+    /// asked for a popover in the same turn that dismissed the keyboard underneath it. The
+    /// presentation and the keyboard's exit animation then arrived together, and what the phone
+    /// does with that is nothing at all — no popup, and a tap spent for no visible reason. It is
+    /// the same fault the composer's six controls had, and `MobileReminderComposer.open(_:)` is
+    /// the same answer.
+    ///
+    /// The wait is conditional here, where the composer's is not. That card asks its list for
+    /// room on the same tap, so something is always travelling and the popup always has to wait
+    /// for it. This one sits above the keyboard and does not move: with nothing focused there is
+    /// nothing to wait for, and making every chip pay a third of a second for a keyboard that
+    /// was not up would be a delay bought with no bug behind it.
+    private func open(_ filing: Filing) {
+        guard isDescriptionFocused || isDurationFocused else {
+            activePopover = filing
+            return
+        }
+
+        isDescriptionFocused = false
+        isDurationFocused = false
+        Task { @MainActor in
+            try? await Task.sleep(for: Self.keyboardExit)
+            activePopover = filing
+        }
     }
 
     /// Closes the popup and opens the sheet built for a keyboard. One beat apart, because two

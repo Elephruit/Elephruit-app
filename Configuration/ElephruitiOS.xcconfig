@@ -22,9 +22,11 @@ CURRENT_PROJECT_VERSION = 1
 SDKROOT = iphoneos
 IPHONEOS_DEPLOYMENT_TARGET = 26.0
 SUPPORTED_PLATFORMS = iphoneos iphonesimulator
-// iPhone only. The iPad experience deserves its own layout pass, not a scaled-up phone —
-// shipping `2` here before that pass exists would be claiming work that has not been done.
-TARGETED_DEVICE_FAMILY = 1
+// iPhone and iPad. The iPad is not a scaled-up phone here: at regular width the app draws a
+// resident sidebar beside a stage — see `PadRootView` — and at compact width, which is what a
+// narrow Split View or a slim Stage Manager window is, it draws the phone's drawer shell. Both
+// arrangements are designed, and `AdaptiveRootView` carries the journey between them.
+TARGETED_DEVICE_FAMILY = 1,2
 ARCHS = $(ARCHS_STANDARD)
 
 // MARK: - Swift

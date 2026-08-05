@@ -21,7 +21,11 @@ CURRENT_PROJECT_VERSION = 1
 SDKROOT = iphoneos
 IPHONEOS_DEPLOYMENT_TARGET = 26.0
 SUPPORTED_PLATFORMS = iphoneos iphonesimulator
-TARGETED_DEVICE_FAMILY = 1
+// Both families, because the host app is both. An extension narrower than its host still builds
+// and still installs — a subset is legal — but it means an iPad running this app would start a
+// Live Activity the device has no interface to draw, and `Activity.request` would fail into a log
+// line nobody reads. The activity's view is plain SwiftUI and has nothing phone-shaped in it.
+TARGETED_DEVICE_FAMILY = 1,2
 ARCHS = $(ARCHS_STANDARD)
 
 // MARK: - Swift

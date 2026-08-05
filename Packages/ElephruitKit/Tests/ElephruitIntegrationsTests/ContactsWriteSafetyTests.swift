@@ -283,9 +283,12 @@ struct ContactsWriteSafetyTests {
 
     /// Thumbnails are legitimate and expensive, so *where* they are fetched is the thing to pin.
     ///
-    /// One occurrence, in the per-contact `thumbnail(forIdentifier:)` path. Adding it to either bulk
-    /// key list would make a scan of several thousand contacts drag every avatar off disk to draw a
-    /// list that shows initials — which is precisely how an import becomes a beachball.
+    /// One occurrence, in the per-contact `thumbnail(forIdentifier:)` path. The People list draws
+    /// these now, one row at a time and only while the row is on screen — see `ContactPhotoStore`.
+    /// Adding the key to either bulk list would make a scan of several thousand contacts drag every
+    /// face off disk before a single row appeared, which is precisely how an import becomes a
+    /// beachball. That the app *displays* thumbnails is exactly why the fetch has to stay per
+    /// contact rather than becoming a reason to relax this.
     @Test("Image data is fetched one contact at a time, never for a whole scan")
     func thumbnailsAreFetchedOnDemand() throws {
         var occurrences = 0

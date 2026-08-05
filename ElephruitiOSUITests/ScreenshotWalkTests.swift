@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// Walks the whole app and photographs every major screen into the result bundle.
@@ -11,6 +12,14 @@ import XCTest
 final class ScreenshotWalkTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = true
+        // The drawer shell only exists at compact width. Skipping says that out loud; running
+        // on an iPad and finding no `mobile.sidebar.button` would report the shell as broken when
+        // what is actually true is that this device draws the other one. The iPad's own suite is
+        // `PadNavigationUITests`, which skips on iPhone for the mirror-image reason.
+        try XCTSkipUnless(
+            UIDevice.current.userInterfaceIdiom == .phone,
+            "The drawer shell only exists on iPhone."
+        )
     }
 
     func testWalkEveryScreen() throws {
@@ -35,7 +44,7 @@ final class ScreenshotWalkTests: XCTestCase {
         snap(app, "02-sidebar")
 
         let walk = [
-            "calendar", "reminders", "records", "notes", "time",
+            "projects", "calendar", "reminders", "records", "notes", "time",
             "areas", "bookmarks", "inbox", "archive", "trash", "search", "settings",
         ]
 
@@ -49,9 +58,17 @@ final class ScreenshotWalkTests: XCTestCase {
         openSidebar(app)
         app.buttons["mobile.sidebar.today"].tap()
         _ = app.navigationBars["Today"].waitForExistence(timeout: 5)
-        app.buttons["mobile.capture.button"].tap()
+        // The fan, on its own, before anything it makes: it is the one piece of the shell that
+        // only exists while a finger is on the screen, so a walk that never opened it would have
+        // no picture of the app's most-used control doing its job.
+        app.buttons["mobile.capture.button"].tapCenter()
+        _ = app.buttons["mobile.add.capture"].waitForExistence(timeout: 5)
+        sleep(1)
+        snap(app, "15-add-menu")
+
+        app.buttons["mobile.add.capture"].tapCenter()
         _ = app.navigationBars["Capture"].waitForExistence(timeout: 5)
-        snap(app, "15-capture")
+        snap(app, "16-capture")
     }
 
     /// Opens the drawer if it is not already showing.

@@ -6,7 +6,7 @@ import Observation
 /// The iPhone's top-level places.
 ///
 /// ### Why a sidebar rather than a tab bar
-/// A tab bar holds five slots, and this app has thirteen places worth naming. The old shell
+/// A tab bar holds five slots, and this app has fourteen places worth naming. The old shell
 /// paid for that shortfall twice: four modules got a tab, and everything else — the calendar,
 /// notes, time, bookmarks, the inbox, the archive, the trash — got filed behind a row called
 /// "Library", which is not a place but an apology for the tab bar's arithmetic. A drawer has
@@ -22,6 +22,7 @@ import Observation
 /// of a tab bar that then switches instantly.
 enum MobileDestination: String, Hashable, CaseIterable, Codable {
     case today
+    case projects
     case calendar
     case reminders
     case records
@@ -41,8 +42,17 @@ enum MobileDestination: String, Hashable, CaseIterable, Codable {
     /// where sessions start; the modules a day is worked in follow; the holding pens — inbox,
     /// archive, trash — come after the work rather than among it; search and settings sit at the
     /// foot where a utility belongs.
+    ///
+    /// **Projects is a band of its own, above the modules**, which is where the Mac's sidebar
+    /// puts the projects tree. `AppModule.displayOrder` deliberately omits `.projects` because on
+    /// the Mac a module *swaps the sidebar away*, and doing that to projects takes the list you
+    /// switch projects with along with it. That argument does not carry to a phone: here every
+    /// place is a screen you enter, including Today, and the drawer is one swipe from all of them
+    /// — so a row costs projects nothing that it does not also cost the calendar. What does carry
+    /// is the ranking, and this is it: your own structure sits above the app's furniture.
     static let groups: [[MobileDestination]] = [
         [.today],
+        [.projects],
         [.calendar, .reminders, .records, .notes, .time, .areas, .bookmarks],
         [.inbox, .archive, .trash],
         [.search, .settings],
@@ -51,6 +61,7 @@ enum MobileDestination: String, Hashable, CaseIterable, Codable {
     var title: String {
         switch self {
         case .today: "Today"
+        case .projects: "Projects"
         case .calendar: "Calendar"
         case .reminders: "Reminders"
         case .records: "Records"
@@ -71,6 +82,7 @@ enum MobileDestination: String, Hashable, CaseIterable, Codable {
     var symbolName: String {
         switch self {
         case .today: "sun.horizon"
+        case .projects: "square.stack.3d.up"
         case .calendar: "calendar"
         case .reminders: "bell"
         case .records: "person.text.rectangle"
@@ -91,6 +103,7 @@ enum MobileDestination: String, Hashable, CaseIterable, Codable {
     var hint: String {
         switch self {
         case .today: "What today asks of you, most urgent first."
+        case .projects: "Work with an outcome and an end."
         case .calendar: "Your days, laid out, and everything you know about them."
         case .reminders: "Things to remember, when they matter, and what you chose for today."
         case .records: "People and things, with their notes, history, and shared work."
@@ -124,8 +137,12 @@ enum MobileRoute: Hashable, Codable {
     case smartList(UUID)
     /// A built-in smart list, by its stable string id.
     case builtInSmartList(String)
+    /// A search the user named and kept — the text they typed, run again.
+    case savedSearch(UUID)
     /// A scoped slice of the Records module — pets, organizations, favorites.
     case records(RecordsScope)
+    /// The groups of people: what they are, what colour, and who is in them.
+    case groups
     /// Everything carrying one tag.
     case tag(String)
     /// The flat list of one kind — notes, bookmarks, areas.
@@ -167,6 +184,22 @@ final class MobileShellModel {
     /// Whether the quick-capture sheet is up.
     var isCaptureVisible = false
 
+    /// Whether the plus has fanned out into what it can make.
+    var isAddMenuOpen = false
+
+    /// Whether the floating clock has grown into its controls.
+    ///
+    /// On the shell rather than inside the pill because two things outside the pill have a view
+    /// about it: the plus folds it before fanning out over the same corner of the screen, and a
+    /// timer that stops takes its own card with it.
+    var isTimerExpanded = false
+
+    /// Whether the event editor is up, opened from the plus rather than from the calendar.
+    var isEventEditorVisible = false
+
+    /// Whether the sheet for time that happened off the clock is up.
+    var isManualTimeVisible = false
+
     /// How many times the shell's button has been asked for a new reminder.
     ///
     /// A count rather than a flag, because the interesting event is the *press* and a flag
@@ -175,14 +208,54 @@ final class MobileShellModel {
     /// it until something else lowered the flag. Nobody reads the number; they watch it change.
     private(set) var newReminderRequests = 0
 
-    /// Asks the Reminders screen for a composer. The shell does not know how to open one —
-    /// the composer belongs to the list, at the end of it, where the next reminder goes.
+    /// A request made from somewhere the Reminders screen was not yet listening.
+    ///
+    /// The counter above only works for a screen that is already on the stack, because a screen
+    /// mounting for the first time has nothing to compare the count against and sees no change.
+    /// Asking for a reminder from the Calendar is exactly that case: the shell steps to Reminders
+    /// and the screen arrives *after* the request. So the request waits here instead, and the
+    /// screen collects it on the way in.
+    private var awaitedReminder = false
+
+    /// Asks for a composer, from anywhere.
+    ///
+    /// The shell does not know how to open one — the composer belongs to the list, at the end of
+    /// it, where the next reminder goes. What it does know is whether the list is on screen: if
+    /// it is, this is the press the counter was built for, and if it is not, going to Reminders
+    /// is half of what "new reminder" means and has to happen first.
     func requestNewReminder() {
-        newReminderRequests += 1
+        if destination == .reminders && path.isEmpty {
+            newReminderRequests += 1
+        } else {
+            awaitedReminder = true
+            popToRoot(of: .reminders)
+            select(.reminders)
+        }
+    }
+
+    /// Collects a request made before the Reminders screen existed, once.
+    ///
+    /// Consuming rather than reading: a request that survived being honoured would open a
+    /// composer every time the user came back to Reminders for the rest of the session.
+    func takeAwaitedReminder() -> Bool {
+        defer { awaitedReminder = false }
+        return awaitedReminder
     }
 
     /// The one search session, kept when the user leaves and returns.
     var searchText = ""
+
+    /// Where a push goes when this is not the shell drawing the screen.
+    ///
+    /// On the iPad the sidebar and the stage decide where things open, and every screen in this
+    /// target navigates by calling ``push(_:)``. Rather than teach twenty screens which shell they
+    /// are inside — a question they would have to ask correctly every time, forever — the wide
+    /// shell installs a redirect here and takes the routes. Returning `false` declines one, and
+    /// the stack push happens as it always did.
+    ///
+    /// `@ObservationIgnored` because a closure is not state anybody draws: observing it would
+    /// invalidate every view in the app the moment a window changed width class.
+    @ObservationIgnored var routeRedirect: ((MobileRoute) -> Bool)?
 
     /// The current destination's drill-down.
     var path: [MobileRoute] {
@@ -212,6 +285,7 @@ final class MobileShellModel {
     /// to where they came from. Jumping elsewhere would answer "open Maya" by losing the
     /// search that found her.
     func push(_ route: MobileRoute) {
+        if routeRedirect?(route) == true { return }
         var path = paths[destination] ?? []
         path.append(route)
         paths[destination] = path

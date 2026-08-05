@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// The iPhone shell, driven for real: the drawer, the routes, capture, and the promises the
@@ -10,6 +11,14 @@ import XCTest
 final class MobileShellUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
+        // The drawer shell only exists at compact width. Skipping says that out loud; running
+        // on an iPad and finding no `mobile.sidebar.button` would report the shell as broken when
+        // what is actually true is that this device draws the other one. The iPad's own suite is
+        // `PadNavigationUITests`, which skips on iPhone for the mirror-image reason.
+        try XCTSkipUnless(
+            UIDevice.current.userInterfaceIdiom == .phone,
+            "The drawer shell only exists on iPhone."
+        )
     }
 
     private func launch(sampleData: Bool = true) -> XCUIApplication {
@@ -60,8 +69,8 @@ final class MobileShellUITests: XCTestCase {
 
     /// The drawer offers every destination, and choosing one lands on it.
     ///
-    /// The drawer's *rows* are asserted here without walking them: thirteen relaunches to prove
-    /// thirteen rows exist costs a minute of every run, and `ScreenshotWalkTests` already
+    /// The drawer's *rows* are asserted here without walking them: fourteen relaunches to prove
+    /// fourteen rows exist costs a minute of every run, and `ScreenshotWalkTests` already
     /// visits every one of them and would fail loudly if any row stopped landing. What this
     /// test owns is the part the walk cannot state — that the drawer lists exactly the
     /// destinations the shell claims to have.
@@ -71,7 +80,7 @@ final class MobileShellUITests: XCTestCase {
 
         openSidebar(app)
         for identifier in [
-            "today", "calendar", "reminders", "records", "notes", "time", "areas",
+            "today", "projects", "calendar", "reminders", "records", "notes", "time", "areas",
             "bookmarks", "inbox", "archive", "trash", "search", "settings",
         ] {
             XCTAssertTrue(
@@ -97,7 +106,7 @@ final class MobileShellUITests: XCTestCase {
         step(app, to: "reminders")
         XCTAssertTrue(app.navigationBars["Reminders"].waitForExistence(timeout: 5))
 
-        app.buttons["mobile.capture.button"].tap()
+        add(app, "reminder")
         XCTAssertTrue(
             app.descendants(matching: .any)["reminders.composer.title"].waitForExistence(timeout: 5)
         )
@@ -197,14 +206,55 @@ final class MobileShellUITests: XCTestCase {
         )
     }
 
+    // MARK: - The plus
+
+    /// Opens the fan and taps one of its choices.
+    ///
+    /// By identifier rather than by label, because a fan of five glass circles has no visible
+    /// text for a label match to find, and because the accessibility labels are prose that
+    /// should be free to change without breaking every test that reaches through them. And by
+    /// `tapCenter` rather than `tap` — see `FloatingControlTaps` for what that buys.
+    private func add(_ app: XCUIApplication, _ action: String) {
+        app.buttons["mobile.capture.button"].tapCenter()
+        let choice = app.buttons["mobile.add.\(action)"]
+        XCTAssertTrue(choice.waitForExistence(timeout: 5), "The plus should fan out")
+        choice.tapCenter()
+    }
+
+    /// The fan is the plus's whole job now: it opens, it offers all five, and it folds away
+    /// again without having done anything.
+    ///
+    /// The closing half matters as much as the opening one. While the fan is up a scrim covers
+    /// the app, so a menu that could be opened and not closed would be a way of locking the
+    /// screen — and the plus is the only control still above that scrim.
+    func testThePlusFansOutAndFoldsBack() throws {
+        let app = launch()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
+
+        app.buttons["mobile.capture.button"].tapCenter()
+        for action in ["reminder", "event", "note", "time", "capture"] {
+            XCTAssertTrue(
+                app.buttons["mobile.add.\(action)"].waitForExistence(timeout: 5),
+                "The fan should offer \(action)"
+            )
+        }
+
+        app.buttons["mobile.capture.button"].tapCenter()
+        XCTAssertTrue(
+            app.buttons["mobile.add.reminder"].waitForNonExistence(timeout: 5),
+            "Tapping the plus again should fold the fan away"
+        )
+        XCTAssertTrue(app.navigationBars["Today"].exists, "And leave the screen where it was")
+    }
+
     // MARK: - Capture
 
-    /// The capture button is never a dead tap, and a cancelled sheet goes away.
+    /// Capture is never a dead tap, and a cancelled sheet goes away.
     func testCaptureSheetOpensAndDismisses() throws {
         let app = launch()
 
         XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
-        app.buttons["mobile.capture.button"].tap()
+        add(app, "capture")
         XCTAssertTrue(app.navigationBars["Capture"].waitForExistence(timeout: 5))
 
         // "Close", not "Cancel": the sheet keeps the draft rather than discarding it, and its

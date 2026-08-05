@@ -43,6 +43,29 @@ public enum PersonListSort: String, Sendable, Hashable, CaseIterable, Codable, I
     }
 }
 
+/// A group, reduced to the dot a list row draws for it.
+///
+/// ### Why this is not `PersonGroupSummary`
+/// That type lives in `ElephruitPersistence`, and `ElephruitCore` depends on nothing — which is the
+/// property that lets the whole of this file be tested without a database. A row needs three plain
+/// values to draw a dot and name it for VoiceOver, so three plain values are what crosses the
+/// boundary, the same way ``PersonListEntry/colorName`` already carries a palette name rather than a
+/// `Color`.
+public struct PersonListGroupBadge: Sendable, Hashable, Identifiable {
+    public var id: UUID
+    public var name: String
+
+    /// A `Theme.Palette` raw value. `nil` draws in the neutral rather than the accent — an
+    /// uncoloured group must not look like a selected one.
+    public var colorName: String?
+
+    public init(id: UUID, name: String, colorName: String? = nil) {
+        self.id = id
+        self.name = name
+        self.colorName = colorName
+    }
+}
+
 /// One person, reduced to what ordering and sectioning need.
 ///
 /// A value rather than the stored record, so the whole of this file is testable without a database
@@ -64,13 +87,41 @@ public struct PersonListEntry: Sendable, Hashable, Identifiable {
     public var isFavorite: Bool
     public var colorName: String?
 
+    /// What sort of record this is, so a row can tell a person from a car.
+    ///
+    /// A monogram is the right picture of a human being and the wrong picture of a Toyota: "TC" in
+    /// a circle says *somebody called T— C—*. Records that are not people keep their type's glyph,
+    /// and the decision is made here, once, from a value the list already had to compute.
+    public var recordType: RecordType
+
+    /// The linked `CNContact.identifier`, when the person has one.
+    ///
+    /// Here for the same reason the tint is: a photograph is fetched by identifier, and asking the
+    /// record for it inside a row body would fault the contact-link relationship on every row that
+    /// scrolled past — which is precisely the cost the two properties above were moved here to
+    /// avoid. The identifier is a pointer, not a picture; nothing is read from the address book
+    /// until a row is actually on screen. See `ContactPhotoStore`.
+    public var contactIdentifier: String?
+
+    /// The groups this person belongs to, in the order the groups are listed.
+    ///
+    /// Here rather than fetched by the row, and for a sharper version of the same reason as
+    /// everything above it: a row cannot answer *which groups am I in* at all without asking every
+    /// group in turn, because membership belongs to the group and a smart group's membership is the
+    /// result of running a search. Inverted once for the whole list — see
+    /// `PersonGroupService.membership(includingSmart:)` — it is a dictionary lookup.
+    public var groups: [PersonListGroupBadge]
+
     public init(
         id: UUID,
         displayName: String,
         organizationName: String? = nil,
         lastInteraction: Date? = nil,
         isFavorite: Bool = false,
-        colorName: String? = nil
+        colorName: String? = nil,
+        recordType: RecordType = .person,
+        contactIdentifier: String? = nil,
+        groups: [PersonListGroupBadge] = []
     ) {
         self.id = id
         self.displayName = displayName
@@ -78,6 +129,9 @@ public struct PersonListEntry: Sendable, Hashable, Identifiable {
         self.lastInteraction = lastInteraction
         self.isFavorite = isFavorite
         self.colorName = colorName
+        self.recordType = recordType
+        self.contactIdentifier = contactIdentifier
+        self.groups = groups
     }
 }
 

@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// The tracker on the phone, driven the way a thumb drives it.
@@ -10,6 +11,14 @@ import XCTest
 final class TimeTrackerUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
+        // The drawer shell only exists at compact width. Skipping says that out loud; running
+        // on an iPad and finding no `mobile.sidebar.button` would report the shell as broken when
+        // what is actually true is that this device draws the other one. The iPad's own suite is
+        // `PadNavigationUITests`, which skips on iPhone for the mirror-image reason.
+        try XCTSkipUnless(
+            UIDevice.current.userInterfaceIdiom == .phone,
+            "The drawer shell only exists on iPhone."
+        )
     }
 
     private func launch() -> XCUIApplication {
@@ -23,8 +32,22 @@ final class TimeTrackerUITests: XCTestCase {
         return app
     }
 
+    /// Gets to the Time screen from wherever the app came back to.
+    ///
+    /// Which screen that is is deliberately not asserted. The shell restores the destination
+    /// that was last open, and the store these tests launch against is temporary — so the entries
+    /// do not survive a relaunch but the choice of screen does, and a test that runs after one
+    /// that ended on Time arrives on Time. Waiting for "Today" made every test in this class
+    /// depend on the order it ran in, which is a dependency none of them mean to have. What is
+    /// worth waiting for is the shell itself; the rest is travel, and travel that has already
+    /// happened is travel that can be skipped.
     private func openTime(_ app: XCUIApplication) {
-        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 15))
+        XCTAssertTrue(
+            app.buttons["mobile.sidebar.button"].waitForExistence(timeout: 15),
+            "the app never finished launching into its shell"
+        )
+        guard !app.navigationBars["Time"].exists else { return }
+
         if !app.buttons["mobile.sidebar.time"].exists {
             app.buttons["mobile.sidebar.button"].tap()
         }
@@ -38,6 +61,63 @@ final class TimeTrackerUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    /// The clock follows you off the Time screen, and it carries its controls with it.
+    ///
+    /// This is the promise the old bottom strip could not keep. It showed a running timer from
+    /// anywhere and could only stop it, so pausing one — or checking what it was filed against —
+    /// meant walking back to the Time screen and losing whatever you were doing. The pill answers
+    /// both without leaving the page: it is small until asked, and asked, it grows.
+    func testTheClockFollowsYouAndOpensInPlace() throws {
+        let app = launch()
+        openTime(app)
+
+        app.buttons["time.start"].tap()
+        XCTAssertTrue(app.buttons["time.stop"].waitForExistence(timeout: 5))
+
+        // Away from Time, where the screen's own tracker card is not there to do this job.
+        app.buttons["mobile.sidebar.button"].tap()
+        app.buttons["mobile.sidebar.today"].tap()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 5))
+
+        let pill = app.otherElements["time.pill"]
+        XCTAssertTrue(pill.waitForExistence(timeout: 5), "A running timer should float over Today")
+        XCTAssertFalse(
+            app.buttons["time.pill.stop"].exists,
+            "At rest the pill is a readout, not a row of controls"
+        )
+        snap(app, "08-pill-resting")
+
+        pill.tap()
+        XCTAssertTrue(
+            app.buttons["time.pill.stop"].waitForExistence(timeout: 5),
+            "Tapping the pill should grow it into its controls"
+        )
+        XCTAssertTrue(app.buttons["time.pill.pause"].exists, "and offer a pause")
+        XCTAssertTrue(
+            app.navigationBars["Today"].exists,
+            "and do it in place, without leaving the page"
+        )
+        snap(app, "09-pill-open")
+
+        // Paused rather than stopped: the pill has to survive a pause, because a paused timer is
+        // the one that is easiest to forget and the pill is the only thing still saying it exists.
+        // And the card stays open around it — pause and resume are one decision seen twice, so
+        // the way back must not cost a second tap to get the controls back.
+        app.buttons["time.pill.pause"].tap()
+        XCTAssertTrue(
+            app.buttons["time.pill.resume"].waitForExistence(timeout: 5),
+            "Pausing should leave the card open, with Resume where Pause was"
+        )
+
+        let stop = app.buttons["time.pill.stop"]
+        XCTAssertTrue(stop.exists)
+        stop.tap()
+        XCTAssertTrue(
+            app.otherElements["time.pill"].waitForNonExistence(timeout: 5),
+            "Stopping should take the clock off the screen entirely"
+        )
     }
 
     /// Start, name, file, pause, resume, stop — the whole sitting, in the order somebody does it.
@@ -67,9 +147,18 @@ final class TimeTrackerUITests: XCTestCase {
 
         app.buttons["time.billable"].tap()
         app.buttons["time.subject"].tap()
-        // By identifier, not by title. The popup is anchored to the chip that opened it and draws
-        // no header, so "Subject" survives only as an accessibility label on a container — which
-        // `staticTexts` will never match, however long it waits.
+        // A chip is tapped with the description still under the cursor, so the keyboard has to
+        // leave before the popup can be anchored to a control it was about to move. Asserted
+        // rather than assumed: presenting over a live keyboard is how this chip used to open
+        // nothing at all, and the symptom was a tap that visibly did nothing.
+        XCTAssertTrue(
+            app.keyboards.element.waitForNonExistence(timeout: 5),
+            "opening a filing chip should have put the keyboard away"
+        )
+        // The header was taken out deliberately — a popup anchored to the control that opened it
+        // spends its first row saying what you just tapped — so the name survives only as a label
+        // on a `children: .contain` container. Matched by identifier rather than by that label,
+        // because chrome is what gets restructured and the words are what change.
         XCTAssertTrue(
             app.descendants(matching: .any)["time.pickerPopup"].waitForExistence(timeout: 5),
             "the subject chip opened nothing"

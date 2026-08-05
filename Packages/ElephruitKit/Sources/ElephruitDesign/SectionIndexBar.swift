@@ -36,12 +36,42 @@ import SwiftUI
 /// is not drawn at all, so the state cannot arise. What *can* be unavailable is the whole rail — see
 /// ``isEnabled``.
 public struct SectionIndexBar: View {
+    /// How the rail presents itself, which is a question about the input device rather than taste.
+    ///
+    /// The two differ in exactly the ways a pointer and a thumb differ, and in no others: the
+    /// behaviour, the accessibility, and the arithmetic that turns a position into a heading are one
+    /// implementation, because a second one is how two controls that were meant to be the same
+    /// control stop being it.
+    public enum Style: Sendable {
+        /// A column of the window, beside the list. Twenty-two points, its own quiet surface, a
+        /// hairline on its leading edge — see the note above on why the rail is a sibling of the
+        /// list rather than a layer over it.
+        case column
+
+        /// A slim strip down the edge of a phone screen, drawn on nothing.
+        ///
+        /// No surface and no divider, because on a phone the rail is not a column of a window; it
+        /// is the thing every address book on the platform puts against the right bezel, and giving
+        /// it a background of its own would make it look like a second list. It is wider than the
+        /// Mac's because the target is a thumb rather than a pointer — the letters stay the same
+        /// size, and the extra points are hit area.
+        case floating
+
+        var width: CGFloat {
+            switch self {
+            case .column: 22
+            case .floating: 28
+            }
+        }
+    }
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let titles: [String]
     private let activeTitle: String?
     private let isEnabled: Bool
     private let label: String
+    private let style: Style
     private let unavailableReason: String?
 
     /// Called with the heading under the pointer, repeatedly while scrubbing.
@@ -52,13 +82,18 @@ public struct SectionIndexBar: View {
     @State private var height: CGFloat = 0
     @FocusState private var isFocused: Bool
 
-    /// The rail's own width. See the note above on why it is this small.
-    public static let width: CGFloat = 22
+    /// The Mac rail's width. See the note above on why it is this small.
+    ///
+    /// Kept as the bare name it has always had, because on the Mac there is one style and every
+    /// caller already reserves this. Per-style widths are ``Style/width``.
+    public static let width: CGFloat = Style.column.width
 
     /// - Parameters:
     ///   - titles: the headings that exist, in the order the list shows them.
     ///   - activeTitle: the section the list is currently in, marked so the rail says *where you
-    ///     are* as well as *where you could go*.
+    ///     are* as well as *where you could go*. `nil` where the list has no cheap way to know,
+    ///     which is the ordinary case on a phone — the sticky section header is already answering
+    ///     that question there, and tracking it a second time would cost a scroll observer per row.
     ///   - isEnabled: `false` draws the rail dimmed and inert rather than removing it. A rail that
     ///     disappears the moment somebody types into the search field takes its width with it and
     ///     shifts every row sideways, which is a worse answer to "this cannot be used right now"
@@ -72,6 +107,7 @@ public struct SectionIndexBar: View {
         activeTitle: String? = nil,
         isEnabled: Bool = true,
         label: String = "section",
+        style: Style = .column,
         unavailableReason: String? = nil,
         onSelect: @escaping (String) -> Void
     ) {
@@ -79,6 +115,7 @@ public struct SectionIndexBar: View {
         self.activeTitle = activeTitle
         self.isEnabled = isEnabled
         self.label = label
+        self.style = style
         self.unavailableReason = unavailableReason
         self.onSelect = onSelect
     }
@@ -111,12 +148,16 @@ public struct SectionIndexBar: View {
                     }
             }
         }
-        .frame(width: Self.width)
+        .frame(width: style.width)
         .padding(.vertical, Theme.Spacing.tight)
         .background(alignment: .leading) {
             // Its own surface and its own boundary, so the rail reads as a control the list stops
-            // beside rather than as the list's last column.
-            Divider()
+            // beside rather than as the list's last column. A phone's rail gets neither: it sits
+            // against the bezel where the platform puts it, and a divider there would be drawing a
+            // window edge on a device that has none.
+            if style == .column {
+                Divider()
+            }
         }
         .background(scrubbing == nil ? Color.clear : Theme.Colors.subtleFill)
         .contentShape(Rectangle())
@@ -149,6 +190,12 @@ public struct SectionIndexBar: View {
         .onKeyPress(.downArrow) { step(1) }
         .calmAnimation(Theme.Motion.appearance, value: scrubbing)
         .calmAnimation(Theme.Motion.appearance, value: hovering)
+        // One tick per letter crossed. Scrubbing moves the list faster than it can be read, so the
+        // hand is navigating by feel and by the scrub indicator rather than by the rows going past;
+        // without the tick, twenty-seven letters under a thumb are one undifferentiated drag. The
+        // trigger is the heading rather than the position, so it fires when the *answer* changes and
+        // not on every touch event.
+        .sensoryFeedback(.selection, trigger: scrubbing)
         .help(isEnabled ? "Jump to a \(label) section" : (unavailableReason ?? ""))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Jump to a \(label) section")

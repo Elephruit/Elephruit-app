@@ -3,9 +3,11 @@ import ElephruitDesign
 import ElephruitFeaturesCore
 import ElephruitModel
 import ElephruitPersistence
+import ElephruitTransfer
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// Settings: the three system integrations, the way out (export), and the honest
+/// Settings: the three system integrations, the way in and out, and the honest
 /// statement of what this app is — local, per device, no network.
 struct SettingsScreen: View {
     @Environment(\.services) private var services
@@ -17,6 +19,9 @@ struct SettingsScreen: View {
 
     /// The working day as this screen has it, once it has been edited here.
     @State private var editedWorkday: WorkdayHours?
+    @State private var isChoosingImport = false
+    @State private var importSummary: String?
+    @State private var importWarnings: [String] = []
 
     var body: some View {
         List {
@@ -25,6 +30,7 @@ struct SettingsScreen: View {
             integrationsSection
             remindersListsSection
             exportSection
+            importSection
             aboutSection
         }
         .listStyle(.insetGrouped)
@@ -195,7 +201,7 @@ struct SettingsScreen: View {
         } footer: {
             Text(
                 """
-                Sync keeps this iPhone and your Mac looking at one library, through your \
+                Sync keeps this \(DeviceName.thisDevice) and your Mac looking at one library, through your \
                 own private iCloud database. Apple's CloudKit is the only thing this app \
                 talks to on the network — no account with us, no analytics, no third-party \
                 service.
@@ -365,6 +371,85 @@ struct SettingsScreen: View {
         }
     }
 
+    // MARK: - Import
+
+    /// The way back in.
+    ///
+    /// The export section has always promised the archive round-trips — "the Mac app imports it
+    /// losslessly" — and until now that promise ran one way: a phone could write a library it
+    /// could not read. The same `Importer` the Mac uses does the reading, with the same duplicate
+    /// policy, so an archive means the same thing on both platforms.
+    private var importSection: some View {
+        Section {
+            Button {
+                isChoosingImport = true
+            } label: {
+                Label("Import Archive…", systemImage: "square.and.arrow.down")
+            }
+
+            if let importSummary {
+                Label(importSummary, systemImage: "checkmark.circle")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+
+            // Non-fatal problems are said out loud rather than swallowed: an import that quietly
+            // dropped a record is an import you cannot trust the next time.
+            ForEach(importWarnings, id: \.self) { warning in
+                Label(warning, systemImage: "exclamationmark.triangle")
+                    .font(Theme.Text.metadata)
+                    .foregroundStyle(Theme.Colors.warning)
+            }
+        } footer: {
+            Text("Adds the archive's records to this library. Anything already here is left alone — importing the same file twice changes nothing.")
+        }
+        .fileImporter(
+            isPresented: $isChoosingImport,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: true
+        ) { result in
+            importArchives(result)
+        }
+    }
+
+    private func importArchives(_ result: Result<[URL], any Error>) {
+        guard let services else { return }
+        importSummary = nil
+        importWarnings = []
+
+        switch result {
+        case .failure(let error):
+            importWarnings = [error.localizedDescription]
+
+        case .success(let urls):
+            var reports: [ImportReport] = []
+            for url in urls {
+                // A file chosen from another app's container is only readable inside a
+                // security-scoped access, and the access must be balanced however this exits.
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+
+                guard let data = try? Data(contentsOf: url) else {
+                    importWarnings.append("“\(url.lastPathComponent)” could not be read.")
+                    continue
+                }
+
+                // Skip rather than overwrite: an import is not an undoable operation, and
+                // replacing a record somebody has since edited is the one outcome they cannot
+                // recover from by hand.
+                let didImport = services.perform {
+                    reports.append(try services.importer.importArchive(data, policy: .skip))
+                }
+                guard didImport else { return }
+            }
+
+            importSummary = reports.map(\.summary).joined(separator: "; ")
+            importWarnings.append(contentsOf: reports.flatMap(\.warnings))
+            services.refreshDerivedState()
+            Task { await services.invalidateAndWarmIndex() }
+        }
+    }
+
     // MARK: - About
 
     private var aboutSection: some View {
@@ -373,7 +458,7 @@ struct SettingsScreen: View {
                 Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
             }
             LabeledContent("Library") {
-                Text("On this iPhone")
+                Text("On this \(DeviceName.thisDevice)")
             }
         } header: {
             Text("About")
