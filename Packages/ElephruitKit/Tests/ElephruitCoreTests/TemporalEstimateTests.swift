@@ -235,11 +235,66 @@ struct TemporalEstimateTests {
         #expect(SchoolGrade.parse("twelfth grade") == .grade(12))
     }
 
+    /// Nobody says "my son is in twelfth grade". Until these four words were read, "senior" was
+    /// stored as text no estimator could parse, so the grade never advanced and the record quietly
+    /// held a high-school senior in place while he finished school and left.
+    @Test("The words people actually use for high school are grades")
+    func highSchoolWordsAreGrades() {
+        #expect(SchoolGrade.parse("freshman") == .grade(9))
+        #expect(SchoolGrade.parse("sophomore") == .grade(10))
+        #expect(SchoolGrade.parse("junior") == .grade(11))
+        #expect(SchoolGrade.parse("senior") == .grade(12))
+        #expect(SchoolGrade.parse("senior year") == .grade(12))
+        #expect(SchoolGrade.parse("a senior in high school") == .grade(12))
+        #expect(SchoolGrade.parse("8th grade") == .grade(8))
+    }
+
+    /// A senior advances into having finished school rather than into a thirteenth grade — the
+    /// property that makes the worked example read correctly a year later.
+    @Test("A senior finishes school")
+    func aSeniorGraduates() {
+        #expect(SchoolGrade.parse("senior")?.advanced(by: 1) == .graduated)
+        #expect(SchoolGrade.parse("junior")?.advanced(by: 1) == .grade(12))
+    }
+
     @Test("A grade the parser cannot read stays unread")
     func unreadableGradesAreNotGuessed() {
         #expect(SchoolGrade.parse("sixth form") == nil)
         #expect(SchoolGrade.parse("") == nil)
         #expect(SchoolGrade.parse("99") == nil)
+        // Two words neither of which is filler. Guessing that this means sixth grade is how a wrong
+        // number earns a decade of being advanced every August.
+        #expect(SchoolGrade.parse("sixth college") == nil)
+        #expect(SchoolGrade.parse("second and third") == nil)
+    }
+
+    // MARK: - Which school year was meant
+
+    /// The six weeks in which people say "going into", and in which reading the date alone is wrong.
+    @Test("Going into a grade in July means the year about to begin")
+    func startingIntentInSummer() {
+        let july = Self.date(2026, 7, 20)
+
+        #expect(SchoolYearIntent.current.schoolYear(observedOn: july, calendar: Self.calendar).startYear == 2025)
+        #expect(SchoolYearIntent.starting.schoolYear(observedOn: july, calendar: Self.calendar).startYear == 2026)
+    }
+
+    /// Once the school year has turned over, "going into" and "in" agree — which is why the control
+    /// has to be a stated intention rather than a rule derived from the month.
+    @Test("After the turn of the school year both readings agree")
+    func intentsAgreeOnceTermHasBegun() {
+        let august = Self.date(2026, 8, 5)
+
+        #expect(SchoolYearIntent.current.schoolYear(observedOn: august, calendar: Self.calendar).startYear == 2026)
+        #expect(SchoolYearIntent.starting.schoolYear(observedOn: august, calendar: Self.calendar).startYear == 2026)
+    }
+
+    @Test("In the spring, going into a grade means next autumn")
+    func startingIntentInSpring() {
+        let february = Self.date(2027, 2, 10)
+
+        #expect(SchoolYearIntent.current.schoolYear(observedOn: february, calendar: Self.calendar).startYear == 2026)
+        #expect(SchoolYearIntent.starting.schoolYear(observedOn: february, calendar: Self.calendar).startYear == 2027)
     }
 
     @Test("Ordinals are English ordinals")

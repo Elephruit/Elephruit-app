@@ -156,6 +156,61 @@ public struct SchoolYear: Sendable, Hashable, Comparable {
     }
 }
 
+/// Whether a stated grade is the one somebody is in *now* or the one they are about to start.
+///
+/// ### Why this is asked rather than inferred
+/// "Going into 8th grade" and "in 8th grade" are the same five words about two different school
+/// years, and which one was meant cannot be recovered from the sentence or from the date it was
+/// said. Left to a date alone the app is wrong for the whole of July and August — precisely the
+/// weeks in which the sentence is said — and being wrong here is not a cosmetic error: the grade is
+/// the *input* to ``GradeEstimator``, so one year of drift at capture is one year of drift for as
+/// long as the record exists.
+///
+/// Two cases, not a date picker. Nobody knows the first day of somebody else's school year, and
+/// asking would be asking for a fact in order to avoid asking for an intention.
+public enum SchoolYearIntent: String, Sendable, Hashable, CaseIterable, Identifiable {
+    /// "She's in 8th grade."
+    case current
+
+    /// "She's going into 8th grade."
+    case starting
+
+    public var id: String { rawValue }
+
+    /// The word used on the control — "in 8th grade now" / "going into 8th grade".
+    public var displayName: String {
+        switch self {
+        case .current: "in it now"
+        case .starting: "going into it"
+        }
+    }
+
+    /// The school year a grade stated with this intent refers to.
+    ///
+    /// ### The arithmetic, and the one month it is unsure about
+    /// ``SchoolYear/containing(_:calendar:startMonth:)`` puts January-to-July in the year that began
+    /// the previous August, so *the year about to begin* is `containing + 1` in those months and
+    /// `containing` from August onwards. Both of those are the **calendar year of the observation**,
+    /// which is why this is one line rather than a branch.
+    ///
+    /// It reads a forward-looking grade said in, say, November as being about the year already
+    /// under way. That is the conservative direction — it under-advances by at most one year, and
+    /// only for a sentence nobody says in November — and the interface shows the resolved year back
+    /// ("2026–27") before anything is saved, so the rare case is visible rather than silent.
+    public func schoolYear(
+        observedOn: Date,
+        calendar: Calendar,
+        startMonth: Int = SchoolYear.defaultStartMonth
+    ) -> SchoolYear {
+        switch self {
+        case .current:
+            SchoolYear.containing(observedOn, calendar: calendar, startMonth: startMonth)
+        case .starting:
+            SchoolYear(startYear: calendar.component(.year, from: observedOn))
+        }
+    }
+}
+
 /// A school grade, or the fact that somebody is past or before one.
 ///
 /// Modelled rather than stored as a string so that advancing a year is addition, and so that
@@ -171,37 +226,64 @@ public enum SchoolGrade: Sendable, Hashable, Comparable {
     /// Past secondary school.
     case graduated
 
-    /// Reads a written grade — "2", "second", "2nd", "kindergarten", "pre-k".
+    /// Reads a written grade — "2", "second", "2nd", "kindergarten", "pre-k", "senior".
     ///
     /// Returns `nil` rather than guessing. A grade the app cannot read stays as the user's own text
     /// on the card, which is always better than a wrong number that then advances every year.
+    ///
+    /// ### Why the high-school words matter more than they look
+    /// Nobody says "my son is in twelfth grade". They say *he's a senior*, and until these four words
+    /// were read, that sentence stored the literal string "senior" — which
+    /// ``ElephruitPersistence/PersonWorkspaceService`` cannot parse, so no ``GradeEstimate`` is ever
+    /// produced and the fact sits on the card unchanged while the child finishes school and leaves.
+    /// A grade that silently never advances is the exact failure the estimator exists to prevent.
     public static func parse(_ text: String) -> SchoolGrade? {
-        let cleaned = text
+        // "grade" and "year" carry no information once the number beside them has been read.
+        let stripped = text
             .lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "grade", with: "")
-            .replacingOccurrences(of: "year", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "grade", with: " ")
+            .replacingOccurrences(of: "year", with: " ")
 
-        switch cleaned {
+        // Words that say *where* somebody is at school without saying *which* year: "senior in high
+        // school" is one grade wearing four words. Dropped whole-token rather than by substring, so
+        // "pre-school" survives having "school" inside it.
+        let filler: Set<String> = ["in", "at", "the", "a", "of", "high", "school", "highschool", "hs"]
+        let words = stripped
+            .split(whereSeparator: { $0.isWhitespace })
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: ".,")) }
+            .filter { !$0.isEmpty && !filler.contains($0) }
+
+        // Exactly one word must remain. Two means something was said that this does not understand —
+        // "sixth form" is not sixth grade — and guessing at it is how a wrong number gets a decade of
+        // being advanced every August.
+        guard words.count == 1, let word = words.first else { return nil }
+
+        switch word {
         case "k", "kindergarten", "kinder": return .kindergarten
         case "pre-k", "prek", "pre-school", "preschool", "nursery": return .preSchool
         default: break
         }
 
-        if let number = Int(cleaned.trimmingCharacters(in: CharacterSet(charactersIn: "stndrdth "))),
+        if let number = Int(word.trimmingCharacters(in: CharacterSet(charactersIn: "stndrdth "))),
            (1...12).contains(number) {
             return .grade(number)
         }
 
-        let words = [
-            "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6,
-            "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10, "eleventh": 11, "twelfth": 12,
-        ]
-        if let number = words[cleaned] { return .grade(number) }
+        if let number = Self.writtenGrades[word] { return .grade(number) }
 
         return nil
     }
+
+    /// Every word this reads as a grade number.
+    ///
+    /// The American high-school names sit beside the ordinals rather than in a table of their own,
+    /// because they mean the same thing — a year of school counted from the same zero — and splitting
+    /// them would invite a caller to consult one and not the other.
+    static let writtenGrades: [String: Int] = [
+        "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6,
+        "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10, "eleventh": 11, "twelfth": 12,
+        "freshman": 9, "sophomore": 10, "junior": 11, "senior": 12,
+    ]
 
     /// This grade, `years` school years later.
     public func advanced(by years: Int) -> SchoolGrade {
@@ -279,9 +361,18 @@ public struct GradeEstimate: Sendable, Hashable {
         self.isEstimate = isEstimate
     }
 
-    /// "likely in 3rd grade" · "in 2nd grade".
+    /// "likely in 3rd grade" · "in 2nd grade" · "likely finished school".
+    ///
+    /// Leaving school is the one grade that is not a place you are *in*, and it became reachable the
+    /// moment "senior" started parsing — a senior advances to ``SchoolGrade/graduated`` on the next
+    /// August, and "likely in finished school" is not a sentence.
     public var displayText: String {
-        isEstimate ? "likely in \(grade.displayText)" : "in \(grade.displayText)"
+        switch grade {
+        case .graduated:
+            isEstimate ? "likely finished school" : "finished school"
+        default:
+            isEstimate ? "likely in \(grade.displayText)" : "in \(grade.displayText)"
+        }
     }
 }
 
