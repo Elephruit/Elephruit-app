@@ -56,6 +56,12 @@ private struct TodayContent: View {
     /// identifier so it survives a reassembly — a reload must not close what somebody opened.
     @State private var expandedGatherings: Set<String> = []
 
+    /// How close to the end the scroll has to get before the next week is asked for.
+    ///
+    /// About a screen. Less and the feed visibly stops before it continues; more and a flick that
+    /// was never going to reach the bottom has already spent a calendar read.
+    private static let pagingReach: CGFloat = 600
+
     var body: some View {
         List {
             if let failure = model.failure {
@@ -73,26 +79,8 @@ private struct TodayContent: View {
             }
 
             if let plan = model.selectedPlan {
-                briefingSection(plan)
-                calendarStateSection
-                awarenessSection(plan)
-                eventsSection(plan)
-                tasksSection(plan)
-                completedSection(plan)
-                peopleSection(plan)
-                dailyNoteSection(plan)
-
-                if plan.isEmpty, model.failure == nil {
-                    EmptyStateView(
-                        symbolName: plan.isToday ? "sun.max" : "calendar",
-                        headline: plan.isToday ? "A clear day" : "Nothing planned",
-                        message: plan.isToday
-                            ? "Nothing scheduled, nothing due. Capture something, or enjoy it."
-                            : "Nothing scheduled or due on this day yet.",
-                        tone: .accomplished
-                    )
-                    .onTimeline()
-                }
+                daySections(plan, isAnchor: true)
+                upcomingFeed
             } else if model.isLoadingInitially {
                 HStack {
                     Spacer()
@@ -109,6 +97,24 @@ private struct TodayContent: View {
         .listStyle(.plain)
         .environment(\.defaultMinListRowHeight, 0)
         .background(Theme.Colors.contentBackground)
+        // A different anchor day is a different page, and a page that opens two hundred rows down
+        // because that is where the last one was left is a page somebody has to scroll back up.
+        // Rebuilding on the date puts the new day under the thumb rather than under whatever offset
+        // the old one happened to end on.
+        .id(model.selectedDate)
+        // The feed pages on proximity rather than on a row appearing. A row's `onAppear` fires once
+        // and never again while it stays on screen, so a week of clear days — which adds barely a
+        // screen of height — would leave the marker visible and the feed stopped with nothing to
+        // press. Geometry keeps answering, including when the answer is "the days you just loaded
+        // did not fill the gap", so it carries on until the screen is full.
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            // `visibleRect` rather than `contentOffset`: it is already inset-corrected, which
+            // matters under a large navigation title.
+            geometry.contentSize.height - geometry.visibleRect.maxY
+        } action: { _, remaining in
+            guard remaining < Self.pagingReach else { return }
+            model.extendFuture()
+        }
         .refreshable {
             // Honest refresh: re-reads the calendar, which genuinely can have changed
             // underneath the app. The library itself needs no pulling — it is local.
@@ -152,6 +158,87 @@ private struct TodayContent: View {
                     }
                 }
         )
+    }
+
+    // MARK: - A day, in full
+
+    /// Everything one day has to say, in the order somebody plans in.
+    ///
+    /// The same builder for the day at the top and for a day further down that has been opened out,
+    /// because "open it in full" has to mean the *same* full — a second, thinner rendering of a day
+    /// is a second set of rules about what a day contains, and the two drift.
+    ///
+    /// `isAnchor` marks the day the page is standing on. Only it carries the calendar's own state
+    /// and the empty-day illustration: a banner about calendar access repeated on ninety days is
+    /// ninety copies of one fact, and a full-height "A clear day" under every free Thursday is a
+    /// feed made mostly of empty states.
+    @ViewBuilder
+    private func daySections(_ plan: DayPlan, isAnchor: Bool) -> some View {
+        briefingSection(plan)
+
+        if isAnchor {
+            calendarStateSection
+        }
+
+        awarenessSection(plan)
+        eventsSection(plan)
+        tasksSection(plan)
+        completedSection(plan)
+        peopleSection(plan)
+        dailyNoteSection(plan)
+
+        if isAnchor, plan.isEmpty, model.failure == nil {
+            EmptyStateView(
+                symbolName: plan.isToday ? "sun.max" : "calendar",
+                headline: plan.isToday ? "A clear day" : "Nothing planned",
+                message: plan.isToday
+                    ? "Nothing scheduled, nothing due. Capture something, or enjoy it."
+                    : "Nothing scheduled or due on this day yet.",
+                tone: .accomplished
+            )
+            .onTimeline()
+        }
+    }
+
+    // MARK: - The days after it
+
+    /// The run of days under the one you are standing on, on the same thread.
+    @ViewBuilder
+    private var upcomingFeed: some View {
+        if !model.followingDays.isEmpty {
+            TimelineHeader("Upcoming").onTimeline()
+        }
+
+        ForEach(model.followingDays) { plan in
+            TodayFeedDayHeader(plan: plan, isExpanded: model.isExpanded(plan)) {
+                withCalmAnimation(Theme.Motion.standard) { model.toggleExpanded(plan) }
+            }
+            .onTimeline()
+
+            // Closed, the day is its own summary. Open, the full sections carry it — drawing both
+            // would put every meeting on the screen twice.
+            if model.isExpanded(plan) {
+                daySections(plan, isAnchor: false)
+            } else {
+                let calendar = services?.dateProvider.calendar ?? .current
+
+                ForEach(plan.scheduleEvents(calendar: calendar)) { event in
+                    TodayFeedEventLine(dayEvent: event).onTimeline()
+                }
+
+                ForEach(model.openTasks(in: plan), id: \.day.id) { entry in
+                    TodayFeedTaskLine(task: entry.day, item: entry.item).onTimeline()
+                }
+            }
+        }
+
+        if model.selectedPlan != nil {
+            TodayFeedFooter(
+                isExtending: model.isExtendingFuture,
+                canLoadMore: model.canLoadMoreDays
+            )
+            .onTimeline()
+        }
     }
 
     // MARK: - Briefing

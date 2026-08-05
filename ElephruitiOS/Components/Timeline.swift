@@ -44,6 +44,11 @@ enum Timeline {
     static let leadingInset: CGFloat = Theme.Spacing.large
 
     static let badgeSize: CGFloat = 26
+
+    /// The disc a summary line gets instead of a symbol. Small enough to read as a bead on the
+    /// thread rather than as another entry demanding to be looked at.
+    static let compactBadgeSize: CGFloat = 10
+
     static let lineWidth: CGFloat = 1
 
     /// How far down a row the badge's centre sits — the top padding plus half the badge.
@@ -73,31 +78,53 @@ enum Timeline {
     /// What sits on the line: a symbol in a filled circle, ringed in the page's own colour so the
     /// line appears to pass behind it rather than through it.
     struct Badge: View {
-        let symbolName: String
+        /// The glyph, or `nil` for a plain disc.
+        ///
+        /// A day marker wants no glyph: it is a knot in the thread rather than a kind of thing, and
+        /// the only symbol that would fit — a filled circle inside a filled circle — draws a donut
+        /// that reads as neither.
+        var symbolName: String?
         var tint: Color = Theme.Colors.secondaryText
-        /// A hollow badge for something that is not an entry — the marker for now, an empty slot.
+        /// A hollow badge for something that is not an entry — a day with nothing in it.
         var isHollow: Bool = false
+
+        /// A small disc instead of a symbol in a circle.
+        ///
+        /// For the summary lines of a day nobody has reached yet. A future day drawn with the same
+        /// weight as today competes with it, and a page where every row shouts equally is a page
+        /// with no shape — the thread should quieten as it runs into next week.
+        var isCompact: Bool = false
 
         var body: some View {
             ZStack {
                 Circle()
                     .fill(Theme.Colors.contentBackground)
-                    .frame(width: Timeline.badgeSize + Theme.Spacing.tight)
+                    .frame(width: diameter + Theme.Spacing.tight)
 
-                if isHollow {
+                if isCompact {
+                    Circle()
+                        .fill(tint)
+                        .frame(width: diameter)
+                } else if isHollow {
                     Circle()
                         .strokeBorder(tint, lineWidth: Timeline.lineWidth * 2)
-                        .frame(width: Timeline.badgeSize)
+                        .frame(width: diameter)
                 } else {
                     Circle()
                         .fill(tint)
-                        .frame(width: Timeline.badgeSize)
-                    Image(systemName: symbolName)
-                        .font(Theme.Text.denseLabel)
-                        .foregroundStyle(Theme.Colors.onAccent)
+                        .frame(width: diameter)
+                    if let symbolName {
+                        Image(systemName: symbolName)
+                            .font(Theme.Text.denseLabel)
+                            .foregroundStyle(Theme.Colors.onAccent)
+                    }
                 }
             }
             .accessibilityHidden(true)
+        }
+
+        private var diameter: CGFloat {
+            isCompact ? Timeline.compactBadgeSize : Timeline.badgeSize
         }
     }
 }
@@ -120,10 +147,24 @@ struct TimelineRow<Leading: View, Content: View>: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
-            leading()
-                .frame(width: leadingWidth, alignment: .trailing)
-                .padding(.leading, Timeline.leadingInset)
-                .padding(.top, Theme.Spacing.medium)
+            // Backed by `Color.clear` so the column exists whatever the caller puts in it.
+            //
+            // This is not belt and braces; it is the fix for a bug found twice. `EmptyView` takes
+            // no part in layout, so a `.frame(width:)` around one is discarded and the column
+            // vanishes — and a caller does not have to *pass* `EmptyView` to hit it, only to write
+            // an `if` with no `else`, which is what an untimed reminder's empty gutter looks like.
+            // Reserving the width here means no row can lose the gutter by accident.
+            // `.topTrailing`, not `.trailing`: a `ZStack`'s horizontal alignment says nothing about
+            // the vertical one, and the default centres. Against a tall row — a meeting with a
+            // location, a conflict and three names — a centred time drifts to the middle of a block
+            // it is supposed to be labelling the top of.
+            ZStack(alignment: .topTrailing) {
+                Color.clear
+                leading()
+            }
+            .frame(width: leadingWidth, alignment: .trailing)
+            .padding(.leading, Timeline.leadingInset)
+            .padding(.top, Theme.Spacing.medium)
 
             ZStack(alignment: .top) {
                 rail
@@ -199,13 +240,9 @@ private struct TimelineLine: Shape {
 
 /// A row with nothing to say in the leading column — an all-day entry, a note.
 ///
-/// ### Why the placeholder is `Color.clear` and not `EmptyView`
-/// `EmptyView` renders nothing *and takes no part in layout*, so a `.frame(width:)` on it is
-/// discarded and the leading column silently collapses. The first screenshot of this page caught it
-/// exactly: the awareness rows sat fifty points left of their own header, with two rails down the
-/// page instead of one. `Color.clear` is a real view that honours a frame, which is the whole
-/// difference between an empty column and no column.
-extension TimelineRow where Leading == Color {
+/// Safe to hand `EmptyView` here because ``TimelineRow`` backs the column with `Color.clear` itself;
+/// see the note there for why that is load-bearing rather than defensive.
+extension TimelineRow where Leading == EmptyView {
     init(
         railStyle: Timeline.RailStyle = .solid,
         badge: Timeline.Badge? = nil,
@@ -216,7 +253,7 @@ extension TimelineRow where Leading == Color {
             railStyle: railStyle,
             badge: badge,
             showsDivider: showsDivider,
-            leading: { Color.clear },
+            leading: { EmptyView() },
             content: content
         )
     }
