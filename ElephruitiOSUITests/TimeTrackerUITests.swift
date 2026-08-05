@@ -141,7 +141,7 @@ final class TimeTrackerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["time.stop"].waitForExistence(timeout: 5))
 
         app.buttons["More timer commands"].tap()
-        let focus = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Focus'")).firstMatch
+        let focus = app.buttons["time.focus"]
         XCTAssertTrue(focus.waitForExistence(timeout: 5), "the menu offers no focus cycle")
         focus.tap()
 

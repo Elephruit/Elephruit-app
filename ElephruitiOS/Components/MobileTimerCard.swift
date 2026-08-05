@@ -33,6 +33,7 @@ struct MobileTimerCard: View {
 
     @State private var descriptionText = ""
     @State private var preparedFor: UUID?
+    @State private var hasPrepared = false
     @State private var activePopover: Filing?
     /// The same list again as a sheet, once somebody asks to type. See `MobileChoiceList`.
     @State private var searching: Filing?
@@ -302,8 +303,10 @@ struct MobileTimerCard: View {
         Menu {
             if timer?.isFocusing == true {
                 Button("End Focus", systemImage: "brain.head.profile") { timer?.endFocus() }
+                    .accessibilityIdentifier(AccessibilityID.Time.focusEnd)
             } else {
                 Button(focusTitle, systemImage: "brain.head.profile") { timer?.startFocus() }
+                    .accessibilityIdentifier(AccessibilityID.Time.focusButton)
             }
 
             Button("Start Again From Zero", systemImage: "arrow.counterclockwise") {
@@ -311,6 +314,7 @@ struct MobileTimerCard: View {
                 timer?.restart()
                 announce()
             }
+            .accessibilityIdentifier(AccessibilityID.Time.floatingRestart)
 
             Divider()
 
@@ -677,9 +681,15 @@ struct MobileTimerCard: View {
 
     /// Fills the card from whatever is running, so the fields describe the timer rather than a
     /// stale draft that happens to be sitting in them.
+    ///
+    /// The `hasPrepared` flag is not redundant with the comparison beside it: on the very first
+    /// pass with nothing running, the timer's identity and the remembered one are both `nil`, so
+    /// a comparison alone would decide there was nothing to do — and the card would arrive with
+    /// no list of things to continue until something else happened to change.
     private func prepare() {
         let identifier = running?.id
-        guard preparedFor != identifier else { return }
+        guard !hasPrepared || preparedFor != identifier else { return }
+        hasPrepared = true
         preparedFor = identifier
         descriptionText = running?.entryDescription ?? ""
         isEditingDuration = false

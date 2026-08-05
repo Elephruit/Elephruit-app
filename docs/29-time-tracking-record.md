@@ -192,6 +192,17 @@ buttons on the row, and everything that ends a timer *without* keeping the time 
 further away in a menu, because on a surface aimed at with a thumb Stop and Discard must not be
 neighbours.
 
+Time added by hand and time corrected afterwards file the same way, through one
+`TimeFilingSection` shared by both sheets. An hour typed in on a train is the same hour as an
+hour measured at a desk, and a sheet that could only record its length would put it in the log
+as something nobody can report on — which is how a month's totals grow a category called
+"untitled" that is bigger than any real one. The project row is prefilled from the entry's
+*explicit* project only, for the reason §"The project is derived unless it is stated" gives:
+prefilling from a derived one and saving pins it.
+
+The report takes the rounding preference and shares both shapes of CSV — one line per stretch,
+and the totals as they are on screen. Rounding is applied to the reading and never to the store.
+
 Two things the phone does not have, and cannot honestly fake:
 
 - **Idle detection.** `SystemIdleClock.secondsSinceLastInput` returns zero off macOS; there is no
