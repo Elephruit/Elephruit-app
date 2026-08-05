@@ -135,6 +135,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
     case foodAndDrink
     case family
     case age
+    case grade
     case school
     case interests
     case likes
@@ -151,6 +152,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .foodAndDrink: "Food & drink"
         case .family: "Family"
         case .age: "Age"
+        case .grade: "Grade"
         case .school: "School"
         case .interests: "Interests"
         case .likes: "Likes"
@@ -167,7 +169,8 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .foodAndDrink: "fork.knife"
         case .family: "figure.2.and.child.holdinghands"
         case .age: "birthday.cake"
-        case .school: "graduationcap"
+        case .grade: "graduationcap"
+        case .school: "building.columns"
         case .interests: "star.fill"
         case .likes: "hand.thumbsup.fill"
         case .avoid: "hand.thumbsdown.fill"
@@ -183,6 +186,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .foodAndDrink: Theme.Palette.green.color
         case .family: Theme.Palette.pink.color
         case .age: Theme.Palette.orange.color
+        case .grade: Theme.Palette.indigo.color
         case .school: Theme.Palette.indigo.color
         case .interests: Theme.Palette.purple.color
         case .likes: Theme.Palette.cyan.color
@@ -199,7 +203,8 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .foodAndDrink: .foodAndDrink
         case .family: .family
         case .age: .observedAge
-        case .school: .schoolGrade
+        case .grade: .schoolGrade
+        case .school: .school
         case .interests: .interest
         case .likes: .like
         case .avoid: .dislike
@@ -215,7 +220,8 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .foodAndDrink: "Diet, allergies, favorite drinks, restaurants…"
         case .family: "Names, ages, milestones, or family context…"
         case .age: "Age now, or the age when you learned it…"
-        case .school: "Grade, school, teacher, or what needs confirming…"
+        case .grade: "The year they are in — “8th”, “senior”, “kindergarten”…"
+        case .school: "Which school they go to…"
         case .interests: "Hobbies, teams, books, music, travel…"
         case .likes: "Something they enjoy or appreciate…"
         case .avoid: "Something they dislike or would rather skip…"
@@ -231,7 +237,8 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .foodAndDrink: ["Vegetarian", "Gluten-free", "Doesn’t drink alcohol", "Likes wine"]
         case .family: ["Has 2 children", "Names to confirm", "Partner", "New baby"]
         case .age: ["5 years old", "About 8", "Age to confirm"]
-        case .school: ["2nd grade", "2nd or 3rd grade", "School to confirm"]
+        case .grade: ["2nd grade", "senior", "kindergarten"]
+        case .school: ["School to confirm"]
         case .interests: ["Wine", "Golf", "Art", "Running"]
         case .likes: ["Coffee", "Live music", "Thoughtful gifts"]
         case .avoid: ["Crowded places", "Early meetings", "Spicy food"]
@@ -262,6 +269,7 @@ struct AddFactSheet: View {
     @State private var sensitivity: FactSensitivity = .normal
     @State private var observedOn = Date()
     @State private var showsDetails = false
+    @State private var schoolYearIntent: SchoolYearIntent = .current
     @FocusState private var isValueFocused: Bool
 
     init(
@@ -383,6 +391,34 @@ struct AddFactSheet: View {
                             .accessibilityLabel(category.title)
                     }
 
+                    // Only for a grade, because it is the only fact here that means a different
+                    // thing depending on which school year it referred to — and the only one whose
+                    // stored value the app goes on advancing by itself.
+                    if category == .grade {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                            Text("Which school year?")
+                                .font(Theme.Text.metadata)
+                                .foregroundStyle(Theme.Colors.secondaryText)
+
+                            Picker("School year", selection: $schoolYearIntent) {
+                                ForEach(SchoolYearIntent.allCases) { option in
+                                    Text(option.displayName).tag(option)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+
+                            if let reading = gradeReading {
+                                Text(reading)
+                                    .font(Theme.Text.metadata)
+                                    .foregroundStyle(
+                                        parsedGrade == nil ? Theme.Colors.warning : Theme.Colors.secondaryText
+                                    )
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+
                     VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                         Text("How certain is this?")
                             .font(Theme.Text.metadata)
@@ -432,7 +468,10 @@ struct AddFactSheet: View {
                     onSave(
                         ObservationDraft(
                             attribute: category.attribute,
-                            value: normalizedValue
+                            value: normalizedValue,
+                            // Stated rather than derived from `observedOn`, which is wrong for the
+                            // whole of every summer — see `SchoolYearIntent`.
+                            schoolYearStart: category == .grade ? schoolYear.startYear : nil
                         ),
                         confidence,
                         sensitivity,
@@ -457,18 +496,40 @@ struct AddFactSheet: View {
         }
     }
 
-    /// Estimators need a clean numeric age or grade, while ambiguous wording must remain exactly
-    /// as entered so the interface never turns “2nd or 3rd” into a confident “2nd.”
+    private var calendar: Calendar { services?.dateProvider.calendar ?? .current }
+
+    /// The school year the grade being typed refers to.
+    private var schoolYear: SchoolYear {
+        schoolYearIntent.schoolYear(observedOn: observedOn, calendar: calendar)
+    }
+
+    private var parsedGrade: SchoolGrade? {
+        SchoolGrade.parse(value.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// What the app made of the grade, said back before it is stored.
+    ///
+    /// The same sentence the family editor shows, from the same place, for the same reason: an
+    /// unreadable grade is kept verbatim and never advanced, and the moment to discover that is
+    /// while typing it rather than next August.
+    private var gradeReading: String? {
+        RelativeCapture(gradeText: value, schoolYearIntent: schoolYearIntent)
+            .gradeReading(observedOn: observedOn, calendar: calendar)
+    }
+
+    /// An age has to reach ``ElephruitCore/AgeEstimator`` as a number, so a number is dug out of it.
+    ///
+    /// ### Why a grade is no longer touched
+    /// It used to be reduced to a bare digit — "2nd grade" stored as "2" — because
+    /// ``ElephruitCore/SchoolGrade/parse(_:)`` could not read the words around it. It can now, and
+    /// storing the sentence somebody typed is what ``ElephruitCore/PersonObservation/value`` has
+    /// always promised. The narrowing also silently lost "senior", which reduced to nothing at all.
     private var normalizedValue: String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        let numbers = trimmed.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
 
-        if category == .age, let age = numbers.first {
+        if category == .age,
+           let age = trimmed.split(whereSeparator: { !$0.isNumber }).compactMap({ Int($0) }).first {
             return "\(age)"
-        }
-
-        if category == .school, numbers.count == 1, !trimmed.localizedCaseInsensitiveContains(" or ") {
-            return "\(numbers[0])"
         }
 
         return trimmed
