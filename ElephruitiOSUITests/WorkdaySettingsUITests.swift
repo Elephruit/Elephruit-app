@@ -29,12 +29,25 @@ final class WorkdaySettingsUITests: XCTestCase {
         app.buttons["mobile.sidebar.settings"].tap()
 
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10))
+
+        // By identifier, because these are chrome — text this screen renders from a literal, which
+        // is the kind that gets restructured. Matching the words passes until somebody wraps a row
+        // in a control or rewords a label, and then waits out the whole timeout before failing with
+        // a message about the feature rather than about the query. That has now cost three separate
+        // diagnoses on this codebase. Content rendered from data is still fair to match by text.
+        let section = app.descendants(matching: .any)["settings.workday"]
         XCTAssertTrue(
-            app.staticTexts["Working day"].waitForExistence(timeout: 5),
+            section.waitForExistence(timeout: 5),
             "the working-day section did not draw"
         )
-        XCTAssertTrue(app.staticTexts["Starts"].exists, "no start time to set")
-        XCTAssertTrue(app.staticTexts["Ends"].exists, "no end time to set")
+        XCTAssertTrue(
+            app.descendants(matching: .any)["settings.workday.start"].exists,
+            "no start time to set"
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["settings.workday.end"].exists,
+            "no end time to set"
+        )
 
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "settings-workday"

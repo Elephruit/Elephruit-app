@@ -67,8 +67,11 @@ final class TimeTrackerUITests: XCTestCase {
 
         app.buttons["time.billable"].tap()
         app.buttons["time.subject"].tap()
+        // By identifier, not by title. The popup is anchored to the chip that opened it and draws
+        // no header, so "Subject" survives only as an accessibility label on a container — which
+        // `staticTexts` will never match, however long it waits.
         XCTAssertTrue(
-            app.staticTexts["Subject"].waitForExistence(timeout: 5),
+            app.descendants(matching: .any)["time.pickerPopup"].waitForExistence(timeout: 5),
             "the subject chip opened nothing"
         )
         snap(app, "03-subject")

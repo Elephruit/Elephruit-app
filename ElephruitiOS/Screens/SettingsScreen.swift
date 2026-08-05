@@ -67,15 +67,18 @@ struct SettingsScreen: View {
                         selection: minutesBinding(\.startMinutes, of: workday.hours),
                         displayedComponents: .hourAndMinute
                     )
+                    .accessibilityIdentifier(AccessibilityID.Settings.workdayStart)
                     DatePicker(
                         "Ends",
                         selection: minutesBinding(\.endMinutes, of: workday.hours),
                         displayedComponents: .hourAndMinute
                     )
+                    .accessibilityIdentifier(AccessibilityID.Settings.workdayEnd)
                     weekdayPicker(workday.hours)
                 }
             } header: {
                 Text("Working day")
+                    .accessibilityIdentifier(AccessibilityID.Settings.workdaySection)
             } footer: {
                 Text(
                     workday.source.isChosen

@@ -105,6 +105,10 @@ struct MobileChoiceList: View {
         // The name the header used to carry, kept for the reading that still needs it.
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
+        // And named, so a test can find the popup without matching that label. A label on a
+        // `children: .contain` container is not a `StaticText`, so looking for the title finds
+        // nothing however long it waits.
+        .accessibilityIdentifier(AccessibilityID.Time.pickerPopup)
     }
 
     /// What is left of the header: a way to take the choice back, and only when there is a
