@@ -389,7 +389,6 @@ private struct TodayContent: View {
         awarenessSection(plan)
         eventsSection(plan)
         tasksSection(plan)
-        completedSection(plan)
         peopleSection(plan)
         dailyNoteSection(plan)
 
@@ -855,10 +854,26 @@ private struct TodayContent: View {
 
     // MARK: - Tasks
 
+    /// The day's work: what is left, and — faded, underneath it — what is finished.
+    ///
+    /// ### Why finished work keeps its title
+    /// Because "1 completed reminder" is a receipt, not a record. Ticking something off replaced the
+    /// thing you did with a count of things you did, and getting the words back cost a tap on a
+    /// disclosure arrow that then moved. The title is the only part of a finished task worth
+    /// keeping, and it is the part that was being thrown away.
+    ///
+    /// So it stays where it was, in the same list, and says it is done the way paper does: a filled
+    /// circle, a line through it, and the whole row stepped back so the eye skims it on the way to
+    /// the work that is left. Nothing collapses and nothing has to be opened.
     @ViewBuilder
     private func tasksSection(_ plan: DayPlan) -> some View {
         let open = model.openTasks(in: plan)
-        if !open.isEmpty {
+        // Below the open work rather than in place. Where a task *sat* is not a fact the day plan
+        // keeps once it is finished, and a finished row holding its old position would push the
+        // three things still owed further down the page every time one of them was done.
+        let finished = model.completedTasks(in: plan)
+
+        if !open.isEmpty || !finished.isEmpty {
             TimelineHeader(plan.isToday ? "To do" : "Due or planned").onTimeline()
 
             ForEach(open, id: \.day.id) { entry in
@@ -904,6 +919,20 @@ private struct TodayContent: View {
                     .contextMenu { taskMenu(entry.item, plan: plan) }
                     .onTimeline()
             }
+
+            ForEach(finished) { item in
+                TodayTaskRow(task: item) {
+                    withCalmAnimation(Theme.Motion.standard) { actions.toggleCompletion(item) }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { shell.push(.item(item.id)) }
+                // No swipe actions on a finished row. Every one of them — complete, move to
+                // tomorrow, block time — is a thing to do with work that is still owed, and a
+                // drawer full of verbs that do not apply is worse than an empty edge. Reopening is
+                // the circle, which is where it already was.
+                .contextMenu { taskMenu(item, plan: plan) }
+                .onTimeline()
+            }
         }
     }
 
@@ -942,46 +971,6 @@ private struct TodayContent: View {
     private func nextDay(after date: Date) -> Date {
         guard let services else { return date }
         return services.dateProvider.calendar.date(byAdding: .day, value: 1, to: date) ?? date
-    }
-
-    // MARK: - Completed
-
-    @ViewBuilder
-    private func completedSection(_ plan: DayPlan) -> some View {
-        let completed = model.completedTasks(in: plan)
-        if !completed.isEmpty {
-            TimelineRow(
-                badge: Timeline.Badge(
-                    symbolName: "checkmark", tint: Theme.Colors.completed
-                )
-            ) {
-                DisclosureGroup {
-                    ForEach(completed) { item in
-                        HStack(spacing: Theme.Spacing.small) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(Theme.Colors.completed)
-                            Text(item.displayTitle)
-                                .font(Theme.Text.rowSubtitle)
-                                .strikethrough()
-                                .foregroundStyle(Theme.Colors.secondaryText)
-                                .lineLimit(1)
-                            Spacer(minLength: 0)
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            withCalmAnimation(Theme.Motion.standard) {
-                                actions.toggleCompletion(item)
-                            }
-                        }
-                    }
-                } label: {
-                    Text("^[\(completed.count) completed reminder](inflect: true)")
-                        .font(Theme.Text.rowSubtitle)
-                        .foregroundStyle(Theme.Colors.secondaryText)
-                }
-            }
-            .onTimeline()
-        }
     }
 
     // MARK: - People
@@ -1347,7 +1336,15 @@ private struct TodayEventRow: View {
 /// task. Nothing about the Reminders module changes because of this.
 private struct TodayTaskRow: View {
     let task: Item
-    let day: DayTask
+
+    /// Why the day is showing this, when the day still has a reason.
+    ///
+    /// Absent for finished work: `DayPlan` keeps completed tasks as bare identifiers, because a
+    /// reason is an argument for doing something and there is nothing left to argue for. The row
+    /// simply says less, which is right — "overdue" under a job that is done is a reproach for a
+    /// thing that no longer needs one.
+    var day: DayTask?
+
     let toggle: () -> Void
 
     /// Whether the circle is filled in.
@@ -1355,6 +1352,17 @@ private struct TodayTaskRow: View {
     /// Read from the record rather than kept here, so the fill appears the moment the task is
     /// completed and stays right if the same task is completed from somewhere else.
     private var isCompleted: Bool { task.status == .completed }
+
+    /// Finished *or* deliberately dropped. Both are settled, and a settled row is drawn the same
+    /// way — the difference between them is the logbook's business, not the day's.
+    private var isSettled: Bool { task.status == .completed || task.status == .cancelled }
+
+    /// How much of the page a settled row keeps.
+    ///
+    /// Enough to read the title without effort, little enough that the eye skims past it to the
+    /// work that is left. This is the whole of what replaced the collapsed count: the row is still
+    /// there, still says what it was, and no longer competes for attention it has already had.
+    private static let settledDimming: CGFloat = 0.45
 
     var body: some View {
         TimelineRow(
@@ -1364,31 +1372,37 @@ private struct TodayTaskRow: View {
             //
             // Outlined in the reason's own colour, so a page of work still reads as late, due, or
             // merely chosen without a word being read. Completed, it fills and takes a check —
-            // the same colour, now solid, which is what "done" has looked like since paper.
+            // which is what "done" has looked like since paper.
             badge: Timeline.Badge(
                 symbolName: isCompleted ? "checkmark" : nil,
                 tint: tint,
-                isHollow: !isCompleted
+                isHollow: !isSettled
             ),
             badgeAction: toggle,
-            badgeLabel: isCompleted ? "Reopen \(task.displayTitle)" : "Complete \(task.displayTitle)"
+            badgeLabel: isSettled ? "Reopen \(task.displayTitle)" : "Complete \(task.displayTitle)"
         ) {
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 Text(task.displayTitle)
                     .font(Theme.Text.rowTitle)
+                    // Struck as well as faded. Fading alone is what a disabled control looks like,
+                    // and a line through the words is the one mark that has only ever meant done.
+                    .strikethrough(isSettled, color: Theme.Colors.secondaryText)
+                    .foregroundStyle(isSettled ? Theme.Colors.secondaryText : Theme.Colors.primaryText)
                     .lineLimit(2)
 
-                if let reason = day.primaryReason {
+                if let reason = day?.primaryReason {
                     Text(reason.label)
                         .font(Theme.Text.metadata)
                         .foregroundStyle(tint)
                 }
             }
         }
+        .opacity(isSettled ? Self.settledDimming : 1)
     }
 
     private var tint: Color {
-        switch day.primaryReason {
+        guard !isSettled else { return Theme.Colors.completed }
+        return switch day?.primaryReason {
         case .overdue?: Theme.Colors.overdue
         case .due?: Theme.Colors.dueToday
         default: Theme.Colors.secondaryText
