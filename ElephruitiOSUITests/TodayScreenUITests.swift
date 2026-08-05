@@ -164,4 +164,67 @@ final class TodayScreenUITests: XCTestCase {
             "the switch did not hide the gaps"
         )
     }
+
+    /// A gap can be claimed, and the claim can be taken straight back.
+    ///
+    /// The whole loop in one method because each one relaunches the app: tapping the gap, what it
+    /// offers, the write, the receipt, and the undo. Undo is asserted rather than assumed — a button
+    /// that writes to somebody's calendar and cannot be reversed in the same breath is the fastest
+    /// way to make them stop trusting it.
+    ///
+    /// Everything is reached by identifier, because all of it is chrome. The one thing matched by
+    /// its words is the work in the offer list, which is content and is the test doing its job.
+    func testAGapCanBeClaimedAndGivenBack() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ElephruitDevelopmentMode",
+            "-ElephruitUseTemporaryStore",
+            "-ElephruitLoadSampleData",
+            "-ElephruitUseFixtureCalendar",
+            "-ElephruitFixturesAuthorized",
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["today.schedule.header"].waitForExistence(timeout: 30))
+
+        let gaps = app.descendants(matching: .any).matching(identifier: "today.freeSlot")
+        for _ in 0..<8 where gaps.count == 0 {
+            app.swipeUp()
+        }
+        XCTAssertGreaterThan(gaps.count, 0, "no gap was drawn on a day the fixture leaves room in")
+
+        gaps.firstMatch.tap()
+
+        let addButton = app.buttons["today.block.add"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 10), "tapping a gap offered nothing to do with it")
+        XCTAssertTrue(
+            app.buttons["today.block.focus"].exists,
+            "a gap must at least offer to be defended, whatever else is on the day"
+        )
+
+        let offered = XCTAttachment(screenshot: app.screenshot())
+        offered.name = "today-block-offers"
+        offered.lifetime = .keepAlways
+        add(offered)
+
+        addButton.tap()
+
+        let remove = app.buttons["today.block.remove"]
+        XCTAssertTrue(
+            remove.waitForExistence(timeout: 15),
+            "the write said nothing about itself, so there is nothing to undo"
+        )
+
+        let written = XCTAttachment(screenshot: app.screenshot())
+        written.name = "today-block-written"
+        written.lifetime = .keepAlways
+        add(written)
+
+        remove.tap()
+        XCTAssertTrue(
+            remove.waitForNonExistence(timeout: 15),
+            "removing the block left the sheet up, so nobody can tell whether it worked"
+        )
+    }
 }

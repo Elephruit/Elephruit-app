@@ -56,6 +56,9 @@ private struct TodayContent: View {
     /// identifier so it survives a reassembly — a reload must not close what somebody opened.
     @State private var expandedGatherings: Set<String> = []
 
+    /// The gap or the task the block sheet is up about, if it is up.
+    @State private var blocking: BlockTimeSubject?
+
     /// How close to the end the scroll has to get before the next week is asked for.
     ///
     /// About a screen. Less and the feed visibly stops before it continues; more and a flick that
@@ -144,10 +147,22 @@ private struct TodayContent: View {
                 }
             }
         }
+        .sheet(item: $blocking) { subject in
+            BlockTimeSheet(
+                actions: actions, plan: subject.plan, slot: subject.slot, task: subject.task
+            )
+        }
         // The same two-token drive as the Mac: the window token reloads the calendar,
         // the source token reassembles from memory. See `TodayModel` for why they differ.
         .task(id: model.windowToken) { await model.reload() }
-        .onChange(of: model.sourceToken) { _, _ in model.assemble() }
+        // Animated, because one of the things that changes the source token is this page writing to
+        // the calendar. A block written as busy takes back the free time it was made from, so the
+        // thread reassembles under the thumb that just wrote it. That is honest, and it must not
+        // read as a glitch.
+        .onChange(of: model.sourceToken) { _, _ in
+            withCalmAnimation(Theme.Motion.standard) { model.assemble() }
+            openBlockSheetIfReviewing()
+        }
         // A day is a horizontal thing: swipe back and forward through it.
         .gesture(
             DragGesture(minimumDistance: 40)
@@ -409,7 +424,14 @@ private struct TodayContent: View {
                         }
                         .onTimeline()
                 case .free(let slot):
-                    TodayFreeSlotRow(slot: slot).onTimeline()
+                    TodayFreeSlotRow(slot: slot)
+                        .contentShape(Rectangle())
+                        .onTapGesture { blocking = .slot(slot, plan) }
+                        // Said, because the row does not look like a button and should not: it is a
+                        // gap in a line. What it can do has to be spoken instead of drawn.
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint("Block this time")
+                        .onTimeline()
                 }
             }
         }
@@ -475,6 +497,22 @@ private struct TodayContent: View {
             default: return left.id < right.id
             }
         }
+    }
+
+    /// Opens the block sheet on the first gap of the day, when a development launch asked for it.
+    ///
+    /// Driven off the source token rather than off the first reload, and refusing to open until the
+    /// calendar has answered: a day assembled before the events arrive has one enormous gap where
+    /// the whole working afternoon is, and photographing *that* would be photographing a state no
+    /// user ever sees.
+    private func openBlockSheetIfReviewing() {
+        guard blocking == nil,
+              TodayReviewLaunch.opensBlockSheet(),
+              services?.calendar.calendars.isEmpty == false,
+              let plan = model.selectedPlan,
+              let slot = plan.briefing.focus.slots.first
+        else { return }
+        blocking = .slot(slot, plan)
     }
 
     private func openMeetingNotes(_ event: DayEvent) {

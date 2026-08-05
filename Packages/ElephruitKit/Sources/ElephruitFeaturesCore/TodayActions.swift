@@ -177,6 +177,23 @@ public struct TodayActions {
         return created
     }
 
+    /// Creates a reminder that interrupts at a particular time of day.
+    ///
+    /// The third thing a gap in the day can become, after work moved into it and a block defending
+    /// it: something to be reminded of *then*. It writes a reminder and nothing on the calendar,
+    /// because "nudge me at two" is not an appointment and drawing it as one is how an agenda starts
+    /// lying about how full a day is.
+    @discardableResult
+    public func createTask(titled title: String, remindingAt moment: Date) -> Item? {
+        guard let task = createTask(titled: title, on: clock.calendar.startOfDay(for: moment))
+        else { return nil }
+
+        act(on: task) { services in
+            try services.reminderLifecycle.setReminder(moment, timed: true, on: task)
+        }
+        return task
+    }
+
     // MARK: - Meetings
 
     /// The link to join, if the organiser left one anywhere findable.
