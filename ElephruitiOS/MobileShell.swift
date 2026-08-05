@@ -169,6 +169,20 @@ final class MobileShellModel {
     /// Whether the quick-capture sheet is up.
     var isCaptureVisible = false
 
+    /// How many times the shell's button has been asked for a new reminder.
+    ///
+    /// A count rather than a flag, because the interesting event is the *press* and a flag
+    /// cannot report the second one: raising it twice in a row is one change, and the screen
+    /// listening for it would open a composer for the first press and ignore every press after
+    /// it until something else lowered the flag. Nobody reads the number; they watch it change.
+    private(set) var newReminderRequests = 0
+
+    /// Asks the Reminders screen for a composer. The shell does not know how to open one —
+    /// the composer belongs to the list, at the end of it, where the next reminder goes.
+    func requestNewReminder() {
+        newReminderRequests += 1
+    }
+
     /// The one search session, kept when the user leaves and returns.
     var searchText = ""
 

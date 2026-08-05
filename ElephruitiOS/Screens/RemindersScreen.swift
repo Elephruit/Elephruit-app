@@ -41,7 +41,25 @@ struct RemindersScreen: View {
     /// the circles read as one column rather than as the first cell of a table.
     private static let separatorInset: CGFloat = 44
 
+    /// Where a new reminder's editor sits, which is not always the same place.
+    ///
+    /// A tap on the list opens the editor where the tap happened — the end, where the next
+    /// reminder goes. The shell's floating button is not a place in the list: it is chrome over
+    /// the bottom-right corner, and honouring it at the end of the list puts a card you are about
+    /// to type into behind the keyboard and under the button that opened it. From there it goes
+    /// to the top, where it can be read and edited.
+    private enum NewReminderPlacement {
+        case tail
+        case top
+    }
+
     @State private var composing: Composing?
+    /// Read only while a new reminder is being written; meaningless otherwise, which is why it is
+    /// not part of `Composing` — an editor on a reminder has exactly one place it can be.
+    @State private var newReminderPlacement: NewReminderPlacement = .tail
+    /// Counted rather than flagged, for the same reason the shell counts its button presses:
+    /// what matters is that the card is asking *again*, and a flag cannot say so twice.
+    @State private var roomRequests = 0
     /// Which field the editor should arrive on, when the tap that opened it said so.
     @State private var openingField: ComposerField?
     @State private var draft = ReminderComposerDraft()
@@ -97,6 +115,14 @@ struct RemindersScreen: View {
             ToolbarItem(placement: .topBarTrailing) { completedToggle }
         }
         .task(id: services?.changeToken ?? 0) { reload() }
+        // The shell's floating button, over this screen, means "another reminder" — and the
+        // only place that can honour it is here, because the composer opens at the end of the
+        // list rather than over it.
+        .onChange(of: shell.newReminderRequests) { startNewReminder(at: .top) }
+        // Leaving the screen is a way of closing the editor, and every way of closing it keeps
+        // what is in it. Without this, walking out of Reminders with a half-written card open
+        // was the one exit that threw the words away.
+        .onDisappear { settleOpenEditor() }
     }
 
     /// The saved rules over this library, as a menu rather than a permanent rail.
@@ -139,12 +165,39 @@ struct RemindersScreen: View {
             listContent
                 .onChange(of: composing) { _, current in
                     guard current != nil else { return }
-                    // The editor is at the end of a list that is usually taller than the
-                    // screen, so opening one can put it — and the × that closes it — below the
-                    // fold or behind the keyboard. An editor you have to go looking for is an
-                    // editor that has trapped you.
+                    // The editor is in a list that is usually taller than the screen, so opening
+                    // one can put it — and the × that closes it — below the fold or behind the
+                    // keyboard. An editor you have to go looking for is an editor that has
+                    // trapped you.
+                    //
+                    // A card at the head of the list goes to the top of the screen rather than
+                    // the middle: that is the whole reason it was put there, and centring it
+                    // would hand back the half of the screen the keyboard was going to take.
+                    let anchor: UnitPoint =
+                        current == .newReminder && newReminderPlacement == .top ? .top : .center
                     withCalmAnimation {
-                        scroller.scrollTo(Self.composerAnchor, anchor: .center)
+                        scroller.scrollTo(Self.composerAnchor, anchor: anchor)
+                    }
+                }
+                // The card has asked to be all the way on screen — the keyboard has landed on
+                // it, or a popup is about to want somewhere to go.
+                //
+                // Anchored to its *bottom* edge, which is the part in danger: the keyboard
+                // takes the lower half of the screen and the card's controls are its lowest
+                // thing, so a card scrolled to the centre of a screen that no longer exists
+                // has its whole action row underneath a keyboard. Nothing in the system
+                // corrects this — the focused field is the title, and the title is not
+                // covered.
+                //
+                // A new reminder written from the shell's button is already at the top with
+                // the whole screen beneath it; scrolling that one down to the keyboard would
+                // undo the reason it was put there.
+                .onChange(of: roomRequests) {
+                    guard !(composing == .newReminder && newReminderPlacement == .top) else {
+                        return
+                    }
+                    withCalmAnimation {
+                        scroller.scrollTo(Self.composerAnchor, anchor: .bottom)
                     }
                 }
         }
@@ -160,6 +213,11 @@ struct RemindersScreen: View {
                     Label(actionError, systemImage: "exclamationmark.triangle")
                         .font(Theme.Text.metadata)
                         .foregroundStyle(Theme.Colors.warning)
+                }
+
+                if composing == .newReminder, newReminderPlacement == .top {
+                    composer(quickCommitKeepsOpen: true)
+                        .id(Self.composerAnchor)
                 }
 
                 ForEach(sections) { group in
@@ -185,7 +243,7 @@ struct RemindersScreen: View {
                 // top of the list, which is right for a window you can see all of at once and
                 // wrong for a phone — the tap that opened it happened down here, and a form
                 // that answers a tap by scrolling somewhere else has moved the conversation.
-                if composing == .newReminder {
+                if composing == .newReminder, newReminderPlacement == .tail {
                     composer(quickCommitKeepsOpen: true)
                         .id(Self.composerAnchor)
                 } else if composing == nil {
@@ -372,7 +430,8 @@ struct RemindersScreen: View {
             draft: $draft,
             onQuickCommit: { commit(keepsOpen: quickCommitKeepsOpen) },
             onDismiss: { commit(keepsOpen: false) },
-            opening: openingField
+            opening: openingField,
+            onNeedsRoom: { roomRequests += 1 }
         )
         // Identity by target *and* field, so tapping a different chip on the reminder already
         // being edited builds a fresh card that opens on the new field rather than reusing the
@@ -384,11 +443,23 @@ struct RemindersScreen: View {
         .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
     }
 
+    /// A new reminder where the tap for it happened: the end of the list.
+    ///
+    /// Kept argument-free because it is passed as an action to four different controls, and a
+    /// defaulted parameter cannot be handed over as a plain closure.
     private func startNewReminder() {
-        guard composing != .newReminder else { return }
+        startNewReminder(at: .tail)
+    }
+
+    private func startNewReminder(at placement: NewReminderPlacement) {
+        // Already open in the place being asked for is nothing to do. Open somewhere *else* is a
+        // request to move, which is worth honouring: the button that asked has a view about where
+        // the card should be.
+        guard composing != .newReminder || newReminderPlacement != placement else { return }
         settleOpenEditor()
         draft.reset()
         openingField = nil
+        newReminderPlacement = placement
         withCalmAnimation(Theme.Motion.appearance) {
             composing = .newReminder
         }
@@ -588,10 +659,14 @@ struct RemindersScreen: View {
 /// pointing at the deadline; making it open the editor on some other field — or open the editor
 /// and then wait to be told again which field was meant — spends two taps and an animation
 /// getting back to where the first tap was already aimed.
+///
+/// A chip whose field the editor no longer has — a start date, since When was taken out of the
+/// composer — still opens the editor, just without an opinion about where to land. Better than a
+/// chip that has stopped answering, which reads as a broken row rather than a missing field.
 private struct ReminderFactRow: View {
     let facts: [ReminderFact]
-    /// Opens this reminder's editor on one field.
-    var onEdit: (ComposerField) -> Void
+    /// Opens this reminder's editor, on one field where there is one to open.
+    var onEdit: (ComposerField?) -> Void
 
     var body: some View {
         if !facts.isEmpty {
@@ -613,7 +688,10 @@ private struct ReminderFactRow: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityElement(children: .combine)
-                    .accessibilityHint("Opens this reminder's \(fact.field.rawValue)")
+                    .accessibilityHint(
+                        fact.field.map { "Opens this reminder's \($0.rawValue)" }
+                            ?? "Opens this reminder"
+                    )
                 }
             }
         }
@@ -628,8 +706,8 @@ struct ReminderFact: Identifiable {
     let symbol: String
     let text: String
     let tint: Color
-    /// Which field of the editor this chip is a door to.
-    let field: ComposerField
+    /// Which field of the editor this chip is a door to, where the editor still has one.
+    let field: ComposerField?
 }
 
 /// One reminder, reduced to what drawing it needs.
@@ -686,7 +764,7 @@ enum ReminderRowBuilder {
         if reminder.isSomeday {
             facts.append(
                 ReminderFact(id: "someday", symbol: "archivebox", text: "Someday",
-                             tint: Theme.Colors.secondaryText, field: .when)
+                             tint: Theme.Colors.secondaryText, field: nil)
             )
         } else if let startAt = reminder.startAt {
             facts.append(
@@ -695,7 +773,7 @@ enum ReminderRowBuilder {
                     symbol: "calendar",
                     text: RelativeDay.text(for: startAt, using: clock),
                     tint: Theme.Colors.secondaryText,
-                    field: .when
+                    field: nil
                 )
             )
         }

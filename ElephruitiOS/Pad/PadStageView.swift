@@ -218,13 +218,16 @@ private struct PadDetailStack: View {
 struct PadStageOverlays: ViewModifier {
     @Environment(\.services) private var services
     @Environment(PadShellModel.self) private var pad
+    /// The compact shell's model, which the Reminders screen watches for a composer request
+    /// whichever shell is drawing it.
+    @Environment(MobileShellModel.self) private var shell
 
     func body(content: Content) -> some View {
         @Bindable var pad = pad
 
         content
             .overlay(alignment: .bottomTrailing) {
-                CaptureButton { pad.isCaptureVisible = true }
+                primaryButton
             }
             .overlay(alignment: .bottom) {
                 // Attached only while a timer runs, and floating rather than inset: a stage this
@@ -247,6 +250,37 @@ struct PadStageOverlays: ViewModifier {
     /// Whether the Time module's own tracker card is what the stage is showing.
     private var isShowingTheTracker: Bool {
         pad.root == .time && pad.contentPath.isEmpty
+    }
+
+    /// The one button the stage floats, meaning whatever the surface under it means by "add".
+    ///
+    /// The same rule the phone shell states: quick capture is what a plus means on a screen with
+    /// nothing to add *to*, and on Reminders it is the wrong answer — the thing being added is a
+    /// reminder, it belongs in the list under the thumb, and filing it in the Inbox for sorting
+    /// later is an extra journey for a decision already made. One rule, two shells; a plus that
+    /// meant different things on an iPad and an iPhone would be two apps.
+    private var primaryButton: some View {
+        @Bindable var pad = pad
+
+        return CaptureButton(
+            label: composesReminders ? "New reminder" : "Quick capture",
+            hint: composesReminders
+                ? "Opens a composer at the end of the list"
+                : "Captures a reminder, note, or anything else into the Inbox"
+        ) {
+            if composesReminders {
+                shell.requestNewReminder()
+            } else {
+                pad.isCaptureVisible = true
+            }
+        }
+    }
+
+    /// Whether the stage is showing the reminders list itself. A drill-down from it — a smart
+    /// list, one reminder read in a pane — is not, because the composer that would open lives on
+    /// the surface that was left behind.
+    private var composesReminders: Bool {
+        pad.root == .reminders && pad.contentPath.isEmpty
     }
 }
 

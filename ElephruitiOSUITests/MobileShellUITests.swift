@@ -93,6 +93,57 @@ final class MobileShellUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Calendar"].waitForExistence(timeout: 5))
     }
 
+    /// The chevron answers the first tap even when a keyboard is up — and takes the keyboard
+    /// with it.
+    ///
+    /// The sequence a reminder makes likely: write something, then leave. If leaving takes two
+    /// taps — one swallowed putting the keyboard away, one that works — the button reads as
+    /// unreliable rather than as busy. And a drawer that arrives under a keyboard belonging to a
+    /// field that is no longer on screen is half a drawer.
+    func testTheChevronRegistersWhileTheKeyboardIsUp() throws {
+        let app = launch()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
+        step(app, to: "reminders")
+        XCTAssertTrue(app.navigationBars["Reminders"].waitForExistence(timeout: 5))
+
+        app.buttons["mobile.capture.button"].tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["reminders.composer.title"].waitForExistence(timeout: 5)
+        )
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5), "The composer takes focus")
+
+        app.buttons["mobile.sidebar.button"].tap()
+        XCTAssertTrue(
+            app.buttons["mobile.sidebar.today"].waitForExistence(timeout: 5),
+            "One tap on the chevron should open the drawer, keyboard or no keyboard"
+        )
+        XCTAssertTrue(
+            app.keyboards.element.waitForNonExistence(timeout: 5),
+            "Opening the drawer should take the keyboard with it"
+        )
+    }
+
+    /// The chevron answers a tap anywhere on it, including its leading edge.
+    ///
+    /// The drawer's swipe is caught by a transparent strip along the leading edge of the screen,
+    /// and that strip ran the full height — straight through the leading quarter of the chevron
+    /// sitting in the toolbar. A thumb landing there hit the strip, the strip only understands
+    /// drags, and the tap went nowhere. Which reads exactly as a button that works most of the
+    /// time.
+    func testTheChevronRegistersATapOnItsLeadingEdge() throws {
+        let app = launch()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
+
+        let chevron = app.buttons["mobile.sidebar.button"]
+        XCTAssertTrue(chevron.waitForExistence(timeout: 5))
+        chevron.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5)).tap()
+
+        XCTAssertTrue(
+            app.buttons["mobile.sidebar.today"].waitForExistence(timeout: 5),
+            "A tap on the chevron's leading edge should still open the drawer"
+        )
+    }
+
     /// Back means one thing at every depth: out of the stack, then into the drawer.
     func testBackWalksAllTheWayToTheSidebar() throws {
         let app = launch()

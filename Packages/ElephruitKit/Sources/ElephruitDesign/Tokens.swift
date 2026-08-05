@@ -692,6 +692,16 @@ extension Theme {
         /// A list reordering or an item moving between sections.
         public static let reorder: Animation = .spring(response: 0.3, dampingFraction: 0.85)
 
+        /// A panel travelling under, or just out of, a thumb — the iPhone's drawer.
+        ///
+        /// A spring rather than a curve because this animation usually *continues* a gesture
+        /// rather than starting one. An `easeOut` begins at zero velocity, so a drawer let go
+        /// at speed stops dead the instant the finger lifts and then starts again: the one
+        /// moment of the interaction where the hand and the screen visibly disagree. Damped
+        /// just short of critical, so it settles without a bounce a drawer has no reason to
+        /// have.
+        public static let drawer: Animation = .spring(response: 0.34, dampingFraction: 0.9)
+
         /// The animation to use, or `nil` when Reduce Motion is on.
         ///
         /// Returning `nil` rather than a zero duration matters: SwiftUI treats a `nil`
