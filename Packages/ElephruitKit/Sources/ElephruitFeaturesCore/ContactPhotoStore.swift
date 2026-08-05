@@ -91,8 +91,16 @@ public final class ContactPhotoStore {
         if let answered = known[identifier] { return answered.data }
         if let existing = inFlight[identifier] { return await existing.value }
 
-        let task = Task { @MainActor [weak self] in
+        let task: Task<Data?, Never> = Task { @MainActor [weak self] in
             let fetched = await fetch()
+
+            // A read that was in flight when ``forgetAll()` ran must not put its face back. The
+            // window is small and the consequence is not: it is the difference between "Contacts is
+            // switched off" and "Contacts is switched off and one more photograph arrived
+            // afterwards". Cancellation is checked here rather than before the fetch because this
+            // is the only point at which the answer would be written down.
+            guard !Task.isCancelled else { return nil }
+
             self?.record(fetched, for: identifier)
             self?.inFlight.removeValue(forKey: identifier)
             // Empty bytes are a picture that cannot be drawn, which is the same as no picture at all
