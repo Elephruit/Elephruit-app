@@ -15,13 +15,30 @@ public struct PersonGroup: Sendable, Hashable, Identifiable {
     public var id: UUID
     public var name: String
     public var symbolName: String
+
+    /// A ``ElephruitDesign/Theme/Palette`` raw value, and the group's whole identity in a list.
+    ///
+    /// Optional because the column is, and because a group written by an older build has none. A
+    /// group without one is drawn in the neutral its surroundings use rather than in the accent —
+    /// see ``PersonGroupService/assignableColorName(existing:)`` for why every group made here gets
+    /// one anyway.
+    public var colorName: String?
+
     public var definition: Definition
     public var memberIDs: [UUID]
 
-    public init(id: UUID, name: String, symbolName: String, definition: Definition, memberIDs: [UUID]) {
+    public init(
+        id: UUID,
+        name: String,
+        symbolName: String,
+        colorName: String? = nil,
+        definition: Definition,
+        memberIDs: [UUID]
+    ) {
         self.id = id
         self.name = name
         self.symbolName = symbolName
+        self.colorName = colorName
         self.definition = definition
         self.memberIDs = memberIDs
     }
@@ -42,12 +59,40 @@ public struct PersonGroupSummary: Sendable, Hashable, Identifiable {
     public var id: UUID
     public var name: String
     public var symbolName: String
+    public var colorName: String?
 
-    public init(id: UUID, name: String, symbolName: String) {
+    public init(id: UUID, name: String, symbolName: String, colorName: String? = nil) {
         self.id = id
         self.name = name
         self.symbolName = symbolName
+        self.colorName = colorName
     }
+}
+
+/// Which groups each person belongs to, worked out once for a whole list.
+///
+/// ### Why this is not a property of a person
+/// Membership lives on the group — a fixed group owns its `CollectionMembership` rows, and a smart
+/// group owns nothing at all, because its membership is the result of running a search. Asking a
+/// person "which groups are you in" therefore means asking every group in turn, and asking it once
+/// per row means asking it once per row *per frame*: the People list draws two hundred of them.
+///
+/// So the question is answered in one pass, for everybody, and the rows read a dictionary. The same
+/// reasoning — and the same measurement — that took the store out of the list's scroll path in the
+/// first place; see ``ElephruitCore/PersonListEntry``.
+public struct PersonGroupMembership: Sendable {
+    /// Person ID to the groups they are in, in the order the groups are listed.
+    public var groupsByPerson: [UUID: [PersonGroupSummary]]
+
+    public init(groupsByPerson: [UUID: [PersonGroupSummary]] = [:]) {
+        self.groupsByPerson = groupsByPerson
+    }
+
+    public func groups(for personID: UUID) -> [PersonGroupSummary] {
+        groupsByPerson[personID] ?? []
+    }
+
+    public var isEmpty: Bool { groupsByPerson.isEmpty }
 }
 
 /// What a batch action will do, shown before it does it.
@@ -190,7 +235,8 @@ public final class PersonGroupService {
             return PersonGroupSummary(
                 id: collection.id,
                 name: String(collection.name.dropFirst(Self.groupPrefix.count)),
-                symbolName: collection.effectiveSymbolName
+                symbolName: collection.effectiveSymbolName,
+                colorName: collection.colorName
             )
         }
         let smart = try fetch(smartDescriptor).compactMap { saved -> PersonGroupSummary? in
@@ -198,7 +244,8 @@ public final class PersonGroupService {
             return PersonGroupSummary(
                 id: saved.id,
                 name: String(saved.name.dropFirst(Self.groupPrefix.count)),
-                symbolName: saved.effectiveSymbolName
+                symbolName: saved.effectiveSymbolName,
+                colorName: saved.colorName
             )
         }
 
@@ -217,6 +264,7 @@ public final class PersonGroupService {
                 id: collection.id,
                 name: String(collection.name.dropFirst(Self.groupPrefix.count)),
                 symbolName: collection.effectiveSymbolName,
+                colorName: collection.colorName,
                 definition: .fixed,
                 memberIDs: (collection.memberships ?? [])
                     .sorted { $0.position < $1.position }
@@ -244,6 +292,7 @@ public final class PersonGroupService {
                     id: saved.id,
                     name: String(saved.name.dropFirst(Self.groupPrefix.count)),
                     symbolName: saved.effectiveSymbolName,
+                    colorName: saved.colorName,
                     definition: .smart(query: saved.queryString),
                     memberIDs: matches.map(\.id)
                 )
@@ -269,15 +318,30 @@ public final class PersonGroupService {
     // MARK: - Writing
 
     @discardableResult
-    public func createFixedGroup(named name: String, symbolName: String = "person.2") throws(AppError) -> PersonGroup {
+    public func createFixedGroup(
+        named name: String,
+        symbolName: String = "person.2",
+        colorName: String? = nil
+    ) throws(AppError) -> PersonGroup {
+        // Spelled out rather than `colorName ?? (try …)`: a throwing right-hand side erases the
+        // typed throw back to `any Error`, the same way a throwing closure does — see `members(of:)`.
+        let color: String
+        if let colorName {
+            color = colorName
+        } else {
+            color = try assignableColorName()
+        }
+
         let collection = ItemCollection(name: Self.groupPrefix + name)
         collection.symbolName = symbolName
+        collection.colorName = color
         collection.createdAt = dateProvider.now
         context.insert(collection)
         try save()
 
         return PersonGroup(
-            id: collection.id, name: name, symbolName: symbolName, definition: .fixed, memberIDs: []
+            id: collection.id, name: name, symbolName: symbolName, colorName: color,
+            definition: .fixed, memberIDs: []
         )
     }
 
@@ -285,10 +349,21 @@ public final class PersonGroupService {
     public func createSmartGroup(
         named name: String,
         query: String,
-        symbolName: String = "person.2.badge.gearshape"
+        symbolName: String = "person.2.badge.gearshape",
+        colorName: String? = nil
     ) throws(AppError) -> PersonGroup {
+        // Spelled out rather than `colorName ?? (try …)`: a throwing right-hand side erases the
+        // typed throw back to `any Error`, the same way a throwing closure does — see `members(of:)`.
+        let color: String
+        if let colorName {
+            color = colorName
+        } else {
+            color = try assignableColorName()
+        }
+
         let saved = SavedSearch(name: Self.groupPrefix + name, queryString: query)
         saved.symbolName = symbolName
+        saved.colorName = color
         saved.createdAt = dateProvider.now
         // People groups have their own section; showing them in the general sidebar too would list
         // them twice.
@@ -297,10 +372,132 @@ public final class PersonGroupService {
         try save()
 
         return PersonGroup(
-            id: saved.id, name: name, symbolName: symbolName,
+            id: saved.id, name: name, symbolName: symbolName, colorName: color,
             definition: .smart(query: query),
             memberIDs: try search.search(query, limit: 500).map(\.id)
         )
+    }
+
+    /// Renames a group, keeping the prefix that marks it as one.
+    public func rename(groupID: UUID, to name: String) throws(AppError) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        for collection in try fetch(FetchDescriptor<ItemCollection>(predicate: #Predicate { $0.id == groupID })) {
+            collection.name = Self.groupPrefix + trimmed
+            collection.updatedAt = dateProvider.now
+        }
+        for saved in try fetch(FetchDescriptor<SavedSearch>(predicate: #Predicate { $0.id == groupID })) {
+            saved.name = Self.groupPrefix + trimmed
+        }
+        try save()
+    }
+
+    /// Changes a group's colour. `nil` clears it back to the neutral.
+    public func setColor(_ colorName: String?, forGroup groupID: UUID) throws(AppError) {
+        for collection in try fetch(FetchDescriptor<ItemCollection>(predicate: #Predicate { $0.id == groupID })) {
+            collection.colorName = colorName
+            collection.updatedAt = dateProvider.now
+        }
+        for saved in try fetch(FetchDescriptor<SavedSearch>(predicate: #Predicate { $0.id == groupID })) {
+            saved.colorName = colorName
+        }
+        try save()
+    }
+
+    public func setSymbol(_ symbolName: String, forGroup groupID: UUID) throws(AppError) {
+        for collection in try fetch(FetchDescriptor<ItemCollection>(predicate: #Predicate { $0.id == groupID })) {
+            collection.symbolName = symbolName
+            collection.updatedAt = dateProvider.now
+        }
+        for saved in try fetch(FetchDescriptor<SavedSearch>(predicate: #Predicate { $0.id == groupID })) {
+            saved.symbolName = symbolName
+        }
+        try save()
+    }
+
+    // MARK: - Colour
+
+    /// Every colour a group may be given, in the order they are offered.
+    ///
+    /// The design system's palette, spelled here as raw values so this module keeps its independence
+    /// from `ElephruitDesign` — persistence stores a name, and what that name looks like is not its
+    /// business. `Theme.Palette` is the enum these correspond to, and its own test asserts the two
+    /// lists have not drifted.
+    ///
+    /// Graphite is deliberately absent: a group's colour has to survive being drawn as a four-point
+    /// dot beside a name, and the one grey in the palette is the colour of *no group at all*
+    /// everywhere else in the interface.
+    public static let groupColorNames = [
+        "blue", "purple", "pink", "red", "orange", "yellow", "green", "mint", "teal", "cyan",
+        "indigo", "brown",
+    ]
+
+    /// The colour a new group should get: the first unused one, else the least used.
+    ///
+    /// ### Why unique matters and why it cannot be guaranteed
+    /// The colour *is* the group in a list of dots — two groups sharing one makes the dots a lie.
+    /// So the first twelve groups are all distinct, which is more groups than the circles metaphor
+    /// this is modelled on ever asks for.
+    ///
+    /// Past twelve there is no honest answer, only choices about which lie is smallest. Reusing the
+    /// least-used colour keeps collisions as rare and as evenly spread as they can be, and picking
+    /// deterministically — palette order breaks the tie — means the same library always produces the
+    /// same assignment, so a screenshot is reproducible and a test can assert on it.
+    public func assignableColorName() throws(AppError) -> String {
+        Self.assignableColorName(existing: try allGroupSummaries().compactMap(\.colorName))
+    }
+
+    /// The pure half, so the rule is testable without a store.
+    public static func assignableColorName(existing: [String]) -> String {
+        var counts: [String: Int] = [:]
+        for name in existing where groupColorNames.contains(name) {
+            counts[name, default: 0] += 1
+        }
+
+        // `min(by:)` over the palette in order: the first colour with the lowest count wins, and an
+        // unused colour has a count of zero, so "first unused" falls out of the same expression
+        // rather than needing a special case that could disagree with it.
+        return groupColorNames.min { left, right in
+            let leftCount = counts[left] ?? 0
+            let rightCount = counts[right] ?? 0
+            if leftCount != rightCount { return leftCount < rightCount }
+            return (groupColorNames.firstIndex(of: left) ?? 0) < (groupColorNames.firstIndex(of: right) ?? 0)
+        } ?? "blue"
+    }
+
+    // MARK: - Membership, inverted
+
+    /// Which groups each person is in, for a whole list at once.
+    ///
+    /// One pass over the groups rather than one query per row — see ``PersonGroupMembership`` for
+    /// what that costs and why the rows cannot ask this question themselves.
+    ///
+    /// - Parameter includingSmart: smart groups run a search each. Worth it for the People list,
+    ///   where the dots are the point; not worth it for a picker that is about to write explicit
+    ///   membership, since a smart group has none to write.
+    public func membership(includingSmart: Bool = true) throws(AppError) -> PersonGroupMembership {
+        let groups = includingSmart ? try allGroups() : try fixedGroups()
+
+        var byPerson: [UUID: [PersonGroupSummary]] = [:]
+        for group in groups {
+            let summary = PersonGroupSummary(
+                id: group.id, name: group.name, symbolName: group.symbolName, colorName: group.colorName
+            )
+            for personID in group.memberIDs {
+                byPerson[personID, default: []].append(summary)
+            }
+        }
+        return PersonGroupMembership(groupsByPerson: byPerson)
+    }
+
+    /// The fixed groups this person is explicitly in, for the membership editor.
+    ///
+    /// Fixed only: a smart group's membership is a consequence of a query, so "add somebody to it"
+    /// is not an operation — the honest way in is to change the person until the query matches, and
+    /// a checkbox that silently did nothing would be worse than no checkbox.
+    public func fixedGroupIDs(containing personID: UUID) throws(AppError) -> Set<UUID> {
+        Set(try fixedGroups().filter { $0.memberIDs.contains(personID) }.map(\.id))
     }
 
     public func add(_ person: Item, to groupID: UUID) throws(AppError) {

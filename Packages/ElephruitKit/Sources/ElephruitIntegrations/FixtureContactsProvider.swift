@@ -124,11 +124,18 @@ public actor FixtureContactsProvider: ContactsProviding {
         }
     }
 
-    /// Always `nil`.
+    /// A face for the few fixture contacts that claim to have one, and `nil` for everybody else.
     ///
-    /// A fixture that returned invented image bytes would let a layout bug through by making every
-    /// avatar render — the real absence is the more useful default.
-    public func thumbnail(forIdentifier identifier: String) async -> Data? { nil }
+    /// It used to be `nil` for everybody, on the argument that a fixture where every avatar renders
+    /// would let a layout bug through. That argument is right and this keeps it: what it asked for
+    /// is not *no* pictures but a *realistic proportion* of them, which is what
+    /// ``ContactFixtures/thumbnails`` supplies. A row that has to draw a monogram beside a
+    /// photograph is the row where a mismatched diameter or an unclipped corner shows up, and no
+    /// amount of universal absence would ever produce it.
+    public func thumbnail(forIdentifier identifier: String) async -> Data? {
+        guard currentAuthorization == .authorized else { return nil }
+        return ContactFixtures.thumbnails[identifier]
+    }
 
     // MARK: - Change tracking
 
@@ -488,6 +495,66 @@ public enum ContactFixtures {
             ),
         ]
     }
+
+    /// The invented faces, by contact identifier.
+    ///
+    /// ### Why only two, when the library has ten
+    /// Because an address book where everybody has a photograph is a fixture that cannot fail the
+    /// way a real one does. The interesting screen is the *mixed* one — some faces, mostly
+    /// monograms — and it is the only screen that catches a row whose avatar changes size when the
+    /// picture arrives, or a monogram that was only legible because nothing ever covered it. So the
+    /// pictures go to exactly the fixture contacts that claim `hasImage`, and to the identifier the
+    /// sample library's Maya carries, which is what puts one face in the People list a design
+    /// review actually photographs.
+    ///
+    /// PNG bytes written out rather than drawn, so this module keeps needing no drawing framework
+    /// and the same bytes appear on every machine and in every appearance. They are 96 points
+    /// square — a little larger than the biggest avatar the app draws, which is what a real
+    /// `thumbnailImageData` is too.
+    public static let thumbnails: [String: Data] = [
+        "fixture-tomas": decoded(tomasPortrait),
+        "sample-contact-maya": decoded(mayaPortrait),
+    ].compactMapValues { $0 }
+
+    /// Bytes, or nothing at all. A fixture that could not decode its own picture should draw a
+    /// monogram like any other contact without one, not stop a preview from opening.
+    private static func decoded(_ base64: String) -> Data? {
+        Data(base64Encoded: base64, options: .ignoreUnknownCharacters)
+    }
+
+    private static let tomasPortrait = """
+        iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAABt+uBvAAADK0lEQVR42u3a2VITURDG8e9BkH2HhEBYEsAF
+        RRGUfQugiIiouKAiIqKoqKjow3rlhVeeqkmq5KbPzOR0TzJ01e8B+vvfzYL+5V+KgOzST0UwgU4UAdnciSIg
+        k/uhCMgsflcEDWQL1LfwTRFMoGNFQN/8sSKgd/6rIqB37osiaCBboJ7Zz4pgAh0pAnpmjhQB3TOfFAHd0x8V
+        QQNZA019iNbfP79p0Z6H9NRhVKxp/hfVkUhPHsoLlOZUJvFTTaD3kkKnOZ1J7mB0TbwT46SOR+xmlGMdyUbo
+        Gj8Q4LxOvhH/5egcPxDAFEjgcnTefMuNqU6+EfPxJtA+K9Y6hUaM9yN1Y5+VQCDW+02gN3wE6hQacU1AamyP
+        j1wgtgnoGNvjIxaIb4IJ9JqPYCCuCegY3WUiViffiGcFkqO7TIQDMa1A8vorJtKBeFaYQDtMxAOxrEByZIeJ
+        dCCeFUiMvGQiHIhpBRLXXvCRq8M2QQPZArVffc5HLBDfBBNom49gIK4JaB/eZiVRh/N+tA0/YyUQiPV+tF15
+        yo23DvPxEoH4GglcjtbLTwQwBRK4XCgQRyOZs9E69FiMyzpSN6NlaEuSkzqSB6Pl0pa88GnETzWBHkUlYJpo
+        jkTzxYfRsqaJ9rzoA5U4NF94oAgm0KYioOn8piKYQPcVAU2DG4qAxsENRUDjwD1FMIHWFQENA+sR8vmcEeGF
+        aOi/K8nJ07zkwSbQmgznL8xkzkZ9do2VwFcN1vtNoDtMhH9eYFqB+syqc8JpTmVyvQV1mVW3IqzjcTsHdX23
+        HYq8Tr6Ru0WIWRrnmVDbe6t4JVjHU/w0E2ilSCVbp9CoqHWo7VkpRonXyTcqYqAJtBxaWdQpNAq5ETXdS+GU
+        UR1PuJk4I3VCN0JNOhdCuQYKvhTV6cWgyrSOJ+hYVHctBlLWdfKNguw1gRYCiUWgAHtR1TnvXwzqePxPxhms
+        E6gRqlJzPsUtkL/VqEzN+hGzOh4/w1HZMetHPAP5GG4CzfgR00D24TiXnLaKZR2PdbsGsgZKTFnFOZBtOyoS
+        k7QY1/HQ81HRPkmLfyByvgk0QTsDgaj5GsgS6B/3GZ6mRO1wHgAAAABJRU5ErkJggg==
+        """
+
+    private static let mayaPortrait = """
+        iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAABt+uBvAAADM0lEQVR42u3Zx1YbQRCF4fs02GCyyQYTJKGM
+        hAI555wFGGfjgHP2c3rlhVfmnGahVU1QV41m3Od8D1D33/UMfhXODQJ+5s8MAn7kTw0CvudODQK+5UoGAV9H
+        SwbhOtCJQcCX7IlBwOfssUHAp8yRQcDHzJFBwIeRQ4NgAlkFep8+MAh4lz4wCHib2jcIuErtGQRcJfcMAt4k
+        dw0CXid2vfX3z2+at+fhVWLHK5Zpynl1JF7Gd+Q5SlNO/lRcxrcluU5TTvJgXMa2xGipc9NI6ma8iG3J0FhH
+        kTkbz6ObArTXUQQux7PopgCmQAKX4+nwBjemOgr38fB1HYFGeBJZZyUQiPV+PI6s8RGoo/BNwKPwGh+xQHwT
+        8DC8ykcsEN8EXIRX+YgF4puAi9AKE7E6N414VuBBaIWJcCCmFTgfWmYiHIhpBc6GlpgIB2JagdPBJSbCgZhW
+        oDS4yEQ4ENMKlAYW+cjVYZuAk4EFPmKB+CbguH+Bj1ggvgk46p/nIxaIbwIO78+xEqjDer8JZBXooG+WG2sd
+        7uOx3zcrgKmOwOXY650RwBRI4HLs9s7I0F5H5mzs3JsWo7GO2M2igXQ1kjwY2z1T8lynkT8VWz2TXnGUxqsj
+        sdk96S3LNN6eh43uCYOAja4Jg4D1rnGDgLXOcYOA1c4xg4CVjqJBwHJH0SBgub1gELDUXjAIWGzPe8jmO8PD
+        C7HQlpek5TUveTDm23IytH8wkzkbc3dHWQn81WC9H75OI5AJs61Z7YTTlNO+BTOtWb08rKPonYPploxGntdR
+        NC7CVEtGiypJU07LLkw1j1SuCuvcNKp4Giab0xWq2jpKhesw0ZSuRJXXUSoZiPGmlGu+qKO43oixxpQ7Pqqj
+        uJuJYmPSBd/VUVwsRbEh6YJfAzlfikJDwimf1lGcjkW+Pu6Ir+sojvYiVx93JACBHO3F6J2YfQGoo9ifjP+w
+        jqNGyNZFbQpYIJurkamL2hGwOoqd4RipHbYjkIHsDEe6NmJHIAPZGY7U7YilQNZRLLdfBwpbCnQgi+1I3gpb
+        CnAgy+1I3ArRAlxHoecjXhOiBT4QPR+xmiFa4APR800gi0D/ACpaZIs1Ot3PAAAAAElFTkSuQmCC
+        """
 
     /// A library of `count` synthetic contacts, for checking the import stays responsive.
     ///

@@ -13,15 +13,40 @@ import SwiftUI
 /// disagree about what "Unsorted" means. Search runs the ranked person-graph search the
 /// Mac's command bar uses, so "maya's manager" finds her here too.
 struct RecordsScreen: View {
+    @Environment(\.services) private var services
+    @Environment(MobileShellModel.self) private var shell
+
     /// People first: the tab inherits the donor People tab's job. The full type menu is
     /// one tap away, which is a hierarchy, not a hiding place.
     @State private var scope: RecordsScope = .people
+
+    /// The groups, for the filter menu. Summaries rather than groups: a menu draws a name, a
+    /// symbol and a colour, and resolving membership for every group — which for a smart group
+    /// means running its search — to decide what to put in a menu nobody has opened yet is work
+    /// for nothing. See `PersonGroupService.allGroupSummaries()`.
+    @State private var groups: [PersonGroupSummary] = []
 
     var body: some View {
         RecordsListBody(scope: scope) {
             scopeMenu
         }
-        .navigationTitle(scope == .people ? "Records" : scope.title)
+        .navigationTitle(title)
+        .task(id: services?.changeToken ?? 0) {
+            groups = (try? services?.personGroups.allGroupSummaries()) ?? []
+        }
+    }
+
+    /// A group scope is titled with the group's own name.
+    ///
+    /// `RecordsScope.group` can only answer "Group" — it holds an identifier and the vocabulary is
+    /// shared with the Mac, so it cannot reach a store to look the name up. The screen that has one
+    /// does it here.
+    private var title: String {
+        switch scope {
+        case .people: "Records"
+        case .group(let id): groups.first { $0.id == id }?.name ?? "Group"
+        default: scope.title
+        }
     }
 
     private var scopeMenu: some View {
@@ -32,6 +57,26 @@ struct RecordsScreen: View {
                 }
                 Label(RecordsScope.favorites.title, systemImage: RecordsScope.favorites.symbolName)
                     .tag(RecordsScope.favorites)
+            }
+
+            // A section rather than a submenu: the whole point of a group filter is to be one tap
+            // from the list, and burying it a level down would make picking a group slower than
+            // scrolling to the person would have been.
+            if !groups.isEmpty {
+                Section("Groups") {
+                    Picker("Group", selection: $scope) {
+                        ForEach(groups) { group in
+                            Label(group.name, systemImage: group.symbolName)
+                                .tag(RecordsScope.group(id: group.id))
+                        }
+                    }
+                }
+            }
+
+            Section {
+                Button("Manage Groups…", systemImage: "person.2.circle") {
+                    shell.push(.groups)
+                }
             }
         } label: {
             Label("Scope", systemImage: scope.symbolName)
@@ -51,7 +96,17 @@ struct RecordsListScreen: View {
     }
 }
 
-/// The shared list: scoped records, ranked search on top.
+/// The shared list: scoped records under alphabetical headings, ranked search on top.
+///
+/// ### Why it is sectioned and railed rather than one long scroll
+/// A flat list is fine at forty people and unusable at two thousand: reaching the S's means
+/// flicking, overshooting, and flicking back, and there is nothing on screen that says how far
+/// through you are. Headings answer *where am I* and the rail answers *take me to the M's*, which
+/// are the two questions a long address book is asked and neither of which a scrollbar answers.
+///
+/// The sectioning itself is `PersonListOrganiser`'s, which builds the alphabet from the names that
+/// exist rather than promising A–Z — see that type for why a fixed strip is wrong in most of the
+/// languages people are named in.
 private struct RecordsListBody<TrailingItem: View>: View {
     @Environment(\.services) private var services
     @Environment(MobileShellModel.self) private var shell
@@ -59,7 +114,7 @@ private struct RecordsListBody<TrailingItem: View>: View {
     let scope: RecordsScope
     @ViewBuilder let trailingItem: TrailingItem
 
-    @State private var records: [Item] = []
+    @State private var sections: [PersonListSection] = []
     @State private var results: [RankedPerson] = []
     @State private var searchText = ""
     @State private var loadError: String?
@@ -74,6 +129,40 @@ private struct RecordsListBody<TrailingItem: View>: View {
     @FocusState private var isSearchFocused: Bool
 
     var body: some View {
+        ScrollViewReader { proxy in
+            list
+                // An inset rather than an overlay, so the rows *end* where the rail begins. Laid
+                // over the list, twenty-eight points of letters would sit on top of the trailing
+                // end of every name — and the rail holds no data about anybody, so nothing of the
+                // list's should have to reach underneath it.
+                .safeAreaInset(edge: .trailing, spacing: 0) {
+                    SectionIndexBar(
+                        titles: sections.map(\.title),
+                        isEnabled: !isSearching,
+                        label: "name",
+                        style: .floating,
+                        unavailableReason: "Clear the search to jump by name"
+                    ) { title in
+                        jump(to: title, using: proxy)
+                    }
+                }
+        }
+        .listStyle(.plain)
+        // A heading belongs to the names under it. At the default spacing each letter floated in the
+        // middle of a band of empty list, closer to the section above it than to its own first
+        // person — which is a heading that has stopped labelling anything.
+        .listSectionSpacing(.compact)
+        .searchable(text: $searchText, prompt: "Search people")
+        .searchFocused($isSearchFocused)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { trailingItem }
+        }
+        .task(id: reloadKey) { reload() }
+        .onChange(of: searchText) { _, _ in scheduleSearch() }
+        .onDisappear { searchTask?.cancel() }
+    }
+
+    private var list: some View {
         List {
             if let loadError {
                 Label(loadError, systemImage: "exclamationmark.triangle")
@@ -90,17 +179,38 @@ private struct RecordsListBody<TrailingItem: View>: View {
                     .buttonStyle(.plain)
                 }
             } else {
-                ForEach(records) { record in
-                    Button {
-                        open(.person(record.id))
-                    } label: {
-                        MobileItemRow(item: record)
+                ForEach(sections) { section in
+                    Section {
+                        ForEach(section.entries) { entry in
+                            Button {
+                                open(.person(entry.id))
+                            } label: {
+                                MobileRecordRow(entry: entry)
+                            }
+                            .buttonStyle(.plain)
+                            // The row's own breathing room, in one place. A `List` row's default
+                            // vertical padding is generous enough for a line of text and far too
+                            // much around a 44-point face: it made a row of a person ninety-six
+                            // points tall, which is half again what any address book on the
+                            // platform uses and a third fewer people per screen.
+                            .listRowInsets(
+                                EdgeInsets(
+                                    top: Theme.Spacing.small,
+                                    leading: Theme.Spacing.large,
+                                    bottom: Theme.Spacing.small,
+                                    trailing: Theme.Spacing.large
+                                )
+                            )
+                        }
+                    } header: {
+                        Text(section.title)
+                            .font(Theme.Text.sectionHeader)
+                            .foregroundStyle(Theme.Colors.secondaryText)
                     }
-                    .buttonStyle(.plain)
                 }
             }
 
-            if !isSearching, records.isEmpty, loadError == nil {
+            if !isSearching, sections.isEmpty, loadError == nil {
                 EmptyStateView(
                     symbolName: scope.symbolName,
                     headline: "Nothing here yet",
@@ -110,19 +220,30 @@ private struct RecordsListBody<TrailingItem: View>: View {
                 .frame(maxWidth: .infinity)
             }
         }
-        .listStyle(.plain)
-        .searchable(text: $searchText, prompt: "Search people")
-        .searchFocused($isSearchFocused)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { trailingItem }
-        }
-        .task(id: reloadKey) { reload() }
-        .onChange(of: searchText) { _, _ in scheduleSearch() }
-        .onDisappear { searchTask?.cancel() }
     }
 
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Moves the list to a heading the rail was dragged over.
+    ///
+    /// ### Why it scrolls to the first row rather than to the header
+    /// A plain list's headers are sticky, so the header for the section you are *in* is already
+    /// pinned at the top; scrolling to a header therefore has to argue with the thing that pins it,
+    /// and lands a header's height off. Putting the section's first person at the top puts its
+    /// heading exactly where the sticky one goes, which is the same picture and needs no arguing.
+    ///
+    /// Unanimated on purpose. Scrubbing produces a heading every few points of travel, and
+    /// animating each one would mean the list was always finishing the *previous* jump — the drag
+    /// would feel like it was being resisted. `PersonListOrganiser` supplies the nearest existing
+    /// section for a letter nobody's name begins with, which is what keeps the travel continuous
+    /// rather than sticky.
+    private func jump(to title: String, using proxy: ScrollViewProxy) {
+        guard let target = PersonListOrganiser.section(nearest: title, in: sections),
+              let first = target.entries.first
+        else { return }
+        proxy.scrollTo(first.id, anchor: .top)
     }
 
     /// One key so the list follows both the library and the scope.
@@ -145,19 +266,63 @@ private struct RecordsListBody<TrailingItem: View>: View {
         .contentShape(Rectangle())
     }
 
+    /// Reads the scope's records once and reduces each to what a row draws.
+    ///
+    /// The reduction is the point. Every property a row needs — the name, the employer, the star,
+    /// the tint, the type, the pointer to a photograph — is read here, on the one pass the list
+    /// already makes, and carried on a `PersonListEntry`. A row that reached back into the record
+    /// would fault the profile relationship while the list was scrolling, which is the difference
+    /// between a list that moves and one that stutters at two thousand people.
+    ///
+    /// Ordered and cut into headings by `PersonListOrganiser` rather than here, with the caller's
+    /// locale, so ä sorts with a in German and after z in Swedish without this file knowing either
+    /// fact. `.firstName` is the order because the row shows the display name and sectioning by any
+    /// other part of it would put people under a letter the list does not show.
     private func reload() {
         guard let services else { return }
         do {
             let all = try services.records.allRecords()
-            records = all.filter { record in
+
+            // Once for the list, not once per row. Membership belongs to the group, so the question
+            // "which groups is this person in" can only be answered by asking every group — which is
+            // affordable exactly once. See `PersonGroupMembership`.
+            let membership = try services.personGroups.membership()
+
+            // Resolved before the filter, so scoping to a group costs the same walk that drew the
+            // dots rather than a second one.
+            let groupMembers: Set<UUID>? = if case .group(let id) = scope {
+                Set(try services.personGroups.group(id: id)?.memberIDs ?? [])
+            } else {
+                nil
+            }
+
+            let scoped = all.filter { record in
                 switch scope {
                 case .all: true
                 case .unsorted: services.records.isUnsorted(record)
                 case .favorites: record.isFavorite
+                case .group: groupMembers?.contains(record.id) ?? false
                 default:
                     scope.recordType.map { services.records.type(of: record) == $0 } ?? true
                 }
             }
+
+            let entries = scoped.map { record in
+                PersonListEntry(
+                    id: record.id,
+                    displayName: record.displayTitle,
+                    organizationName: record.personProfile?.organizationName,
+                    isFavorite: record.isFavorite,
+                    colorName: record.colorName,
+                    recordType: services.records.type(of: record),
+                    contactIdentifier: record.personProfile?.contactsIdentifier,
+                    groups: membership.groups(for: record.id).map {
+                        PersonListGroupBadge(id: $0.id, name: $0.name, colorName: $0.colorName)
+                    }
+                )
+            }
+
+            sections = PersonListOrganiser.sections(entries, by: .firstName)
             loadError = nil
         } catch {
             loadError = error.summary
