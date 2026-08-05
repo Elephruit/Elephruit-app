@@ -368,8 +368,17 @@ public final class SwiftDataItemRepository: ItemRepository {
     /// splitter cannot get right on its own — "van der Berg", a family name written first, a title
     /// somebody typed as "Dr Chen" — because those are corrected once, deliberately, and re-splitting
     /// them on an unrelated edit would undo the correction every time.
+    ///
+    /// ### And it never acts on somebody who has no name yet
+    /// A person recorded before their name was known carries a *phrase* for a title — "Dave's son" —
+    /// and splitting that gives a given name of "Dave" and a family name of "son". Which is the
+    /// failure this very comment warns about one paragraph up, arriving through a different door:
+    /// nothing displays given and family names, so the drift is invisible until an address-book
+    /// write offers to call somebody's child by their father's first name. The flag says there is no
+    /// name here to keep in step, so there is nothing for this to do.
     private static func syncNameParts(of item: Item) {
         guard item.kind == .person, let profile = item.personProfile else { return }
+        guard profile.hasStatedName else { return }
 
         // `title`, never `displayTitle`. The latter falls back to the body's first line and then to
         // "Untitled Person", and splitting a placeholder into somebody's name is how a person ends

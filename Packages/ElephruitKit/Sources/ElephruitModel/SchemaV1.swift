@@ -520,6 +520,28 @@ public enum SchemaV17: VersionedSchema {
     }
 }
 
+/// The eighteenth schema: somebody can be recorded before their name is known.
+///
+/// Adds one attribute, `PersonProfile.hasStatedName`, defaulted to `true`.
+///
+/// ### Why this is lightweight, and why the default is that way round
+/// A new non-optional attribute with a default is the textbook additive change: Core Data adds a
+/// column and writes the default into every existing row, touching no relationship and no join
+/// table. Nothing is computed at migration time and nothing can fail part-way.
+///
+/// The default has to be `true`, and not because it is the commoner value. Every record that existed
+/// before this version was created through a path that *required* a name — the empty string was a
+/// validation failure — so "this person has a stated name" is not an assumption about old data, it
+/// is a fact about it. Defaulting to `false` would put the entire existing library into the "to fill
+/// in" list on first launch, asking the user to supply names they had already supplied.
+public enum SchemaV18: VersionedSchema {
+    public static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 18) }
+
+    public static var models: [any PersistentModel.Type] {
+        SchemaV17.models
+    }
+}
+
 /// The migration path from the first released schema to the current one.
 ///
 /// Rules, from `docs/05-cloudkit-and-migrations.md`:
@@ -532,7 +554,7 @@ public enum SchemaV17: VersionedSchema {
 ///    and a recovery state. It is never fatal, and it never deletes anything.
 public enum ElephruitMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV17.self]
+        [SchemaV18.self]
     }
 
     /// **Empty, and that is not an oversight.**
@@ -552,9 +574,9 @@ public enum ElephruitMigrationPlan: SchemaMigrationPlan {
 
 /// The schema the app currently opens.
 public enum CurrentSchema {
-    public static var versioned: any VersionedSchema.Type { SchemaV17.self }
+    public static var versioned: any VersionedSchema.Type { SchemaV18.self }
 
-    public static var schema: Schema { Schema(versionedSchema: SchemaV17.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV18.self) }
 
     /// Human-readable version, for diagnostics and export archives.
     public static var versionString: String {
