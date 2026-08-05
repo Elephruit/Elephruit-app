@@ -229,7 +229,12 @@ struct PadStageOverlays: ViewModifier {
             .overlay(alignment: .bottom) {
                 // Attached only while a timer runs, and floating rather than inset: a stage this
                 // wide has room to show the timer without any column paying height for it.
-                if services?.timer.running != nil {
+                //
+                // And not over the tracker itself, which is already showing the same clock and a
+                // larger Stop — the phone shell makes the same subtraction for the same reason:
+                // two stop buttons for one timer on one screen is a question about which of them
+                // is the real one.
+                if services?.timer.running != nil, !isShowingTheTracker {
                     TimerAccessoryView()
                         .frame(maxWidth: 420)
                         .padding(.vertical, Theme.Spacing.small)
@@ -237,6 +242,11 @@ struct PadStageOverlays: ViewModifier {
                         .padding(.bottom, Theme.Spacing.medium)
                 }
             }
+    }
+
+    /// Whether the Time module's own tracker card is what the stage is showing.
+    private var isShowingTheTracker: Bool {
+        pad.root == .time && pad.contentPath.isEmpty
     }
 }
 

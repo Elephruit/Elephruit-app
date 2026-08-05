@@ -20,6 +20,10 @@ struct TimeScreen: View {
     @State private var surface: Surface = .log
     @State private var window: TimeWindow = .today
     @State private var grouping: TimeGrouping = .item
+    /// Report-only, and never applied to the store: an entry that ran for fifty-one minutes ran
+    /// for fifty-one minutes. See `docs/29` — rounding is a way of *reading* time, not a way of
+    /// recording it.
+    @State private var rounding: TimeRounding = .exact
     @State private var isAddingEntry = false
     @State private var editingEntry: TimeEntry?
 
@@ -61,6 +65,14 @@ struct TimeScreen: View {
                             Text("Day").tag(TimeGrouping.day)
                             Text("Person").tag(TimeGrouping.person)
                         }
+                        .accessibilityIdentifier(AccessibilityID.Time.groupingPicker)
+
+                        Picker("Rounding", selection: $rounding) {
+                            ForEach(TimeRounding.allCases, id: \.self) { option in
+                                Text(option.displayName).tag(option)
+                            }
+                        }
+                        .accessibilityIdentifier(AccessibilityID.Time.reportRoundingPicker)
                     }
                     Divider()
                     Button("Add Entry", systemImage: "plus") { isAddingEntry = true }
@@ -79,45 +91,12 @@ struct TimeScreen: View {
 
     // MARK: - Timer
 
-    @ViewBuilder
     private var timerSection: some View {
-        if let services {
-            let timer = services.timer
-            Section {
-                if let running = timer.running {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                                Text(running.displayTitle)
-                                    .font(Theme.Text.rowTitle)
-                                    .lineLimit(1)
-                                Text(timer.elapsedDisplay)
-                                    .font(.system(.title2, design: .rounded, weight: .semibold))
-                                    .monospacedDigit()
-                                    .contentTransition(.numericText())
-                            }
-                            Spacer()
-                            Button {
-                                _ = timer.stop()
-                            } label: {
-                                Image(systemName: "stop.fill")
-                                    .font(.title3)
-                                    .frame(width: 44, height: 44)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .accessibilityLabel("Stop timer")
-                        }
-                    }
-                    .padding(.vertical, Theme.Spacing.tight)
-                } else {
-                    Button {
-                        _ = services.timer.start(item: nil)
-                    } label: {
-                        Label("Start a Timer", systemImage: "play.fill")
-                    }
-                    .accessibilityIdentifier("time.start")
-                }
-            }
+        // The whole tracker, not a summary of it: naming, filing, pausing and discarding are
+        // what turn a stretch of time into a record worth keeping, and a phone that could only
+        // start and stop produced entries somebody had to reconstruct at a desk later.
+        Section {
+            MobileTimerCard()
         }
     }
 
@@ -166,7 +145,7 @@ struct TimeScreen: View {
     private var logSections: some View {
         if let services {
             let range = TimePeriod.window(window).range(using: services.dateProvider)
-            let entries = (try? services.timeEntries.entries(in: range, limit: 500)) ?? []
+            let entries = loggedEntries(in: range, services: services)
 
             Section {
                 ForEach(entries, id: \.id) { entry in
@@ -187,6 +166,29 @@ struct TimeScreen: View {
                 }
             }
         }
+    }
+
+    /// The day's entries, re-read whenever anything could have changed them.
+    ///
+    /// ### Why the two reads above the fetch are load-bearing
+    /// A fetch is a plain function call. SwiftUI has no way to know its answer went stale, so a
+    /// list built from one only refreshes when something *else* the body read changes. This body
+    /// used to read the timer's ticking `elapsedDisplay`, which invalidated it every second — so
+    /// the log looked live while costing a full re-read of the day once a second, and stopped
+    /// looking live the moment the clock moved into the card. Reading the change token and the
+    /// running entry's identity says exactly what this list actually depends on: a write
+    /// somebody made, and a timer starting or stopping.
+    private func loggedEntries(in range: Range<Date>, services: AppServices) -> [TimeEntry] {
+        _ = services.changeToken
+        _ = services.timer.running?.id
+        return (try? services.timeEntries.entries(in: range, limit: 500)) ?? []
+    }
+
+    /// The same subscription the log takes out, for the same reason.
+    private func reportSnapshots(in range: Range<Date>, services: AppServices) -> [TimeEntrySnapshot] {
+        _ = services.changeToken
+        _ = services.timer.running?.id
+        return (try? services.timeEntries.snapshots(in: range, limit: nil)) ?? []
     }
 
     private func logRow(_ entry: TimeEntry, services: AppServices) -> some View {
@@ -223,6 +225,7 @@ struct TimeScreen: View {
             if entry.endedAt != nil {
                 Button {
                     _ = services.timer.resume(entry)
+                    services.noteTimeChange()
                 } label: {
                     Label("Resume", systemImage: "play.fill")
                 }
@@ -232,6 +235,7 @@ struct TimeScreen: View {
         .swipeActions(edge: .trailing) {
             Button {
                 services.perform { try services.timeEntries.delete(entry) }
+                services.noteTimeChange()
             } label: {
                 Label("Delete", systemImage: "trash")
             }
@@ -240,14 +244,19 @@ struct TimeScreen: View {
         .contextMenu {
             Button("Edit", systemImage: "pencil") { editingEntry = entry }
             if entry.endedAt != nil {
-                Button("Resume", systemImage: "play.fill") { _ = services.timer.resume(entry) }
+                Button("Resume", systemImage: "play.fill") {
+                    _ = services.timer.resume(entry)
+                    services.noteTimeChange()
+                }
                 Button("Duplicate", systemImage: "plus.square.on.square") {
                     services.perform { _ = try services.timeEntries.duplicate(entry) }
+                    services.noteTimeChange()
                 }
             }
             Divider()
             Button("Delete", systemImage: "trash", role: .destructive) {
                 services.perform { try services.timeEntries.delete(entry) }
+                services.noteTimeChange()
             }
         }
     }
@@ -258,13 +267,14 @@ struct TimeScreen: View {
     private var reportSections: some View {
         if let services {
             let range = TimePeriod.window(window).range(using: services.dateProvider)
-            let snapshots = (try? services.timeEntries.snapshots(in: range, limit: nil)) ?? []
+            let snapshots = reportSnapshots(in: range, services: services)
             let report = TimeReporting.report(
                 entries: snapshots,
                 grouping: grouping,
                 range: range,
                 calendar: services.dateProvider.calendar,
-                now: services.dateProvider.now
+                now: services.dateProvider.now,
+                rounding: rounding
             )
 
             Section {
@@ -316,13 +326,67 @@ struct TimeScreen: View {
                     Text("\(window.displayName) · \(TimeFormatting.short(report.total)) total")
                 }
             }
+
+            if !report.isEmpty {
+                exportSection(report: report, snapshots: snapshots, services: services)
+            }
         }
+    }
+
+    /// Both shapes of the same period, because they answer different questions: the rows are what
+    /// a client asks for when they want to see the work, and the summary is what goes at the
+    /// bottom of an invoice. The Mac offers both from its report toolbar; a phone shares them.
+    private func exportSection(
+        report: TimeReport,
+        snapshots: [TimeEntrySnapshot],
+        services: AppServices
+    ) -> some View {
+        Section {
+            ShareLink(
+                item: csv(
+                    TimeExport.rows(for: snapshots, rounding: rounding, now: services.dateProvider.now),
+                    named: TimeExport.filename(for: window.displayName, kind: "entries")
+                ),
+                preview: SharePreview("Tracked time — every entry")
+            ) {
+                Label("Share Every Entry", systemImage: "square.and.arrow.up")
+            }
+            .accessibilityIdentifier(AccessibilityID.Time.reportExportButton)
+
+            ShareLink(
+                item: csv(
+                    TimeExport.summary(for: report, grouping: grouping),
+                    named: TimeExport.filename(for: window.displayName, kind: "summary")
+                ),
+                preview: SharePreview("Tracked time — totals")
+            ) {
+                Label("Share the Totals", systemImage: "square.and.arrow.up")
+            }
+        } footer: {
+            Text("CSV, rounded as shown above. The store always keeps the exact time.")
+        }
+    }
+
+    /// A CSV written where the share sheet can reach it.
+    ///
+    /// In the temporary directory rather than the container: an export is a copy handed to
+    /// another application, and keeping one afterwards would leave the library's contents lying
+    /// about in a second place that nothing ever tidies.
+    private func csv(_ contents: String, named name: String) -> URL {
+        let url = URL.temporaryDirectory.appending(path: name, directoryHint: .notDirectory)
+        try? contents.write(to: url, atomically: true, encoding: .utf8)
+        return url
     }
 }
 
 // MARK: - Entry sheets
 
 /// Adding time that happened off the clock.
+///
+/// It files exactly as a timer does. An hour typed in on the train is the same hour as an hour
+/// measured at a desk, and a sheet that could only record its length would put it in the log as
+/// something nobody can report on — which is how a month's totals end up with a category called
+/// "untitled" that is larger than any real one.
 struct ManualEntrySheet: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
@@ -330,13 +394,18 @@ struct ManualEntrySheet: View {
     @State private var descriptionText = ""
     @State private var startedAt = Date().addingTimeInterval(-3600)
     @State private var endedAt = Date()
+    @State private var filing = TimeEntryFiling()
 
     var body: some View {
         NavigationStack {
             Form {
-                TextField("What was the time spent on?", text: $descriptionText)
-                DatePicker("From", selection: $startedAt)
-                DatePicker("To", selection: $endedAt, in: startedAt...)
+                Section {
+                    TextField("What was the time spent on?", text: $descriptionText)
+                    DatePicker("From", selection: $startedAt)
+                    DatePicker("To", selection: $endedAt, in: startedAt...)
+                }
+
+                TimeFilingSection(filing: $filing)
             }
             .navigationTitle("Add Entry")
             .navigationBarTitleDisplayMode(.inline)
@@ -347,26 +416,29 @@ struct ManualEntrySheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") { add() }
                         .disabled(endedAt <= startedAt)
+                        .accessibilityIdentifier(AccessibilityID.Time.manualAddButton)
                 }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.large])
+        .accessibilityIdentifier(AccessibilityID.Time.manualSheet)
     }
 
     private func add() {
         guard let services else { return }
         services.perform {
             _ = try services.timeEntries.addManual(
-                item: nil,
-                project: nil,
-                people: [],
+                item: filing.subject.flatMap { filing.item($0, in: services) },
+                project: filing.project.flatMap { filing.item($0, in: services) },
+                people: filing.people.compactMap { filing.item($0, in: services) },
                 description: descriptionText.trimmingCharacters(in: .whitespaces),
                 startedAt: startedAt,
                 endedAt: endedAt,
-                tagSlugs: [],
-                isBillable: false
+                tagSlugs: filing.tagSlugs,
+                isBillable: filing.isBillable
             )
         }
+        services.noteTimeChange()
         dismiss()
     }
 }
@@ -381,18 +453,21 @@ struct EditEntrySheet: View {
     @State private var descriptionText = ""
     @State private var startedAt = Date()
     @State private var endedAt = Date()
-    @State private var isBillable = false
+    @State private var filing = TimeEntryFiling()
     @State private var hasPrepared = false
 
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Description", text: $descriptionText)
-                DatePicker("From", selection: $startedAt)
-                if entry.endedAt != nil {
-                    DatePicker("To", selection: $endedAt, in: startedAt...)
+                Section {
+                    TextField("Description", text: $descriptionText)
+                    DatePicker("From", selection: $startedAt)
+                    if entry.endedAt != nil {
+                        DatePicker("To", selection: $endedAt, in: startedAt...)
+                    }
                 }
-                Toggle("Billable", isOn: $isBillable)
+
+                TimeFilingSection(filing: $filing)
             }
             .navigationTitle("Edit Entry")
             .navigationBarTitleDisplayMode(.inline)
@@ -410,10 +485,10 @@ struct EditEntrySheet: View {
                 descriptionText = entry.entryDescription
                 startedAt = entry.startedAt
                 endedAt = entry.endedAt ?? Date()
-                isBillable = entry.isBillable
+                filing = TimeEntryFiling(entry)
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.large])
     }
 
     private func save() {
@@ -423,10 +498,24 @@ struct EditEntrySheet: View {
                 live.entryDescription = descriptionText
                 live.startedAt = startedAt
                 if live.endedAt != nil { live.endedAt = endedAt }
-                live.isBillable = isBillable
+                live.isBillable = filing.isBillable
+                live.item = filing.subject.flatMap { filing.item($0, in: services) }
             }
+            // Each through its own method rather than inside the block above: a project has to
+            // be refused when it is not one, people are filtered to records, and tags are
+            // coined if they do not exist yet. All three rules live in the repository.
+            try services.timeEntries.setProject(
+                filing.project.flatMap { filing.item($0, in: services) },
+                on: entry
+            )
+            try services.timeEntries.setPeople(
+                filing.people.compactMap { filing.item($0, in: services) },
+                on: entry
+            )
+            try services.timeEntries.setTags(filing.tagSlugs, on: entry)
         }
         services.timer.refresh()
+        services.noteTimeChange()
         dismiss()
     }
 }

@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// The Reminders screen's own promises, driven for real.
@@ -9,6 +10,14 @@ import XCTest
 final class RemindersUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
+        // The drawer shell only exists at compact width. Skipping says that out loud; running
+        // on an iPad and finding no `mobile.sidebar.button` would report the shell as broken when
+        // what is actually true is that this device draws the other one. The iPad's own suite is
+        // `PadNavigationUITests`, which skips on iPhone for the mirror-image reason.
+        try XCTSkipUnless(
+            UIDevice.current.userInterfaceIdiom == .phone,
+            "The drawer shell only exists on iPhone."
+        )
     }
 
     private func launchOnReminders(sampleData: Bool = true) -> XCUIApplication {

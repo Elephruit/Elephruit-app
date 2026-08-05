@@ -31,6 +31,14 @@ struct AdaptiveRootView: View {
     @SceneStorage("pad.navigation") private var storedPadNavigation: String?
     @State private var hasRestored = false
 
+    /// The running timer, as the Dynamic Island sees it.
+    ///
+    /// Here rather than inside `MobileRootView`, which is where it was written: that view was the
+    /// app's root, and is now one of two. Left where it was, a timer started on an iPad in
+    /// landscape would put nothing on the Lock Screen — a feature quietly turned off by a
+    /// refactor rather than by anybody's decision.
+    @State private var liveActivity = TimerLiveActivityController()
+
     private var isWide: Bool { sizeClass == .regular }
 
     var body: some View {
@@ -66,6 +74,22 @@ struct AdaptiveRootView: View {
         .onOpenURL { url in
             handleDeepLink(url)
         }
+        // The island is not driven by the commands that change the timer — see
+        // `TimerLiveActivityController`. It is driven by *what the timer is*, read here on every
+        // pass the observation system already wakes this view for, and compared with what the
+        // system is currently showing.
+        .task {
+            liveActivity.adoptExisting()
+            liveActivity.apply(timerActivityState)
+        }
+        .onChange(of: timerActivityState) { _, state in
+            liveActivity.apply(state)
+        }
+    }
+
+    /// What the Dynamic Island should be saying, or `nil` for nothing.
+    private var timerActivityState: ElephruitTimerAttributes.ContentState? {
+        .current(services)
     }
 
     // MARK: - Arrival
