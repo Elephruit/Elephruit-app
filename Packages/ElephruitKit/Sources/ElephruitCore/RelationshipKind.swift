@@ -90,8 +90,15 @@ public enum RelationshipKind: String, Codable, Sendable, Hashable, CaseIterable 
     /// Distinct from ``displayName`` because a label and a possessive phrase are not the same string,
     /// and because a gendered variant belongs here rather than in a view: the app only uses one when
     /// the user has recorded it themselves, through ``RelationshipKind/gendered(_:)``.
-    public func possessivePhrase(subject: String) -> String {
-        "\(subject)'s \(displayName)"
+    ///
+    /// The `label` is the user's own word, and it wins when there is one. This phrase is also what
+    /// stands in for the *name* of somebody recorded before their name was known — see
+    /// ``RelativeCapture/derivedTitle(subjectName:)`` — so "Maya's son" has to read as a description
+    /// of a person rather than as a category, which "Maya's child" does not.
+    public func possessivePhrase(subject: String, label: String? = nil) -> String {
+        let word = label?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let noun = (word?.isEmpty == false ? word : nil) ?? displayName
+        return "\(subject)'s \(noun)"
     }
 
     public var symbolName: String {
