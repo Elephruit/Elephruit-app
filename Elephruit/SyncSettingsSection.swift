@@ -6,8 +6,16 @@ import SwiftUI
 ///
 /// The container decision is made once, before the first fetch, so the toggle applies at
 /// the next launch — and says so in words rather than pretending to be instant. The same
-/// section, in the same words, exists on the iPhone; this is a promise made in two places
-/// about one behavior.
+/// section exists on the iPhone, making one promise in two places; the wording diverges
+/// only where the two platforms differ in what they can reach.
+///
+/// ### The footer no longer follows the switch
+/// It used to end "Off means off: the library stays on this Mac and the network is not used at
+/// all", and that sentence was false before it was written. `MapPlaceSearchField` had already
+/// shipped, and it runs an `MKLocalSearch` the moment somebody types a venue into a record —
+/// with sync off, with sync on, either way. A claim about privacy that changes as you toggle
+/// something is a claim you have to watch, and the point of one is that you do not, so both
+/// endpoints are now named unconditionally.
 struct SyncSettingsSection: View {
     @Environment(\.services) private var services
 
@@ -37,10 +45,11 @@ struct SyncSettingsSection: View {
                 Text(
                     """
                     Sync keeps this Mac and your iPhone looking at one library, through your \
-                    own private iCloud database. Apple's CloudKit is the only thing this app \
-                    talks to on the network — no account with us, no analytics, no third-party \
-                    service. Off means off: the library stays on this Mac and the network is \
-                    not used at all.
+                    own private iCloud database. No account with us, no analytics, no \
+                    third-party service: the only two things this app ever talks to are your \
+                    own iCloud, and Apple Maps when you type a place into a record. Off means \
+                    off for your library — it stays on this Mac and none of it goes anywhere. \
+                    A place you search for still reaches Apple Maps, because you asked it to.
                     """
                 )
             }

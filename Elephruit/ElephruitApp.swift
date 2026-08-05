@@ -720,12 +720,21 @@ struct SettingsView: View {
     /// Its own tab rather than a paragraph at the bottom of General. It is the claim this whole app
     /// is built around, it is the thing somebody checks before trusting it with a decade of notes,
     /// and a privacy claim buried under a Trash preference is too easy to miss.
+    ///
+    /// ### What was wrong with the old headline
+    /// It said "This app makes no network requests", under a paragraph ending "iCloud sync is not
+    /// enabled in this version". Both outlived their truth: sync shipped with a switch of its own
+    /// and a whole tab beside this one, and `MapPlaceSearchField` reaches Apple Maps whenever
+    /// somebody types a venue into a record. A headline that says *none* is worthless once there is
+    /// one; a headline that names each one is still checkable by a reader, so that is what this is
+    /// now. Two is a number somebody can hold in their head — the moment it stops being two, this
+    /// screen has to change again, and that is the point of writing it as a count.
     private var privacy: some View {
         Form {
             Section {
-                Label("This app makes no network requests.", systemImage: "lock.shield")
+                Label("Two things here can reach the network, and both are named below.", systemImage: "lock.shield")
 
-                Text("Your library is stored only on this Mac. There is no analytics, no telemetry, and no crash reporting. iCloud sync is not enabled in this version.")
+                Text("Your library goes nowhere but your own private iCloud database, and only if you turn on sync. Searching for a place in a record asks Apple Maps, and sends only the words you typed. There is no account with us, no analytics, no telemetry, no crash reporting, and no third-party service.")
                     .font(Theme.Text.metadata)
                     .foregroundStyle(Theme.Colors.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -751,6 +760,14 @@ struct SettingsView: View {
                     symbolName: "safari",
                     title: "Web Clipper",
                     detail: "Reads only the Safari tab where you open the clipper. The page travels through a private on-device inbox and is never uploaded."
+                )
+                // Last, because it is the only one here that sends something out rather than
+                // reading something already on this Mac — and the only one with nothing to turn
+                // off, which is the part a row indistinguishable from Contacts' would hide.
+                PrivacyRow(
+                    symbolName: "map",
+                    title: "Apple Maps",
+                    detail: "Asked when you type into a record's place field, and sent only the words you typed — never a note, never who the record is about. It has no switch: it happens while you are searching, and at no other moment."
                 )
             }
         }

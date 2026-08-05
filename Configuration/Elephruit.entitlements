@@ -13,15 +13,46 @@
 	  file held no network-client entitlement, so the sandbox refused outbound connections at
 	  the kernel boundary — "this app makes no network requests" was verifiable, not a
 	  promise. iCloud sync is a network feature; the kernel-enforced version of the guarantee
-	  ends with it. What remains true, and what Settings says in the same words: the only
-	  endpoint is Apple's CloudKit, the only payload is the user's own library in the user's
-	  own private database, sync is off until turned on, and no analytics, telemetry, or
-	  third-party service exists in the binary.
+	  ends with it.
+
+	  **There are two endpoints, not one.** This comment said "the only endpoint is Apple's
+	  CloudKit" and Settings said it in the same words, and both were already wrong when they
+	  were written: `MapPlaceSearchField` had already shipped, and it runs an
+	  `MKLocalSearch` whenever somebody types a venue into a record. It is user-initiated, it
+	  carries only the typed words, and it goes to Apple — but it is a network request, and an
+	  app whose whole claim is that you can name what it talks to cannot have an endpoint
+	  nobody counted.
+
+	  So: two endpoints, Apple's CloudKit and Apple Maps. The library goes only to the user's
+	  own private database and only with sync on; the Maps search carries only what was typed
+	  into a place field and happens only while it is being typed. No analytics, telemetry, or
+	  third-party service exists in the binary. Anything that adds a third endpoint changes
+	  this comment, the Sync footer, and the Privacy tab in the same commit, or it has quietly
+	  made a liar of all three.
+
+	  **The obvious way to make a liar of them is already sitting in the build.** Route
+	  estimates shipped on the iPhone, and `MapKitRouteProvider` lives in `ElephruitIntegrations`
+	  — a module this target links. It reaches no network here only because nothing on the Mac
+	  constructs it and no switch offers to. Wiring one up is a two-endpoint app becoming a
+	  three-endpoint one, and it needs the Location entitlement listed as ABSENT above. Read
+	  `docs/36` §3.5 before doing it: the answer there is "not yet", with reasons.
 	-->
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
 
-	<!-- CloudKit, and nothing else on the network. Added in the same commit as sync. -->
+	<!--
+	  Outbound connections. Added for CloudKit; MapKit's venue search now rides on it too, so
+	  one key covers two features and the comment naming only one is what went stale.
+
+	  **Unresolved, and worth knowing before anything is claimed about it.** The venue search
+	  shipped *before* this key, into a file that still read "Deliberately ABSENT: network
+	  client". Either `MKLocalSearch` reaches the network through the system's own
+	  daemon and never needed this key, or the search was silently failing into its own
+	  "Apple Maps search is unavailable right now" for that window. Nobody has checked which.
+	  It does not change what the app talks to today, and it does change what the sandbox can
+	  be said to have been enforcing — so do not repeat either version as fact until somebody
+	  removes this key on a scratch build and watches what the field does.
+	-->
 	<key>com.apple.security.network.client</key>
 	<true/>
 
