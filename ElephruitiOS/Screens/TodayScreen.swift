@@ -274,7 +274,13 @@ private struct TodayContent: View {
         // but the row itself was quietly booked against the guess. A day holds a handful of events
         // and `refreshEstimate` refuses everything not worth asking, so asking about all of them is
         // cheaper than the bug.
-        .task(id: model.sourceToken) {
+        //
+        // Keyed on more than the day, because the day is not the only thing that changes the answer.
+        // Turning route estimates on in Settings changes nothing the source token watches — it is
+        // the library and the calendar — so the page a reader comes back to kept its guesses and
+        // measured nothing, and the switch appeared to do nothing at all. Same for changing how you
+        // travel, which invalidates every answer on hand.
+        .task(id: travelTrigger) {
             await measureTravelForTheDay()
             // After the measuring, not alongside the assembly, and for the reason the sheet already
             // waits on the calendar: a review launch exists to photograph what a user sees, and a
@@ -817,6 +823,25 @@ private struct TodayContent: View {
             event.event, minutes: travel.minutes, now: services.dateProvider.now
         ) else { return nil }
         return travel
+    }
+
+    /// Everything that changes what a journey's answer would be.
+    ///
+    /// The day, obviously — but also whether measuring is switched on at all and how the user says
+    /// they travel, neither of which the source token watches. Both are settings on another screen,
+    /// which is exactly why they were missed: nothing about this page changes when they do.
+    private var travelTrigger: TravelTrigger {
+        TravelTrigger(
+            source: model.sourceToken,
+            isEstimating: services?.travel.isEstimating ?? false,
+            transport: services?.travel.transport ?? .driving
+        )
+    }
+
+    private struct TravelTrigger: Equatable {
+        var source: TodayModel.SourceToken
+        var isEstimating: Bool
+        var transport: RouteTransport
     }
 
     /// Asks how long the day's journeys really take, for the ones worth asking about.

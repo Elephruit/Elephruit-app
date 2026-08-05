@@ -161,7 +161,20 @@ public final class TravelPreferences {
     /// - this place refused recently and is still inside its retry delay;
     /// - a question about this place is already outstanding.
     public func refreshEstimate(to place: RoutePlace, departingAt moment: Date) async {
-        guard isEstimating, authorization.canRead else { return }
+        guard isEstimating else { return }
+
+        // A relaunch arrives with the switch already on and nothing known about the permission:
+        // ``enableEstimates()`` is the only thing that ever set ``authorization``, and that happened
+        // in some previous session. Without this the app comes back up believing it is allowed to
+        // measure, believing it has not been given permission, and quietly measuring nothing —
+        // forever, because nothing else would ever ask again.
+        //
+        // Reading the standing decision is free and never prompts; only ``enableEstimates()`` does
+        // that, and only when nobody has decided yet.
+        if authorization == .notRequested {
+            authorization = await provider.authorization
+        }
+        guard authorization.canRead else { return }
 
         let key = place.key
         guard !key.isEmpty, !inFlight.contains(key) else { return }

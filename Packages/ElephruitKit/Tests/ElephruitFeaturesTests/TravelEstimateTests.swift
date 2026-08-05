@@ -132,6 +132,40 @@ struct TravelEstimateTests {
         #expect(travel.rememberedPlaceCount == 1, "Turning measuring off is not forgetting what you were told")
     }
 
+    /// The bug that made the whole feature look broken to the first person who used it.
+    ///
+    /// `enableEstimates()` was the only thing that ever set `authorization`, so the session where
+    /// somebody turned the switch on worked and every session afterwards did not: the app came back
+    /// up with the switch on, the permission standing, and `authorization` at its initial
+    /// `.notRequested` — measuring nothing, forever, because nothing would ever ask again. It reads
+    /// as "I granted location and it still says 15 minutes", which is exactly how it was reported.
+    @Test("A relaunch with the switch already on still measures")
+    func aRelaunchStillMeasures() async {
+        let clock = MovingClock(now: Self.now)
+        let defaults = Self.scratchDefaults()
+
+        // The session where somebody turns it on.
+        let first = TravelPreferences(defaults: defaults, dateProvider: clock) {
+            FixtureRouteProvider(dateProvider: clock)
+        }
+        await first.enableEstimates()
+        #expect(first.isEstimating)
+
+        // The next launch: same preferences on disk, a brand-new object, nobody asked again.
+        let second = TravelPreferences(defaults: defaults, dateProvider: clock) {
+            FixtureRouteProvider(dateProvider: clock)
+        }
+        #expect(second.isEstimating, "the switch is remembered")
+        #expect(second.authorization == .notRequested, "and nothing has read the standing decision yet")
+
+        await second.refreshEstimate(to: RoutePlace(name: Self.studio), departingAt: Self.soon)
+
+        #expect(second.minutes(to: Self.studio) == 12, """
+            A relaunched app with the switch on and permission granted must measure. Reading the \
+            standing decision costs nothing and never prompts.
+            """)
+    }
+
     @Test("A refused permission measures nothing")
     func aRefusedPermissionMeasuresNothing() async {
         let clock = MovingClock(now: Self.now)
