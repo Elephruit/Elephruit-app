@@ -245,6 +245,133 @@ textarea.field {
   margin-top: var(--space-large);
 }
 
+/* MARK: Timeline — the feed's skeleton.
+   A 40px rail with a 1px centred line; badges are circles ringed in the page
+   background so the line appears to pass behind them. No cards: rows are
+   16px of padding and a hairline, day boundaries are a top rule plus a
+   larger day name. Ported from ElephruitiOS/Components/Timeline.swift. */
+
+.timeline-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.timeline-rail {
+  flex: none;
+  width: var(--rail-width);
+  position: relative;
+}
+
+.timeline-rail::before {
+  content: '';
+  position: absolute;
+  left: calc(50% - 0.5px);
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--color-separator);
+}
+
+.timeline-row[data-rail='head'] .timeline-rail::before {
+  top: calc(var(--row-padding) + var(--badge-size) / 2);
+}
+
+.timeline-row[data-rail='tail'] .timeline-rail::before {
+  bottom: auto;
+  height: calc(var(--row-padding) + var(--badge-size) / 2);
+}
+
+.timeline-row[data-rail='none'] .timeline-rail::before {
+  display: none;
+}
+
+.timeline-badge {
+  position: absolute;
+  left: 50%;
+  top: var(--row-padding);
+  transform: translateX(-50%);
+  width: var(--badge-size);
+  height: var(--badge-size);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--tint, var(--color-accent)) 12%, var(--color-background));
+  color: var(--tint, var(--color-accent));
+  /* The ring that makes the line pass behind the badge. */
+  box-shadow: 0 0 0 3px var(--color-background);
+  border: 0;
+  padding: 0;
+}
+
+button.timeline-badge {
+  cursor: pointer;
+}
+
+.timeline-content {
+  flex: 1;
+  min-width: 0;
+  padding: var(--row-padding) 0;
+  border-bottom: 1px solid var(--color-separator);
+}
+
+.timeline-row:last-child .timeline-content {
+  border-bottom: 0;
+}
+
+.timeline-title-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-small);
+}
+
+.timeline-title {
+  font: var(--text-row-title-emphasised);
+  min-width: 0;
+}
+
+.timeline-time {
+  margin-left: auto;
+  font: var(--text-metadata);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+.timeline-subtitle {
+  font: var(--text-row-subtitle);
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+.timeline-excerpt {
+  font: var(--text-row-subtitle);
+  color: var(--color-text);
+  margin-top: var(--space-tight);
+}
+
+/* A day boundary: a rule that says "this begins here", clear air, and the
+   day's name a full size larger — never a box. */
+.timeline-day-header {
+  display: flex;
+  align-items: flex-end;
+}
+
+.timeline-day-header .timeline-rail::before {
+  top: 0;
+}
+
+.timeline-day-title {
+  flex: 1;
+  font: var(--text-day-header);
+  padding: var(--space-section) 0 var(--space-small);
+}
+
+.timeline-day-rule {
+  border: 0;
+  border-top: 1px solid var(--color-separator);
+  margin: var(--space-large) 0 0;
+}
+
 /* MARK: Tab bar */
 
 .tab-bar {
