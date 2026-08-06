@@ -94,6 +94,12 @@ export function usePersonInteractions(uid: string, personID: string): Interactio
   )
 }
 
+/// The whole collection, filtered client-side — same spike-scale posture as
+/// useReminders; the day brief reads several people's ledgers at once.
+export function useAllObservations(uid: string): Observation[] | undefined {
+  return useQuerySnapshot<Observation>(() => query(collectionRef(uid, 'observations')), [uid])
+}
+
 export function useObservationsFor(uid: string, personID: string): Observation[] | undefined {
   return useQuerySnapshot<Observation>(
     () => query(collectionRef(uid, 'observations'), where('subjectID', '==', personID)),

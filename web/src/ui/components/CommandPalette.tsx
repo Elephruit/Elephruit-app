@@ -21,6 +21,7 @@ interface Command {
 
 const STATIC_COMMANDS: Command[] = [
   { id: 'action-capture', group: 'Actions', label: 'Log an interaction', icon: 'plus', to: '/capture' },
+  { id: 'action-brief', group: 'Actions', label: 'Prepare my day', icon: 'sparkle', to: '/?brief=1' },
   { id: 'page-feed', group: 'Pages', label: 'Feed', icon: 'feed', to: '/' },
   { id: 'page-people', group: 'Pages', label: 'People', icon: 'people', to: '/people' },
   { id: 'page-followups', group: 'Pages', label: 'Follow-ups', icon: 'bell', to: '/followups' },

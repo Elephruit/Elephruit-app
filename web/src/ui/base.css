@@ -770,7 +770,15 @@ textarea.field {
 /* MARK: Feed workspace — greeting, capture entry, overview tiles */
 
 .feed-greeting {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-large);
   margin: var(--space-small) 0 var(--space-section);
+}
+
+.feed-greeting-text {
+  min-width: 0;
+  flex: 1;
 }
 
 .feed-greeting h1 {
@@ -782,6 +790,96 @@ textarea.field {
 .feed-greeting p {
   font: var(--text-sub);
   color: var(--color-text-secondary);
+}
+
+/* The day brief — the read direction of the AI street */
+.brief-panel {
+  background: var(--color-background-elevated);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-large);
+  box-shadow: var(--shadow-raised);
+  padding: var(--space-large) var(--space-section) var(--space-section);
+  margin-bottom: var(--space-large);
+}
+
+.brief-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-small);
+}
+
+.brief-head h2 {
+  font: var(--text-heading);
+  display: flex;
+  align-items: center;
+  gap: var(--space-small);
+}
+
+.brief-head svg {
+  color: var(--color-brand);
+}
+
+.brief-note {
+  font: var(--text-sub);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-small);
+}
+
+.brief-privacy {
+  font: var(--text-metadata);
+  color: var(--color-text-tertiary);
+  margin-top: var(--space-small);
+}
+
+.brief-daynote {
+  font: var(--text-display);
+  font-size: 1.15rem;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-medium);
+}
+
+.brief-card {
+  border-top: 1px solid var(--color-separator);
+  padding: var(--space-medium) 0;
+}
+
+.brief-card header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-medium);
+  margin-bottom: var(--space-small);
+}
+
+.brief-card header h3 {
+  font: var(--text-body-strong);
+}
+
+.brief-card header p {
+  font: var(--text-sub);
+  color: var(--color-text-secondary);
+}
+
+.brief-section {
+  margin: var(--space-small) 0;
+}
+
+.brief-section h4 {
+  font: var(--text-section);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-tight);
+}
+
+.brief-section ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.brief-section li {
+  font: var(--text-body);
+  margin: var(--space-tight) 0;
 }
 
 .composer-entry {

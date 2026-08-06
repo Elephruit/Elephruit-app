@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { auth } from '../../data/firebase'
 import { useFeed, usePeople, useReminders } from '../../data/hooks'
 import { startOfDay, wholeDaysBetween } from '../../domain/dates'
@@ -21,6 +21,7 @@ import { Icon } from '../components/Icon'
 import { MetricTile } from '../components/MetricTile'
 import { TimelineDayHeader, TimelineRow } from '../components/TimelineRow'
 import { PageScaffold } from '../shell/PageScaffold'
+import { DayBriefPanel } from './DayBriefPanel'
 
 function dayLabel(day: Date, now: Date): string {
   const days = wholeDaysBetween(day, startOfDay(now))
@@ -143,6 +144,15 @@ export function FeedPage() {
   const people = usePeople(uid)
   const reminders = useReminders(uid)
   const now = new Date()
+  const [briefOpen, setBriefOpen] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  useEffect(() => {
+    if (searchParams.get('brief') === '1') {
+      setBriefOpen(true)
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   const groups = useMemo(() => {
     if (!interactions || !people) return undefined
@@ -174,12 +184,28 @@ export function FeedPage() {
       <div className="feed-layout">
         <div className="feed-main">
           <header className="feed-greeting">
-        <h1>{greeting(now)}</h1>
-        <p>
-          {dateLine}
-          {summary && <> · {summary}</>}
-        </p>
+        <div className="feed-greeting-text">
+          <h1>{greeting(now)}</h1>
+          <p>
+            {dateLine}
+            {summary && <> · {summary}</>}
+          </p>
+        </div>
+        {!briefOpen && (
+          <Button variant="secondary" icon="sparkle" onClick={() => setBriefOpen(true)}>
+            Prepare my day
+          </Button>
+        )}
       </header>
+
+      {briefOpen && people && reminders && interactions && (
+        <DayBriefPanel
+          people={people}
+          reminders={reminders}
+          interactions={interactions}
+          onClose={() => setBriefOpen(false)}
+        />
+      )}
 
       <button type="button" className="composer-entry" onClick={() => navigate('/capture')}>
         <Icon name="plus" size={17} />
