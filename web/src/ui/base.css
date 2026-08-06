@@ -1247,6 +1247,120 @@ textarea.field {
   display: none;
 }
 
+/* MARK: Directory grid — the People table on desktop, dense rows below */
+
+.field-inline {
+  width: 200px;
+}
+
+.field-select {
+  width: auto;
+  appearance: auto;
+}
+
+@media (max-width: 719.98px) {
+  .field-inline {
+    width: 140px;
+  }
+}
+
+.directory-empty {
+  font: var(--text-sub);
+  color: var(--color-text-secondary);
+  padding: var(--space-section) 0;
+}
+
+.data-grid-head {
+  display: none;
+}
+
+.person-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-medium);
+  width: 100%;
+  padding: var(--space-medium) var(--space-small);
+  border: 0;
+  border-bottom: 1px solid var(--color-separator);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-medium);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.person-row:hover {
+  background: var(--color-subtle-fill);
+}
+
+.person-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.person-main .row-title,
+.person-main .row-subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.person-last {
+  font: var(--text-metadata);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+.person-next {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .data-grid-head {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.6fr);
+    gap: var(--space-medium);
+    padding: 0 var(--space-small) var(--space-small);
+    font: var(--text-section);
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--color-text-tertiary);
+    border-bottom: 1px solid var(--color-separator);
+  }
+
+  .person-row {
+    grid-template-columns: 36px minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.6fr);
+  }
+
+  .person-last {
+    font: var(--text-sub);
+    color: var(--color-text-secondary);
+  }
+
+  .person-next {
+    display: block;
+    font: var(--text-sub);
+    color: var(--color-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .person-next[data-tone='overdue'] {
+    color: var(--color-overdue);
+  }
+
+  .person-next[data-tone='today'] {
+    color: var(--color-due-today);
+  }
+
+  .person-next-none {
+    color: var(--color-text-tertiary);
+  }
+}
+
 /* MARK: Rows */
 
 .row {

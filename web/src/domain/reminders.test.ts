@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bucketFor, completedList, sections, type Reminder } from './reminders'
+import { bucketFor, completedList, nextOpenReminderByPerson, sections, type Reminder } from './reminders'
 
 const NOW = new Date('2026-08-06T15:00:00')
 
@@ -77,5 +77,16 @@ describe('sections', () => {
     const first = reminder({ status: 'completed', completedAt: new Date('2026-08-01T12:00:00') })
     const second = reminder({ status: 'completed', completedAt: new Date('2026-08-05T12:00:00') })
     expect(completedList([first, second]).map((r) => r.id)).toEqual([second.id, first.id])
+  })
+
+  it('finds each person their soonest open reminder, dated beating undated', () => {
+    const anytime = reminder({ personIDs: ['ana'], title: 'Anytime' })
+    const nextWeek = reminder({ personIDs: ['ana', 'dave'], title: 'Next week', dueAt: new Date('2026-08-12T12:00:00') })
+    const tomorrow = reminder({ personIDs: ['ana'], title: 'Tomorrow', startAt: new Date('2026-08-07T09:00:00') })
+    const done = reminder({ personIDs: ['dave'], title: 'Done', dueAt: new Date('2026-08-07T09:00:00'), status: 'completed', completedAt: NOW })
+    const best = nextOpenReminderByPerson([anytime, nextWeek, tomorrow, done])
+    expect(best.get('ana')?.title).toBe('Tomorrow')
+    expect(best.get('dave')?.title).toBe('Next week')
+    expect(nextOpenReminderByPerson([anytime]).get('ana')?.title).toBe('Anytime')
   })
 })

@@ -111,6 +111,22 @@ export function sections(reminders: Reminder[], now: Date): BucketGroup[] {
   return groups
 }
 
+/// The next open reminder per person — the soonest deadline-or-start; undated
+/// reminders only win when a person has nothing dated at all.
+export function nextOpenReminderByPerson(reminders: Reminder[]): Map<string, Reminder> {
+  const best = new Map<string, Reminder>()
+  for (const reminder of reminders) {
+    if (reminder.status !== 'open') continue
+    for (const personID of reminder.personIDs) {
+      const current = best.get(personID)
+      if (!current || relevantDate(reminder) < relevantDate(current)) {
+        best.set(personID, reminder)
+      }
+    }
+  }
+  return best
+}
+
 /// Completed reminders, newest completion first — behind a toggle, never mixed in.
 export function completedList(reminders: Reminder[]): Reminder[] {
   return reminders
