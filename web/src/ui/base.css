@@ -17,11 +17,11 @@ html {
 }
 
 body {
-  font: var(--text-row-title);
-  font-family: var(--font-stack);
+  font: var(--text-body);
   color: var(--color-text);
   background: var(--color-background);
   min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
 }
 
 #root {
@@ -81,7 +81,7 @@ a {
   border: 0;
   border-radius: var(--radius-medium);
   padding: 10px var(--space-large);
-  font: var(--text-row-title-emphasised);
+  font: var(--text-body-strong);
   background: var(--color-accent);
   color: var(--color-on-accent);
   cursor: pointer;
@@ -115,13 +115,17 @@ a {
   border-radius: var(--radius-medium);
   background: var(--color-background-elevated);
   padding: 10px var(--space-medium);
-  font: var(--text-row-title);
+  font: var(--text-body);
 }
 
 .field:focus {
-  outline: 2px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
-  outline-offset: 0;
+  outline: none;
   border-color: var(--color-accent);
+}
+
+.field:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
 textarea.field {
@@ -155,7 +159,7 @@ textarea.field {
 
 .chip[aria-pressed='true'],
 .chip.chip-selected {
-  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
   color: var(--color-accent);
 }
 
@@ -194,12 +198,12 @@ textarea.field {
 }
 
 .row-title {
-  font: var(--text-row-title);
+  font: var(--text-body);
   color: var(--color-text);
 }
 
 .row-subtitle {
-  font: var(--text-row-subtitle);
+  font: var(--text-sub);
   color: var(--color-text-secondary);
 }
 
@@ -228,7 +232,7 @@ textarea.field {
   max-height: 88dvh;
   overflow-y: auto;
   background: var(--color-background-elevated);
-  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
   box-shadow: var(--shadow-panel);
   padding: var(--space-large) var(--space-large) calc(var(--space-section) + env(safe-area-inset-bottom));
 }
@@ -296,7 +300,7 @@ textarea.field {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--tint, var(--color-accent)) 12%, var(--color-background));
+  background: color-mix(in srgb, var(--tint, var(--color-accent)) 14%, var(--color-background));
   color: var(--tint, var(--color-accent));
   /* The ring that makes the line pass behind the badge. */
   box-shadow: 0 0 0 3px var(--color-background);
@@ -326,7 +330,7 @@ button.timeline-badge {
 }
 
 .timeline-title {
-  font: var(--text-row-title-emphasised);
+  font: var(--text-body-strong);
   min-width: 0;
 }
 
@@ -338,13 +342,13 @@ button.timeline-badge {
 }
 
 .timeline-subtitle {
-  font: var(--text-row-subtitle);
+  font: var(--text-sub);
   color: var(--color-text-secondary);
   margin-top: 2px;
 }
 
 .timeline-excerpt {
-  font: var(--text-row-subtitle);
+  font: var(--text-sub);
   color: var(--color-text);
   margin-top: var(--space-tight);
 }
@@ -362,7 +366,7 @@ button.timeline-badge {
 
 .timeline-day-title {
   flex: 1;
-  font: var(--text-day-header);
+  font: var(--text-heading);
   padding: var(--space-section) 0 var(--space-small);
 }
 
@@ -443,13 +447,13 @@ button.timeline-badge {
 }
 
 .empty-state h2 {
-  font: var(--text-row-title-emphasised);
+  font: var(--text-body-strong);
   color: var(--color-text);
   margin-bottom: var(--space-tight);
 }
 
 .empty-state p {
-  font: var(--text-row-subtitle);
+  font: var(--text-sub);
   max-width: 34ch;
   margin: 0 auto;
 }
@@ -471,7 +475,7 @@ button.timeline-badge {
 
 .signin p {
   color: var(--color-text-secondary);
-  font: var(--text-row-subtitle);
+  font: var(--text-sub);
   max-width: 40ch;
 }
 
@@ -485,8 +489,8 @@ button.timeline-badge {
   display: flex;
   align-items: center;
   justify-content: center;
-  font: 600 0.8rem/1 var(--font-stack);
-  background: color-mix(in srgb, var(--tint, var(--color-accent)) 16%, transparent);
+  font: 600 0.8rem/1 var(--font-sans);
+  background: color-mix(in srgb, var(--tint, var(--color-accent)) 14%, transparent);
   color: var(--tint, var(--color-accent));
 }
 

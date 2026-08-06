@@ -1,13 +1,43 @@
-/* Design tokens, ported from ElephruitDesign/Tokens.swift.
-   Everything visual derives from these: an 8pt spacing grid with a 4pt half-step,
-   exactly four radii, four named shadow depths, and semantic colours that resolve
-   per scheme. The one tint recipe — 12% alpha fill, 25% alpha stroke — is what
-   keeps every chip and tile in the same family. */
+/* Elephruit's web-native tokens. Two layers: raw ramps (stone, ink, azure,
+   status, the 13-key person palette) that nothing outside this file references,
+   and the semantic tokens every component consumes. Dark mode, when it arrives,
+   re-points only the semantic layer under [data-theme='dark'] — see theme.ts.
+
+   The ground is warm ivory, the text is warm ink, and there is one accent: the
+   azure of the logo. azure-500 is the brand (marks, sign-in, big moments);
+   azure-600 is the interactive accent — darkened until white-on-600 and 600-on-
+   ivory both clear 4.5:1. The one tint recipe — 14% alpha fill, 28% alpha
+   stroke, calibrated for the ivory ground — keeps every chip, badge, and avatar
+   in the same family.
+
+   Breakpoints (media queries cannot read custom properties — the canonical
+   numbers live in breakpoints.ts): 720 mobile→tablet, 1024 tablet→desktop rail,
+   1280 wide (feed right rail). */
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
-  /* Spacing — nothing off-scale */
+  /* ——— Raw ramps — never referenced outside this file ——— */
+
+  --stone-0: #fdfcfa;
+  --stone-50: #f8f6f2;
+  --stone-100: #f1eee7;
+  --stone-150: #e9e5db;
+  --stone-200: #ddd7ca;
+
+  --ink-900: #221f1a;
+  --ink-600: rgba(46, 40, 30, 0.64);
+  --ink-400: rgba(46, 40, 30, 0.4);
+  --ink-150: rgba(46, 40, 30, 0.13);
+
+  --azure-100: #e4f1f9;
+  --azure-300: #7cc4e8;
+  --azure-400: #4aaee0;
+  --azure-500: #2f9fd8;
+  --azure-600: #1873a6;
+  --azure-700: #125e8a;
+
+  /* ——— Spacing — the 8pt grid with a 4pt half-step, plus a desktop stride ——— */
   --space-hairline: 2px;
   --space-tight: 4px;
   --space-small: 8px;
@@ -16,116 +46,124 @@
   --space-section: 24px;
   --space-xl: 32px;
   --space-generous: 40px;
+  --space-huge: 64px;
 
-  /* Radius — exactly four */
-  --radius-small: 4px;
-  --radius-medium: 6px;
-  --radius-large: 10px;
-  --radius-sheet: 16px;
+  /* ——— Radius — exactly four ——— */
+  --radius-small: 6px;
+  --radius-medium: 8px;
+  --radius-large: 12px;
+  --radius-panel: 16px;
 
-  /* Elevation — exactly four */
+  /* ——— Elevation — warm-tinted and quiet ——— */
   --shadow-flat: none;
-  --shadow-raised: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --shadow-floating: 0 4px 10px rgba(0, 0, 0, 0.16);
-  --shadow-panel: 0 8px 20px rgba(0, 0, 0, 0.22);
+  --shadow-raised: 0 1px 2px rgba(50, 42, 28, 0.05), 0 1px 3px rgba(50, 42, 28, 0.05);
+  --shadow-floating: 0 4px 12px rgba(50, 42, 28, 0.1);
+  --shadow-panel: 0 8px 24px rgba(50, 42, 28, 0.14);
+  --shadow-overlay: 0 18px 50px rgba(50, 42, 28, 0.22);
 
-  /* Type — Geist for interface text, sizes from the text-style ladder */
-  --font-stack: 'Geist Variable', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+  /* ——— Type — Geist carries the interface; Newsreader appears only at
+         --text-display moments (greeting, sign-in, empty-state headlines) ——— */
+  --font-sans: 'Geist Variable', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     sans-serif;
-  --text-title: 600 1.3rem/1.25 var(--font-stack);
-  --text-day-header: 600 1.15rem/1.3 var(--font-stack);
-  --text-row-title: 400 1rem/1.4 var(--font-stack);
-  --text-row-title-emphasised: 500 1rem/1.4 var(--font-stack);
-  --text-row-subtitle: 400 0.875rem/1.4 var(--font-stack);
-  --text-metadata: 400 0.75rem/1.35 var(--font-stack);
-  --text-chip: 500 0.75rem/1.2 var(--font-stack);
-  --text-section: 600 0.72rem/1.3 var(--font-stack);
+  --font-serif: 'Newsreader Variable', Georgia, 'Times New Roman', serif;
 
-  /* Timeline geometry — the rail is the feed's skeleton */
+  --text-display: italic 500 1.6rem/1.3 var(--font-serif);
+  --text-title: 600 1.4rem/1.25 var(--font-sans);
+  --text-heading: 600 1.05rem/1.35 var(--font-sans);
+  --text-body: 400 0.9375rem/1.45 var(--font-sans);
+  --text-body-strong: 500 0.9375rem/1.45 var(--font-sans);
+  --text-sub: 400 0.8125rem/1.45 var(--font-sans);
+  --text-label: 500 0.8125rem/1.4 var(--font-sans);
+  --text-metadata: 400 0.75rem/1.4 var(--font-sans);
+  --text-chip: 500 0.75rem/1.2 var(--font-sans);
+  --text-section: 600 0.6875rem/1.3 var(--font-sans);
+
+  /* ——— Motion ——— */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 260ms;
+
+  /* ——— Density and measure ——— */
+  --control-height: 36px;
+  --control-height-small: 28px;
+  --content-narrow: 640px;
+  --content-reading: 760px;
+  --content-wide: 1120px;
+
+  /* ——— Timeline geometry — the rail is the feed's skeleton ——— */
   --rail-width: 40px;
   --rail-inset: 8px;
-  --badge-size: 26px;
+  --badge-size: 27px;
   --row-padding: 16px;
 
-  /* Semantic colours — light */
-  --color-text: #1c1c1e;
-  --color-text-secondary: rgba(60, 60, 67, 0.6);
-  --color-text-tertiary: rgba(60, 60, 67, 0.33);
-  --color-background: #ffffff;
-  --color-background-elevated: #ffffff;
-  --color-subtle-fill: rgba(120, 120, 128, 0.08);
-  --color-hover-fill: rgba(120, 120, 128, 0.12);
-  --color-separator: rgba(60, 60, 67, 0.16);
-  --color-accent: #007aff;
+  /* ——— Semantic colours ——— */
+  --color-text: var(--ink-900);
+  --color-text-secondary: var(--ink-600);
+  --color-text-tertiary: var(--ink-400);
+  --color-background: var(--stone-50);
+  --color-background-elevated: var(--stone-0);
+  --color-subtle-fill: rgba(58, 48, 30, 0.055);
+  --color-hover-fill: rgba(58, 48, 30, 0.085);
+  --color-separator: var(--ink-150);
+  --color-border-strong: var(--stone-200);
+  --color-accent: var(--azure-600);
+  --color-accent-hover: var(--azure-700);
+  --color-brand: var(--azure-500);
   --color-on-accent: #ffffff;
-  --color-overdue: #ff3b30;
-  --color-due-today: #ff9500;
-  --color-completed: #34c759;
-  --color-destructive: #ff3b30;
-  --color-personal: #30b0c7;
-  --color-work: #5856d6;
-  --color-capture: #af52de;
+  --color-focus: var(--azure-500);
+  --color-overdue: #b5432e;
+  --color-due-today: #8f5f10;
+  --color-completed: #3e7d4f;
+  --color-destructive: #b5432e;
+  --color-personal: #2f8fa4;
+  --color-work: #5f5cba;
+  --color-capture: #8d55c4;
 
-  /* Palette — the 13 user-pickable colours */
-  --palette-red: #ff3b30;
-  --palette-orange: #ff9500;
-  --palette-yellow: #d6a500;
-  --palette-green: #34c759;
-  --palette-mint: #00c7be;
-  --palette-teal: #30b0c7;
-  --palette-cyan: #32ade6;
-  --palette-blue: #007aff;
-  --palette-indigo: #5856d6;
-  --palette-purple: #af52de;
-  --palette-pink: #ff2d55;
-  --palette-brown: #a2845e;
-  --palette-graphite: #8e8e93;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-text: #f2f2f7;
-    --color-text-secondary: rgba(235, 235, 245, 0.6);
-    --color-text-tertiary: rgba(235, 235, 245, 0.3);
-    --color-background: #151517;
-    --color-background-elevated: #1f1f22;
-    --color-subtle-fill: rgba(120, 120, 128, 0.18);
-    --color-hover-fill: rgba(120, 120, 128, 0.26);
-    --color-separator: rgba(84, 84, 88, 0.6);
-    --color-accent: #0a84ff;
-    --color-overdue: #ff453a;
-    --color-due-today: #ff9f0a;
-    --color-completed: #30d158;
-    --color-destructive: #ff453a;
-    --color-personal: #40cbe0;
-    --color-work: #5e5ce6;
-    --color-capture: #bf5af2;
-
-    --palette-red: #ff453a;
-    --palette-orange: #ff9f0a;
-    --palette-yellow: #ffd60a;
-    --palette-green: #30d158;
-    --palette-mint: #63e6e2;
-    --palette-teal: #40cbe0;
-    --palette-cyan: #64d2ff;
-    --palette-blue: #0a84ff;
-    --palette-indigo: #5e5ce6;
-    --palette-purple: #bf5af2;
-    --palette-pink: #ff375f;
-    --palette-brown: #ac8e68;
-    --palette-graphite: #98989d;
-
-    --shadow-raised: 0 1px 3px rgba(0, 0, 0, 0.4);
-    --shadow-floating: 0 4px 10px rgba(0, 0, 0, 0.5);
-    --shadow-panel: 0 8px 20px rgba(0, 0, 0, 0.6);
-  }
+  /* ——— The 13 user-pickable person colours. The key names are persisted in
+         Firestore (Person.colorName) and must never change; the values are
+         re-derived to sit on ivory at the tint recipe's alphas. ——— */
+  --palette-red: #bd4a3a;
+  --palette-orange: #b96e2c;
+  --palette-yellow: #9d7f1d;
+  --palette-green: #5a8e51;
+  --palette-mint: #41a08a;
+  --palette-teal: #2f8fa4;
+  --palette-cyan: #3f9fc9;
+  --palette-blue: #4168c6;
+  --palette-indigo: #5f5cba;
+  --palette-purple: #8d55c4;
+  --palette-pink: #bd4f7a;
+  --palette-brown: #96754e;
+  --palette-graphite: #7c766c;
 }
 
 /* The one tint recipe. Anything tinted uses these two, never bespoke alphas. */
 .tinted {
-  background: color-mix(in srgb, var(--tint, var(--color-accent)) 12%, transparent);
+  background: color-mix(in srgb, var(--tint, var(--color-accent)) 14%, transparent);
   color: var(--tint, var(--color-accent));
 }
 .tinted-stroke {
-  border: 1px solid color-mix(in srgb, var(--tint, var(--color-accent)) 25%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tint, var(--color-accent)) 28%, transparent);
+}
+
+/* One focus treatment for the whole app. */
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Numbers that line up — dates, counts, times. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

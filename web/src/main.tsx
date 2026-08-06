@@ -7,6 +7,9 @@ import '@fontsource-variable/newsreader/wght-italic.css'
 import './ui/tokens.css'
 import './ui/base.css'
 import App from './App.tsx'
+import { initTheme } from './ui/theme'
+
+initTheme()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
