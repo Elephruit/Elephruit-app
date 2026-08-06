@@ -54,6 +54,15 @@ export function FeedPage() {
     <main className="page">
       <h1 className="page-title">Feed</h1>
 
+      <button
+        type="button"
+        className="field"
+        style={{ textAlign: 'left', color: 'var(--color-text-tertiary)', cursor: 'text', marginBottom: 'var(--space-small)' }}
+        onClick={() => navigate('/capture')}
+      >
+        What happened?
+      </button>
+
       {groups && groups.length === 0 && (
         <EmptyState
           icon="feed"
