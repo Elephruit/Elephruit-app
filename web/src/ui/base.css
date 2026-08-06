@@ -855,6 +855,12 @@ textarea.field {
   text-decoration: underline;
 }
 
+/* A callout that stacks prose above its actions — the key-migration card. */
+.callout-stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+
 .capture-actions {
   display: flex;
   justify-content: flex-end;

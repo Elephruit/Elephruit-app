@@ -1,8 +1,12 @@
-/// AI capture settings. The API key is the user's own, pasted at runtime, and
-/// lives in localStorage only — never Firestore (it would sync), never .env
-/// (it would end up in a build), never logged. Clearing it forgets it.
+/// AI browser preferences. The model choice stays in localStorage — it is a
+/// preference, not a secret, and the server enforces its own allowlist per
+/// request. The API key no longer lives here at all: custody moved
+/// server-side (see ai/credentials.ts). What remains of key storage is the
+/// legacy slot from the earlier localStorage era, kept only so Settings can
+/// offer a consented migration — link it to your account or discard it —
+/// and then clear it.
 
-const KEY_STORAGE = 'elephruit.ai.apiKey'
+const LEGACY_KEY_STORAGE = 'elephruit.ai.apiKey'
 const MODEL_STORAGE = 'elephruit.ai.model'
 
 export interface AIModelChoice {
@@ -18,19 +22,6 @@ export const AI_MODELS: AIModelChoice[] = [
 
 export const DEFAULT_AI_MODEL = AI_MODELS[0].id
 
-export function storedAPIKey(): string | null {
-  const key = localStorage.getItem(KEY_STORAGE)
-  return key && key.trim() ? key : null
-}
-
-export function setAPIKey(key: string): void {
-  localStorage.setItem(KEY_STORAGE, key.trim())
-}
-
-export function clearAPIKey(): void {
-  localStorage.removeItem(KEY_STORAGE)
-}
-
 export function storedModel(): string {
   return localStorage.getItem(MODEL_STORAGE) ?? DEFAULT_AI_MODEL
 }
@@ -39,6 +30,13 @@ export function setModel(model: string): void {
   localStorage.setItem(MODEL_STORAGE, model)
 }
 
-export function aiCaptureReady(): boolean {
-  return storedAPIKey() !== null
+/// The pre-migration key, if this browser still holds one. Read-only except
+/// for the explicit clear — nothing auto-uploads it.
+export function legacyStoredAPIKey(): string | null {
+  const key = localStorage.getItem(LEGACY_KEY_STORAGE)
+  return key && key.trim() ? key.trim() : null
+}
+
+export function clearLegacyAPIKey(): void {
+  localStorage.removeItem(LEGACY_KEY_STORAGE)
 }
