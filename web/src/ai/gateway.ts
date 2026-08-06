@@ -124,6 +124,10 @@ export async function collectStream(
   source: StreamSource,
   options: { onDelta?: (text: string) => void; resetWatchdog?: () => void } = {},
 ): Promise<AiTaskResult> {
+  // On failure both the iterable and the data promise reject with the same
+  // error; the iterable's is the one surfaced, so mark the twin handled or
+  // every gateway failure also fires an unhandled-rejection event.
+  source.data.catch(() => {})
   let text = ''
   try {
     for await (const chunk of source.stream) {
