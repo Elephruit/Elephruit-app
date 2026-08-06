@@ -4,6 +4,7 @@ import {
   planCorrection,
   planCreatePerson,
   planInteractionBundle,
+  planNamePerson,
   planQuickReschedule,
   planRelativeCapture,
   planRenamePerson,
@@ -118,6 +119,33 @@ describe('relative capture', () => {
     expect(relative.displayName).toBe('Rosa')
     expect(relative.isPlaceholder).toBe(false)
     expect(relative.hasStatedName).toBe(true)
+  })
+
+  it('naming a placeholder touches only the person document, so every fact and relationship survives', () => {
+    const { relative } = planRelativeCapture(
+      dave,
+      { kind: 'child', label: 'son', facts: [{ attribute: FactAttributes.school, value: 'South High' }] },
+      NOW,
+    )
+
+    const { plan } = planNamePerson(relative, 'Jack Marsh', NOW)
+
+    expect(plan).toHaveLength(1)
+    const write = plan[0]
+    if (write.op !== 'update') throw new Error('expected a single update')
+    expect(write.collection).toBe('people')
+    expect(write.id).toBe(relative.id)
+    expect(write.data).toMatchObject({
+      displayName: 'Jack Marsh',
+      givenName: 'Jack',
+      familyName: 'Marsh',
+      hasStatedName: true,
+      isPlaceholder: false,
+    })
+    // Nothing else is rewritten and nothing is deleted — observations and
+    // relationship rows reference the person by ID and stay attached.
+    expect(plan.some((w) => w.op === 'delete')).toBe(false)
+    expect(plan.some((w) => w.collection === 'observations' || w.collection === 'relationships')).toBe(false)
   })
 
   it('refreshes dependent phrase titles when the subject is renamed', () => {

@@ -182,6 +182,29 @@ describe('planFromResolved', () => {
     expect(school.value).toBe('South High')
   })
 
+  it('moves nobody\'s last contact when the interaction is removed before save', () => {
+    const kelly = person('Kelly Tsaur', { lastContactAt: null })
+    const { items } = resolveProposal(
+      {
+        ...emptyProposal,
+        interaction: { kind: 'other', summary: 'Harbinder introduced me to Kelly', discussion: null },
+        participantNames: ['Kelly Tsaur', 'Harbinder Raina'],
+        facts: [{ personName: 'Kelly Tsaur', attribute: 'employer', value: 'ZS', confidence: 'stated' }],
+        followUps: [{ title: 'Attend Monday meeting', personNames: ['Kelly Tsaur'] }],
+      },
+      [kelly],
+      NOW,
+    )
+    const withoutInteraction = new Set(items.filter((i) => i.type !== 'interaction').map((i) => i.id))
+    const plan = planFromResolved(items, withoutInteraction, NOW)
+
+    expect(plan.length).toBeGreaterThan(0)
+    expect(plan.some((w) => w.collection === 'interactions')).toBe(false)
+    // Last contact is only ever advanced inside an interaction bundle; profile
+    // data alone must not pretend a conversation happened.
+    expect(plan.some((w) => w.collection === 'people' && w.op === 'update')).toBe(false)
+  })
+
   it('returns an empty plan when nothing is kept', () => {
     const { items } = resolveProposal(
       { ...emptyProposal, followUps: [{ title: 'Call back', personNames: [] }] },
