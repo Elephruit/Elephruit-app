@@ -20,6 +20,36 @@ Branch: `claude/family-info-logging-plan-8f3e0b`, off `f6cb2e60`.
 | 5 — Meeting debrief | **Done for macOS.** `MeetingDebriefSheet`, reached from the event inspector. 5.3 (the Today row) not started. |
 | 6 — iOS parity | **6.1 done** — `RelativesSheet` on `PersonScreen`, plus phone review routing. 6.2 (log an interaction) and 6.3 (brief and debrief on `EventScreen`) not started. |
 | 7 — The fill-in queue | **Done on the phone** — "To fill in" on `PersonScreen`, with a one-field naming sheet. Not on the Mac; no Today card. |
+| 8 — Hardening | **Done.** See below. |
+
+## 8. Widening it past the case it was built for
+
+The plan above solves one conversation well and generalises badly, which was fair criticism. Two
+changes, both of which turned out to be *removing* a narrowing rather than adding a feature.
+
+**`FactAttribute` is reachable.** It has always been an open string type — its own documentation
+gives *allergic to shellfish* as the reason — but every interface reached it through
+`QuickFactCategory`, a closed list of eleven. An open type reachable only through a closed menu is a
+closed type with extra steps. `FactAttribute.custom(_:)` makes one from what the user typed, and
+nothing downstream needed changing: the display name, symbol, multi-value rule, staleness, search
+projection and export filter all had defaults that were already right for an attribute nobody had
+declared. A named attribute that matches a curated one **folds back into it**, so typing "School"
+gives the School card rather than a second card beside it that neither supersedes nor merges.
+
+**The capture form asks rather than decides.** `RelativeCapture` held five named properties drawn
+behind `if kind == .child`, so adding a field cost six file edits and a colleague could not have an
+age. It is a `[FactAttribute: String]` now; editors ask `RelationshipKind.suggestedAttributes` what
+to *offer* and `FactAttribute.captureKind` how to draw it — three cases, because nearly everything
+is a line of text and the two exceptions are exceptions for reasons already in the model. The old
+properties survive as accessors over the dictionary, which is why this was a rewrite of three
+editors and not of every call site.
+
+**What was deliberately not done: a general "facts that age" engine.** There are two estimators and
+a `schoolYearStart` column serving one attribute, and turning that into a declared drift model is
+tempting. But age and grade may be the only facts that *estimate forward* — "married in 2019 → 6
+years" is arithmetic on a date, not estimation — and building the engine for two cases is
+speculative generality that will be wrong in ways nobody can predict until a third exists. Wait for
+the third.
 
 **Verification, honestly.** `PersonCaptureUITests` drives the phone's capture end to end — press
 *Son*, type "senior", save, find the child, name him — and its screenshots are attached to the

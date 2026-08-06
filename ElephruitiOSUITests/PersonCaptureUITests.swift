@@ -104,6 +104,40 @@ final class PersonCaptureUITests: XCTestCase {
         snap(app, "person-capture-03-recorded")
     }
 
+    /// What a row offers follows the relationship, and is not the same five fields for everybody.
+    ///
+    /// Before the fields were asked for rather than hard-coded, every row drew age, grade, school
+    /// and note behind `kind == .child` — so a partner had none of them and could not have a job.
+    /// This is that being untrue: a partner is offered where they work, and *Something else* is
+    /// under it, so the suggestion is a suggestion rather than a limit.
+    func testAPartnerIsOfferedWhatFitsAPartner() throws {
+        let app = launchOnMaya()
+        XCTAssertTrue(app.collectionViews["person.screen"].waitForExistence(timeout: 20))
+
+        let addFamily = app.buttons["person.addRelatives"]
+        scroll(app, to: addFamily, "the page must offer a way to add family")
+        addFamily.tap()
+
+        let addPartner = app.buttons["person.relatives.add.partner"]
+        XCTAssertTrue(addPartner.waitForExistence(timeout: 10))
+        addPartner.tap()
+
+        XCTAssertTrue(
+            app.textFields["person.relatives.employer"].waitForExistence(timeout: 10),
+            "a partner should be offered where they work"
+        )
+        XCTAssertFalse(
+            app.textFields["person.relatives.grade"].exists,
+            "and should not be asked for a school grade unprompted"
+        )
+        XCTAssertTrue(
+            app.buttons["person.relatives.somethingElse"].exists,
+            "the suggestions are suggestions — anything else has to be reachable"
+        )
+
+        snap(app, "person-capture-05-partner")
+    }
+
     /// Filling in the blank keeps everything already known, which is the difference between
     /// supplying a name and starting the record again.
     func testSupplyingTheNameLater() throws {
