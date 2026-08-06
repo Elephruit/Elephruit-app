@@ -31,6 +31,9 @@ export interface Observation {
   sensitivity: FactSensitivity
   /// The interaction this came out of. A fact that has a source must never lose it.
   sourceInteractionID: string | null
+  /// The imported document this came out of, when it came out of one.
+  /// Optional and backward compatible; observations predating dossiers lack it.
+  sourceDocumentID?: string | null
   /// The observation this one replaces — the chain that makes correction non-destructive.
   supersedesID: string | null
   supersededOn: Date | null

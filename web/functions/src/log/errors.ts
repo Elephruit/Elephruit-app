@@ -19,6 +19,9 @@ export type PublicAiErrorCode =
   | 'PROVIDER_AUTH_FAILED'
   | 'PROVIDER_RATE_LIMITED'
   | 'PROVIDER_UNAVAILABLE'
+  | 'UNSUPPORTED_ATTACHMENT'
+  | 'PAYLOAD_TOO_LARGE'
+  | 'ATTACHMENT_PROCESSING_FAILED'
   | 'INTERNAL'
 
 export class PublicError extends Error {
@@ -48,6 +51,9 @@ const HTTPS_CODE: Record<PublicAiErrorCode, FunctionsErrorCode> = {
   PROVIDER_AUTH_FAILED: 'failed-precondition',
   PROVIDER_RATE_LIMITED: 'resource-exhausted',
   PROVIDER_UNAVAILABLE: 'unavailable',
+  UNSUPPORTED_ATTACHMENT: 'invalid-argument',
+  PAYLOAD_TOO_LARGE: 'invalid-argument',
+  ATTACHMENT_PROCESSING_FAILED: 'unavailable',
   INTERNAL: 'internal',
 }
 

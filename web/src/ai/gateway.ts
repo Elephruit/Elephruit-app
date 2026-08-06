@@ -8,11 +8,22 @@
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../data/firebase'
 
+/// Provider-neutral content blocks. Text is what it always was; image and
+/// document carry base64 payloads of *processed* attachments — re-encoded
+/// images, original PDFs only when vision is required — never arbitrary raw
+/// files. The server re-validates MIME types, counts, and sizes regardless.
+export type GatewayContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; mimeType: 'image/jpeg' | 'image/png' | 'image/webp'; data: string }
+  | { type: 'document'; mimeType: 'application/pdf'; data: string; name?: string }
+
+export type GatewayMessageContent = string | GatewayContentBlock[]
+
 export interface GatewayRequest {
   credentialId: string
   provider: 'anthropic'
   model: string
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  messages: Array<{ role: 'user' | 'assistant'; content: GatewayMessageContent }>
   system?: string
   maxTokens?: number
   effort?: 'low' | 'medium' | 'high'
@@ -49,6 +60,9 @@ export type GatewayErrorCode =
   | 'PROVIDER_AUTH_FAILED'
   | 'PROVIDER_RATE_LIMITED'
   | 'PROVIDER_UNAVAILABLE'
+  | 'UNSUPPORTED_ATTACHMENT'
+  | 'PAYLOAD_TOO_LARGE'
+  | 'ATTACHMENT_PROCESSING_FAILED'
   | 'INTERNAL'
   | 'STREAM_TIMEOUT'
   | 'UNKNOWN'
@@ -89,6 +103,18 @@ const FRIENDLY: Record<Exclude<GatewayErrorCode, 'STREAM_TIMEOUT' | 'UNKNOWN'>, 
   },
   PROVIDER_RATE_LIMITED: { message: 'The API is rate-limiting right now — try again in a moment.', recoverable: true },
   PROVIDER_UNAVAILABLE: { message: 'Could not reach the provider. Nothing was lost.', recoverable: true },
+  UNSUPPORTED_ATTACHMENT: {
+    message: 'The selected model cannot read these files. Choose a vision-capable model in Settings.',
+    recoverable: false,
+  },
+  PAYLOAD_TOO_LARGE: {
+    message: 'These files are too large to send together. Remove one and try again.',
+    recoverable: true,
+  },
+  ATTACHMENT_PROCESSING_FAILED: {
+    message: 'The provider could not process one of the files. Try removing it.',
+    recoverable: true,
+  },
   INTERNAL: { message: 'Something went wrong on our side. Try again.', recoverable: true },
 }
 

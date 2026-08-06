@@ -73,11 +73,95 @@ function cannedDayBrief(request: NormalizedRequest): unknown {
   }
 }
 
+/// Flatten message content to text for marker sniffing — block arrays carry
+/// their text blocks, attachments contribute nothing.
+function contentAsText(content: NormalizedRequest['messages'][number]['content'] | undefined): string {
+  if (typeof content === 'string') return content
+  if (!content) return ''
+  return content
+    .map((block) => (block.type === 'text' ? block.text : ''))
+    .join('\n')
+}
+
+/// A canned dossier keyed to the [File: … (id)] headers in the request, so
+/// provenance rows in the review point at the real attachments.
+function cannedDossier(request: NormalizedRequest): unknown {
+  const text = contentAsText(request.messages[0]?.content)
+  const ids = [...text.matchAll(/\[File: .+? \(([^)]+)\)\]/g)].map((match) => match[1])
+  const source = ids[0] ?? 'file-1'
+  return {
+    subject: { proposedName: 'Kelly Tsaur', roleTitle: 'Head of Payer/Provider Industry Vertical', organizationName: 'ZS' },
+    facts: [
+      {
+        attribute: 'role',
+        value: 'Head of Payer/Provider Industry Vertical',
+        confidence: 'stated',
+        sensitivity: 'normal',
+        evidence: 'Kelly Tsaur, Head of Payer/Provider Industry Vertical',
+        sourceAttachmentID: source,
+        pageNumber: 1,
+      },
+      {
+        attribute: 'employer',
+        value: 'ZS',
+        confidence: 'stated',
+        sensitivity: 'normal',
+        evidence: 'joined ZS in 2019',
+        sourceAttachmentID: source,
+        pageNumber: 1,
+      },
+      {
+        attribute: 'location',
+        value: 'Chicago',
+        confidence: 'inferred',
+        sensitivity: 'normal',
+        evidence: 'based in the Chicago office',
+        sourceAttachmentID: source,
+        pageNumber: 2,
+      },
+      {
+        attribute: 'health',
+        value: 'Recovering from knee surgery',
+        confidence: 'stated',
+        sensitivity: 'sensitive',
+        evidence: 'out for two weeks after knee surgery',
+        sourceAttachmentID: source,
+        pageNumber: 2,
+      },
+    ],
+    relationships: [
+      {
+        kind: 'colleague',
+        label: null,
+        otherName: 'Harbinder Raina',
+        facts: [
+          {
+            attribute: 'employer',
+            value: 'ZS',
+            evidence: 'works alongside Harbinder Raina',
+            sourceAttachmentID: source,
+            pageNumber: 1,
+          },
+        ],
+      },
+    ],
+    followUps: [
+      {
+        title: 'Review the payer landscape deck before the intro call',
+        evidence: 'suggest reviewing the payer landscape deck',
+        sourceAttachmentID: source,
+        pageNumber: 3,
+      },
+    ],
+    warnings: ['A phone number in the document was omitted.'],
+  }
+}
+
 /// The day-brief input is JSON in the single user message; echo its people
 /// so the UI shows real names during a browser walk.
 function briefedNames(request: NormalizedRequest): string[] {
   try {
-    const input = JSON.parse(request.messages[0]?.content ?? '{}') as {
+    const input = JSON.parse(contentAsText(request.messages[0]?.content) || '{}') as {
       people?: Array<{ name?: unknown }>
     }
     const names = (input.people ?? [])
@@ -92,6 +176,7 @@ function briefedNames(request: NormalizedRequest): string[] {
 
 function cannedText(request: NormalizedRequest): string {
   const format = request.outputFormat ? JSON.stringify(request.outputFormat) : ''
+  if (format.includes('sourceAttachmentID')) return JSON.stringify(cannedDossier(request))
   if (format.includes('participantNames')) return JSON.stringify(cannedCaptureProposal())
   if (format.includes('talkingPoints')) return JSON.stringify(cannedDayBrief(request))
   return 'A canned reply from the emulator fake adapter.'

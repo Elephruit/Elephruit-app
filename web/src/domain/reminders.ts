@@ -16,6 +16,8 @@ export interface Reminder {
   personIDs: string[]
   /// The interaction it fell out of, when it fell out of one.
   sourceInteractionID: string | null
+  /// The imported document it fell out of, for dossier-derived follow-ups.
+  sourceDocumentID?: string | null
   /// When it becomes available. Cannot make it late.
   startAt: Date | null
   /// The only date that can make something overdue.

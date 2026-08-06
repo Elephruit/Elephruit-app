@@ -195,6 +195,7 @@ export interface ObservationDraft {
   sensitivity?: FactSensitivity
   observedOn?: Date
   sourceInteractionID?: string | null
+  sourceDocumentID?: string | null
 }
 
 export function makeObservation(draft: ObservationDraft, now: Date): Observation {
@@ -210,6 +211,7 @@ export function makeObservation(draft: ObservationDraft, now: Date): Observation
     confidence: draft.confidence ?? 'stated',
     sensitivity: draft.sensitivity ?? 'normal',
     sourceInteractionID: draft.sourceInteractionID ?? null,
+    sourceDocumentID: draft.sourceDocumentID ?? null,
     supersedesID: null,
     supersededOn: null,
     correctionNote: null,
@@ -237,7 +239,7 @@ export function planConfirmObservation(observation: Observation, now: Date): { p
 /// this" belongs. Nothing is ever deleted.
 export function planCorrection(
   old: Observation,
-  next: { value: string; confidence?: FactConfidence; sensitivity?: FactSensitivity },
+  next: { value: string; confidence?: FactConfidence; sensitivity?: FactSensitivity; sourceDocumentID?: string | null },
   correctionNote: string | null,
   now: Date,
 ): { plan: WritePlan; observation: Observation } {
@@ -249,6 +251,7 @@ export function planCorrection(
       confidence: next.confidence ?? 'stated',
       sensitivity: next.sensitivity ?? old.sensitivity,
       sourceInteractionID: old.sourceInteractionID,
+      sourceDocumentID: next.sourceDocumentID ?? null,
     },
     now,
   )
@@ -355,6 +358,7 @@ export interface ReminderDraft {
   notes?: string | null
   personIDs?: string[]
   sourceInteractionID?: string | null
+  sourceDocumentID?: string | null
   startAt?: Date | null
   dueAt?: Date | null
   isSomeday?: boolean
@@ -370,6 +374,7 @@ export function planCreateReminder(draft: ReminderDraft, now: Date): { plan: Wri
     notes: draft.notes?.trim() || null,
     personIDs: [...new Set(draft.personIDs ?? [])],
     sourceInteractionID: draft.sourceInteractionID ?? null,
+    sourceDocumentID: draft.sourceDocumentID ?? null,
     startAt: draft.startAt ?? null,
     dueAt: draft.dueAt ?? null,
     isSomeday: draft.isSomeday ?? false,

@@ -14,11 +14,34 @@ const STREAM_TIMEOUT_MS = 240_000
 /// beta helpers send exactly this value. Sent only when a format is present.
 const STRUCTURED_OUTPUTS_BETA = 'structured-outputs-2025-12-15'
 
+/// Provider-neutral blocks → Anthropic content blocks. Only the three shapes
+/// the gateway schema admits can arrive; anything else is unrepresentable.
+/// Filenames and payloads are never logged on any path out of here.
+function toAnthropicContent(
+  content: NormalizedRequest['messages'][number]['content'],
+): Anthropic.MessageParam['content'] {
+  if (typeof content === 'string') return content
+  return content.map((block): Anthropic.ContentBlockParam => {
+    switch (block.type) {
+      case 'text':
+        return { type: 'text', text: block.text }
+      case 'image':
+        return { type: 'image', source: { type: 'base64', media_type: block.mimeType, data: block.data } }
+      case 'document':
+        return {
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data: block.data },
+          ...(block.name ? { title: block.name } : {}),
+        }
+    }
+  })
+}
+
 function buildParams(request: NormalizedRequest): Anthropic.MessageStreamParams {
   const params: Anthropic.MessageStreamParams = {
     model: request.model,
     max_tokens: request.maxTokens,
-    messages: request.messages,
+    messages: request.messages.map((message) => ({ role: message.role, content: toAnthropicContent(message.content) })),
   }
   if (request.system) params.system = request.system
   if (request.effort || request.outputFormat) {

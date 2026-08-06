@@ -4,12 +4,13 @@
 /// slot in without touching the gateway.
 
 import type { GatewayStopReason } from '../gateway/events.js'
+import type { GatewayContentBlock } from '../gateway/request.js'
 import type { KeyVerification, ProviderId } from './types.js'
 
 export interface NormalizedRequest {
   model: string
   system: string | null
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  messages: Array<{ role: 'user' | 'assistant'; content: string | GatewayContentBlock[] }>
   maxTokens: number
   effort: 'low' | 'medium' | 'high' | null
   /// Client-derived JSON-schema output format, forwarded opaquely.

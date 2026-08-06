@@ -59,7 +59,19 @@ export async function handleStreamAiResponse(
   }
   const request = parsedInput.data
 
-  requireEnabledModel(request.provider, request.model)
+  const model = requireEnabledModel(request.provider, request.model)
+
+  // The media gate: attachment blocks only travel to models the catalog
+  // vouches for. Checked before rate spend so a wrong model costs nothing.
+  const hasAttachments = request.messages.some(
+    (message) => typeof message.content !== 'string' && message.content.some((block) => block.type !== 'text'),
+  )
+  if (hasAttachments && !model.supportsAttachments) {
+    throw new PublicError(
+      'UNSUPPORTED_ATTACHMENT',
+      'The selected model cannot read attached files. Choose a vision-capable model.',
+    )
+  }
 
   if (!(await deps.rateLimiter.consume(uid, 'stream_start', RATE_POLICIES.streamStart))) {
     throw new PublicError('RATE_LIMITED', 'Too many requests for now. Try again in a minute.')

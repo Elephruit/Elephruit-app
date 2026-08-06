@@ -3,7 +3,17 @@
 /// batch. That mirrors the Mac app's rule that there is one repository method a
 /// capture goes through — a platform-specific write path is a review failure.
 
-export const COLLECTIONS = ['people', 'interactions', 'relationships', 'observations', 'reminders'] as const
+export const COLLECTIONS = [
+  'people',
+  'interactions',
+  'relationships',
+  'observations',
+  'reminders',
+  /// Provenance metadata for imported dossiers — never raw file content.
+  'sources',
+  /// The feed's durable grouping records — one per meaningful save.
+  'memories',
+] as const
 export type CollectionName = (typeof COLLECTIONS)[number]
 
 export type DocWrite =

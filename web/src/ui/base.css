@@ -1607,6 +1607,193 @@ textarea.field {
   max-height: calc(4 * 1.45em + 24px);
 }
 
+/* MARK: Attachments — open rows, and a drop state that lives on the rail */
+
+.capture-composer[data-drag] .memory-branch {
+  height: 2px;
+  background: var(--color-accent);
+}
+
+.capture-composer[data-drag] .composer-node {
+  box-shadow:
+    0 0 0 4px var(--color-canvas),
+    0 0 0 6px color-mix(in srgb, var(--color-accent) 40%, transparent);
+}
+
+.capture-composer[data-drag] .composer-panel {
+  background: color-mix(in srgb, var(--color-accent) 7%, transparent);
+}
+
+.attachment-dropzone {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  position: relative;
+}
+
+.attachment-drop-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: var(--text-body-strong);
+  color: var(--color-accent);
+  pointer-events: none;
+}
+
+.attachment-list {
+  margin: var(--space-small) 0;
+}
+
+.attachment-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-medium);
+  padding: var(--space-small) 0;
+  border-top: 1px solid var(--color-separator);
+}
+
+.attachment-icon {
+  flex: none;
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-subtle-fill);
+  color: var(--color-text-secondary);
+}
+
+.attachment-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.attachment-name {
+  font: var(--text-label);
+  color: var(--color-text);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.attachment-status {
+  font: var(--text-metadata);
+  color: var(--color-text-secondary);
+}
+
+.attachment-row[data-status='error'] .attachment-status {
+  color: var(--color-destructive);
+}
+
+.attachment-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-tight);
+}
+
+.composer-privacy {
+  font: var(--text-metadata);
+  color: var(--color-text-secondary);
+  margin: var(--space-tight) 0;
+}
+
+.composer-privacy a {
+  color: var(--color-accent);
+}
+
+.composer-reattach {
+  font: var(--text-metadata);
+  color: var(--color-due-today);
+  margin: var(--space-tight) 0;
+}
+
+.composer-target-line {
+  font: var(--text-label);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-tight);
+}
+
+/* Dossier review */
+
+.dossier-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-medium);
+}
+
+.dossier-target-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-small);
+  padding: var(--space-small) 0;
+  border-bottom: 1px solid var(--color-separator);
+  cursor: pointer;
+}
+
+.dossier-target-body {
+  display: flex;
+  align-items: center;
+  gap: var(--space-small);
+  min-width: 0;
+}
+
+.dossier-target-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dossier-target-text b {
+  font: var(--text-body-strong);
+}
+
+.dossier-target-text span {
+  font: var(--text-metadata);
+  color: var(--color-text-secondary);
+}
+
+.dossier-target-search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-tight);
+  margin: var(--space-small) 0;
+}
+
+.dossier-evidence-toggle {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: var(--text-metadata);
+  color: var(--color-accent);
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
+.dossier-evidence-text {
+  display: block;
+  font: var(--text-sub);
+  color: var(--color-text-secondary);
+  border-left: 2px solid var(--color-border-strong);
+  padding-left: var(--space-medium);
+  margin-top: var(--space-tight);
+}
+
+.dossier-conflict {
+  margin-top: var(--space-small);
+  padding: var(--space-small) var(--space-medium);
+  border-left: 2px solid var(--color-due-today);
+  background: color-mix(in srgb, var(--color-due-today) 6%, transparent);
+}
+
 .sheet-confirm-text {
   margin-right: auto;
   font: var(--text-sub);
