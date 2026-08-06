@@ -139,7 +139,11 @@ struct PersonWorkspaceView: View {
             }
         }
         .accessibilityIdentifier(AccessibilityID.Records.workspace)
-        .task(id: person.id) { reload() }
+        .task(id: person.id) {
+            reload()
+            // Development-mode only, and nil in every shipping build — see `DesignReviewLaunch`.
+            if DesignReviewLaunch.openSheet == .relatives { isAddingRelationship = true }
+        }
         .onChange(of: person.updatedAt) { _, _ in reload() }
         // Most of this page is *other* items pointing at this person, and writing one of those
         // leaves the person's own row untouched — so `updatedAt` above cannot see it. A task added
@@ -196,7 +200,7 @@ struct PersonWorkspaceView: View {
             MeetingBriefSheet(person: person) { navigation.selectItem($0) }
         }
         .sheet(isPresented: $isAddingRelationship) {
-            AddRelationshipSheet(person: person) { isAddingRelationship = false }
+            AddRelativesSheet(person: person) { isAddingRelationship = false }
         }
         .sheet(item: $chartKind) { kind in
             RelationshipChartSheet(person: person, initialKind: kind) { id in

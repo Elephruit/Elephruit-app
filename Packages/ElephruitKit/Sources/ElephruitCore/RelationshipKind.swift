@@ -90,8 +90,15 @@ public enum RelationshipKind: String, Codable, Sendable, Hashable, CaseIterable 
     /// Distinct from ``displayName`` because a label and a possessive phrase are not the same string,
     /// and because a gendered variant belongs here rather than in a view: the app only uses one when
     /// the user has recorded it themselves, through ``RelationshipKind/gendered(_:)``.
-    public func possessivePhrase(subject: String) -> String {
-        "\(subject)'s \(displayName)"
+    ///
+    /// The `label` is the user's own word, and it wins when there is one. This phrase is also what
+    /// stands in for the *name* of somebody recorded before their name was known — see
+    /// ``RelativeCapture/derivedTitle(subjectName:)`` — so "Maya's son" has to read as a description
+    /// of a person rather than as a category, which "Maya's child" does not.
+    public func possessivePhrase(subject: String, label: String? = nil) -> String {
+        let word = label?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let noun = (word?.isEmpty == false ? word : nil) ?? displayName
+        return "\(subject)'s \(noun)"
     }
 
     public var symbolName: String {
@@ -106,6 +113,37 @@ public enum RelationshipKind: String, Codable, Sendable, Hashable, CaseIterable 
         case .introducedBy, .introduced: "arrow.triangle.branch"
         case .householdMember: "house"
         case .petOwner, .pet: "pawprint"
+        }
+    }
+
+    /// What a capture form offers to record about somebody in this relationship.
+    ///
+    /// ### What this is, and what it very deliberately is not
+    /// It is a list of *suggestions*, and it decides only which fields appear without being asked
+    /// for. It does not decide what a person of this kind is allowed to have: every editor built on
+    /// it also offers "anything else", and ``FactAttribute/custom(_:)`` will make an attribute out
+    /// of whatever the user types. A partner finishing a PhD gets a grade by naming one.
+    ///
+    /// The distinction matters because the version of this that was hard-coded — `kind == .child`,
+    /// in four places — read as a rule about people rather than a guess about forms. It said a
+    /// colleague could not have an age and a partner could not have a job, and it was wrong about
+    /// both while looking like a decision somebody had made.
+    ///
+    /// A `switch` rather than a table, so a kind added later has to be given an answer.
+    public var suggestedAttributes: [FactAttribute] {
+        switch self {
+        case .child:
+            [.observedAge, .schoolGrade, .school, .quickFact]
+        case .partner, .parent, .sibling, .householdMember:
+            [.employer, .quickFact]
+        case .colleague, .manager, .directReport, .worksWith:
+            [.role, .employer, .quickFact]
+        case .pet:
+            // An age, because "Pepper is four" is the commonest thing anybody says about a dog, and
+            // `AgeEstimator` carries it forward for a pet exactly as it does for a child.
+            [.observedAge, .quickFact]
+        case .friend, .introducedBy, .introduced, .petOwner:
+            [.location, .quickFact]
         }
     }
 

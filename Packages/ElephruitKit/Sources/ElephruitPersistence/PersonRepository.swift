@@ -38,6 +38,10 @@ public struct PersonDraft: Sendable, Hashable {
     /// A record made only so somebody could be mentioned. See ``PersonProfile/isPlaceholder``.
     public var isPlaceholder: Bool
 
+    /// Whether ``fullName`` is a name or a phrase standing in for one. See
+    /// ``ElephruitModel/PersonProfile/hasStatedName``.
+    public var hasStatedName: Bool
+
     public var source: ItemSource
 
     public init(
@@ -64,6 +68,7 @@ public struct PersonDraft: Sendable, Hashable {
         contactsIdentifier: String? = nil,
         contactsAccountName: String? = nil,
         isPlaceholder: Bool = false,
+        hasStatedName: Bool = true,
         source: ItemSource = .manual
     ) {
         self.id = id
@@ -89,6 +94,7 @@ public struct PersonDraft: Sendable, Hashable {
         self.contactsIdentifier = contactsIdentifier
         self.contactsAccountName = contactsAccountName
         self.isPlaceholder = isPlaceholder
+        self.hasStatedName = hasStatedName
         self.source = source
     }
 
@@ -191,6 +197,34 @@ public protocol PersonRepository: AnyObject {
 
     /// Finds somebody by name, or makes a placeholder for them.
     func resolveOrCreatePlaceholder(named name: String) throws(AppError) -> Item
+
+    /// Records somebody whose name is not known yet, titled with the phrase that describes them.
+    @discardableResult
+    func createUnnamedRelative(
+        of subject: Item,
+        kind: RelationshipKind,
+        label: String?
+    ) throws(AppError) -> Item
+
+    /// Changes what somebody is called, keeping in step the people who are described in terms of
+    /// them.
+    func renamePerson(_ person: Item, to name: String) throws(AppError)
+
+    /// Everybody recorded before their name was known.
+    func unnamedRelatives() throws(AppError) -> [Item]
+
+    // MARK: Capture
+
+    /// Writes everything one conversation added to what is known about one person, as one unit.
+    ///
+    /// The single write path described on ``ElephruitCore/PersonUpdate``. Returns the relatives it
+    /// touched, in the order they were given, so a caller can navigate to what it just made.
+    @discardableResult
+    func apply(
+        _ update: PersonUpdate,
+        source: Item?,
+        observedOn: Date
+    ) throws(AppError) -> [Item]
 
     // MARK: Celebrations
 
@@ -317,9 +351,18 @@ public final class SwiftDataPersonRepository: PersonRepository {
     ///   must not rename anybody.
     private func apply(_ draft: PersonDraft, to profile: PersonProfile, replacingIdentity: Bool) {
         if replacingIdentity {
-            let parts = PersonDraft.nameParts(from: draft.fullName)
-            profile.givenName = draft.givenName ?? parts.given
-            profile.familyName = draft.familyName ?? parts.family
+            if draft.hasStatedName {
+                let parts = PersonDraft.nameParts(from: draft.fullName)
+                profile.givenName = draft.givenName ?? parts.given
+                profile.familyName = draft.familyName ?? parts.family
+            } else {
+                // The title is a phrase — "Dave's son" — and splitting it would make "Dave's"
+                // somebody's given name and "son" their family name, which would then be offered
+                // back as their name the first time anything asked for one.
+                profile.givenName = ""
+                profile.familyName = ""
+            }
+            profile.hasStatedName = draft.hasStatedName
             profile.isPlaceholder = draft.isPlaceholder
         }
 
@@ -642,6 +685,142 @@ public final class SwiftDataPersonRepository: PersonRepository {
         }
 
         return try createPerson(PersonDraft(fullName: name, isPlaceholder: true))
+    }
+
+    @discardableResult
+    public func createUnnamedRelative(
+        of subject: Item,
+        kind: RelationshipKind,
+        label: String?
+    ) throws(AppError) -> Item {
+        let phrase = RelativeCapture(kind: kind, label: label)
+            .derivedTitle(subjectName: subject.displayTitle)
+
+        // Never resolved against an existing record by its phrase. Two people can both be "Dave's
+        // son", and matching on the phrase would quietly make them one person.
+        return try createPerson(
+            PersonDraft(fullName: phrase, isPlaceholder: true, hasStatedName: false)
+        )
+    }
+
+    public func renamePerson(_ person: Item, to name: String) throws(AppError) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw .validation(ValidationFailure(reason: .emptyPersonName, field: "name"))
+        }
+
+        let wasUnnamed = person.personProfile?.hasStatedName == false
+
+        try items.update(person) { subject in
+            subject.title = trimmed
+            subject.refreshSearchText()
+        }
+
+        if wasUnnamed {
+            // Supplying a name for the first time is not the same as correcting one: there are no
+            // parts to preserve, so the naive split is safe here in a way it is not elsewhere.
+            try updateProfile(of: person) { profile in
+                let parts = PersonDraft.nameParts(from: trimmed)
+                profile.givenName = parts.given
+                profile.familyName = parts.family
+                profile.hasStatedName = true
+            }
+        }
+
+        try refreshUnnamedRelativeTitles(around: person)
+        try save()
+    }
+
+    /// Rewrites the phrase-titles of everybody described in terms of this person.
+    ///
+    /// The cost of storing "Dave's son" in a title rather than deriving it at render time is that the
+    /// phrase goes stale when Dave is renamed. This is that cost being paid, in the same save as the
+    /// rename, which is the whole reason renaming a person goes through the repository at all.
+    private func refreshUnnamedRelativeTitles(around subject: Item) throws(AppError) {
+        for relationship in try relationships(of: subject) {
+            guard let other = relationship.other,
+                  other.personProfile?.hasStatedName == false
+            else { continue }
+
+            // Read from the subject's side of the pair, which is the side carrying the user's word:
+            // "Dave's son" is what Dave's page calls him, and this row is what says so.
+            let phrase = relationship.kind.possessivePhrase(
+                subject: subject.displayTitle,
+                label: relationship.customLabel
+            )
+
+            guard other.title != phrase else { continue }
+            try items.update(other) { relative in
+                relative.title = phrase
+                relative.refreshSearchText()
+            }
+        }
+    }
+
+    public func unnamedRelatives() throws(AppError) -> [Item] {
+        try allPeople(includingPlaceholders: true)
+            .filter { $0.personProfile?.hasStatedName == false }
+    }
+
+    // MARK: - Capture
+
+    @discardableResult
+    public func apply(
+        _ update: PersonUpdate,
+        source: Item?,
+        observedOn: Date
+    ) throws(AppError) -> [Item] {
+        guard let subject = try person(id: update.subjectID) else {
+            throw .itemNotFound(id: update.subjectID)
+        }
+
+        for draft in update.observations {
+            try record(
+                draft, about: subject, observedOn: observedOn,
+                confidence: .stated, sensitivity: .normal, source: source
+            )
+        }
+
+        var touched: [Item] = []
+        for capture in update.recordableRelatives {
+            let other = try resolveRelative(capture, of: subject)
+
+            try relate(subject, to: other, as: capture.kind, label: capture.statedLabel)
+
+            for draft in capture.observations(observedOn: observedOn, calendar: dateProvider.calendar) {
+                try record(
+                    draft, about: other, observedOn: observedOn,
+                    confidence: .stated, sensitivity: .normal, source: source
+                )
+            }
+
+            // The note that produced these facts does mention this person, and saying so is what
+            // puts the conversation on their timeline rather than only on their parent's.
+            if let source {
+                try items.link(source, to: other, kind: .mentions)
+            }
+
+            touched.append(other)
+        }
+
+        try save()
+        return touched
+    }
+
+    /// Which record a captured relative refers to.
+    ///
+    /// Stated identity first, then a name, then a new record. Never a match on the derived phrase —
+    /// see ``createUnnamedRelative(of:kind:label:)``.
+    private func resolveRelative(_ capture: RelativeCapture, of subject: Item) throws(AppError) -> Item {
+        if let existingID = capture.existingPersonID, let existing = try person(id: existingID) {
+            return existing
+        }
+
+        if let name = capture.statedName {
+            return try resolveOrCreatePlaceholder(named: name)
+        }
+
+        return try createUnnamedRelative(of: subject, kind: capture.kind, label: capture.statedLabel)
     }
 
     // MARK: - Celebrations

@@ -211,6 +211,35 @@ public enum DesignReviewLaunch {
         return CGSize(width: width, height: height)
     }
 
+    /// A sheet the review should open once the window has settled.
+    ///
+    /// ### Why a launch argument rather than a click
+    /// A sheet is the one part of this interface a headless review could not photograph. Every other
+    /// screen is reachable by naming it; a sheet is reachable only by pressing something, and
+    /// pressing something means driving the machine's own pointer — which this project does not do
+    /// uninvited. So the sheets that hold real editing get a name too, and a review of one is the
+    /// same repeatable command as a review of a page.
+    public enum ReviewSheet: String, Sendable {
+        /// The family editor on a person's page.
+        case relatives
+    }
+
+    public static var openSheet: ReviewSheet? {
+        guard isDevelopmentMode else { return nil }
+        return openSheet(in: ProcessInfo.processInfo.arguments)
+    }
+
+    static func openSheet(in arguments: [String]) -> ReviewSheet? {
+        guard let raw = value(for: "-ElephruitOpenSheet", in: arguments)?.lowercased() else {
+            return nil
+        }
+        guard let sheet = ReviewSheet(rawValue: raw) else {
+            Diagnostics.shell.error("Unknown -ElephruitOpenSheet \(raw, privacy: .public)")
+            return nil
+        }
+        return sheet
+    }
+
     /// Whether the sample library should be planted at launch, into an empty library.
     ///
     /// The fixture store persists between runs, so a library seeded by some earlier session is the

@@ -46,6 +46,16 @@ public struct FactAttribute: RawRepresentable, Codable, Sendable, Hashable {
     /// A school grade, meaningful only alongside the school year it referred to.
     public static let schoolGrade = FactAttribute("schoolGrade")
 
+    /// Which school somebody attends.
+    ///
+    /// ### Why a fact and not an organization record
+    /// A record would cost a page nobody opens, and a link to it would not *supersede* when the
+    /// child changes school — it would have to be found and removed by hand, which means the wrong
+    /// school stays true by default. A single-valued dated fact changes school the same way somebody
+    /// changes employer, keeps the old one as history, and reaches the brief's Family section
+    /// without anything else being taught about it.
+    public static let school = FactAttribute("school")
+
     /// Somebody is looking for something — a dog trainer, a plumber, a new job.
     public static let lookingFor = FactAttribute("lookingFor")
 
@@ -60,7 +70,7 @@ public struct FactAttribute: RawRepresentable, Codable, Sendable, Hashable {
 
     /// Every attribute the interface offers a dedicated card for, in the order they are shown.
     public static let curated: [FactAttribute] = [
-        .significance, .conversationTopic, .family, .observedAge, .schoolGrade, .foodAndDrink, .interest,
+        .significance, .conversationTopic, .family, .observedAge, .schoolGrade, .school, .foodAndDrink, .interest,
         .like, .dislike, .lifeEvent, .location, .employer, .role,
         .giftIdea, .communicationPreference, .lookingFor, .quickFact,
         .promise, .reflection,
@@ -84,7 +94,11 @@ public struct FactAttribute: RawRepresentable, Codable, Sendable, Hashable {
         case .conversationTopic: "Ask about"
         case .quickFact: "Good to know"
         case .observedAge: "Age"
-        case .schoolGrade: "School"
+        // "Grade", not "School" — the two are separate cards now, and a heading that names the
+        // building over a value that names the year is the sort of mismatch nobody reports and
+        // everybody misreads.
+        case .schoolGrade: "Grade"
+        case .school: "School"
         case .lookingFor: "Looking for"
         case .significance: "Why they matter"
         case .reflection: "Private notes"
@@ -110,6 +124,7 @@ public struct FactAttribute: RawRepresentable, Codable, Sendable, Hashable {
         case .quickFact: "sparkles"
         case .observedAge: "birthday.cake"
         case .schoolGrade: "graduationcap"
+        case .school: "building.columns"
         case .lookingFor: "magnifyingglass"
         case .significance: "heart"
         case .reflection: "lock"
@@ -126,7 +141,7 @@ public struct FactAttribute: RawRepresentable, Codable, Sendable, Hashable {
     /// or a Lives-in card that lists three cities.
     public var isMultiValued: Bool {
         switch self {
-        case .location, .employer, .role, .observedAge, .schoolGrade, .significance: false
+        case .location, .employer, .role, .observedAge, .schoolGrade, .school, .significance: false
         default: true
         }
     }
@@ -134,6 +149,83 @@ public struct FactAttribute: RawRepresentable, Codable, Sendable, Hashable {
     /// Attributes never included in an exported contact card, whatever the share profile says.
     public var isAlwaysPrivate: Bool {
         self == .reflection
+    }
+
+    // MARK: Anything else
+
+    /// An attribute made from something the user typed.
+    ///
+    /// ### Why this was the missing half of an open type
+    /// This struct has always been open — the doc comment above says so, and gives *allergic to
+    /// shellfish* as the reason. But no interface could construct one: every path went through a
+    /// closed list of curated categories, so the model supported facts the app could not be told.
+    /// An open type reachable only through a closed menu is a closed type with extra steps.
+    ///
+    /// ### Why it folds back into the curated set
+    /// Typing "School" must give ``FactAttribute/school`` rather than a second card beside it that
+    /// happens to read the same. Without that, the escape hatch fragments the very set it exists to
+    /// extend, and a person ends up with two School cards that neither supersede nor merge.
+    ///
+    /// Normalised to lower case with the spacing collapsed, so "Food Allergy" and " food  allergy "
+    /// are one attribute rather than three. Returns `nil` for nothing at all.
+    public static func custom(_ text: String) -> FactAttribute? {
+        let words = text
+            .lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+        guard !words.isEmpty else { return nil }
+
+        let normalised = words.joined(separator: " ")
+        if let existing = curated.first(where: {
+            $0.displayName.lowercased() == normalised || $0.rawValue.lowercased() == normalised
+        }) {
+            return existing
+        }
+        return FactAttribute(normalised)
+    }
+
+    /// Whether this is one of the attributes the interface names for itself.
+    public var isCurated: Bool { Self.curated.contains(self) }
+
+    // MARK: Capture
+
+    /// What kind of control this attribute wants when it is being typed.
+    ///
+    /// Three cases, not fifteen. Nearly everything anybody records about a person is a line of text,
+    /// and the two exceptions are exceptions for reasons the model already states: an age has to
+    /// reach ``AgeEstimator`` as a number, and a grade means a different year depending on whether
+    /// somebody is in it or going into it. Declaring them here is what lets one editor serve every
+    /// attribute — including ones nobody has thought of yet, which get the text field and are none
+    /// the worse for it.
+    public enum CaptureKind: Sendable, Hashable {
+        case text
+        case wholeNumber
+        case schoolGrade
+    }
+
+    public var captureKind: CaptureKind {
+        switch self {
+        case .observedAge: .wholeNumber
+        case .schoolGrade: .schoolGrade
+        default: .text
+        }
+    }
+
+    /// The placeholder in the field, which is where an attribute says what it wants.
+    public var capturePrompt: String {
+        switch self {
+        case .observedAge: "Age now"
+        case .schoolGrade: "Grade — “8th”, “senior”"
+        case .school: "Which school"
+        case .employer: "Where they work"
+        case .role: "What they do"
+        case .location: "Where they live"
+        case .quickFact: "Worth remembering"
+        case .foodAndDrink: "Diet, allergies, what they drink"
+        case .interest: "What they are into"
+        case .conversationTopic: "Worth asking about"
+        default: displayName
+        }
     }
 }
 
@@ -343,6 +435,11 @@ public struct PersonObservation: Sendable, Hashable, Identifiable {
         .lifeEvent: 180,
         .health: 180,
         .lookingFor: 120,
+        // Longer than an employer because school is changed at transitions rather than at will, and
+        // short enough to be asked once per phase of somebody's schooling rather than never. Unlike
+        // ``FactAttribute/schoolGrade`` there is nothing here to estimate forward: the app has no way
+        // to know which building a child moves to, so asking is the only honest option it has.
+        .school: 1095,
     ]
 
     // `observedAge` and `schoolGrade` are deliberately absent. They are the *inputs* to

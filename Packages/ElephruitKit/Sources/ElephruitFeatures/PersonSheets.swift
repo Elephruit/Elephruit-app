@@ -135,6 +135,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
     case foodAndDrink
     case family
     case age
+    case grade
     case school
     case interests
     case likes
@@ -142,6 +143,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
     case life
     case work
     case goodToKnow
+    case somethingElse
 
     var id: String { rawValue }
 
@@ -151,6 +153,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .foodAndDrink: "Food & drink"
         case .family: "Family"
         case .age: "Age"
+        case .grade: "Grade"
         case .school: "School"
         case .interests: "Interests"
         case .likes: "Likes"
@@ -158,6 +161,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .life: "Life"
         case .work: "Work"
         case .goodToKnow: "Good to know"
+        case .somethingElse: "Something else"
         }
     }
 
@@ -167,13 +171,15 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .foodAndDrink: "fork.knife"
         case .family: "figure.2.and.child.holdinghands"
         case .age: "birthday.cake"
-        case .school: "graduationcap"
+        case .grade: "graduationcap"
+        case .school: "building.columns"
         case .interests: "star.fill"
         case .likes: "hand.thumbsup.fill"
         case .avoid: "hand.thumbsdown.fill"
         case .life: "sparkles"
         case .work: "briefcase.fill"
         case .goodToKnow: "lightbulb.fill"
+        case .somethingElse: "square.and.pencil"
         }
     }
 
@@ -183,6 +189,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .foodAndDrink: Theme.Palette.green.color
         case .family: Theme.Palette.pink.color
         case .age: Theme.Palette.orange.color
+        case .grade: Theme.Palette.indigo.color
         case .school: Theme.Palette.indigo.color
         case .interests: Theme.Palette.purple.color
         case .likes: Theme.Palette.cyan.color
@@ -190,6 +197,7 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .life: Theme.Palette.indigo.color
         case .work: Theme.Colors.workDetail
         case .goodToKnow: Theme.Palette.yellow.color
+        case .somethingElse: Theme.Colors.secondaryText
         }
     }
 
@@ -199,13 +207,17 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .foodAndDrink: .foodAndDrink
         case .family: .family
         case .age: .observedAge
-        case .school: .schoolGrade
+        case .grade: .schoolGrade
+        case .school: .school
         case .interests: .interest
         case .likes: .like
         case .avoid: .dislike
         case .life: .lifeEvent
         case .work: .role
         case .goodToKnow: .quickFact
+        // Replaced by whatever the user names. `.quickFact` is the fallback for a category chosen
+        // and then left unnamed, which is the same place an unlabelled note has always gone.
+        case .somethingElse: .quickFact
         }
     }
 
@@ -215,13 +227,15 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .foodAndDrink: "Diet, allergies, favorite drinks, restaurants…"
         case .family: "Names, ages, milestones, or family context…"
         case .age: "Age now, or the age when you learned it…"
-        case .school: "Grade, school, teacher, or what needs confirming…"
+        case .grade: "The year they are in — “8th”, “senior”, “kindergarten”…"
+        case .school: "Which school they go to…"
         case .interests: "Hobbies, teams, books, music, travel…"
         case .likes: "Something they enjoy or appreciate…"
         case .avoid: "Something they dislike or would rather skip…"
         case .life: "Something happening in their life…"
         case .work: "Role, project, goal, or professional context…"
         case .goodToKnow: "Anything useful that does not fit elsewhere…"
+        case .somethingElse: "What is it about? — “allergy”, “team”, “sober since”…"
         }
     }
 
@@ -231,13 +245,15 @@ enum QuickFactCategory: String, CaseIterable, Identifiable {
         case .foodAndDrink: ["Vegetarian", "Gluten-free", "Doesn’t drink alcohol", "Likes wine"]
         case .family: ["Has 2 children", "Names to confirm", "Partner", "New baby"]
         case .age: ["5 years old", "About 8", "Age to confirm"]
-        case .school: ["2nd grade", "2nd or 3rd grade", "School to confirm"]
+        case .grade: ["2nd grade", "senior", "kindergarten"]
+        case .school: ["School to confirm"]
         case .interests: ["Wine", "Golf", "Art", "Running"]
         case .likes: ["Coffee", "Live music", "Thoughtful gifts"]
         case .avoid: ["Crowded places", "Early meetings", "Spicy food"]
         case .life: ["Moving", "Planning a trip", "New home"]
         case .work: ["New role", "Hiring", "Launching a project"]
         case .goodToKnow: []
+        case .somethingElse: []
         }
     }
 
@@ -262,6 +278,9 @@ struct AddFactSheet: View {
     @State private var sensitivity: FactSensitivity = .normal
     @State private var observedOn = Date()
     @State private var showsDetails = false
+    @State private var schoolYearIntent: SchoolYearIntent = .current
+    /// What the user called this fact, when they picked *Something else*.
+    @State private var customLabel = ""
     @FocusState private var isValueFocused: Bool
 
     init(
@@ -361,8 +380,33 @@ struct AddFactSheet: View {
                         }
                     }
 
+                    // Naming the fact is the whole of what *Something else* does. `FactAttribute`
+                    // has always been an open type — the model's own doc gives "allergic to
+                    // shellfish" as the reason — and this is the first interface able to make one.
+                    if category == .somethingElse {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
+                            Text("What is this about?")
+                                .font(.system(.headline, weight: .semibold))
+
+                            TextField("allergy · team · sober since", text: $customLabel)
+                                .textFieldStyle(.roundedBorder)
+                                .accessibilityIdentifier("records.addFact.customLabel")
+
+                            if let attribute = FactAttribute.custom(customLabel), attribute.isCurated {
+                                Label(
+                                    "That is “\(attribute.displayName)”, which Elephruit already "
+                                        + "keeps. It will go on that card.",
+                                    systemImage: "arrow.turn.down.right"
+                                )
+                                .font(Theme.Text.metadata)
+                                .foregroundStyle(Theme.Colors.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+
                     VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-                        Text(category.title)
+                        Text(headingText)
                             .font(.system(.headline, weight: .semibold))
                         Text(category.prompt)
                             .font(Theme.Text.rowSubtitle)
@@ -381,6 +425,34 @@ struct AddFactSheet: View {
                             }
                             .focused($isValueFocused)
                             .accessibilityLabel(category.title)
+                    }
+
+                    // Only for a grade, because it is the only fact here that means a different
+                    // thing depending on which school year it referred to — and the only one whose
+                    // stored value the app goes on advancing by itself.
+                    if category == .grade {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                            Text("Which school year?")
+                                .font(Theme.Text.metadata)
+                                .foregroundStyle(Theme.Colors.secondaryText)
+
+                            Picker("School year", selection: $schoolYearIntent) {
+                                ForEach(SchoolYearIntent.allCases) { option in
+                                    Text(option.displayName).tag(option)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+
+                            if let reading = gradeReading {
+                                Text(reading)
+                                    .font(Theme.Text.metadata)
+                                    .foregroundStyle(
+                                        parsedGrade == nil ? Theme.Colors.warning : Theme.Colors.secondaryText
+                                    )
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
                     }
 
                     VStack(alignment: .leading, spacing: Theme.Spacing.small) {
@@ -431,8 +503,11 @@ struct AddFactSheet: View {
                 Button("Add Quick Fact") {
                     onSave(
                         ObservationDraft(
-                            attribute: category.attribute,
-                            value: normalizedValue
+                            attribute: chosenAttribute,
+                            value: normalizedValue,
+                            // Stated rather than derived from `observedOn`, which is wrong for the
+                            // whole of every summer — see `SchoolYearIntent`.
+                            schoolYearStart: category == .grade ? schoolYear.startYear : nil
                         ),
                         confidence,
                         sensitivity,
@@ -442,7 +517,10 @@ struct AddFactSheet: View {
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
                 .tint(category.tint)
-                .disabled(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(
+                    value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || (category == .somethingElse && FactAttribute.custom(customLabel) == nil)
+                )
             }
             .padding(.horizontal, Theme.Spacing.section)
             .frame(height: 60)
@@ -457,18 +535,56 @@ struct AddFactSheet: View {
         }
     }
 
-    /// Estimators need a clean numeric age or grade, while ambiguous wording must remain exactly
-    /// as entered so the interface never turns “2nd or 3rd” into a confident “2nd.”
+    private var calendar: Calendar { services?.dateProvider.calendar ?? .current }
+
+    /// The attribute this will be recorded under.
+    ///
+    /// A named custom attribute folds back into the curated set when it matches one — typing
+    /// "School" gives the School card rather than a second card beside it reading the same.
+    private var chosenAttribute: FactAttribute {
+        guard category == .somethingElse else { return category.attribute }
+        return FactAttribute.custom(customLabel) ?? .quickFact
+    }
+
+    /// The heading over the value field, which is the fact's own name once it has one.
+    private var headingText: String {
+        category == .somethingElse
+            ? (FactAttribute.custom(customLabel)?.displayName ?? category.title)
+            : category.title
+    }
+
+    /// The school year the grade being typed refers to.
+    private var schoolYear: SchoolYear {
+        schoolYearIntent.schoolYear(observedOn: observedOn, calendar: calendar)
+    }
+
+    private var parsedGrade: SchoolGrade? {
+        SchoolGrade.parse(value.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// What the app made of the grade, said back before it is stored.
+    ///
+    /// The same sentence the family editor shows, from the same place, for the same reason: an
+    /// unreadable grade is kept verbatim and never advanced, and the moment to discover that is
+    /// while typing it rather than next August.
+    private var gradeReading: String? {
+        RelativeCapture(gradeText: value, schoolYearIntent: schoolYearIntent)
+            .gradeReading(observedOn: observedOn, calendar: calendar)
+    }
+
+    /// An age has to reach ``ElephruitCore/AgeEstimator`` as a number, so a number is dug out of it.
+    ///
+    /// ### Why a grade is no longer touched
+    /// It used to be reduced to a bare digit — "2nd grade" stored as "2" — because
+    /// ``ElephruitCore/SchoolGrade/parse(_:)`` could not read the words around it. It can now, and
+    /// storing the sentence somebody typed is what ``ElephruitCore/PersonObservation/value`` has
+    /// always promised. The narrowing also silently lost "senior", which reduced to nothing at all.
     private var normalizedValue: String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        let numbers = trimmed.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
 
-        if category == .age, let age = numbers.first {
+        if category == .age,
+           let age = trimmed.split(whereSeparator: { !$0.isNumber }).compactMap({ Int($0) }).first {
             return "\(age)"
-        }
-
-        if category == .school, numbers.count == 1, !trimmed.localizedCaseInsensitiveContains(" or ") {
-            return "\(numbers[0])"
         }
 
         return trimmed
@@ -545,239 +661,6 @@ struct CorrectFactSheet: View {
 }
 
 // MARK: - Relationships
-
-/// Linking two people, with the reciprocal stated before it is written.
-struct AddRelationshipSheet: View {
-    @Environment(\.services) private var services
-
-    let person: Item
-    let onFinish: () -> Void
-
-    @State private var kind: RelationshipKind
-    @State private var label = ""
-    @State private var name = ""
-    @State private var matches: [Item] = []
-    @State private var selected: Item?
-    @FocusState private var isNameFocused: Bool
-
-    /// How old they are *now*, in whole years. Optional, and free of any range picker.
-    ///
-    /// ### Why one number and not a range
-    /// Adding a child used to mean linking them and then going to find a separate fact sheet, and
-    /// the thing most worth recording about a child — roughly how old they are — was the thing that
-    /// took the second trip. So it belongs here.
-    ///
-    /// What it must not become is a range picker. `AgeEstimate` already knows that "six today" fixes
-    /// a *window* rather than a birthday, and widens that window correctly as time passes — an age
-    /// recorded now shows as "approximately 7–8 years old" two years from now without anybody being
-    /// asked to think about bounds. Asking for the range would be asking the user to do arithmetic
-    /// the app is better at, and to do it about a child whose birthday they have just said they do
-    /// not know.
-    @State private var ageText = ""
-
-    /// Anything else worth keeping, recorded as a quick fact on the new person.
-    @State private var noteText = ""
-
-    init(person: Item, initialKind: RelationshipKind = .friend, onFinish: @escaping () -> Void) {
-        self.person = person
-        self.onFinish = onFinish
-        _kind = State(initialValue: initialKind)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-            // The title says what was asked for. Arriving from "Add Child" and being told you are
-            // linking "somebody" is the sheet disowning the button that opened it.
-            Text(kind == .child
-                ? "Add a child to \(person.displayTitle)"
-                : "Link somebody to \(person.displayTitle)")
-                .font(Theme.Text.title)
-
-            Form {
-                Picker("Relationship", selection: $kind) {
-                    ForEach(RelationshipKind.allCases, id: \.rawValue) { option in
-                        Label(option.displayName.capitalized, systemImage: option.symbolName).tag(option)
-                    }
-                }
-
-                TextField("Their name", text: $name)
-                    .focused($isNameFocused)
-                    .onChange(of: name) { _, newValue in search(newValue) }
-
-                TextField("Call them (optional)", text: $label)
-                    .help("“son” rather than “child” — the app uses your word and never guesses one")
-
-                // Only for a child, and only when this is a new person: an age is a starting point
-                // for somebody the app is meeting for the first time, and re-asking it for an
-                // existing record would invite overwriting what is already known about them.
-                if kind == .child, selected == nil {
-                    TextField("Age now (optional)", text: $ageText)
-                        .help("Whole years. If you are not sure, a close guess is worth more than nothing.")
-
-                    if let years = age {
-                        Text(ageExplanation(years))
-                            .font(Theme.Text.metadata)
-                            .foregroundStyle(Theme.Colors.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-
-                TextField("Anything worth remembering (optional)", text: $noteText)
-                    .help("Kept as a quick fact on their own record")
-            }
-            .formStyle(.grouped)
-
-            if kind == .child {
-                // The promise made in the entitlements file, said where it is being relied on.
-                Label(
-                    "Children stay in Elephruit. Nothing here is written to your Apple Contacts.",
-                    systemImage: "lock.shield"
-                )
-                .font(Theme.Text.metadata)
-                .foregroundStyle(Theme.Colors.tertiaryText)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if !matches.isEmpty {
-                VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-                    Text("Existing people")
-                        .font(Theme.Text.sectionHeader)
-                        .foregroundStyle(Theme.Colors.secondaryText)
-
-                    ForEach(matches, id: \.id) { match in
-                        Button {
-                            selected = match
-                            name = match.displayTitle
-                            matches = []
-                        } label: {
-                            HStack(spacing: Theme.Spacing.small) {
-                                PersonAvatar(name: match.displayTitle, colorName: match.colorName, size: 22)
-                                Text(match.displayTitle)
-                                Spacer()
-                            }
-                            .contentShape(.rect)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            } else if !trimmedName.isEmpty, selected == nil {
-                Label(
-                    "“\(trimmedName)” is new. A lightweight record will be created — you can fill it in later.",
-                    systemImage: "person.badge.plus"
-                )
-                .font(Theme.Text.metadata)
-                .foregroundStyle(Theme.Colors.tertiaryText)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if !trimmedName.isEmpty {
-                Text(reciprocalSentence)
-                    .font(Theme.Text.rowSubtitle)
-                    .foregroundStyle(Theme.Colors.secondaryText)
-            }
-
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel, action: onFinish)
-                    .keyboardShortcut(.cancelAction)
-                Button("Link", action: link)
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(trimmedName.isEmpty)
-            }
-        }
-        .padding(Theme.Spacing.section)
-        .frame(width: 440)
-        .accessibilityIdentifier(AccessibilityID.Records.addRelationshipSheet)
-        .onAppear { isNameFocused = true }
-    }
-
-    private var trimmedName: String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// Says both halves before either is written, because writing one is writing both.
-    private var reciprocalSentence: String {
-        let word = label.isEmpty ? kind.displayName : label
-        return "\(trimmedName) becomes \(person.displayTitle)'s \(word), "
-            + "and \(person.displayTitle) becomes \(trimmedName)'s \(kind.inverse.displayName)."
-    }
-
-    private func search(_ query: String) {
-        guard let services, query.count >= 2 else {
-            matches = []
-            return
-        }
-        selected = nil
-
-        let key = TextNormalizer.foldedForMatching(query)
-        matches = ((try? services.persons.allPeople(includingPlaceholders: true)) ?? [])
-            .filter { $0.id != person.id && TextNormalizer.foldedForMatching($0.displayTitle).contains(key) }
-            .prefix(5)
-            .map { $0 }
-    }
-
-    /// The age typed in, when it is a plausible one.
-    ///
-    /// Nil rather than zero for anything unparseable, so a stray keystroke records nothing instead of
-    /// asserting that somebody is nought. The upper bound is a sanity check on a typo, not a claim
-    /// about how old a child can be.
-    private var age: Int? {
-        let trimmed = ageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let years = Int(trimmed), (0...120).contains(years) else { return nil }
-        return years
-    }
-
-    /// Says what recording an age will actually mean, before it is recorded.
-    ///
-    /// An age is the one field here that does not stay the value it was given — it is stored against
-    /// today's date and read forward as a widening estimate. Somebody typing "6" deserves to know
-    /// that before they press the button, not to discover it a year later.
-    private func ageExplanation(_ years: Int) -> String {
-        "Recorded as \(years) today. Elephruit carries it forward, and shows it as approximate "
-            + "once a birthday could have passed."
-    }
-
-    private func link() {
-        guard let services else { return }
-        let clock = services.dateProvider
-
-        services.perform {
-            let other = try selected ?? services.persons.resolveOrCreatePlaceholder(named: trimmedName)
-            try services.persons.relate(
-                person, to: other, as: kind, label: label.isEmpty ? nil : label
-            )
-
-            // Recorded on the new person, not the parent: it is a fact about them, and it should
-            // still be true if the relationship is later corrected.
-            if kind == .child, selected == nil, let age {
-                try services.persons.record(
-                    ObservationDraft(attribute: .observedAge, value: String(age)),
-                    about: other,
-                    observedOn: clock.now,
-                    confidence: .stated,
-                    sensitivity: .normal,
-                    source: nil
-                )
-            }
-
-            let note = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !note.isEmpty {
-                try services.persons.record(
-                    ObservationDraft(attribute: .quickFact, value: note),
-                    about: other,
-                    observedOn: clock.now,
-                    confidence: .stated,
-                    sensitivity: .normal,
-                    source: nil
-                )
-            }
-
-            services.noteChange(to: other)
-        }
-        onFinish()
-    }
-}
 
 /// Repairs or removes an existing relationship while keeping both people's records in agreement.
 struct EditRelationshipSheet: View {

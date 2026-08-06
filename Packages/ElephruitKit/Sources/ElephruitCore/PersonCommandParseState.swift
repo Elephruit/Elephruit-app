@@ -364,7 +364,15 @@ struct ParseState {
             cursor += 1
         }
 
-        guard !nameWords.isEmpty else {
+        let observations = consumeTrailingObservations()
+
+        // A name *or* something said about them. "Maya son senior at South High" names nobody and is
+        // still three facts; requiring a name here was the grammar's own copy of the constraint that
+        // stopped the rest of the app recording anybody's children — see `RelativeCapture`.
+        //
+        // What is still refused is a bare "Maya son", which says only that a relationship word was
+        // typed and is more likely a half-finished line than a claim.
+        guard !nameWords.isEmpty || !observations.isEmpty else {
             cursor -= 1
             return nil
         }
@@ -375,16 +383,31 @@ struct ParseState {
             kind: kind,
             label: word.lowercased() == kind.rawValue.lowercased() ? nil : word.lowercased(),
             relatedName: nameWords.joined(separator: " "),
-            observations: consumeTrailingObservations()
+            observations: observations
         )
     }
 
     /// Whether a word starts something said *about* somebody rather than part of their name.
+    ///
+    /// ### Why a grade word counts, and what it costs
+    /// "Dave son senior at South High" is the shape people actually type, and without this the name
+    /// swallows the whole line and Dave gains a child called *senior at South High*. So a word that
+    /// ``SchoolGrade/parse(_:)`` reads ends the name, and so does "at".
+    ///
+    /// The cost is somebody whose entire given name is *Junior* or *Senior*, in this one position,
+    /// who would be read as a grade instead. That is the same bet the grammar already makes on "is"
+    /// and on treating "son" as a relationship rather than a name, and it is covered by the same
+    /// safety mechanism: every recognised span is previewed under the field, so a line about to do
+    /// the wrong thing looks wrong before Return is pressed.
     private func readsAsAttributeStart(_ word: String) -> Bool {
-        [
+        let lowered = word.lowercased()
+        if [
             "age", "aged", "is", "turns", "turning", "entering", "starts", "starting",
-            "in", "likes", "loves", "hates", "dislikes", "prefers", "works", "lives", "moved",
-        ].contains(word.lowercased())
+            "in", "at", "likes", "loves", "hates", "dislikes", "prefers", "works", "lives", "moved",
+        ].contains(lowered) {
+            return true
+        }
+        return SchoolGrade.parse(lowered) != nil
     }
 
     /// Observations trailing a name — `age 6 entering second grade`.
@@ -398,6 +421,10 @@ struct ParseState {
             }
             if let grade = consumeGrade() {
                 drafts.append(grade)
+                continue
+            }
+            if let school = consumeSchool() {
+                drafts.append(school)
                 continue
             }
             if let fact = consumeFact() {
@@ -424,35 +451,63 @@ struct ParseState {
         return ObservationDraft(attribute: .observedAge, value: "\(years)")
     }
 
-    /// `entering second grade` · `starts 3rd grade` · `in kindergarten`.
+    /// `entering second grade` · `starts 3rd grade` · `in kindergarten` · `senior`.
     ///
     /// The school year is *not* derived from today's date here — parsing has no clock. It is left
     /// `nil` and filled in by the caller, which does, and which knows that "entering" means the year
     /// about to begin rather than the one the calendar is currently in.
+    ///
+    /// ### Why a bare grade is read at all
+    /// Because "senior" is a whole sentence. Requiring a leading verb meant the grammar could read
+    /// *entering senior year* and not *senior*, and the second is what anybody types — so the line
+    /// fell through to being part of the child's name.
     mutating func consumeGrade() -> ObservationDraft? {
         guard cursor < tail else { return nil }
         let word = tokens[cursor].text.lowercased()
-        guard ["entering", "starts", "starting", "in"].contains(word) else { return nil }
+        let isLed = ["entering", "starts", "starting", "in"].contains(word)
 
-        var end = cursor + 1
+        // A led phrase begins after the verb; a bare one begins where it stands.
+        var end = isLed ? cursor + 1 : cursor
         var phrase: [String] = []
         while end < tail, phrase.count < 3 {
             phrase.append(tokens[end].text)
             end += 1
-            if let grade = SchoolGrade.parse(phrase.joined(separator: " ")) {
-                let range = tokens[cursor].range.lowerBound..<tokens[end - 1].range.upperBound
-                entities.append(RecognizedEntity(kind: .grade, text: grade.displayText, range: range))
-                cursor = end
+            guard SchoolGrade.parse(phrase.joined(separator: " ")) != nil else { continue }
 
-                return ObservationDraft(
-                    attribute: .schoolGrade,
-                    value: grade.displayText,
-                    // "Entering" and "starts" mean the year that has not begun; "in" means now.
-                    effective: ["entering", "starts", "starting"].contains(word) ? .today : nil
-                )
-            }
+            let range = tokens[cursor].range.lowerBound..<tokens[end - 1].range.upperBound
+            // Recorded as the user wrote it. `PersonObservation.value` promises what was said, and
+            // the estimator reads the words back through the same parser that just read them here.
+            let spoken = phrase.joined(separator: " ")
+            entities.append(RecognizedEntity(kind: .grade, text: spoken, range: range))
+            cursor = end
+
+            return ObservationDraft(
+                attribute: .schoolGrade,
+                value: spoken,
+                // "Entering" and "starts" mean the year that has not begun; anything else is now.
+                effective: ["entering", "starts", "starting"].contains(word) ? .today : nil
+            )
         }
         return nil
+    }
+
+    /// `at South High School` — which school, when a grade has just been given.
+    ///
+    /// Only reachable from ``consumeTrailingObservations()``, which runs after a relationship. A bare
+    /// "at" on the subject's own line is left to ``consumeFact()``, where "works at Acme" already
+    /// means an employer — reading it as a school there would put somebody's office in the school
+    /// card the first time they mentioned it.
+    mutating func consumeSchool() -> ObservationDraft? {
+        guard cursor < tail, tokens[cursor].text.lowercased() == "at" else { return nil }
+        let valueStart = cursor + 1
+        guard valueStart < tail else { return nil }
+
+        let value = tokens[valueStart..<tail].map(\.text).joined(separator: " ")
+        let range = tokens[cursor].range.lowerBound..<tokens[tail - 1].range.upperBound
+        entities.append(RecognizedEntity(kind: .note, text: value, range: range))
+        cursor = tail
+
+        return ObservationDraft(attribute: .school, value: value)
     }
 
     // MARK: Facts

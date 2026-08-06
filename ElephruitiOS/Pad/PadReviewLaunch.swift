@@ -60,6 +60,45 @@ enum PadReviewLaunch {
         }
     }
 
+    /// The screen a *phone* review should open on.
+    ///
+    /// ### Why the phone had none until now
+    /// This file was written for the iPad shell, and the phone was left with whatever the previous
+    /// session happened to leave open — so a headless review of a phone screen photographed the last
+    /// build's navigation, or the wrong screen entirely, and the only way to reach anything was to
+    /// tap. Which is the same gap the Mac's `DesignReviewLaunch` was written to close, one shell
+    /// later.
+    ///
+    /// The vocabulary is deliberately the same. A phone stack is a push rather than a three-column
+    /// selection, so the pair that selects a record on the iPad resolves here to the one route to
+    /// push onto it.
+    ///
+    ///     -ElephruitPadRoot people -ElephruitPadSelectFirst
+    ///     -ElephruitPadRoot people -ElephruitSelectPerson Maya
+    static func requestedPhoneRoute(
+        arguments: [String] = ProcessInfo.processInfo.arguments,
+        services: AppServices?
+    ) -> MobileRoute? {
+        guard arguments.contains("-ElephruitDevelopmentMode") else { return nil }
+
+        // A named person wins over "the first one", because a review that silently photographs
+        // whoever sorts first is a review of the alphabet.
+        if let index = arguments.firstIndex(of: "-ElephruitSelectPerson"),
+           index + 1 < arguments.count,
+           let services {
+            let wanted = arguments[index + 1].lowercased()
+            let people = (try? services.persons.allPeople(includingPlaceholders: true)) ?? []
+            guard let match = people.first(where: { $0.title.lowercased().hasPrefix(wanted) }) else {
+                Diagnostics.shell.error("No person matching \(wanted, privacy: .public)")
+                return nil
+            }
+            return .person(match.id)
+        }
+
+        guard let root = requestedRoot(arguments: arguments, services: services) else { return nil }
+        return requestedDetail(for: root, arguments: arguments, services: services)
+    }
+
     /// The project view a review launch asked for.
     ///
     /// A project's five presentations are five screens, and a review that can only ever photograph

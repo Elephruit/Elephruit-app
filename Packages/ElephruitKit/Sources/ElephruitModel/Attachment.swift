@@ -221,6 +221,24 @@ public final class PersonProfile {
     /// fill one in rather than showing an empty page as though something had gone wrong.
     public var isPlaceholder: Bool = false
 
+    /// Whether anybody has said what this person is called.
+    ///
+    /// ### Why this is a flag and not read off the title
+    /// Somebody recorded before their name was known carries a *phrase* for a title — "Dave's son" —
+    /// and the phrase has to sit in ``Item/title`` rather than being derived at render time, because
+    /// the title feeds search, sort, links, export and every row in both apps, and threading a
+    /// relationship-aware fallback through all of it to serve one case is the wrong trade.
+    ///
+    /// But a phrase and a name are then indistinguishable in the column that holds them, and
+    /// inferring which is which from the shape of the string is exactly the sort of cleverness that
+    /// is wrong about somebody actually called "Dave's". So the fact is recorded rather than
+    /// deduced: this is what the "to fill in" list queries, and what tells a rename that it is
+    /// supplying a name rather than correcting one.
+    ///
+    /// Defaults to `true`, so every record that existed before this reads as named — which is what
+    /// was true of all of them.
+    public var hasStatedName: Bool = true
+
     /// The user's own card. At most one profile in a library has this set.
     public var isMyCard: Bool = false
 

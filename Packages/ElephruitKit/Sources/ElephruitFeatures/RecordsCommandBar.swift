@@ -364,18 +364,44 @@ struct RecordsCommandBarView: View {
 
         case .recordRelation(let personID, let kind, let label, let name, let observations):
             guard let person = try? services.persons.person(id: personID) else { return }
+
+            // Through `apply` rather than resolve-relate-record by hand, which is what this did and
+            // which threw on an empty name. "Maya son senior at South High" names nobody and is
+            // still three facts; the command bar is now the third interface building the same
+            // `PersonUpdate` rather than the last one with a write path of its own.
             services.perform {
-                let other = try services.persons.resolveOrCreatePlaceholder(named: name)
-                try services.persons.relate(person, to: other, as: kind, label: label)
-                for draft in observations {
-                    try services.persons.record(
-                        draft, about: other, observedOn: services.dateProvider.now,
-                        confidence: .stated, sensitivity: .normal, source: nil
-                    )
+                var capture = RelativeCapture(kind: kind, label: label, name: name.isEmpty ? nil : name)
+                // The parser has no clock, so it flags a forward-looking grade with `effective`
+                // rather than resolving a year. Carried across here, where there is one.
+                if observations.contains(where: { $0.attribute == .schoolGrade && $0.effective != nil }) {
+                    capture.schoolYearIntent = .starting
                 }
-                services.noteChange(to: other)
+                capture.gradeText = observations.first { $0.attribute == .schoolGrade }?.value
+                capture.school = observations.first { $0.attribute == .school }?.value
+                capture.age = observations.first { $0.attribute == .observedAge }.flatMap { Int($0.value) }
+
+                let touched = try services.persons.apply(
+                    PersonUpdate(subjectID: person.id, relatives: [capture]),
+                    source: nil,
+                    observedOn: services.dateProvider.now
+                )
+
+                // Anything the parser understood that a capture has no field for — a like, a
+                // location — still belongs on the new person.
+                let carried: Set<FactAttribute> = [.schoolGrade, .school, .observedAge]
+                if let other = touched.first {
+                    for draft in observations where !carried.contains(draft.attribute) {
+                        try services.persons.record(
+                            draft, about: other, observedOn: services.dateProvider.now,
+                            confidence: .stated, sensitivity: .normal, source: nil
+                        )
+                    }
+                    services.noteChange(to: other)
+                }
             }
-            feedback = "\(name) linked to \(person.displayTitle)."
+            feedback = name.isEmpty
+                ? "Recorded a \(label ?? kind.displayName) of \(person.displayTitle)."
+                : "\(name) linked to \(person.displayTitle)."
 
         case .addNote(let personID, let text):
             guard let person = try? services.persons.person(id: personID) else { return }

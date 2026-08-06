@@ -28,6 +28,7 @@ public struct EventInspectorView: View {
     @State private var priorMeetings: [Item] = []
     @State private var isShowingRecordPicker = false
     @State private var isShowingFollowUp = false
+    @State private var isLoggingMeeting = false
     @State private var debriefText = ""
     @State private var preparationText = ""
     @State private var brief: [BriefEntry] = []
@@ -73,6 +74,12 @@ public struct EventInspectorView: View {
         .task(id: event.id) { await load() }
         .sheet(isPresented: $isShowingFollowUp) {
             FollowUpSheet(event: event, people: linkedPeople) { Task { await load() } }
+        }
+        .sheet(isPresented: $isLoggingMeeting) {
+            MeetingDebriefSheet(event: event, people: linkedPeople) {
+                isLoggingMeeting = false
+                Task { await load() }
+            }
         }
         .accessibilityIdentifier(AccessibilityID.Calendar.inspector)
     }
@@ -544,6 +551,22 @@ public struct EventInspectorView: View {
                         Button("Save") { saveNotes() }
                             .buttonStyle(.borderless)
                             .font(Theme.Text.metadata)
+                    }
+
+                    // The box above writes text that stays text. This writes the same text *and*
+                    // whatever the meeting changed about the people in it, with the meeting attached
+                    // to every fact as its source. Offered rather than replacing the box, because
+                    // most debriefs really are just a paragraph.
+                    if isPast {
+                        Button {
+                            isLoggingMeeting = true
+                        } label: {
+                            Label("Log what you learned…", systemImage: "person.badge.plus")
+                                .font(Theme.Text.metadata)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityIdentifier(AccessibilityID.Calendar.logMeeting)
+                        .help("Records facts and family against the people in this meeting.")
                     }
                 }
             }

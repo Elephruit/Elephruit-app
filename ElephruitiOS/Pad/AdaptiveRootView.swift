@@ -115,6 +115,11 @@ struct AdaptiveRootView: View {
             if let storedMobileNavigation {
                 shell.restore(from: storedMobileNavigation)
             }
+            // Development-only review routing, after restoration so it wins — same reason and same
+            // vocabulary as the iPad branch above.
+            if let requested = PadReviewLaunch.requestedPhoneRoute(services: services) {
+                shell.push(requested)
+            }
             if let initialRoute {
                 shell.open(initialRoute, in: initialRoute.owningDestinationForWindow)
             }

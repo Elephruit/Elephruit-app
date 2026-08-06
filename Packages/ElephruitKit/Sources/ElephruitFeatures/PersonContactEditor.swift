@@ -314,10 +314,15 @@ struct EditContactDetailsSheet: View {
             // The person is shown under the item's title everywhere outside this sheet, so a name
             // edited here has to reach it or the header would still read the old one. Assembled from
             // the parts rather than typed as a line, which is the direction that does not guess.
+            //
+            // Through the repository rather than straight onto the item, because renaming somebody
+            // also rewrites the titles of anybody recorded only as *their* relative — "Dave's son"
+            // has to stop saying Dave the moment Dave stops being called Dave.
             let assembled = cleaned.displayName
-            try services.items.update(person) { subject in
-                if !assembled.isEmpty { subject.title = assembled }
-                subject.refreshSearchText()
+            if assembled.isEmpty {
+                try services.items.update(person) { $0.refreshSearchText() }
+            } else {
+                try services.persons.renamePerson(person, to: assembled)
             }
 
             services.refreshDerivedState()
