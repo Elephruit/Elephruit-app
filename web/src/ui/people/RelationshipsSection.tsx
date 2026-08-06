@@ -4,7 +4,7 @@
 /// rest; possible duplicates surface a compare callout; creation goes through
 /// the stepped side-sheet flow.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { applyPlan } from '../../data/applyPlan'
 import { useAllObservations, useAllRelationships } from '../../data/hooks'
@@ -124,16 +124,22 @@ export function RelationshipsSection({
   person,
   relationships,
   people,
+  addSignal = 0,
 }: {
   person: Person
   relationships: Relationship[]
   people: Person[]
+  /// Bumping this from outside opens the add flow — the header overflow.
+  addSignal?: number
 }) {
   const uid = useUID()
   const navigate = useNavigate()
   const observations = useAllObservations(uid)
   const allRelationships = useAllRelationships(uid) ?? []
   const [adding, setAdding] = useState(false)
+  useEffect(() => {
+    if (addSignal > 0) setAdding(true)
+  }, [addSignal])
   const [naming, setNaming] = useState<Person | null>(null)
   const [comparing, setComparing] = useState<UnnamedPairSuggestion | null>(null)
   const [newRelationshipID, setNewRelationshipID] = useState<string | null>(null)
@@ -163,9 +169,9 @@ export function RelationshipsSection({
   }
 
   return (
-    <section className="rail-section">
+    <section className="rail-section remember-people">
       <div className="aside-panel-head">
-        <h2 className="rail-section-title">Relationships</h2>
+        <h2 className="rail-section-title">People in their life</h2>
         <button type="button" className="button button-plain button-small" onClick={() => setAdding(true)}>
           Add
         </button>

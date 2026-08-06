@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { planConfirmObservation, planCorrection, planObservation } from '../../domain/capture'
 import { planMemoryRecord } from '../../domain/memory'
 import {
@@ -249,10 +249,22 @@ function HistorySheet({
   )
 }
 
-export function FactsSection({ person, observations }: { person: Person; observations: Observation[] }) {
+export function FactsSection({
+  person,
+  observations,
+  addSignal = 0,
+}: {
+  person: Person
+  observations: Observation[]
+  /// Bumping this from outside opens the add dialog — the header overflow.
+  addSignal?: number
+}) {
   const uid = useUID()
   const now = new Date()
   const [adding, setAdding] = useState(false)
+  useEffect(() => {
+    if (addSignal > 0) setAdding(true)
+  }, [addSignal])
   const [correcting, setCorrecting] = useState<Observation | null>(null)
   const [historyFor, setHistoryFor] = useState<FactAttribute | null>(null)
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
@@ -265,9 +277,9 @@ export function FactsSection({ person, observations }: { person: Person; observa
   }
 
   return (
-    <div className="aside-panel">
+    <section className="rail-section remember-facts">
       <div className="aside-panel-head">
-        <h2 className="aside-title">Facts</h2>
+        <h2 className="rail-section-title">Key facts</h2>
         <button type="button" className="button button-plain button-small" onClick={() => setAdding(true)}>
           Add a fact
         </button>
@@ -346,6 +358,6 @@ export function FactsSection({ person, observations }: { person: Person; observa
       {historyFor && (
         <HistorySheet attribute={historyFor} observations={observations} onClose={() => setHistoryFor(null)} />
       )}
-    </div>
+    </section>
   )
 }

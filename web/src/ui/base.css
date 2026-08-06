@@ -3074,9 +3074,40 @@ a.memory-person-link:hover {
 
 .profile-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-large);
   margin: var(--space-medium) 0 var(--space-section);
+}
+
+.profile-header .avatar-large {
+  width: 64px;
+  height: 64px;
+  font-size: 1.3rem;
+}
+
+@media (max-width: 719.98px) {
+  .profile-header .avatar-large {
+    width: 52px;
+    height: 52px;
+    font-size: 1.05rem;
+  }
+}
+
+.profile-badge {
+  font: var(--text-chip);
+  color: var(--color-text-secondary);
+  background: var(--color-subtle-fill);
+  border: 1px solid var(--color-separator);
+  border-radius: 999px;
+  padding: 2px 10px;
+  vertical-align: middle;
+}
+
+.profile-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-tight);
+  margin-top: var(--space-small);
 }
 
 .profile-id {
@@ -3122,34 +3153,77 @@ a.memory-person-link:hover {
   gap: var(--space-section);
 }
 
-.person-context {
-  order: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-large);
+.person-history {
   min-width: 0;
 }
 
-.person-history {
-  order: 2;
-  min-width: 0;
+/* Below the desktop rail the Remember container dissolves (display:contents)
+   and its sections interleave with history in the reading order the plan
+   requires: follow-ups, facts, relationships, history, talking points. */
+@media (max-width: 1023.98px) {
+  .person-context.remember-rail {
+    display: contents;
+  }
+
+  .remember-eyebrow {
+    display: none;
+  }
+
+  .remember-followups {
+    order: 1;
+  }
+
+  .remember-facts {
+    order: 2;
+  }
+
+  .remember-people {
+    order: 3;
+  }
+
+  .person-history {
+    order: 4;
+  }
+
+  .remember-next {
+    order: 5;
+  }
 }
 
 @media (min-width: 1024px) {
   .person-cols {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-columns: minmax(0, 1fr) 360px;
     gap: var(--space-generous);
     align-items: start;
   }
 
-  .person-history {
-    order: 0;
+  .person-context.remember-rail {
+    position: sticky;
+    top: 24px;
+    max-height: calc(100dvh - 48px);
+    overflow-y: auto;
+    min-width: 0;
   }
+}
 
-  .person-context {
-    order: 0;
-  }
+.remember-eyebrow {
+  font: var(--text-section);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--color-text-secondary);
+}
+
+.remember-rail .rail-section:first-of-type {
+  border-top: 0;
+}
+
+.rail-row-when[data-tone='overdue'] {
+  color: var(--color-overdue);
+}
+
+.rail-row-when[data-tone='today'] {
+  color: var(--color-due-today);
 }
 
 .pinned-panel {
@@ -3186,11 +3260,23 @@ a.memory-person-link:hover {
 
 .timeline-month-title {
   flex: 1;
-  font: var(--text-section);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: var(--color-text-secondary);
+  font: 600 0.85rem/1.3 var(--font-sans);
+  color: var(--color-text);
   padding: var(--space-section) 0 var(--space-small);
+}
+
+/* The history filter scrolls only when it cannot fit, with an edge fade. */
+@media (max-width: 719.98px) {
+  .history-head .seg {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    mask-image: linear-gradient(to right, black 92%, transparent);
+  }
+
+  .history-head .seg::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .seg {

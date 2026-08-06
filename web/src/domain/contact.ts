@@ -38,8 +38,10 @@ export function relativeDescription(date: Date, now: Date): string {
 
 /// The one line at the top of a person's page. Says what is true, never what to
 /// do about it — the recommendation half is FollowUpPolicy, opt-in and separate.
-export function lastContactLine(lastContactAt: Date | null, now: Date): string {
-  if (lastContactAt === null) return 'Nothing recorded yet'
+/// Two different absences are two different sentences: a populated profile with
+/// no conversations must never claim nothing was recorded.
+export function lastContactLine(lastContactAt: Date | null, now: Date, hasProfileData = false): string {
+  if (lastContactAt === null) return hasProfileData ? 'No conversations logged yet' : 'Nothing recorded yet'
   return `Last spoke ${relativeDescription(lastContactAt, now)}`
 }
 

@@ -66,9 +66,9 @@ export function TalkingPointsPanel({
   const entry = brief?.people.find((p) => p.name === person.displayName) ?? brief?.people[0]
 
   return (
-    <div className="aside-panel">
+    <section className="rail-section remember-next">
       <div className="aside-panel-head">
-        <h2 className="aside-title">Talking points</h2>
+        <h2 className="rail-section-title">Next time</h2>
         {ready && (
           <Button variant="ghost" small icon="sparkle" loading={busy} onClick={() => void generate()}>
             {entry ? 'Refresh' : 'Prepare'}
@@ -120,6 +120,6 @@ export function TalkingPointsPanel({
           )}
         </div>
       )}
-    </div>
+    </section>
   )
 }

@@ -4,7 +4,7 @@ import { relativeDescription } from '../../domain/contact'
 import { startOfDay, wholeDaysBetween } from '../../domain/dates'
 import { foldedForMatching, type Person } from '../../domain/person'
 import { bucketFor, nextOpenReminderByPerson, type Reminder } from '../../domain/reminders'
-import { usePeople, useReminders } from '../../data/hooks'
+import { useAllObservations, useAllRelationships, usePeople, useReminders } from '../../data/hooks'
 import { useUID } from '../UserContext'
 import { Avatar } from '../components/Avatar'
 import { Button } from '../components/Button'
@@ -61,6 +61,22 @@ export function PeopleListPage() {
   const navigate = useNavigate()
   const people = usePeople(uid)
   const reminders = useReminders(uid)
+  const observations = useAllObservations(uid)
+  const relationships = useAllRelationships(uid)
+
+  // Whether a never-contacted person has anything at all recorded — the row
+  // says "No conversation yet" for a populated profile and "Nothing recorded"
+  // only for a truly empty one.
+  const hasProfileData = useMemo(() => {
+    const populated = new Set<string>()
+    for (const observation of observations ?? []) populated.add(observation.subjectID)
+    for (const relationship of relationships ?? []) {
+      populated.add(relationship.subjectID)
+      populated.add(relationship.otherID)
+    }
+    for (const reminder of reminders ?? []) for (const id of reminder.personIDs) populated.add(id)
+    return populated
+  }, [observations, relationships, reminders])
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
   const [order, setOrder] = useState<SortOrder>('name')
@@ -139,13 +155,17 @@ export function PeopleListPage() {
           </div>
           {listed.map((person) => (
             <button key={person.id} type="button" className="person-row" onClick={() => navigate(`/people/${person.id}`)}>
-              <Avatar name={person.displayName} colorName={person.colorName} />
+              <Avatar name={person.displayName} colorName={person.colorName} unnamed={!person.hasStatedName} />
               <span className="person-main">
                 <span className="row-title">{person.displayName}</span>
                 {subtitle(person) && <span className="row-subtitle">{subtitle(person)}</span>}
               </span>
               <span className="person-last">
-                {person.lastContactAt ? relativeDescription(person.lastContactAt, now) : 'never'}
+                {person.lastContactAt
+                  ? relativeDescription(person.lastContactAt, now)
+                  : hasProfileData.has(person.id)
+                    ? 'No conversation yet'
+                    : 'Nothing recorded'}
               </span>
               <NextFollowUp reminder={nextByPerson.get(person.id)} now={now} />
             </button>

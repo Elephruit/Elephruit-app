@@ -1,9 +1,15 @@
+/// A person's page answers, in order: who is this, what happened with them,
+/// what matters now, what to remember next. The header is the identity — for
+/// an unnamed person the relationship word and distinguishing facts, never
+/// just a possessive phrase — and the right rail is one Remember hierarchy:
+/// Next time, Open follow-ups, Key facts, People in their life.
+
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { planCompleteReminder, planRenamePerson, planReopenReminder } from '../../domain/capture'
 import { deriveLastContact, lastContactLine } from '../../domain/contact'
-import { startOfDay, wholeDaysBetween } from '../../domain/dates'
-import { bucketFor } from '../../domain/reminders'
+import { FactAttributes, currentValues } from '../../domain/facts'
+import { relationshipIdentitySummary } from '../../domain/personIdentity'
 import {
   FILTER_LABELS,
   entryFromInteraction,
@@ -16,8 +22,11 @@ import {
   type TimelineEntry,
   type TimelineFilter,
 } from '../../domain/timeline'
+import { formatScheduleSummary } from '../../domain/temporal'
+import { bucketFor } from '../../domain/reminders'
 import { applyPlan } from '../../data/applyPlan'
 import {
+  useAllRelationships,
   useObservationsFor,
   usePeople,
   usePerson,
@@ -27,7 +36,7 @@ import {
 } from '../../data/hooks'
 import { useUID } from '../UserContext'
 import { Avatar } from '../components/Avatar'
-import { Button, IconButton } from '../components/Button'
+import { Button } from '../components/Button'
 import { Dialog } from '../components/Dialog'
 import { Icon } from '../components/Icon'
 import { SegmentedControl } from '../components/SegmentedControl'
@@ -56,6 +65,10 @@ function entryBadge(entry: TimelineEntry): { icon: string; tint: string } {
   return { icon: 'sparkle', tint: 'var(--color-capture)' }
 }
 
+/// The at-a-glance chips: role, location, family, good-to-know — never
+/// restricted values, at most three.
+const CHIP_ATTRIBUTES = [FactAttributes.role, FactAttributes.location, FactAttributes.family, FactAttributes.quickFact]
+
 export function PersonPage() {
   const uid = useUID()
   const navigate = useNavigate()
@@ -66,10 +79,14 @@ export function PersonPage() {
   const observations = useObservationsFor(uid, personID!)
   const reminders = useRemindersFor(uid, personID!)
   const relationships = useRelationshipsFor(uid, personID!)
+  const allRelationships = useAllRelationships(uid)
   const [filter, setFilter] = useState<TimelineFilter>('everything')
   const [renaming, setRenaming] = useState(false)
   const [newName, setNewName] = useState('')
   const [savingName, setSavingName] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [addFactSignal, setAddFactSignal] = useState(0)
+  const [addRelationshipSignal, setAddRelationshipSignal] = useState(0)
   const now = new Date()
 
   const entries = useMemo(() => {
@@ -86,6 +103,25 @@ export function PersonPage() {
     () => (entries ? groupByMonth(entries.filter((e) => matchesFilter(filter, e))) : undefined),
     [entries, filter],
   )
+
+  // For an unnamed person: how they relate back to whoever recorded them —
+  // the reciprocal row carries the other side's word ("son").
+  const reverseIdentity = useMemo(() => {
+    if (!person || person.hasStatedName || !allRelationships || !people) return null
+    const inbound = allRelationships.find((r) => r.otherID === person.id)
+    if (!inbound) return null
+    const subject = people.find((p) => p.id === inbound.subjectID)
+    if (!subject) return null
+    return {
+      subject,
+      summary: relationshipIdentitySummary({
+        subject,
+        other: person,
+        relationship: inbound,
+        observations: observations ?? [],
+      }),
+    }
+  }, [person, allRelationships, people, observations])
 
   const openFollowUps = reminders?.filter((r) => r.status === 'open') ?? []
 
@@ -104,14 +140,31 @@ export function PersonPage() {
     )
   }
 
-  // The page shows the truth, derived live; the list may lean on the cache.
   const derivedLastContact = interactions ? deriveLastContact(interactions, person.id) : person.lastContactAt
+  const hasProfileData =
+    (observations?.length ?? 0) > 0 || (relationships?.length ?? 0) > 0 || (reminders?.length ?? 0) > 0
   const roleLine = [person.roleTitle, person.organizationName].filter(Boolean).join(' · ')
+
+  const chips = CHIP_ATTRIBUTES.flatMap((attribute) =>
+    currentValues(observations ?? [], attribute)
+      .filter((o) => o.sensitivity !== 'restricted')
+      .slice(0, 1)
+      .map((o) => ({ attribute, value: o.value })),
+  ).slice(0, 3)
 
   async function toggleReminder(id: string, isOpen: boolean) {
     const { plan } = isOpen ? planCompleteReminder(id, new Date()) : planReopenReminder(id)
     await applyPlan(uid, plan)
   }
+
+  const identityTitle = person.hasStatedName ? person.displayName : (reverseIdentity?.summary.primaryLabel ?? person.displayName)
+  const identitySubtitle = person.hasStatedName
+    ? roleLine
+    : reverseIdentity
+      ? [`Related to ${reverseIdentity.subject.displayName}`, ...reverseIdentity.summary.details.map((d) => d.value)].join(
+          ' · ',
+        )
+      : roleLine
 
   return (
     <PageScaffold width="wide">
@@ -120,59 +173,82 @@ export function PersonPage() {
       </button>
 
       <header className="profile-header">
-        <Avatar name={person.displayName} colorName={person.colorName} size="lg" />
+        <Avatar name={person.displayName} colorName={person.colorName} size="lg" unnamed={!person.hasStatedName} />
         <div className="profile-id">
           <h1>
-            {person.displayName}
-            <IconButton
-              label="Rename"
-              icon="pencil"
-              onClick={() => {
-                setNewName(person.hasStatedName ? person.displayName : '')
-                setRenaming(true)
-              }}
-            />
+            {identityTitle}
+            {!person.hasStatedName && <span className="profile-badge">Name unknown</span>}
           </h1>
-          {roleLine && <p>{roleLine}</p>}
-          <p className="profile-last">{lastContactLine(derivedLastContact, now)}</p>
+          {identitySubtitle && <p>{identitySubtitle}</p>}
+          <p className="profile-last">{lastContactLine(derivedLastContact, now, hasProfileData)}</p>
+          {chips.length > 0 && (
+            <div className="profile-chips">
+              {chips.map((chip) => (
+                <span key={chip.attribute} className="chip" style={{ cursor: 'default' }}>
+                  {chip.value}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <div className="profile-actions">
-          <Button variant="primary" icon="plus" onClick={() => navigate(`/log?person=${person.id}`)}>
-            Log an interaction
+          <Button variant="primary" icon="plus" onClick={() => navigate(`/?capture=1&person=${person.id}`)}>
+            Record a memory
           </Button>
+          <span className="memory-actions">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={`More actions for ${person.displayName}`}
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <Icon name="other" size={16} />
+            </button>
+            {menuOpen && (
+              <div className="memory-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="memory-menu-item"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setNewName(person.hasStatedName ? person.displayName : '')
+                    setRenaming(true)
+                  }}
+                >
+                  {person.hasStatedName ? 'Edit name' : 'Add their name'}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="memory-menu-item"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setAddFactSignal((n) => n + 1)
+                  }}
+                >
+                  Add fact
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="memory-menu-item"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setAddRelationshipSignal((n) => n + 1)
+                  }}
+                >
+                  Add relationship
+                </button>
+              </div>
+            )}
+          </span>
         </div>
       </header>
 
       <div className="person-cols">
         <div className="person-history">
-          {openFollowUps.length > 0 && (
-            <div className="aside-panel pinned-panel">
-              <h4 className="aside-title">Open follow-ups</h4>
-              {openFollowUps.map((reminder) => {
-                const bucket = bucketFor(reminder, now)
-                return (
-                  <div key={reminder.id} className="aside-row" data-static>
-                    <button
-                      type="button"
-                      className="complete-ring"
-                      aria-label={`Complete ${reminder.title}`}
-                      onClick={() => void toggleReminder(reminder.id, true)}
-                    />
-                    <span className="aside-row-text">
-                      <b>{reminder.title}</b>
-                    </span>
-                    {bucket === 'overdue' && reminder.dueAt && (
-                      <span className="chip chip-status-overdue">
-                        due {wholeDaysBetween(startOfDay(reminder.dueAt), startOfDay(now))} days ago
-                      </span>
-                    )}
-                    {bucket === 'today' && <span className="chip chip-status-today">due today</span>}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
           <div className="history-head">
             <h2>History</h2>
             <SegmentedControl
@@ -230,7 +306,9 @@ export function PersonPage() {
           ))}
         </div>
 
-        <aside className="person-context">
+        <aside className="person-context remember-rail" aria-label="Remember">
+          <h2 className="remember-eyebrow">Remember</h2>
+
           {observations && relationships && reminders && interactions && people && (
             <TalkingPointsPanel
               person={person}
@@ -241,15 +319,50 @@ export function PersonPage() {
               interactions={interactions}
             />
           )}
-          {observations && <FactsSection person={person} observations={observations} />}
+
+          {openFollowUps.length > 0 && (
+            <section className="rail-section remember-followups">
+              <h4 className="rail-section-title">Open follow-ups</h4>
+              {openFollowUps.map((reminder) => {
+                const bucket = bucketFor(reminder, now)
+                const schedule = formatScheduleSummary(reminder) ?? 'Anytime'
+                return (
+                  <div key={reminder.id} className="rail-row" data-static>
+                    <button
+                      type="button"
+                      className="complete-ring"
+                      aria-label={`Complete ${reminder.title}`}
+                      onClick={() => void toggleReminder(reminder.id, true)}
+                    />
+                    <span className="rail-row-text">
+                      <b>{reminder.title}</b>
+                    </span>
+                    <span
+                      className="rail-row-when tabular"
+                      data-tone={bucket === 'overdue' ? 'overdue' : bucket === 'today' ? 'today' : undefined}
+                    >
+                      {schedule}
+                    </span>
+                  </div>
+                )
+              })}
+            </section>
+          )}
+
+          {observations && <FactsSection person={person} observations={observations} addSignal={addFactSignal} />}
           {relationships && people && (
-            <RelationshipsSection person={person} relationships={relationships} people={people} />
+            <RelationshipsSection
+              person={person}
+              relationships={relationships}
+              people={people}
+              addSignal={addRelationshipSignal}
+            />
           )}
         </aside>
       </div>
 
       {renaming && (
-        <Dialog title="Rename" onClose={() => setRenaming(false)}>
+        <Dialog title={person.hasStatedName ? 'Edit name' : 'Add their name'} onClose={() => setRenaming(false)}>
           <p className="row-subtitle">
             Unnamed relatives titled after this person — “{person.displayName}'s son” — are re-phrased in the same
             save.

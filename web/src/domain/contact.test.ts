@@ -60,7 +60,10 @@ describe('relative phrasing', () => {
 
   it('summarises the top of a person page without inventing history', () => {
     expect(lastContactLine(null, NOW)).toBe('Nothing recorded yet')
+    expect(lastContactLine(null, NOW, true)).toBe('No conversations logged yet')
+    // A real conversation wins over profile data either way.
     expect(lastContactLine(new Date('2026-08-05T12:00:00'), NOW)).toBe('Last spoke yesterday')
+    expect(lastContactLine(new Date('2026-08-05T12:00:00'), NOW, true)).toBe('Last spoke yesterday')
   })
 
   it('opens a timeline row with the provenance phrase', () => {
