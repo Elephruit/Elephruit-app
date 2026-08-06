@@ -1,236 +1,86 @@
+/// The relationships panel: every row is an identity — the person's name or
+/// their relationship word with distinguishing facts — so two unnamed sons
+/// are tellable apart without opening either. Unnamed rows carry Add name at
+/// rest; possible duplicates surface a compare callout; creation goes through
+/// the stepped side-sheet flow.
+
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  planNamePerson,
-  planObservation,
-  planRelationshipPair,
-  planRelativeCapture,
-} from '../../domain/capture'
-import { attributeLabel, capturePrompt, customAttribute, type FactAttribute } from '../../domain/facts'
-import { foldedForMatching, type Person } from '../../domain/person'
-import {
-  GROUP_TITLES,
-  RELATIONSHIP_GROUPS,
-  RELATIONSHIP_KINDS,
-  SUGGESTED_ATTRIBUTES,
-  genderedKind,
-  groupOf,
-  kindLabel,
-  type Relationship,
-  type RelationshipKind,
-} from '../../domain/relationships'
-import type { WritePlan } from '../../domain/writePlan'
 import { applyPlan } from '../../data/applyPlan'
+import { useAllObservations, useAllRelationships } from '../../data/hooks'
+import { planNamePerson, planUnrelate } from '../../domain/capture'
+import type { Observation } from '../../domain/facts'
+import type { Person } from '../../domain/person'
+import {
+  relationshipIdentitySummary,
+  unnamedPairSuggestions,
+  type UnnamedPairSuggestion,
+} from '../../domain/personIdentity'
+import { GROUP_TITLES, RELATIONSHIP_GROUPS, groupOf, type Relationship } from '../../domain/relationships'
 import { useUID } from '../UserContext'
 import { Avatar } from '../components/Avatar'
-import { Icon } from '../components/Icon'
 import { Dialog } from '../components/Dialog'
-import { planUnrelate } from '../../domain/capture'
-import { planMemoryRecord } from '../../domain/memory'
+import { Icon } from '../components/Icon'
+import { IdentitySummary } from '../components/IdentitySummary'
+import { AddRelationshipFlow } from './relationships/AddRelationshipFlow'
+import { CompareUnnamedPeopleSheet } from './relationships/CompareUnnamedPeopleSheet'
 
-function AddRelationshipSheet({
+/// The one relationship row — also the preview the add-flow shows, so what
+/// the user confirms is exactly what renders afterward.
+export function RelationshipIdentityRow({
   subject,
-  people,
-  onClose,
+  other,
+  relationship,
+  observations,
+  onOpen,
+  onAddName,
+  onRemove,
+  highlight = false,
 }: {
   subject: Person
-  people: Person[]
-  onClose: () => void
+  other: Person
+  relationship: Relationship
+  observations: Observation[]
+  onOpen?: () => void
+  onAddName?: () => void
+  onRemove?: () => void
+  highlight?: boolean
 }) {
-  const uid = useUID()
-  const [word, setWord] = useState('')
-  const [kind, setKind] = useState<RelationshipKind>('friend')
-  const [who, setWho] = useState('')
-  const [existing, setExisting] = useState<Person | null>(null)
-  const [facts, setFacts] = useState<Record<string, string>>({})
-  const [customFactName, setCustomFactName] = useState('')
-  const [customFactValue, setCustomFactValue] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  const matches = useMemo(() => {
-    const folded = foldedForMatching(who)
-    if (!folded || existing) return []
-    return people
-      .filter((p) => p.id !== subject.id && foldedForMatching(p.displayName).includes(folded))
-      .slice(0, 5)
-  }, [who, people, subject.id, existing])
-
-  function onWordChange(text: string) {
-    setWord(text)
-    // The typed word can pick the kind — "son" selects child — but the word
-    // itself is what gets stored. The app never infers gender from a name.
-    const inferred = genderedKind(text.trim())
-    if (inferred) setKind(inferred)
-  }
-
-  async function save() {
-    if (saving) return
-    setSaving(true)
-    const now = new Date()
-    const factList = [
-      ...SUGGESTED_ATTRIBUTES[kind]
-        .filter((a) => facts[a]?.trim())
-        .map((a) => ({ attribute: a as FactAttribute, value: facts[a] })),
-      ...(customFactName.trim() && customFactValue.trim() && customAttribute(customFactName)
-        ? [{ attribute: customAttribute(customFactName)!, value: customFactValue }]
-        : []),
-    ]
-
-    let plan: WritePlan
-    let other: { id: string; displayName: string }
-    let relationshipIDs: string[]
-    const observationIDs: string[] = []
-    if (existing) {
-      const pair = planRelationshipPair(
-        { subjectID: subject.id, otherID: existing.id, kind, customLabel: word || null },
-        now,
-      )
-      plan = [...pair.plan]
-      relationshipIDs = [pair.pair[0].id, pair.pair[1].id]
-      other = existing
-      for (const fact of factList) {
-        const { plan: factPlan, observation } = planObservation({ subjectID: existing.id, ...fact }, now)
-        observationIDs.push(observation.id)
-        plan.push(...factPlan)
-      }
-    } else {
-      const capture = planRelativeCapture(
-        subject,
-        { kind, label: word || null, name: who.trim() || null, facts: factList },
-        now,
-      )
-      plan = capture.plan
-      relationshipIDs = [capture.pair[0].id, capture.pair[1].id]
-      other = capture.relative
-      for (const write of capture.plan) {
-        if (write.collection === 'observations' && write.op === 'set') observationIDs.push(write.id)
-      }
-    }
-    const { plan: memoryPlan } = planMemoryRecord(
-      {
-        kind: 'manualUpdate',
-        title: `Connected ${subject.displayName} and ${other.displayName}`,
-        occurredAt: now,
-        personIDs: [subject.id, other.id],
-        relationshipIDs,
-        observationIDs,
-        origin: 'manualRelationship',
-      },
-      now,
-    )
-    await applyPlan(uid, [...plan, ...memoryPlan])
-    onClose()
-  }
-
+  const summary = relationshipIdentitySummary({ subject, other, relationship, observations })
   return (
-    <Dialog title={`Somebody in ${subject.displayName}'s life`} onClose={onClose}>
-      <label className="field-label" htmlFor="rel-word">
-        Your word for them — optional
-      </label>
-      <input
-        id="rel-word"
-        className="field"
-        value={word}
-        onChange={(event) => onWordChange(event.target.value)}
-        placeholder="“son”, “boss”, “roommate”"
-      />
-
-      <label className="field-label" htmlFor="rel-kind">
-        Relationship
-      </label>
-      <select id="rel-kind" className="field" value={kind} onChange={(event) => setKind(event.target.value as RelationshipKind)}>
-        {RELATIONSHIP_GROUPS.map((group) => (
-          <optgroup key={group} label={GROUP_TITLES[group]}>
-            {RELATIONSHIP_KINDS.filter((k) => groupOf(k) === group).map((k) => (
-              <option key={k} value={k}>
-                {kindLabel(k)}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
-
-      <label className="field-label" htmlFor="rel-who">
-        Who — leave blank if you don't know their name yet
-      </label>
-      {existing ? (
-        <div className="chip-row">
-          <span className="chip chip-selected">
-            {existing.displayName}
-            <button
-              type="button"
-              className="button-plain button"
-              style={{ padding: 0 }}
-              aria-label="Clear person"
-              onClick={() => setExisting(null)}
-            >
-              <Icon name="x" size={12} />
-            </button>
-          </span>
-        </div>
-      ) : (
-        <input
-          id="rel-who"
-          className="field"
-          value={who}
-          onChange={(event) => setWho(event.target.value)}
-          placeholder="A name, or an existing person"
+    <div className="relationship-row" data-highlight={highlight || undefined}>
+      <button
+        type="button"
+        className="relationship-row-main"
+        aria-label={summary.accessibleLabel}
+        onClick={onOpen}
+        disabled={!onOpen}
+      >
+        <Avatar name={other.displayName} colorName={other.colorName} small unnamed={!other.hasStatedName} />
+        <IdentitySummary
+          primary={summary.primaryLabel}
+          details={summary.details.map((d) => d.value)}
+          accessibleLabel={summary.accessibleLabel}
         />
-      )}
-      {matches.map((match) => (
-        <button
-          key={match.id}
-          type="button"
-          className="row"
-          style={{ padding: 'var(--space-tight) 0' }}
-          onClick={() => {
-            setExisting(match)
-            setWho('')
-          }}
-        >
-          <Avatar name={match.displayName} colorName={match.colorName} small />
-          <span className="row-title">{match.displayName}</span>
-        </button>
-      ))}
-
-      <label className="field-label">Worth noting about them</label>
-      {SUGGESTED_ATTRIBUTES[kind].map((attribute) => (
-        <input
-          key={attribute}
-          className="field"
-          style={{ marginBottom: 'var(--space-small)' }}
-          value={facts[attribute] ?? ''}
-          onChange={(event) => setFacts((current) => ({ ...current, [attribute]: event.target.value }))}
-          placeholder={`${attributeLabel(attribute)} — ${capturePrompt(attribute)}`}
-          aria-label={attributeLabel(attribute)}
-        />
-      ))}
-      <div style={{ display: 'flex', gap: 'var(--space-small)' }}>
-        <input
-          className="field"
-          value={customFactName}
-          onChange={(event) => setCustomFactName(event.target.value)}
-          placeholder="Anything else…"
-          aria-label="Custom fact category"
-        />
-        <input
-          className="field"
-          value={customFactValue}
-          onChange={(event) => setCustomFactValue(event.target.value)}
-          placeholder="…and the fact"
-          aria-label="Custom fact value"
-        />
-      </div>
-
-      <div className="sheet-actions">
-        <button type="button" className="button button-quiet" onClick={onClose}>
-          Cancel
-        </button>
-        <button type="button" className="button" disabled={saving} onClick={() => void save()}>
-          Record
-        </button>
-      </div>
-    </Dialog>
+      </button>
+      <span className="relationship-row-actions">
+        {!other.hasStatedName && onAddName && (
+          <button type="button" className="button button-plain" onClick={onAddName}>
+            Add name
+          </button>
+        )}
+        {onRemove && (
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={`Remove relationship ${summary.accessibleLabel}`}
+            onClick={onRemove}
+          >
+            <Icon name="x" size={14} />
+          </button>
+        )}
+      </span>
+    </div>
   )
 }
 
@@ -248,7 +98,7 @@ function NameSheet({ person, onClose }: { person: Person; onClose: () => void })
   }
 
   return (
-    <Dialog title={`Name ${person.displayName}`} onClose={onClose}>
+    <Dialog title="Add their name" onClose={onClose}>
       <p className="row-subtitle">Every fact and relationship they have stays attached.</p>
       <input
         className="field"
@@ -281,95 +131,110 @@ export function RelationshipsSection({
 }) {
   const uid = useUID()
   const navigate = useNavigate()
+  const observations = useAllObservations(uid)
+  const allRelationships = useAllRelationships(uid) ?? []
   const [adding, setAdding] = useState(false)
   const [naming, setNaming] = useState<Person | null>(null)
+  const [comparing, setComparing] = useState<UnnamedPairSuggestion | null>(null)
+  const [newRelationshipID, setNewRelationshipID] = useState<string | null>(null)
 
   const peopleByID = useMemo(() => new Map(people.map((p) => [p.id, p])), [people])
+  const observationsBySubject = useMemo(() => {
+    const map = new Map<string, Observation[]>()
+    for (const observation of observations ?? []) {
+      map.set(observation.subjectID, [...(map.get(observation.subjectID) ?? []), observation])
+    }
+    return map
+  }, [observations])
 
   const grouped = RELATIONSHIP_GROUPS.map((group) => ({
     group,
     rows: relationships.filter((r) => groupOf(r.kind) === group),
   })).filter((g) => g.rows.length > 0)
 
-  const unnamed = relationships
-    .map((r) => peopleByID.get(r.otherID))
-    .filter((p): p is Person => Boolean(p && !p.hasStatedName))
+  const suggestions = useMemo(
+    () =>
+      unnamedPairSuggestions(relationships, peopleByID, new Set(person.dismissedComparisonKeys ?? [])),
+    [relationships, peopleByID, person.dismissedComparisonKeys],
+  )
 
   async function unrelate(forward: Relationship) {
     await applyPlan(uid, planUnrelate(forward).plan)
   }
 
   return (
-    <div className="aside-panel">
+    <section className="rail-section">
       <div className="aside-panel-head">
-        <h2 className="aside-title">Relationships</h2>
+        <h2 className="rail-section-title">Relationships</h2>
         <button type="button" className="button button-plain button-small" onClick={() => setAdding(true)}>
           Add
         </button>
       </div>
 
-      {grouped.length === 0 && (
-        <p className="row-subtitle">Nobody linked yet — a partner, a boss, an unnamed son.</p>
-      )}
+      {grouped.length === 0 && <p className="row-subtitle">Nobody linked yet — a partner, a boss, an unnamed son.</p>}
 
-      {grouped.map(({ group, rows }) => (
-        <div key={group}>
-          <p className="row-subtitle" style={{ marginTop: 'var(--space-small)', fontWeight: 600 }}>
-            {GROUP_TITLES[group]}
-          </p>
-          {rows.map((relationship) => {
-            const other = peopleByID.get(relationship.otherID)
-            if (!other) return null
-            return (
-              <div key={relationship.id} className="row" style={{ cursor: 'default' }}>
-                <button
-                  type="button"
-                  style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-medium)', background: 'none', border: 0, padding: 0, cursor: 'pointer', minWidth: 0 }}
-                  onClick={() => navigate(`/people/${other.id}`)}
-                >
-                  <Avatar name={other.displayName} colorName={other.colorName} small />
-                  <span style={{ textAlign: 'left' }}>
-                    <span className="row-title" style={{ display: 'block' }}>
-                      {other.displayName}
-                    </span>
-                    <span className="row-subtitle">{relationship.customLabel ?? kindLabel(relationship.kind)}</span>
-                  </span>
+      {grouped.map(({ group, rows }) => {
+        const groupSuggestions = suggestions.filter((s) => groupOf(s.kind) === group)
+        return (
+          <div key={group}>
+            <h3 className="relationship-group-title">{GROUP_TITLES[group]}</h3>
+            {rows.map((relationship) => {
+              const other = peopleByID.get(relationship.otherID)
+              if (!other) return null
+              return (
+                <RelationshipIdentityRow
+                  key={relationship.id}
+                  subject={person}
+                  other={other}
+                  relationship={relationship}
+                  observations={observationsBySubject.get(other.id) ?? []}
+                  onOpen={() => navigate(`/people/${other.id}`)}
+                  onAddName={() => setNaming(other)}
+                  onRemove={() => void unrelate(relationship)}
+                  highlight={relationship.id === newRelationshipID}
+                />
+              )
+            })}
+            {groupSuggestions.map((suggestion) => (
+              <p key={suggestion.key} className="relationship-compare-callout">
+                Two unnamed {suggestion.label ? `${suggestion.label}s` : 'people'} may be hard to tell apart.{' '}
+                <button type="button" className="button-plain button" onClick={() => setComparing(suggestion)}>
+                  Compare them
                 </button>
-                <span className="row-trailing">
-                  <button
-                    type="button"
-                    className="button button-plain"
-                    style={{ padding: '2px 6px', color: 'var(--color-text-tertiary)' }}
-                    aria-label={`Remove relationship with ${other.displayName}`}
-                    onClick={() => void unrelate(relationship)}
-                  >
-                    <Icon name="x" size={14} />
-                  </button>
-                </span>
-              </div>
-            )
-          })}
-        </div>
-      ))}
+              </p>
+            ))}
+          </div>
+        )
+      })}
 
-      {unnamed.length > 0 && (
-        <>
-          <h2 className="aside-title" style={{ marginTop: 'var(--space-medium)' }}>To fill in</h2>
-          {unnamed.map((placeholder) => (
-            <div key={placeholder.id} className="row" style={{ cursor: 'default' }}>
-              <span className="row-title">{placeholder.displayName}</span>
-              <span className="row-trailing">
-                <button type="button" className="button button-plain" onClick={() => setNaming(placeholder)}>
-                  Add name
-                </button>
-              </span>
-            </div>
-          ))}
-        </>
+      {adding && (
+        <AddRelationshipFlow
+          subject={person}
+          people={people}
+          existingRelationships={relationships}
+          observationsBySubject={observationsBySubject}
+          onClose={() => setAdding(false)}
+          onCreated={(relationshipID) => {
+            setAdding(false)
+            setNewRelationshipID(relationshipID)
+            window.setTimeout(() => setNewRelationshipID(null), 900)
+          }}
+        />
       )}
-
-      {adding && <AddRelationshipSheet subject={person} people={people} onClose={() => setAdding(false)} />}
       {naming && <NameSheet person={naming} onClose={() => setNaming(null)} />}
-    </div>
+      {comparing && (
+        <CompareUnnamedPeopleSheet
+          subject={person}
+          suggestion={comparing}
+          relationships={allRelationships}
+          observationsBySubject={observationsBySubject}
+          onAddName={(target) => {
+            setComparing(null)
+            setNaming(target)
+          }}
+          onClose={() => setComparing(null)}
+        />
+      )}
+    </section>
   )
 }

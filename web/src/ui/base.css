@@ -1794,6 +1794,159 @@ textarea.field {
   background: color-mix(in srgb, var(--color-due-today) 6%, transparent);
 }
 
+/* MARK: Relationships — identity rows, type tiles, compare columns */
+
+.relationship-group-title {
+  font: var(--text-label);
+  color: var(--color-text-secondary);
+  margin: var(--space-small) 0 var(--space-tight);
+}
+
+.relationship-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-small);
+  padding: var(--space-small) var(--space-tight);
+  margin: 0 calc(-1 * var(--space-tight));
+  border-radius: var(--radius-medium);
+  transition: background 700ms var(--ease-standard);
+}
+
+.relationship-row[data-highlight] {
+  background: var(--color-surface-selected);
+}
+
+.relationship-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-medium);
+  border: 0;
+  background: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.relationship-row-main:disabled {
+  cursor: default;
+}
+
+.relationship-row-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-tight);
+}
+
+.relationship-compare-callout {
+  font: var(--text-metadata);
+  color: var(--color-text-secondary);
+  padding: var(--space-small) var(--space-medium);
+  border-left: 2px solid var(--color-personal);
+  background: color-mix(in srgb, var(--color-personal) 6%, transparent);
+  margin: var(--space-tight) 0;
+}
+
+.relationship-tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-small);
+  margin-bottom: var(--space-small);
+}
+
+.relationship-tile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-small);
+  padding: var(--space-small) var(--space-medium);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-medium);
+  background: var(--color-surface);
+  font: var(--text-label);
+  color: var(--color-text);
+  cursor: pointer;
+  min-height: 44px;
+  text-align: left;
+}
+
+.relationship-tile[aria-checked='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-surface-selected);
+  color: var(--color-accent);
+}
+
+.relationship-tile svg:first-child {
+  color: var(--color-text-secondary);
+}
+
+.relationship-tile[aria-checked='true'] svg {
+  color: var(--color-accent);
+}
+
+.relationship-tile svg:last-child {
+  margin-left: auto;
+}
+
+.relationship-person-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: var(--space-small);
+}
+
+.relationship-person-options .combobox-option:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.relationship-preview {
+  border-top: 1px solid var(--color-separator);
+  border-bottom: 1px solid var(--color-separator);
+  padding: var(--space-tight) 0;
+}
+
+.sheet-step-note {
+  margin-right: auto;
+  font: var(--text-metadata);
+  color: var(--color-text-secondary);
+}
+
+.compare-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-large);
+}
+
+.compare-column {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-small);
+  padding: var(--space-medium);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-large);
+}
+
+.compare-label {
+  font: var(--text-body-strong);
+}
+
+.compare-details {
+  font: var(--text-sub);
+  color: var(--color-text-secondary);
+}
+
+.compare-details-empty {
+  font-style: italic;
+}
+
+.compare-meta {
+  font: var(--text-metadata);
+  color: var(--color-text-secondary);
+}
+
 .sheet-confirm-text {
   margin-right: auto;
   font: var(--text-sub);

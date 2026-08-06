@@ -39,6 +39,9 @@ export interface Person {
   /// maintained only inside the same batch that logs an interaction. The person
   /// page shows the derived value; lists may lean on this.
   lastContactAt: Date | null
+  /// Optional, backward compatible: unnamed-duplicate comparisons the user
+  /// marked "They are different", keyed order-independently by the pair.
+  dismissedComparisonKeys?: string[]
 }
 
 /// The monogram for an avatar: first letters of the first two words.
