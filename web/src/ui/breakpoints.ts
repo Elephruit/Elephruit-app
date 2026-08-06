@@ -1,11 +1,14 @@
 /// The canonical breakpoints. Media queries cannot read custom properties, so
 /// these numbers are the single source of truth and tokens.css mirrors them in
-/// a comment: 720 mobile→tablet, 1024 tablet→desktop rail, 1280 wide.
+/// a comment: 720 mobile→tablet, 900 sheet (side panel vs bottom sheet),
+/// 1024 tablet→desktop rail, 1280 wide.
 
 import { useSyncExternalStore } from 'react'
 
 export const BREAKPOINTS = {
   tablet: 720,
+  /// Sheets anchor right at and above this; below they rise from the bottom.
+  sheet: 900,
   desktop: 1024,
   wide: 1280,
 } as const

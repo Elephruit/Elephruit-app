@@ -18,7 +18,6 @@ import {
 import { useUID } from '../UserContext'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
-import { MetricTile } from '../components/MetricTile'
 import { SkeletonRows } from '../components/Skeleton'
 import { TimelineDayHeader, TimelineRow } from '../components/TimelineRow'
 import { PageScaffold } from '../shell/PageScaffold'
@@ -215,35 +214,45 @@ export function FeedPage() {
       </button>
 
       {overview && (
-        <div className="metric-tiles">
-          <MetricTile
-            value={overview.overdue}
-            label={overview.overdue === 1 ? 'Overdue follow-up' : 'Overdue follow-ups'}
-            tone={overview.overdue > 0 ? 'overdue' : 'neutral'}
-            detail={overview.oldestOverdueDays !== null ? `oldest: ${overview.oldestOverdueDays} days` : 'all clear'}
+        <div className="feed-summary">
+          <button
+            type="button"
+            className="feed-summary-item"
+            data-tone={overview.overdue > 0 ? 'overdue' : 'neutral'}
             onClick={() => navigate('/followups')}
-          />
-          <MetricTile
-            value={overview.today}
-            label="Due today"
-            tone={overview.today > 0 ? 'today' : 'neutral'}
-            detail={overview.firstTodayTitle ?? 'nothing scheduled'}
+          >
+            <b className="tabular">{overview.overdue}</b>
+            <span>{overview.overdue === 1 ? 'Overdue follow-up' : 'Overdue follow-ups'}</span>
+            <small>{overview.oldestOverdueDays !== null ? `oldest: ${overview.oldestOverdueDays} days` : 'all clear'}</small>
+          </button>
+          <button
+            type="button"
+            className="feed-summary-item"
+            data-tone={overview.today > 0 ? 'today' : 'neutral'}
             onClick={() => navigate('/followups')}
-          />
-          <MetricTile
-            value={overview.quiet.length}
-            label="Going quiet"
-            tone={overview.quiet.length > 0 ? 'accent' : 'neutral'}
-            detail={
-              overview.quiet.length > 0
+          >
+            <b className="tabular">{overview.today}</b>
+            <span>Due today</span>
+            <small>{overview.firstTodayTitle ?? 'nothing scheduled'}</small>
+          </button>
+          <button
+            type="button"
+            className="feed-summary-item"
+            data-tone={overview.quiet.length > 0 ? 'accent' : 'neutral'}
+            data-span
+            onClick={() => navigate('/people')}
+          >
+            <b className="tabular">{overview.quiet.length}</b>
+            <span>Going quiet</span>
+            <small>
+              {overview.quiet.length > 0
                 ? overview.quiet
                     .slice(0, 2)
                     .map((s) => `${s.displayName.split(' ')[0]} · ${Math.floor(s.daysSinceContact / 7)}w`)
                     .join(', ')
-                : 'everyone is current'
-            }
-            onClick={() => navigate('/people')}
-          />
+                : 'everyone is current'}
+            </small>
+          </button>
         </div>
       )}
 

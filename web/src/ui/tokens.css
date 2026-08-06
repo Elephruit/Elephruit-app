@@ -96,6 +96,7 @@
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-out: var(--ease-standard);
+  --duration-sheet: 240ms;
   --duration-slow: 260ms;
 
   /* ——— Density and measure ——— */
