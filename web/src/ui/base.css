@@ -1603,6 +1603,16 @@ textarea.field {
   margin-top: var(--space-small);
 }
 
+.followup-title {
+  max-height: calc(4 * 1.45em + 24px);
+}
+
+.sheet-confirm-text {
+  margin-right: auto;
+  font: var(--text-sub);
+  color: var(--color-destructive);
+}
+
 @media (max-width: 719.98px) {
   .composer-foot,
   .composer-review .sheet-actions {

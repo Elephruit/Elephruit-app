@@ -419,6 +419,12 @@ export function planQuickReschedule(id: string, startAt: Date | null): { plan: W
   }
 }
 
+/// Deletion is real deletion — reminders have no supersede chain — so the UI
+/// must say it cannot be undone before ever applying this.
+export function planDeleteReminder(id: string): { plan: WritePlan } {
+  return { plan: [{ op: 'delete', collection: 'reminders', id }] }
+}
+
 export function planCompleteReminder(id: string, now: Date): { plan: WritePlan } {
   return { plan: [{ op: 'update', collection: 'reminders', id, data: { status: 'completed', completedAt: now } }] }
 }

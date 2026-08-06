@@ -165,6 +165,117 @@ export function hasTemporalCue(text: string): boolean {
   return CUES.some((cue) => cue.test(text))
 }
 
+/// A stored instant read back as wall-clock fields in a zone — the editing
+/// round trip: what was saved as 10:00 America/Chicago reopens as 10:00
+/// America/Chicago wherever the user happens to be.
+export function utcToZonedFields(date: Date, timeZone: string): { localDate: string; localTime: string } {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  })
+  const parts = dtf.formatToParts(date)
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+  return {
+    localDate: `${get('year')}-${get('month')}-${get('day')}`,
+    localTime: `${get('hour')}:${get('minute')}`,
+  }
+}
+
+// MARK: Deterministic phrase detection
+
+/// US zone abbreviations the guard can resolve without a model. Anything else
+/// stays unresolved and the guard offers a plain "add a date" instead.
+const ZONE_ABBREVS: Record<string, string> = {
+  ct: 'America/Chicago',
+  cst: 'America/Chicago',
+  cdt: 'America/Chicago',
+  et: 'America/New_York',
+  est: 'America/New_York',
+  edt: 'America/New_York',
+  mt: 'America/Denver',
+  mst: 'America/Denver',
+  mdt: 'America/Denver',
+  pt: 'America/Los_Angeles',
+  pst: 'America/Los_Angeles',
+  pdt: 'America/Los_Angeles',
+}
+
+const WEEKDAY_INDEX: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+}
+
+export interface DetectedDeadline {
+  /// The matched phrase, verbatim — "Monday 10am CT".
+  phrase: string
+  localDate: string
+  localTime: string | null
+  timeZone: string | null
+  /// Ready-made button copy: "Monday at 10:00 AM CT".
+  label: string
+}
+
+const DETECT_RE = new RegExp(
+  `\\b(today|tomorrow|${Object.keys(WEEKDAY_INDEX).join('|')})\\b` +
+    `(?:\\s+(?:at\\s+)?(\\d{1,2})(?::(\\d{2}))?\\s?(am|pm)\\b)?` +
+    `\\s*\\b(${Object.keys(ZONE_ABBREVS).join('|')})?\\b`,
+  'i',
+)
+
+/// The deterministic half of the temporal safeguard: pull a concrete deadline
+/// out of common phrases ("Monday 10am CT", "tomorrow at 9") so the guard can
+/// offer "Use Monday at 10:00 AM CT" rather than only complaining. Null when
+/// no confidently parseable phrase exists — the guard still fires on the cue,
+/// it just offers manual scheduling instead.
+export function detectDeadlineFromText(text: string, context: { now: Date; timeZone: string }): DetectedDeadline | null {
+  const match = DETECT_RE.exec(text)
+  if (!match) return null
+
+  const [, dayWord, hourRaw, minuteRaw, meridiem, zoneRaw] = match
+  const base = new Date(context.now)
+  const word = dayWord.toLowerCase()
+
+  if (word === 'tomorrow') base.setDate(base.getDate() + 1)
+  else if (word !== 'today') {
+    const target = WEEKDAY_INDEX[word]
+    const shift = (target - base.getDay() + 7) % 7 || 7
+    base.setDate(base.getDate() + shift)
+  }
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const localDate = `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}`
+
+  let localTime: string | null = null
+  if (hourRaw) {
+    let hour = Number(hourRaw)
+    if (meridiem?.toLowerCase() === 'pm' && hour < 12) hour += 12
+    if (meridiem?.toLowerCase() === 'am' && hour === 12) hour = 0
+    localTime = `${pad(hour)}:${minuteRaw ?? '00'}`
+  }
+
+  const timeZone = localTime && zoneRaw ? (ZONE_ABBREVS[zoneRaw.toLowerCase()] ?? null) : null
+
+  const dayLabelText = word === 'today' || word === 'tomorrow' ? word : word[0].toUpperCase() + word.slice(1)
+  let label = dayLabelText
+  if (localTime) {
+    const [h, m] = localTime.split(':').map(Number)
+    const hour12 = h % 12 === 0 ? 12 : h % 12
+    label += ` at ${hour12}:${pad(m)} ${h < 12 ? 'AM' : 'PM'}`
+    if (zoneRaw) label += ` ${zoneRaw.toUpperCase()}`
+  }
+
+  return { phrase: match[0].trim(), localDate, localTime, timeZone, label }
+}
+
 // MARK: Display
 
 function shortZoneName(date: Date, timeZone: string, locale?: string): string {
