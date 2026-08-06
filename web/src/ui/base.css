@@ -297,39 +297,145 @@ a {
 /* MARK: Controls */
 
 .button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-small);
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--radius-medium);
-  padding: 10px var(--space-large);
+  height: var(--control-height);
+  padding: 0 var(--space-large);
   font: var(--text-body-strong);
+  font-size: 0.875rem;
   background: var(--color-accent);
   color: var(--color-on-accent);
   cursor: pointer;
+  box-shadow: var(--shadow-raised);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.button:hover {
+  background: var(--color-accent-hover);
+}
+
+.button:active {
+  box-shadow: var(--shadow-flat);
 }
 
 .button:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: default;
+  box-shadow: none;
+}
+
+.button:disabled:hover {
+  background: var(--color-accent);
+}
+
+.button-secondary {
+  background: var(--color-background-elevated);
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.button-secondary:hover,
+.button-secondary:disabled:hover {
+  background: var(--color-background-elevated);
+  border-color: var(--color-text-tertiary);
 }
 
 .button-quiet {
   background: var(--color-subtle-fill);
   color: var(--color-text);
+  box-shadow: none;
+}
+
+.button-quiet:hover,
+.button-quiet:disabled:hover {
+  background: var(--color-hover-fill);
 }
 
 .button-plain {
   background: none;
   color: var(--color-accent);
+  height: auto;
   padding: 6px var(--space-small);
+  box-shadow: none;
+}
+
+.button-plain:hover,
+.button-plain:disabled:hover {
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
 }
 
 .button-destructive {
   background: none;
   color: var(--color-destructive);
+  height: auto;
   padding: 6px var(--space-small);
+  box-shadow: none;
+}
+
+.button-destructive:hover,
+.button-destructive:disabled:hover {
+  background: color-mix(in srgb, var(--color-destructive) 8%, transparent);
+}
+
+.button-small {
+  height: var(--control-height-small);
+  padding: 0 var(--space-medium);
+  font-size: 0.8125rem;
+}
+
+.button-content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-small);
+}
+
+.button[data-loading] .button-content {
+  visibility: hidden;
+}
+
+.button-spinner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  animation: button-spin 700ms linear infinite;
+}
+
+@keyframes button-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.icon-button:hover {
+  background: var(--color-hover-fill);
+  color: var(--color-text);
 }
 
 .field {
@@ -339,6 +445,15 @@ a {
   background: var(--color-background-elevated);
   padding: 10px var(--space-medium);
   font: var(--text-body);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.field:hover {
+  border-color: var(--color-border-strong);
+}
+
+.field[aria-invalid='true'] {
+  border-color: var(--color-destructive);
 }
 
 .field:focus {
@@ -359,9 +474,29 @@ textarea.field {
 
 .field-label {
   display: block;
-  font: var(--text-metadata);
+  font: var(--text-label);
   color: var(--color-text-secondary);
   margin: var(--space-medium) 0 var(--space-tight);
+}
+
+.form-field .field-label {
+  margin-top: 0;
+}
+
+.form-field {
+  margin-top: var(--space-medium);
+}
+
+.field-help {
+  font: var(--text-metadata);
+  color: var(--color-text-tertiary);
+  margin-top: var(--space-tight);
+}
+
+.field-error {
+  font: var(--text-metadata);
+  color: var(--color-destructive);
+  margin-top: var(--space-tight);
 }
 
 /* MARK: Chips */
