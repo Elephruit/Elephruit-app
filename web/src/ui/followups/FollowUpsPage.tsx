@@ -1,5 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Avatar } from '../components/Avatar'
+import { Button } from '../components/Button'
+import { MetricTile } from '../components/MetricTile'
+import { SegmentedControl } from '../components/SegmentedControl'
+import { PageHeader } from '../shell/PageHeader'
+import { PageScaffold } from '../shell/PageScaffold'
 import {
   planCompleteReminder,
   planCreateReminder,
@@ -24,15 +30,15 @@ function atNoon(dateValue: string): Date {
   return fromLocalInputValue(`${dateValue}T12:00`)
 }
 
-function dateChip(reminder: Reminder, now: Date): { text: string; color?: string } | null {
+function dateChip(reminder: Reminder, now: Date): { text: string; tone: 'overdue' | 'today' | null } | null {
   const bucket = bucketFor(reminder, now)
   if (reminder.dueAt) {
     const phrase = `due ${relativeDescription(reminder.dueAt, now)}`
-    if (bucket === 'overdue') return { text: phrase, color: 'var(--color-overdue)' }
-    if (bucket === 'today') return { text: 'due today', color: 'var(--color-due-today)' }
-    return { text: phrase }
+    if (bucket === 'overdue') return { text: phrase, tone: 'overdue' }
+    if (bucket === 'today') return { text: 'due today', tone: 'today' }
+    return { text: phrase, tone: null }
   }
-  if (reminder.startAt) return { text: `starts ${relativeDescription(reminder.startAt, now)}` }
+  if (reminder.startAt) return { text: `starts ${relativeDescription(reminder.startAt, now)}`, tone: null }
   return null
 }
 
@@ -151,14 +157,25 @@ export function FollowUpsPage() {
   const navigate = useNavigate()
   const reminders = useReminders(uid)
   const people = usePeople(uid)
-  const [showCompleted, setShowCompleted] = useState(false)
+  const [view, setView] = useState<'open' | 'completed'>('open')
   const [editing, setEditing] = useState<Reminder | null>(null)
   const [creating, setCreating] = useState(false)
+  // One clock per mount — a fresh Date each render silently drifted past the memo.
+  const [now] = useState(() => new Date())
 
-  const now = new Date()
-  const groups = useMemo(() => (reminders ? sections(reminders, now) : undefined), [reminders]) // eslint-disable-line react-hooks/exhaustive-deps
+  const groups = useMemo(() => (reminders ? sections(reminders, now) : undefined), [reminders, now])
   const done = useMemo(() => (reminders ? completedList(reminders) : []), [reminders])
   const peopleByID = useMemo(() => new Map((people ?? []).map((p) => [p.id, p])), [people])
+
+  const counts = useMemo(() => {
+    const byBucket = new Map((groups ?? []).map((group) => [group.bucket, group.reminders.length]))
+    return {
+      overdue: byBucket.get('overdue') ?? 0,
+      today: byBucket.get('today') ?? 0,
+      upcoming: byBucket.get('upcoming') ?? 0,
+      unscheduled: (byBucket.get('anytime') ?? 0) + (byBucket.get('someday') ?? 0),
+    }
+  }, [groups])
 
   async function complete(reminder: Reminder) {
     await applyPlan(uid, planCompleteReminder(reminder.id, new Date()).plan)
@@ -174,117 +191,136 @@ export function FollowUpsPage() {
   }
 
   return (
-    <main className="page">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <h1 className="page-title" style={{ marginBottom: 0 }}>
-          Follow-ups
-        </h1>
-        <span>
-          <button type="button" className="button button-plain" onClick={() => setShowCompleted((s) => !s)}>
-            {showCompleted ? 'Hide completed' : 'Completed'}
-          </button>
-          <button type="button" className="button button-plain" onClick={() => setCreating(true)}>
-            New
-          </button>
-        </span>
-      </div>
+    <PageScaffold width="wide">
+      <PageHeader
+        title="Follow-ups"
+        actions={
+          <>
+            <SegmentedControl
+              label="Open or completed"
+              options={[
+                { value: 'open', label: 'Open' },
+                { value: 'completed', label: 'Completed' },
+              ]}
+              value={view}
+              onChange={setView}
+            />
+            <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
+              New follow-up
+            </Button>
+          </>
+        }
+      />
 
-      {groups && groups.length === 0 && !showCompleted && (
-        <EmptyState
-          icon="bell"
-          headline="Nothing owed"
-          message="Follow-ups from logged interactions gather here, bucketed by what their dates actually say."
-        />
-      )}
+      <div className="task-inbox">
+        {view === 'open' && groups && (
+          <div className="metric-tiles metric-tiles-four">
+            <MetricTile value={counts.overdue} label="Overdue" tone={counts.overdue > 0 ? 'overdue' : 'neutral'} />
+            <MetricTile value={counts.today} label="Today" tone={counts.today > 0 ? 'today' : 'neutral'} />
+            <MetricTile value={counts.upcoming} label="Upcoming" />
+            <MetricTile value={counts.unscheduled} label="Unscheduled" />
+          </div>
+        )}
 
-      {groups?.map((group) => (
-        <section key={group.bucket}>
-          <h2
-            className="section-header"
-            style={group.bucket === 'overdue' ? { color: 'var(--color-overdue)' } : undefined}
-          >
-            {BUCKET_TITLES[group.bucket]}
-          </h2>
-          {group.reminders.map((reminder) => {
-            const chip = dateChip(reminder, now)
-            return (
-              <div key={reminder.id} className="row" style={{ cursor: 'default' }}>
+        {view === 'open' && groups && groups.length === 0 && (
+          <EmptyState
+            icon="bell"
+            headline="Nothing owed"
+            message="Follow-ups from logged interactions gather here, bucketed by what their dates actually say."
+          />
+        )}
+
+        {view === 'open' &&
+          groups?.map((group) => (
+            <section key={group.bucket}>
+              <h2 className="section-header" data-tone={group.bucket === 'overdue' ? 'overdue' : undefined}>
+                {BUCKET_TITLES[group.bucket]}
+              </h2>
+              {group.reminders.map((reminder) => {
+                const chip = dateChip(reminder, now)
+                return (
+                  <div key={reminder.id} className="task-row">
+                    <button
+                      type="button"
+                      className="complete-ring"
+                      aria-label={`Complete ${reminder.title}`}
+                      onClick={() => void complete(reminder)}
+                    />
+                    <button type="button" className="task-main" onClick={() => setEditing(reminder)}>
+                      <span className="row-title">{reminder.title}</span>
+                      <span className="task-meta">
+                        {chip && (
+                          <span
+                            className={
+                              chip.tone === 'overdue'
+                                ? 'chip chip-status-overdue'
+                                : chip.tone === 'today'
+                                  ? 'chip chip-status-today'
+                                  : 'chip'
+                            }
+                          >
+                            {chip.text}
+                          </span>
+                        )}
+                        {reminder.personIDs.map((id) => {
+                          const person = peopleByID.get(id)
+                          if (!person) return null
+                          return (
+                            <span
+                              key={id}
+                              role="link"
+                              tabIndex={0}
+                              className="task-person"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                navigate(`/people/${id}`)
+                              }}
+                              onKeyDown={(event) => event.key === 'Enter' && navigate(`/people/${id}`)}
+                            >
+                              <Avatar name={person.displayName} colorName={person.colorName} small />
+                              {person.displayName}
+                            </span>
+                          )
+                        })}
+                      </span>
+                    </button>
+                    <span className="task-actions">
+                      <Button variant="ghost" small onClick={() => void startTomorrow(reminder)}>
+                        Tomorrow
+                      </Button>
+                      <Button variant="ghost" small onClick={() => setEditing(reminder)}>
+                        Edit
+                      </Button>
+                    </span>
+                  </div>
+                )
+              })}
+            </section>
+          ))}
+
+        {view === 'completed' && (
+          <section>
+            {done.length === 0 && <p className="row-subtitle">Nothing completed yet.</p>}
+            {done.map((reminder) => (
+              <div key={reminder.id} className="task-row task-row-done">
                 <button
                   type="button"
                   className="button button-plain"
-                  style={{ padding: 0, color: 'var(--color-due-today)' }}
-                  aria-label={`Complete ${reminder.title}`}
-                  onClick={() => void complete(reminder)}
+                  style={{ padding: 0, color: 'var(--color-completed)', height: 'auto' }}
+                  aria-label={`Reopen ${reminder.title}`}
+                  onClick={() => void reopen(reminder)}
                 >
-                  <Icon name="circle" size={20} />
+                  <Icon name="check-circle" size={20} />
                 </button>
-                <button
-                  type="button"
-                  style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', cursor: 'pointer', minWidth: 0, flex: 1 }}
-                  onClick={() => setEditing(reminder)}
-                >
-                  <span className="row-title" style={{ display: 'block' }}>
-                    {reminder.title}
-                  </span>
-                  <span className="row-subtitle" style={{ display: 'flex', gap: 'var(--space-small)', flexWrap: 'wrap' }}>
-                    {chip && <span style={{ color: chip.color }}>{chip.text}</span>}
-                    {reminder.personIDs.map((id) => {
-                      const person = peopleByID.get(id)
-                      if (!person) return null
-                      return (
-                        <span
-                          key={id}
-                          role="link"
-                          tabIndex={0}
-                          style={{ textDecoration: 'underline', cursor: 'pointer' }}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            navigate(`/people/${id}`)
-                          }}
-                          onKeyDown={(event) => event.key === 'Enter' && navigate(`/people/${id}`)}
-                        >
-                          {person.displayName}
-                        </span>
-                      )
-                    })}
-                  </span>
-                </button>
-                <span className="row-trailing">
-                  <button
-                    type="button"
-                    className="button button-plain"
-                    style={{ padding: '2px 6px' }}
-                    onClick={() => void startTomorrow(reminder)}
-                  >
-                    Tomorrow
-                  </button>
-                </span>
+                <span className="row-title">{reminder.title}</span>
+                {reminder.completedAt && (
+                  <span className="row-trailing">{relativeDescription(reminder.completedAt, now)}</span>
+                )}
               </div>
-            )
-          })}
-        </section>
-      ))}
-
-      {showCompleted && (
-        <section>
-          <h2 className="section-header">Completed</h2>
-          {done.length === 0 && <p className="row-subtitle">Nothing completed yet.</p>}
-          {done.map((reminder) => (
-            <div key={reminder.id} className="row" style={{ cursor: 'default', opacity: 0.65 }}>
-              <button
-                type="button"
-                className="button button-plain"
-                style={{ padding: 0, color: 'var(--color-completed)' }}
-                aria-label={`Reopen ${reminder.title}`}
-                onClick={() => void reopen(reminder)}
-              >
-                <Icon name="check-circle" size={20} />
-              </button>
-              <span className="row-title">{reminder.title}</span>
-            </div>
-          ))}
-        </section>
-      )}
+            ))}
+          </section>
+        )}
+      </div>
 
       {(creating || editing) && people && (
         <ReminderSheet
@@ -296,6 +332,6 @@ export function FollowUpsPage() {
           }}
         />
       )}
-    </main>
+    </PageScaffold>
   )
 }
