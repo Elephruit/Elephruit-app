@@ -1,18 +1,22 @@
-/// The one impure edge of AI capture: dictated text goes to the Anthropic API
-/// with the user's own key, browser-direct, and a schema-validated
-/// CaptureProposal comes back. Everything after that is the pure resolution
-/// in domain/assist.ts and the review screen's confirmation.
+/// The write direction of AI capture: dictated text goes through the app's
+/// AI gateway — which decrypts the user's stored key server-side and calls
+/// Anthropic on their behalf — and a schema-validated CaptureProposal comes
+/// back. Everything after that is the pure resolution in domain/assist.ts
+/// and the review screen's confirmation.
 ///
-/// Privacy shape, stated plainly: the dictation and the people roster's names
-/// are sent to Anthropic under the user's key. Nothing else leaves.
+/// Privacy shape, stated plainly: the dictation and the people roster's
+/// names are sent to Anthropic under the user's stored key, via our
+/// backend. The key itself never enters this module — requests carry a
+/// credential id. The reply is re-validated here against the same zod
+/// schema the request asked for; nothing unvalidated reaches a write plan.
 
-import Anthropic from '@anthropic-ai/sdk'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { z } from 'zod'
 import type { CaptureProposal } from '../domain/assist'
 import { CURATED_ATTRIBUTES, attributeLabel } from '../domain/facts'
 import { INTERACTION_KINDS } from '../domain/interaction'
 import { RELATIONSHIP_KINDS, kindLabel } from '../domain/relationships'
+import { GatewayError, runAiTask, type GatewayRequest } from './gateway'
 
 // Structured outputs want every property present and no extras; optionality is
 // expressed as null. Kept flat — recursive schemas are unsupported there.
@@ -81,19 +85,19 @@ Rules, in order of importance:
 - Empty arrays are correct when the update contains nothing of that type.`
 }
 
-/// The request minus the client — pure, so a test can pin the shape without a
-/// network. Thinking stays at the model's default; low effort fits a scoped
-/// extraction task and keeps dictation snappy.
+/// The request minus the credential — pure, so a test can pin the shape
+/// without a network. Low effort fits a scoped extraction task and keeps
+/// dictation snappy; the output format is the zod schema serialized, which
+/// the gateway forwards opaquely into the provider's output_config.
 export function buildRequestParams(model: string, system: string, text: string) {
   return {
+    provider: 'anthropic' as const,
     model,
-    max_tokens: 8192,
+    maxTokens: 8192,
     system,
     messages: [{ role: 'user' as const, content: text }],
-    output_config: {
-      effort: 'low' as const,
-      format: zodOutputFormat(CaptureProposalSchema),
-    },
+    effort: 'low' as const,
+    outputFormat: zodOutputFormat(CaptureProposalSchema) as unknown as Record<string, unknown>,
   }
 }
 
@@ -108,35 +112,28 @@ export class AICaptureError extends Error {
 
 export async function parseCapture(
   text: string,
-  options: { apiKey: string; model: string; context: CaptureContext },
+  options: { credentialId: string; model: string; context: CaptureContext },
 ): Promise<CaptureProposal> {
-  const client = new Anthropic({ apiKey: options.apiKey, dangerouslyAllowBrowser: true })
-
   try {
-    const response = await client.messages.parse(
-      buildRequestParams(options.model, buildSystemPrompt(options.context), text),
-    )
+    const request: GatewayRequest = {
+      ...buildRequestParams(options.model, buildSystemPrompt(options.context), text),
+      credentialId: options.credentialId,
+    }
+    const { text: reply, final } = await runAiTask(request)
 
-    if (response.stop_reason === 'refusal') {
+    if (final.stopReason === 'refusal') {
       throw new AICaptureError('The model declined to process this update. Your text is kept — log it manually.')
     }
-
-    const proposal = response.parsed_output
-    if (!proposal) {
+    try {
+      return CaptureProposalSchema.parse(JSON.parse(reply))
+    } catch {
       throw new AICaptureError('The reply did not match the expected shape. Your text is kept — log it manually.')
     }
-    return proposal
   } catch (cause) {
     if (cause instanceof AICaptureError) throw cause
-    if (cause instanceof Anthropic.AuthenticationError) {
-      throw new AICaptureError('That API key was not accepted. Check it in Settings.', false)
+    if (cause instanceof GatewayError) {
+      throw new AICaptureError(cause.message, cause.recoverable)
     }
-    if (cause instanceof Anthropic.RateLimitError) {
-      throw new AICaptureError('The API is rate-limiting right now — try again in a moment.')
-    }
-    if (cause instanceof Anthropic.APIError) {
-      throw new AICaptureError(`The API returned an error (${cause.status ?? 'network'}).`)
-    }
-    throw new AICaptureError('Could not reach the API. Your text is kept — log it manually.')
+    throw new AICaptureError('Could not reach the AI gateway. Your text is kept — log it manually.')
   }
 }

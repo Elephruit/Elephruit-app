@@ -46,12 +46,13 @@ describe('CaptureProposalSchema', () => {
 })
 
 describe('the request', () => {
-  it('pins the shape: chosen model, low effort, one user turn, structured format', () => {
+  it('pins the gateway shape: chosen model, low effort, one user turn, structured format', () => {
     const params = buildRequestParams('claude-opus-5', 'SYSTEM', 'coffee with ana')
+    expect(params.provider).toBe('anthropic')
     expect(params.model).toBe('claude-opus-5')
-    expect(params.max_tokens).toBe(8192)
-    expect(params.output_config.effort).toBe('low')
-    expect(params.output_config.format).toBeDefined()
+    expect(params.maxTokens).toBe(8192)
+    expect(params.effort).toBe('low')
+    expect(params.outputFormat).toMatchObject({ type: 'json_schema' })
     expect(params.messages).toEqual([{ role: 'user', content: 'coffee with ana' }])
     expect(params.system).toBe('SYSTEM')
   })

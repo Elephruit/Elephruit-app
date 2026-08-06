@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AICaptureError, parseCapture } from '../../ai/anthropic'
-import { aiCaptureReady, storedAPIKey, storedModel } from '../../ai/settings'
+import { activeCredential } from '../../ai/credentials'
+import { storedModel } from '../../ai/settings'
 import { resolveProposal, type ResolvedCapture } from '../../domain/assist'
-import { usePeople } from '../../data/hooks'
+import { useAiCredentials, usePeople } from '../../data/hooks'
 import { useUID } from '../UserContext'
 import { useViewport } from '../breakpoints'
 import { Button } from '../components/Button'
@@ -30,18 +31,21 @@ export function CapturePage() {
 
   const viewport = useViewport()
   const reviewInline = viewport === 'desktop' || viewport === 'wide'
-  const ready = aiCaptureReady()
+  const credentials = useAiCredentials(uid)
+  const credential = activeCredential(credentials)
+  const ready = credential !== null
+  const credentialNeedsAttention =
+    !ready && (credentials ?? []).some((entry) => entry.status === 'invalid' || entry.status === 'revoked')
   const canParse = ready && text.trim().length > 0 && !busy && people !== undefined
   const canLogManually = text.trim().length > 0
 
   async function parse() {
-    const apiKey = storedAPIKey()
-    if (!apiKey || !canParse) return
+    if (!credential || !canParse) return
     setBusy(true)
     setError(null)
     try {
       const proposal = await parseCapture(text, {
-        apiKey,
+        credentialId: credential.id,
         model: storedModel(),
         context: {
           today: new Date(),
@@ -107,12 +111,22 @@ export function CapturePage() {
           </div>
         )}
 
-        {!ready && (
+        {credentials !== undefined && !ready && (
           <div className="callout">
             <Icon name="sparkle" size={18} />
             <p>
-              <Link to="/settings">Link an Anthropic API key in Settings</Link> and this box parses itself into
-              interactions, facts, relationships, and follow-ups — always shown for review before anything is saved.
+              {credentialNeedsAttention ? (
+                <>
+                  <Link to="/settings">Your AI key needs attention in Settings</Link> — the provider stopped accepting
+                  it. Verify or replace it and this box parses itself again.
+                </>
+              ) : (
+                <>
+                  <Link to="/settings">Link an Anthropic API key in Settings</Link> and this box parses itself into
+                  interactions, facts, relationships, and follow-ups — always shown for review before anything is
+                  saved.
+                </>
+              )}
             </p>
           </div>
         )}
