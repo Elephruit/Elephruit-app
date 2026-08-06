@@ -9,11 +9,18 @@ appearances (Settings → Appearance). What it is and why it is shaped this way:
 
 ## Run it
 
-Requires Node 20+ and a JVM (the Firestore emulator needs one).
+Requires Node 22+ (the functions runtime targets nodejs22) and a JVM (the
+Firestore emulator needs one). One-time setup for the AI backend:
 
 ```bash
 npm install
-npm run emulators     # terminal 1 — Auth + Firestore + emulator UI, fully offline
+npm --prefix functions install
+cp functions/.env.example functions/.env.local   # then set DEV_ENCRYPTION_KEY
+openssl rand -hex 32                             # a good value for it
+```
+
+```bash
+npm run emulators     # terminal 1 — Auth + Firestore + Functions + emulator UI, fully offline
 npm run dev           # terminal 2 — Vite dev server on http://localhost:5173
 ```
 
@@ -24,7 +31,10 @@ straight through the auth emulator. Emulator state survives restarts
 
 ```bash
 npm test              # the domain rules, resolution, and request-shape tests
+npm run test:functions  # the backend: crypto, credential lifecycle, gateway, redaction canary
+npm run test:rules    # Firestore rules attacks, against running emulators
 npm run smoke         # headless rules check against running emulators
+npm run smoke:byok    # attacks the AI gateway like a stranger, against running emulators
 npm run seed          # fill fresh emulators with a believable month of demo data
 npm run build         # typecheck + production bundle
 ```
@@ -43,10 +53,20 @@ text shows exactly what will be saved before anything is written. Reading:
 **Prepare my day** on the Feed (also ⌘K) briefs you on the people attached to
 overdue and today follow-ups, and every person page can produce its own
 talking points. Payloads carry current facts (never restricted ones),
-relationships, open follow-ups, and recent interactions; the key stays in this
-browser's localStorage, is sent only to `api.anthropic.com`, and one tap
-forgets it. Without a key the capture box still works: **Log manually**
-carries your text into the composer.
+relationships, open follow-ups, and recent interactions.
+
+Custody, stated plainly: the key is sent once when you link it, encrypted
+server-side (Cloud KMS in production, a local dev cipher under the
+emulators), and decrypted only to send requests you start to
+`api.anthropic.com`. It never returns to the browser and cannot be viewed
+again — Settings shows the last four characters and the server's verdict on
+it. Remove deletes our encrypted copy; revoking the key itself happens in
+the Anthropic console. Under the emulators, `AI_FAKE_ADAPTER=1` (the
+`.env.local` default) serves canned responses so the whole loop runs
+offline — keys starting `sk-ant-test-` behave per their suffix, and nothing
+is ever sent to the real API. Without a credential the capture box still
+works: **Log manually** carries your text into the composer. Architecture
+and threat model: [docs/39](../docs/39-byok-scope.md).
 
 ## Going real
 
@@ -64,6 +84,10 @@ carries your text into the composer.
    ```
 
 4. `npm run build && npx firebase deploy --only hosting`.
+
+The AI backend needs more than hosting: Blaze, a KMS key with scoped IAM,
+App Check, functions deploy, and a Firestore TTL policy — the ordered list
+lives in [docs/40-byok-cloud-runbook.md](../docs/40-byok-cloud-runbook.md).
 
 For phone browsers on a real deployment, prefer `signInWithRedirect` over the
 popup — popup blockers eat `signInWithPopup`.

@@ -133,6 +133,17 @@ for a personal spike and a stated non-posture for anything multi-user.
 Captures parsed by AI stamp `occurredAt` as now; back-dating a dictated
 memory is a known simplification.
 
+> **Superseded (2026-08-06).** The multi-user graduation this paragraph
+> anticipated happened: key custody moved server-side (encrypted at rest,
+> decrypted per request by the repo's first Cloud Functions backend), the
+> browser now holds only a credential id, and the localStorage key migrates
+> by explicit consent in Settings. See
+> [docs/39-byok-scope.md](39-byok-scope.md) and
+> [ADR 0010](adr/0010-server-side-ai-key-custody.md). D3's "without Cloud
+> Functions" framing still holds for what it was about — the append-only
+> `lastContactAt` cache needs no server help — but the repo as a whole is no
+> longer functions-free.
+
 **D6 — Emulator-first, with a popup-free door.** The whole loop runs against
 the Firebase emulators under the fictional `demo-elephruit` project, offline
 by construction. `signInWithPopup` dies in embedded panes and on phones with
