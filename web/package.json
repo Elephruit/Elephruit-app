@@ -9,8 +9,8 @@
     "lint": "oxlint",
     "test": "vitest run",
     "preview": "vite preview",
-    "emulators": "firebase emulators:start --project demo-elephruit --export-on-exit ./.emulator-data",
-    "emulators:resume": "firebase emulators:start --project demo-elephruit --import ./.emulator-data --export-on-exit ./.emulator-data",
+    "emulators": "npm --prefix functions run build && firebase emulators:start --project demo-elephruit --export-on-exit ./.emulator-data",
+    "emulators:resume": "npm --prefix functions run build && firebase emulators:start --project demo-elephruit --import ./.emulator-data --export-on-exit ./.emulator-data",
     "smoke": "node scripts/emulator-smoke.mjs",
     "seed": "node --import ./scripts/ts-import.mjs scripts/seed-demo.ts"
   },

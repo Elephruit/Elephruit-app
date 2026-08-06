@@ -1,0 +1,9 @@
+# Build output and dependencies
+lib/
+node_modules/
+
+# Local environment — DEV_ENCRYPTION_KEY and emulator-only flags live in
+# .env.local, which must never be committed or deployed.
+.env
+.env.*
+!.env.example

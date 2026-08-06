@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Environment files stay out even if this directory is ever extracted from the
+# repo whose root .gitignore currently also covers them.
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
