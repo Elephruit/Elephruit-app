@@ -1783,6 +1783,49 @@ body:has(dialog[open]) {
   overflow: hidden;
 }
 
+/* Entrances: dialogs settle in, drawers slide up, the palette drops down.
+   @starting-style drives the open transition; reduced-motion stills all of it. */
+dialog.dialog[open],
+dialog.palette[open] {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
+}
+
+dialog.dialog[open]::backdrop,
+dialog.palette[open]::backdrop {
+  opacity: 1;
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+@starting-style {
+  dialog.dialog[open] {
+    opacity: 0;
+    transform: translateY(10px) scale(0.99);
+  }
+
+  dialog.palette[open] {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  dialog.dialog[open]::backdrop,
+  dialog.palette[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 719.98px) {
+  @starting-style {
+    dialog.dialog[open] {
+      opacity: 1;
+      transform: translateY(32px);
+    }
+  }
+}
+
 .dialog-title {
   font: var(--text-heading);
   margin-bottom: var(--space-medium);
