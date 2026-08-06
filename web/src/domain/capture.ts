@@ -358,6 +358,9 @@ export interface ReminderDraft {
   startAt?: Date | null
   dueAt?: Date | null
   isSomeday?: boolean
+  scheduleTimeZone?: string | null
+  duePrecision?: 'date' | 'dateTime' | null
+  startPrecision?: 'date' | 'dateTime' | null
 }
 
 export function planCreateReminder(draft: ReminderDraft, now: Date): { plan: WritePlan; reminder: Reminder } {
@@ -373,22 +376,47 @@ export function planCreateReminder(draft: ReminderDraft, now: Date): { plan: Wri
     status: 'open',
     completedAt: null,
     createdAt: now,
+    scheduleTimeZone: draft.scheduleTimeZone ?? null,
+    duePrecision: draft.duePrecision ?? null,
+    startPrecision: draft.startPrecision ?? null,
   }
   return { plan: [{ op: 'set', collection: 'reminders', id: reminder.id, data: reminder }], reminder }
 }
 
 export function planUpdateReminder(
   id: string,
-  changes: Partial<Pick<Reminder, 'title' | 'notes' | 'startAt' | 'dueAt' | 'isSomeday' | 'personIDs'>>,
+  changes: Partial<
+    Pick<
+      Reminder,
+      | 'title'
+      | 'notes'
+      | 'startAt'
+      | 'dueAt'
+      | 'isSomeday'
+      | 'personIDs'
+      | 'scheduleTimeZone'
+      | 'duePrecision'
+      | 'startPrecision'
+    >
+  >,
 ): { plan: WritePlan } {
   return { plan: [{ op: 'update', collection: 'reminders', id, data: { ...changes } }] }
 }
 
 /// The quick reschedule writes the start date and nothing else. No route through
 /// this helper can create a deadline — rescheduling when you'll get to something
-/// must never change when it is due.
+/// must never change when it is due. Day-granular by construction.
 export function planQuickReschedule(id: string, startAt: Date | null): { plan: WritePlan } {
-  return { plan: [{ op: 'update', collection: 'reminders', id, data: { startAt, isSomeday: false } }] }
+  return {
+    plan: [
+      {
+        op: 'update',
+        collection: 'reminders',
+        id,
+        data: { startAt, isSomeday: false, startPrecision: startAt ? 'date' : null },
+      },
+    ],
+  }
 }
 
 export function planCompleteReminder(id: string, now: Date): { plan: WritePlan } {

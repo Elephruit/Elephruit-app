@@ -183,7 +183,9 @@ describe('reminder planners', () => {
     expect(plan).toHaveLength(1)
     const write = plan[0]
     if (write.op !== 'update') throw new Error('expected update')
-    expect(Object.keys(write.data).sort()).toEqual(['isSomeday', 'startAt'])
+    expect(Object.keys(write.data).sort()).toEqual(['isSomeday', 'startAt', 'startPrecision'])
+    expect(write.data.startPrecision).toBe('date')
+    expect(write.data).not.toHaveProperty('dueAt')
   })
 })
 

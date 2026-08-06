@@ -90,3 +90,32 @@ describe('sections', () => {
     expect(nextOpenReminderByPerson([anytime]).get('ana')?.title).toBe('Anytime')
   })
 })
+
+describe('schedule precision', () => {
+  it('turns a timed deadline overdue the moment it passes, not at midnight', () => {
+    // NOW is 15:00; a 10:00 meeting earlier today with dateTime precision is late.
+    const meeting = reminder({ dueAt: new Date('2026-08-06T10:00:00'), duePrecision: 'dateTime' })
+    expect(bucketFor(meeting, NOW)).toBe('overdue')
+    // The same instant without precision keeps the legacy day-granular rule.
+    const legacy = reminder({ dueAt: new Date('2026-08-06T10:00:00') })
+    expect(bucketFor(legacy, NOW)).toBe('today')
+  })
+
+  it('keeps a timed deadline later today in today', () => {
+    const meeting = reminder({ dueAt: new Date('2026-08-06T18:00:00'), duePrecision: 'dateTime' })
+    expect(bucketFor(meeting, NOW)).toBe('today')
+  })
+
+  it('keeps a date-only deadline from going overdue until its day ends', () => {
+    // Stored at local midnight of the due day, date precision: due today all day.
+    const dateOnly = reminder({ dueAt: new Date('2026-08-06T00:00:00'), duePrecision: 'date' })
+    expect(bucketFor(dateOnly, NOW)).toBe('today')
+    const yesterday = reminder({ dueAt: new Date('2026-08-05T00:00:00'), duePrecision: 'date' })
+    expect(bucketFor(yesterday, NOW)).toBe('overdue')
+  })
+
+  it('makes a date-only start available from the beginning of its local day', () => {
+    const startsToday = reminder({ startAt: new Date('2026-08-06T00:00:00'), startPrecision: 'date' })
+    expect(bucketFor(startsToday, NOW)).toBe('today')
+  })
+})

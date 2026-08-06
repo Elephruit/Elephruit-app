@@ -24,6 +24,15 @@ export interface Reminder {
   status: ReminderStatus
   completedAt: Date | null
   createdAt: Date
+  /// The IANA zone a timed schedule was expressed in — "Monday 10am CT" stays
+  /// Central for display and editing wherever the user happens to be. Absent
+  /// on reminders from before structured schedules; null for date-only ones.
+  scheduleTimeZone?: string | null
+  /// Whether dueAt means a calendar day or an instant. A date-only deadline
+  /// turns overdue when its local day ends; a date-time one at that moment.
+  /// Absent means the pre-precision behavior (day granularity).
+  duePrecision?: 'date' | 'dateTime' | null
+  startPrecision?: 'date' | 'dateTime' | null
 }
 
 /// The five buckets, in reading order: a deadline that has passed, work that
@@ -48,6 +57,9 @@ export function bucketFor(reminder: Reminder, now: Date): Bucket {
   const today = startOfDay(now)
 
   if (reminder.dueAt) {
+    // A timed deadline is late the moment it passes; a date-only one when its
+    // day ends. Reminders predating precision keep the day-granular rule.
+    if (reminder.duePrecision === 'dateTime' && reminder.dueAt.getTime() < now.getTime()) return 'overdue'
     if (reminder.dueAt.getTime() < today.getTime()) return 'overdue'
     if (isSameDay(reminder.dueAt, today)) return 'today'
     return 'upcoming'

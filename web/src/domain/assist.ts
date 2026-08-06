@@ -12,6 +12,7 @@ import type { InteractionKind } from './interaction'
 import { makePerson } from './capture'
 import { foldedForMatching, type Person } from './person'
 import type { RelationshipKind } from './relationships'
+import { resolveProposedSchedule, type ProposedSchedule, type TemporalContext } from './temporal'
 import type { WritePlan } from './writePlan'
 
 // MARK: What the parser proposes
@@ -43,6 +44,10 @@ export interface ProposedRelationship {
 export interface ProposedFollowUp {
   title: string
   personNames: string[]
+  /// Optional so pre-schedule proposals (and their fixtures) stay valid; the
+  /// wire schema always supplies both.
+  notes?: string | null
+  schedule?: ProposedSchedule
 }
 
 export interface CaptureProposal {
@@ -83,7 +88,14 @@ export type ResolvedItem =
       other: PersonSlot | null
       facts: Array<{ attribute: FactAttribute; value: string }>
     }
-  | { id: string; type: 'followUp'; title: string; people: PersonSlot[] }
+  | {
+      id: string
+      type: 'followUp'
+      title: string
+      people: PersonSlot[]
+      notes: string | null
+      schedule: ProposedSchedule
+    }
 
 export interface ResolvedCapture {
   items: ResolvedItem[]
@@ -173,6 +185,15 @@ export function resolveProposal(proposal: CaptureProposal, existingPeople: Perso
       type: 'followUp',
       title: followUp.title.trim(),
       people: followUp.personNames.filter((n) => n.trim()).map(resolveName),
+      notes: followUp.notes?.trim() || null,
+      schedule: followUp.schedule ?? {
+        mode: 'none',
+        localDate: null,
+        localTime: null,
+        timeZone: null,
+        sourceText: null,
+        confidence: 'stated',
+      },
     })
   }
 
@@ -183,8 +204,15 @@ export function resolveProposal(proposal: CaptureProposal, existingPeople: Perso
 
 /// Builds the plan for exactly the items the user kept. People pending creation
 /// are written once no matter how many kept items reference them; people only
-/// referenced by discarded items are never created at all.
-export function planFromResolved(items: ResolvedItem[], keptIDs: Set<string>, now: Date): WritePlan {
+/// referenced by discarded items are never created at all. `temporal` supplies
+/// the user's zone for schedule resolution — callers must pass the real one;
+/// the UTC default exists only for schedule-free fixtures.
+export function planFromResolved(
+  items: ResolvedItem[],
+  keptIDs: Set<string>,
+  now: Date,
+  temporal: TemporalContext = { timeZone: 'UTC' },
+): WritePlan {
   const kept = items.filter((item) => keptIDs.has(item.id))
   const plan: WritePlan = []
 
@@ -269,9 +297,21 @@ export function planFromResolved(items: ResolvedItem[], keptIDs: Set<string>, no
       }
       case 'followUp': {
         const people = item.people.map(ensureCreated)
+        const schedule = resolveProposedSchedule(item.schedule, temporal)
         plan.push(
           ...planCreateReminder(
-            { title: item.title, personIDs: people.map((p) => p.id), sourceInteractionID: interactionID },
+            {
+              title: item.title,
+              notes: item.notes,
+              personIDs: people.map((p) => p.id),
+              sourceInteractionID: interactionID,
+              startAt: schedule.startAt,
+              dueAt: schedule.dueAt,
+              isSomeday: schedule.isSomeday,
+              scheduleTimeZone: schedule.scheduleTimeZone,
+              duePrecision: schedule.duePrecision,
+              startPrecision: schedule.startPrecision,
+            },
             now,
           ).plan,
         )

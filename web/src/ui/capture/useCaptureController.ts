@@ -125,6 +125,9 @@ export function useCaptureController(): CaptureController {
         context: {
           today: new Date(),
           peopleNames: (people ?? []).filter((p) => p.hasStatedName).map((p) => p.displayName),
+          locale: navigator.language,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          utcOffsetMinutes: -new Date().getTimezoneOffset(),
         },
       })
       setReview(resolveProposal(proposal, people ?? [], new Date()))

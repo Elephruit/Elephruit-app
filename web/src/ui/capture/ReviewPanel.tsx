@@ -3,9 +3,12 @@ import { planFromResolved, slotName, type PersonSlot, type ResolvedItem } from '
 import { attributeLabel, CONFIDENCE_LABELS } from '../../domain/facts'
 import { INTERACTION_KIND_LABELS } from '../../domain/interaction'
 import { kindLabel, possessivePhrase } from '../../domain/relationships'
+import { formatScheduleSummary, resolveProposedSchedule } from '../../domain/temporal'
 import { applyPlan } from '../../data/applyPlan'
 import { useUID } from '../UserContext'
 import { Button } from '../components/Button'
+
+const BROWSER_ZONE = { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }
 
 function SlotName({ slot }: { slot: PersonSlot }) {
   return (
@@ -73,25 +76,33 @@ function itemSummary(item: ResolvedItem): React.ReactNode {
         </>
       )
     }
-    case 'followUp':
+    case 'followUp': {
+      const schedule = formatScheduleSummary(resolveProposedSchedule(item.schedule, BROWSER_ZONE))
       return (
         <>
           <span className="row-title" style={{ display: 'block' }}>
             {item.title}
           </span>
-          {item.people.length > 0 && (
+          {(item.people.length > 0 || schedule) && (
             <span className="row-subtitle">
-              for{' '}
-              {item.people.map((slot, index) => (
-                <span key={slot.person.id}>
-                  {index > 0 && ', '}
-                  <SlotName slot={slot} />
-                </span>
-              ))}
+              {item.people.length > 0 && (
+                <>
+                  for{' '}
+                  {item.people.map((slot, index) => (
+                    <span key={slot.person.id}>
+                      {index > 0 && ', '}
+                      <SlotName slot={slot} />
+                    </span>
+                  ))}
+                </>
+              )}
+              {item.people.length > 0 && schedule && ' · '}
+              {schedule}
             </span>
           )}
         </>
       )
+    }
   }
 }
 
@@ -125,7 +136,7 @@ export function ReviewPanel({
 
   // One plan for both the count and the save — planFromResolved mints fresh IDs
   // per call, so building it twice would save different records than counted.
-  const plan = useMemo(() => planFromResolved(items, kept, new Date()), [items, kept])
+  const plan = useMemo(() => planFromResolved(items, kept, new Date(), BROWSER_ZONE), [items, kept])
 
   function toggle(id: string) {
     setKept((current) => {
