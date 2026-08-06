@@ -24,7 +24,7 @@ import { applyPlan } from '../../data/applyPlan'
 import { useUID } from '../UserContext'
 import { Avatar } from '../components/Avatar'
 import { Icon } from '../components/Icon'
-import { Sheet } from '../components/Sheet'
+import { Dialog } from '../components/Dialog'
 import { planUnrelate } from '../../domain/capture'
 
 function AddRelationshipSheet({
@@ -97,7 +97,7 @@ function AddRelationshipSheet({
   }
 
   return (
-    <Sheet title={`Somebody in ${subject.displayName}'s life`} onClose={onClose}>
+    <Dialog title={`Somebody in ${subject.displayName}'s life`} onClose={onClose}>
       <label className="field-label" htmlFor="rel-word">
         Your word for them — optional
       </label>
@@ -204,7 +204,7 @@ function AddRelationshipSheet({
           Record
         </button>
       </div>
-    </Sheet>
+    </Dialog>
   )
 }
 
@@ -222,7 +222,7 @@ function NameSheet({ person, onClose }: { person: Person; onClose: () => void })
   }
 
   return (
-    <Sheet title={`Name ${person.displayName}`} onClose={onClose}>
+    <Dialog title={`Name ${person.displayName}`} onClose={onClose}>
       <p className="row-subtitle">Every fact and relationship they have stays attached.</p>
       <input
         className="field"
@@ -240,7 +240,7 @@ function NameSheet({ person, onClose }: { person: Person; onClose: () => void })
           Save name
         </button>
       </div>
-    </Sheet>
+    </Dialog>
   )
 }
 

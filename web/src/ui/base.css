@@ -437,31 +437,49 @@ textarea.field {
   white-space: nowrap;
 }
 
-/* MARK: Sheet (the composer surface) */
+/* MARK: Dialog — centered panel from 720, bottom drawer below. The element is
+   the native <dialog>; only its look lives here. */
 
-.sheet-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.35);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  z-index: 40;
-}
-
-.sheet {
-  width: 100%;
-  max-width: 640px;
-  max-height: 88dvh;
+dialog.dialog {
+  margin: auto;
+  width: min(560px, calc(100vw - 2 * var(--space-section)));
+  max-width: none;
+  max-height: min(82dvh, 760px);
   overflow-y: auto;
   background: var(--color-background-elevated);
-  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
-  box-shadow: var(--shadow-panel);
-  padding: var(--space-large) var(--space-large) calc(var(--space-section) + env(safe-area-inset-bottom));
+  color: var(--color-text);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-overlay);
+  padding: var(--space-section);
 }
 
-.sheet-title {
-  font: var(--text-title);
+dialog.dialog[data-size='wide'] {
+  width: min(760px, calc(100vw - 2 * var(--space-section)));
+}
+
+dialog.dialog::backdrop {
+  background: rgba(34, 27, 18, 0.38);
+}
+
+@media (max-width: 719.98px) {
+  dialog.dialog,
+  dialog.dialog[data-size='wide'] {
+    margin: auto 0 0;
+    width: 100vw;
+    max-height: 88dvh;
+    border: 0;
+    border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+    padding: var(--space-large) var(--space-large) calc(var(--space-section) + env(safe-area-inset-bottom));
+  }
+}
+
+body:has(dialog[open]) {
+  overflow: hidden;
+}
+
+.dialog-title {
+  font: var(--text-heading);
   margin-bottom: var(--space-medium);
 }
 

@@ -16,7 +16,7 @@ import { usePeople, useReminders } from '../../data/hooks'
 import { useUID } from '../UserContext'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
-import { Sheet } from '../components/Sheet'
+import { Dialog } from '../components/Dialog'
 import { fromLocalInputValue, toLocalDateValue } from '../dateInput'
 import { ParticipantPicker } from '../log/ParticipantPicker'
 
@@ -73,7 +73,7 @@ function ReminderSheet({
   }
 
   return (
-    <Sheet title={existing ? 'Edit follow-up' : 'New follow-up'} onClose={onClose}>
+    <Dialog title={existing ? 'Edit follow-up' : 'New follow-up'} onClose={onClose}>
       <label className="field-label" htmlFor="rem-title">
         What is owed
       </label>
@@ -141,7 +141,7 @@ function ReminderSheet({
           Save
         </button>
       </div>
-    </Sheet>
+    </Dialog>
   )
 }
 

@@ -5,7 +5,7 @@ import { INTERACTION_KIND_LABELS } from '../../domain/interaction'
 import { kindLabel, possessivePhrase } from '../../domain/relationships'
 import { applyPlan } from '../../data/applyPlan'
 import { useUID } from '../UserContext'
-import { Sheet } from '../components/Sheet'
+import { Dialog } from '../components/Dialog'
 
 function SlotName({ slot }: { slot: PersonSlot }) {
   return (
@@ -146,7 +146,7 @@ export function ReviewSheet({
     .filter((s) => s.rows.length > 0)
 
   return (
-    <Sheet title="Here's what was heard" onClose={onClose}>
+    <Dialog size="wide" title="Here’s what was heard" onClose={onClose}>
       {warnings.map((warning) => (
         <p key={warning} className="row-subtitle" style={{ color: 'var(--color-due-today)' }}>
           {warning}
@@ -188,6 +188,6 @@ export function ReviewSheet({
           Save {kept.size > 0 ? `${kept.size} item${kept.size === 1 ? '' : 's'}` : ''}
         </button>
       </div>
-    </Sheet>
+    </Dialog>
   )
 }

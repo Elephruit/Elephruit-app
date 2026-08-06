@@ -26,7 +26,7 @@ import {
 import { useUID } from '../UserContext'
 import { Avatar } from '../components/Avatar'
 import { Icon } from '../components/Icon'
-import { Sheet } from '../components/Sheet'
+import { Dialog } from '../components/Dialog'
 import { TimelineRow } from '../components/TimelineRow'
 import { FactsSection } from './FactsSection'
 import { RelationshipsSection } from './RelationshipsSection'
@@ -194,7 +194,7 @@ export function PersonPage() {
       )}
 
       {renaming && (
-        <Sheet title="Rename" onClose={() => setRenaming(false)}>
+        <Dialog title="Rename" onClose={() => setRenaming(false)}>
           <p className="row-subtitle">
             Unnamed relatives titled after this person — “{person.displayName}'s son” — are
             re-phrased in the same save.
@@ -228,7 +228,7 @@ export function PersonPage() {
               Save
             </button>
           </div>
-        </Sheet>
+        </Dialog>
       )}
 
       {months?.map((group, groupIndex) => (

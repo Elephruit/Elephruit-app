@@ -23,7 +23,7 @@ import type { Person } from '../../domain/person'
 import { applyPlan } from '../../data/applyPlan'
 import { useUID } from '../UserContext'
 import { Icon } from '../components/Icon'
-import { Sheet } from '../components/Sheet'
+import { Dialog } from '../components/Dialog'
 import { fromLocalInputValue, toLocalDateValue } from '../dateInput'
 
 const CONFIDENCES: FactConfidence[] = ['stated', 'inferred', 'uncertain']
@@ -72,7 +72,7 @@ function AddFactSheet({
   }
 
   return (
-    <Sheet title={`Add a fact about ${person.displayName}`} onClose={onClose}>
+    <Dialog title={`Add a fact about ${person.displayName}`} onClose={onClose}>
       <label className="field-label">What kind of fact?</label>
       <div className="chip-row" role="radiogroup">
         {CURATED_ATTRIBUTES.map((a) => (
@@ -150,7 +150,7 @@ function AddFactSheet({
           Add fact
         </button>
       </div>
-    </Sheet>
+    </Dialog>
   )
 }
 
@@ -169,7 +169,7 @@ function CorrectFactSheet({ old, onClose }: { old: Observation; onClose: () => v
   }
 
   return (
-    <Sheet title={`Correct ${attributeLabel(old.attribute)}`} onClose={onClose}>
+    <Dialog title={`Correct ${attributeLabel(old.attribute)}`} onClose={onClose}>
       <p className="row-subtitle">
         Was: “{old.value}”. Correcting appends — the old value stays in history.
       </p>
@@ -201,7 +201,7 @@ function CorrectFactSheet({ old, onClose }: { old: Observation; onClose: () => v
           Correct
         </button>
       </div>
-    </Sheet>
+    </Dialog>
   )
 }
 
@@ -216,7 +216,7 @@ function HistorySheet({
 }) {
   const rows = history(observations, attribute)
   return (
-    <Sheet title={`${attributeLabel(attribute)} — history`} onClose={onClose}>
+    <Dialog title={`${attributeLabel(attribute)} — history`} onClose={onClose}>
       {rows.length === 0 && <p className="row-subtitle">No earlier values.</p>}
       {rows.map((o) => (
         <div key={o.id} style={{ padding: 'var(--space-small) 0', borderBottom: '1px solid var(--color-separator)' }}>
@@ -232,7 +232,7 @@ function HistorySheet({
           Done
         </button>
       </div>
-    </Sheet>
+    </Dialog>
   )
 }
 

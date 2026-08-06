@@ -3,7 +3,7 @@ import { planCreatePerson } from '../../domain/capture'
 import type { Person } from '../../domain/person'
 import { applyPlan } from '../../data/applyPlan'
 import { useUID } from '../UserContext'
-import { Sheet } from '../components/Sheet'
+import { Dialog } from '../components/Dialog'
 
 export function CreatePersonSheet({
   onClose,
@@ -39,7 +39,7 @@ export function CreatePersonSheet({
   }
 
   return (
-    <Sheet title="New person" onClose={onClose}>
+    <Dialog title="New person" onClose={onClose}>
       <label className="field-label" htmlFor="person-name">
         Name
       </label>
@@ -80,6 +80,6 @@ export function CreatePersonSheet({
           Add person
         </button>
       </div>
-    </Sheet>
+    </Dialog>
   )
 }
