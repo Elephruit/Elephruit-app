@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { CaptureComposer } from '../capture/CaptureComposer'
+import { useCaptureController } from '../capture/useCaptureController'
 import { auth } from '../../data/firebase'
 import { useFeed, usePeople, useReminders } from '../../data/hooks'
 import { startOfDay, wholeDaysBetween } from '../../domain/dates'
@@ -112,8 +114,8 @@ function FeedAside({
                   <b>{suggestion.displayName}</b>
                   <span>{Math.floor(suggestion.daysSinceContact / 7)} weeks since you spoke</span>
                 </span>
-                <Button variant="ghost" small onClick={() => navigate(`/log?person=${suggestion.personID}`)}>
-                  Log
+                <Button variant="ghost" small onClick={() => navigate(`/?capture=1&person=${suggestion.personID}`)}>
+                  Remember
                 </Button>
               </div>
             )
@@ -146,6 +148,7 @@ export function FeedPage() {
   const now = new Date()
   const [briefOpen, setBriefOpen] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
+  const capture = useCaptureController()
 
   useEffect(() => {
     if (searchParams.get('brief') === '1') {
@@ -153,6 +156,36 @@ export function FeedPage() {
       setSearchParams({}, { replace: true })
     }
   }, [searchParams, setSearchParams])
+
+  // The URL owns open/closed: ?capture=1 opens the composer (optionally with
+  // ?person=<id> preselected), its absence collapses it. Opening pushes a
+  // history entry so browser Back closes the composer; collapsing replaces so
+  // Back from the feed never resurrects it.
+  const captureOpen = searchParams.get('capture') === '1'
+  useEffect(() => {
+    if (captureOpen && capture.mode === 'collapsed') {
+      capture.open(searchParams.get('person'))
+    } else if (!captureOpen && capture.mode !== 'collapsed') {
+      capture.collapse()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captureOpen, capture.mode])
+
+  function openComposer() {
+    if (!captureOpen) setSearchParams({ capture: '1' })
+  }
+
+  function closeComposer() {
+    if (captureOpen) setSearchParams({}, { replace: true })
+  }
+
+  // The saved beat: hold the confirmation for 500ms, then collapse.
+  useEffect(() => {
+    if (capture.mode !== 'saved') return
+    const timer = window.setTimeout(closeComposer, 500)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capture.mode])
 
   const groups = useMemo(() => {
     if (!interactions || !people) return undefined
@@ -207,11 +240,7 @@ export function FeedPage() {
         />
       )}
 
-      <button type="button" className="composer-entry" onClick={() => navigate('/capture')}>
-        <Icon name="plus" size={17} />
-        <span>What happened?</span>
-        <span className="composer-entry-hint">open capture</span>
-      </button>
+      <CaptureComposer controller={capture} onRequestOpen={openComposer} onRequestClose={closeComposer} />
 
       {overview && (
         <div className="feed-summary">
@@ -265,8 +294,8 @@ export function FeedPage() {
           message="Interactions you log read here as one continuous thread — coffee with Ana, the call about the move, the photos from the lake."
           action={
             <>
-              <Button variant="primary" icon="plus" onClick={() => navigate('/capture')}>
-                Log your first interaction
+              <Button variant="primary" icon="plus" onClick={() => setSearchParams({ capture: '1' })}>
+                Record your first memory
               </Button>
               <Button variant="secondary" onClick={() => navigate('/people')}>
                 Add a person

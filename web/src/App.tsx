@@ -1,10 +1,9 @@
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuthUser } from './data/auth'
 import { SignInPage } from './ui/SignInPage'
 import { UIDProvider } from './ui/UserContext'
 import { AppShell } from './ui/shell/AppShell'
 import { NotFound } from './ui/shell/NotFound'
-import { CapturePage } from './ui/capture/CapturePage'
 import { FeedPage } from './ui/feed/FeedPage'
 import { FollowUpsPage } from './ui/followups/FollowUpsPage'
 import { LogPage } from './ui/log/LogPage'
@@ -27,7 +26,8 @@ function App() {
           <Route path="/people/:personID" element={<PersonPage />} />
           <Route path="/followups" element={<FollowUpsPage />} />
           <Route path="/log" element={<LogPage />} />
-          <Route path="/capture" element={<CapturePage />} />
+          {/* Capture lives inline on the feed now; the old page redirects. */}
+          <Route path="/capture" element={<Navigate to="/?capture=1" replace />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
