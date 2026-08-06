@@ -139,6 +139,54 @@
   --palette-graphite: #7c766c;
 }
 
+/* ——— Dark — the same warmth after hours. Only the semantic layer re-points;
+       theme.ts stamps data-theme on <html> and Settings › Appearance drives it. ——— */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-text: #ece7dc;
+  --color-text-secondary: rgba(236, 231, 220, 0.62);
+  --color-text-tertiary: rgba(236, 231, 220, 0.4);
+  --color-background: #191713;
+  --color-background-elevated: #211e19;
+  --color-rail: #1e1b16;
+  --color-subtle-fill: rgba(235, 225, 205, 0.06);
+  --color-hover-fill: rgba(235, 225, 205, 0.09);
+  --color-separator: rgba(236, 231, 220, 0.12);
+  --color-border-strong: #3d372d;
+  --color-accent: var(--azure-400);
+  --color-accent-hover: var(--azure-300);
+  --color-brand: var(--azure-400);
+  --color-on-accent: #10151b;
+  --color-focus: var(--azure-400);
+  --color-overdue: #dd7a63;
+  --color-due-today: #cfa14e;
+  --color-completed: #82b98c;
+  --color-destructive: #dd7a63;
+  --color-personal: #63b4c8;
+  --color-work: #948fe0;
+  --color-capture: #b78ade;
+
+  --palette-red: #d47d68;
+  --palette-orange: #cf9a58;
+  --palette-yellow: #c4ad55;
+  --palette-green: #8ab97f;
+  --palette-mint: #6fc2ae;
+  --palette-teal: #62b4c9;
+  --palette-cyan: #6cbfe4;
+  --palette-blue: #7d9ce0;
+  --palette-indigo: #928fdb;
+  --palette-purple: #b285dd;
+  --palette-pink: #d883a5;
+  --palette-brown: #b59877;
+  --palette-graphite: #a29c90;
+
+  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.25);
+  --shadow-floating: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-panel: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-overlay: 0 18px 50px rgba(0, 0, 0, 0.6);
+}
+
 /* The one tint recipe. Anything tinted uses these two, never bespoke alphas. */
 .tinted {
   background: color-mix(in srgb, var(--tint, var(--color-accent)) 14%, transparent);

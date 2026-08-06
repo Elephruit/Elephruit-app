@@ -9,8 +9,10 @@ import {
 } from '../../ai/settings'
 import { signOutUser } from '../../data/auth'
 import { usingEmulators } from '../../data/firebase'
+import { setThemePreference, themePreference, type ThemePreference } from '../theme'
 import { Button } from '../components/Button'
 import { FormField } from '../components/FormField'
+import { SegmentedControl } from '../components/SegmentedControl'
 import { PageHeader } from '../shell/PageHeader'
 import { PageScaffold } from '../shell/PageScaffold'
 
@@ -19,6 +21,7 @@ export function SettingsPage() {
   const [showKey, setShowKey] = useState(false)
   const [model, setModelState] = useState(storedModel())
   const [ready, setReady] = useState(aiCaptureReady())
+  const [theme, setThemeState] = useState<ThemePreference>(themePreference())
   const keyInputRef = useRef<HTMLInputElement>(null)
 
   function saveKey() {
@@ -110,6 +113,26 @@ export function SettingsPage() {
             ))}
           </select>
         </FormField>
+      </section>
+
+      <section className="settings-panel aside-panel">
+        <div className="aside-panel-head">
+          <h2 className="aside-title">Appearance</h2>
+        </div>
+        <p className="settings-help">System follows the OS; the choice is remembered in this browser.</p>
+        <SegmentedControl
+          label="Appearance"
+          options={[
+            { value: 'system', label: 'System' },
+            { value: 'light', label: 'Light' },
+            { value: 'dark', label: 'Dark' },
+          ]}
+          value={theme}
+          onChange={(next) => {
+            setThemeState(next)
+            setThemePreference(next)
+          }}
+        />
       </section>
 
       <section className="settings-panel aside-panel">
