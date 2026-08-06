@@ -1,0 +1,131 @@
+/* Design tokens, ported from ElephruitDesign/Tokens.swift.
+   Everything visual derives from these: an 8pt spacing grid with a 4pt half-step,
+   exactly four radii, four named shadow depths, and semantic colours that resolve
+   per scheme. The one tint recipe — 12% alpha fill, 25% alpha stroke — is what
+   keeps every chip and tile in the same family. */
+
+:root {
+  color-scheme: light dark;
+
+  /* Spacing — nothing off-scale */
+  --space-hairline: 2px;
+  --space-tight: 4px;
+  --space-small: 8px;
+  --space-medium: 12px;
+  --space-large: 16px;
+  --space-section: 24px;
+  --space-xl: 32px;
+  --space-generous: 40px;
+
+  /* Radius — exactly four */
+  --radius-small: 4px;
+  --radius-medium: 6px;
+  --radius-large: 10px;
+  --radius-sheet: 16px;
+
+  /* Elevation — exactly four */
+  --shadow-flat: none;
+  --shadow-raised: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-floating: 0 4px 10px rgba(0, 0, 0, 0.16);
+  --shadow-panel: 0 8px 20px rgba(0, 0, 0, 0.22);
+
+  /* Type — system stack, sizes from the text-style ladder */
+  --font-stack: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --text-title: 600 1.3rem/1.25 var(--font-stack);
+  --text-day-header: 600 1.15rem/1.3 var(--font-stack);
+  --text-row-title: 400 1rem/1.4 var(--font-stack);
+  --text-row-title-emphasised: 500 1rem/1.4 var(--font-stack);
+  --text-row-subtitle: 400 0.875rem/1.4 var(--font-stack);
+  --text-metadata: 400 0.75rem/1.35 var(--font-stack);
+  --text-chip: 500 0.75rem/1.2 var(--font-stack);
+  --text-section: 600 0.72rem/1.3 var(--font-stack);
+
+  /* Timeline geometry — the rail is the feed's skeleton */
+  --rail-width: 40px;
+  --rail-inset: 8px;
+  --badge-size: 26px;
+  --row-padding: 16px;
+
+  /* Semantic colours — light */
+  --color-text: #1c1c1e;
+  --color-text-secondary: rgba(60, 60, 67, 0.6);
+  --color-text-tertiary: rgba(60, 60, 67, 0.33);
+  --color-background: #ffffff;
+  --color-background-elevated: #ffffff;
+  --color-subtle-fill: rgba(120, 120, 128, 0.08);
+  --color-hover-fill: rgba(120, 120, 128, 0.12);
+  --color-separator: rgba(60, 60, 67, 0.16);
+  --color-accent: #007aff;
+  --color-on-accent: #ffffff;
+  --color-overdue: #ff3b30;
+  --color-due-today: #ff9500;
+  --color-completed: #34c759;
+  --color-destructive: #ff3b30;
+  --color-personal: #30b0c7;
+  --color-work: #5856d6;
+  --color-capture: #af52de;
+
+  /* Palette — the 13 user-pickable colours */
+  --palette-red: #ff3b30;
+  --palette-orange: #ff9500;
+  --palette-yellow: #d6a500;
+  --palette-green: #34c759;
+  --palette-mint: #00c7be;
+  --palette-teal: #30b0c7;
+  --palette-cyan: #32ade6;
+  --palette-blue: #007aff;
+  --palette-indigo: #5856d6;
+  --palette-purple: #af52de;
+  --palette-pink: #ff2d55;
+  --palette-brown: #a2845e;
+  --palette-graphite: #8e8e93;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-text: #f2f2f7;
+    --color-text-secondary: rgba(235, 235, 245, 0.6);
+    --color-text-tertiary: rgba(235, 235, 245, 0.3);
+    --color-background: #151517;
+    --color-background-elevated: #1f1f22;
+    --color-subtle-fill: rgba(120, 120, 128, 0.18);
+    --color-hover-fill: rgba(120, 120, 128, 0.26);
+    --color-separator: rgba(84, 84, 88, 0.6);
+    --color-accent: #0a84ff;
+    --color-overdue: #ff453a;
+    --color-due-today: #ff9f0a;
+    --color-completed: #30d158;
+    --color-destructive: #ff453a;
+    --color-personal: #40cbe0;
+    --color-work: #5e5ce6;
+    --color-capture: #bf5af2;
+
+    --palette-red: #ff453a;
+    --palette-orange: #ff9f0a;
+    --palette-yellow: #ffd60a;
+    --palette-green: #30d158;
+    --palette-mint: #63e6e2;
+    --palette-teal: #40cbe0;
+    --palette-cyan: #64d2ff;
+    --palette-blue: #0a84ff;
+    --palette-indigo: #5e5ce6;
+    --palette-purple: #bf5af2;
+    --palette-pink: #ff375f;
+    --palette-brown: #ac8e68;
+    --palette-graphite: #98989d;
+
+    --shadow-raised: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --shadow-floating: 0 4px 10px rgba(0, 0, 0, 0.5);
+    --shadow-panel: 0 8px 20px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* The one tint recipe. Anything tinted uses these two, never bespoke alphas. */
+.tinted {
+  background: color-mix(in srgb, var(--tint, var(--color-accent)) 12%, transparent);
+  color: var(--tint, var(--color-accent));
+}
+.tinted-stroke {
+  border: 1px solid color-mix(in srgb, var(--tint, var(--color-accent)) 25%, transparent);
+}
