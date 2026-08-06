@@ -10,6 +10,10 @@ import { verifyAnthropicKey } from './verify.js'
 
 const STREAM_TIMEOUT_MS = 240_000
 
+/// Structured outputs on the streaming path ride a beta flag; the SDK's own
+/// beta helpers send exactly this value. Sent only when a format is present.
+const STRUCTURED_OUTPUTS_BETA = 'structured-outputs-2025-12-15'
+
 function buildParams(request: NormalizedRequest): Anthropic.MessageStreamParams {
   const params: Anthropic.MessageStreamParams = {
     model: request.model,
@@ -31,6 +35,18 @@ function buildParams(request: NormalizedRequest): Anthropic.MessageStreamParams 
 
 export function normalizeAnthropicError(error: unknown): Error {
   if (error instanceof Anthropic.APIUserAbortError) return new StreamCancelled()
+  const publicError = classifyAnthropicError(error)
+  if (publicError instanceof PublicError && error instanceof Anthropic.APIError) {
+    // Log-only diagnostics: upstream status and the API's own complaint,
+    // truncated. These describe request shape, never prompts or keys, and
+    // toHttpsError never sends them to the client.
+    publicError.providerStatus = typeof error.status === 'number' ? error.status : undefined
+    publicError.providerNote = String(error.message ?? '').slice(0, 200)
+  }
+  return publicError
+}
+
+function classifyAnthropicError(error: unknown): Error {
   if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
     return new PublicError('PROVIDER_AUTH_FAILED', 'The provider rejected this key. Verify or replace it in Settings.')
   }
@@ -53,7 +69,10 @@ export const anthropicAdapter: ProviderAdapter = {
   async streamMessage(apiKey, request, signal, onText): Promise<StreamOutcome> {
     const client = new Anthropic({ apiKey, maxRetries: 0, timeout: STREAM_TIMEOUT_MS })
     try {
-      const stream = client.messages.stream(buildParams(request), { signal })
+      const stream = client.messages.stream(buildParams(request), {
+        signal,
+        ...(request.outputFormat ? { headers: { 'anthropic-beta': STRUCTURED_OUTPUTS_BETA } } : {}),
+      })
       for await (const event of stream) {
         if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
           await onText(event.delta.text)

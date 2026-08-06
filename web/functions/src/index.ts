@@ -152,7 +152,15 @@ export const streamAiResponse = onCall(
     } catch (error) {
       const httpsError = toHttpsError(error)
       const details = httpsError.details as { code?: string } | undefined
-      deps.log.warn('stream', { uid, status: 'error', normalizedErrorCode: details?.code ?? 'INTERNAL' })
+      deps.log.warn('stream', {
+        uid,
+        status: 'error',
+        normalizedErrorCode: details?.code ?? 'INTERNAL',
+        ...(error instanceof PublicError && error.providerStatus !== undefined
+          ? { providerStatus: error.providerStatus }
+          : {}),
+        ...(error instanceof PublicError && error.providerNote ? { providerNote: error.providerNote } : {}),
+      })
       throw httpsError
     }
   },

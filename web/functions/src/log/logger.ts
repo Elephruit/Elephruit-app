@@ -16,6 +16,10 @@ const SAFE_FIELDS = [
   'status',
   'outcome',
   'normalizedErrorCode',
+  // Upstream diagnostics from PublicError: HTTP status and the provider's
+  // truncated complaint about request shape — never prompts, never keys.
+  'providerStatus',
+  'providerNote',
 ] as const
 
 type SafeField = (typeof SAFE_FIELDS)[number]

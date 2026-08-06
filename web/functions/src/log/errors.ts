@@ -22,6 +22,11 @@ export type PublicAiErrorCode =
   | 'INTERNAL'
 
 export class PublicError extends Error {
+  /// Server-log-only diagnostics (upstream HTTP status, truncated upstream
+  /// complaint). Never serialized to the client — toHttpsError ignores them.
+  providerStatus?: number
+  providerNote?: string
+
   constructor(
     readonly code: PublicAiErrorCode,
     message: string,
