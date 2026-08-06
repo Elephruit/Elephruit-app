@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // The entire graph is private to its owner. One rule, no exceptions:
+    // everything lives under users/{uid}, and only that user touches it.
+    match /users/{uid}/{collectionName}/{docID} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
