@@ -29,9 +29,9 @@
   --shadow-floating: 0 4px 10px rgba(0, 0, 0, 0.16);
   --shadow-panel: 0 8px 20px rgba(0, 0, 0, 0.22);
 
-  /* Type — system stack, sizes from the text-style ladder */
-  --font-stack: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, sans-serif;
+  /* Type — Geist for interface text, sizes from the text-style ladder */
+  --font-stack: 'Geist Variable', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
   --text-title: 600 1.3rem/1.25 var(--font-stack);
   --text-day-header: 600 1.15rem/1.3 var(--font-stack);
   --text-row-title: 400 1rem/1.4 var(--font-stack);
