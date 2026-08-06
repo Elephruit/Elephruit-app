@@ -12,8 +12,9 @@ const DESTINATIONS = [
   { to: '/followups', label: 'Follow-ups', icon: 'bell', end: false },
 ] as const
 
-export function NavRail() {
+export function NavRail({ onSearch }: { onSearch: () => void }) {
   const navigate = useNavigate()
+  const isMac = navigator.platform.toUpperCase().includes('MAC')
 
   return (
     <nav className="nav-rail" aria-label="Primary">
@@ -39,6 +40,12 @@ export function NavRail() {
           <span className="rail-label">{destination.label}</span>
         </NavLink>
       ))}
+
+      <button className="rail-search" onClick={onSearch} title="Search">
+        <Icon name="search" size={15} />
+        <span className="rail-label">Search</span>
+        <kbd className="rail-kbd">{isMac ? '⌘K' : 'Ctrl K'}</kbd>
+      </button>
 
       <div className="rail-foot">
         <NavLink to="/settings" className="rail-item" title="Settings">

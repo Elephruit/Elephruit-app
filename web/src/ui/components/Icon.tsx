@@ -76,6 +76,22 @@ const PATHS: Record<string, React.ReactNode> = {
   heart: <path d="M12 19.5s-7-4.5-7-9.4C5 7.3 7 5.5 9.2 5.5c1.3 0 2.3.7 2.8 1.6.5-.9 1.5-1.6 2.8-1.6C17 5.5 19 7.3 19 10.1c0 4.9-7 9.4-7 9.4z" />,
   pencil: <path d="M14.5 5.5l4 4L8 20H4v-4zM13 7l4 4" />,
   x: <path d="M6 6l12 12M18 6L6 18" />,
+  search: (
+    <>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="M20 20l-4.2-4.2" />
+    </>
+  ),
+  'chevron-down': <path d="M5.5 9l6.5 6.5L18.5 9" />,
+  'chevron-right': <path d="M9 5.5l6.5 6.5L9 18.5" />,
+  calendar: (
+    <>
+      <rect x="4" y="5.5" width="16" height="14.5" rx="2" />
+      <path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" />
+    </>
+  ),
+  filter: <path d="M4 6h16M7 12h10M10 18h4" />,
+  'arrow-right': <path d="M5 12h14M13 6l6 6-6 6" />,
 }
 
 export type IconName = keyof typeof PATHS extends string ? string : never
