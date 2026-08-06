@@ -11,14 +11,17 @@ import {
   where,
   type Query,
 } from 'firebase/firestore'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AiCredential } from '../ai/credentials'
 import type { Interaction } from '../domain/interaction'
 import type { Observation } from '../domain/facts'
+import type { MemoryRecord } from '../domain/memory'
 import type { Person } from '../domain/person'
 import { foldedForMatching } from '../domain/person'
 import type { Relationship } from '../domain/relationships'
 import type { Reminder } from '../domain/reminders'
+import type { SourceDocument } from '../domain/sources'
+import { projectFeed, type MemoryMomentViewModel } from './memoryProjection'
 import { collectionRef, docRef } from './collections'
 import { deserialize } from './converters'
 import { db } from './firebase'
@@ -132,6 +135,84 @@ export function useRemindersFor(uid: string, personID: string): Reminder[] | und
     () => query(collectionRef(uid, 'reminders'), where('personIDs', 'array-contains', personID)),
     [uid, personID],
   )
+}
+
+export function useSources(uid: string): SourceDocument[] | undefined {
+  return useQuerySnapshot<SourceDocument>(() => query(collectionRef(uid, 'sources')), [uid])
+}
+
+export interface MemoryFeedResult {
+  status: 'loading' | 'error' | 'ready'
+  moments: MemoryMomentViewModel[]
+  retry: () => void
+}
+
+/// The feed's one read model: the memories stream joined to its entities,
+/// plus the legacy projection for everything that predates memory records.
+/// `ready` only once every source has loaded — the empty state can never
+/// flash while anything is still on its way. Local batch writes surface in
+/// these snapshots synchronously (Firestore latency compensation), which is
+/// what makes a fresh save appear without a reload.
+export function useMemoryFeed(uid: string): MemoryFeedResult {
+  const [nonce, setNonce] = useState(0)
+  const [memories, setMemories] = useState<MemoryRecord[] | undefined>(undefined)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    setMemories(undefined)
+    setFailed(false)
+    const unsubscribe = onSnapshot(
+      query(collectionRef(uid, 'memories'), orderBy('occurredAt', 'desc'), limitTo(100)),
+      (snapshot) => {
+        setMemories(
+          snapshot.docs.map((docSnapshot) => {
+            const data = deserialize(docSnapshot.data()) as MemoryRecord
+            data.id = docSnapshot.id
+            return data
+          }),
+        )
+      },
+      () => setFailed(true),
+    )
+    return unsubscribe
+  }, [uid, nonce])
+
+  const people = usePeople(uid)
+  const interactions = useFeed(uid)
+  const observations = useAllObservations(uid)
+  const relationships = useAllRelationships(uid)
+  const reminders = useReminders(uid)
+  const sources = useSources(uid)
+
+  const retry = useCallback(() => setNonce((n) => n + 1), [])
+
+  const loaded =
+    memories !== undefined &&
+    people !== undefined &&
+    interactions !== undefined &&
+    observations !== undefined &&
+    relationships !== undefined &&
+    reminders !== undefined &&
+    sources !== undefined
+
+  const moments = useMemo(() => {
+    if (!loaded) return []
+    return projectFeed({
+      memories: memories!,
+      people: people!,
+      interactions: interactions!,
+      observations: observations!,
+      relationships: relationships!,
+      reminders: reminders!,
+      sources: sources!,
+    })
+  }, [loaded, memories, people, interactions, observations, relationships, reminders, sources])
+
+  return {
+    status: failed ? 'error' : loaded ? 'ready' : 'loading',
+    moments,
+    retry,
+  }
 }
 
 /// Server-written credential metadata, owner-readable under the rules. The
