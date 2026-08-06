@@ -33,8 +33,30 @@ function cannedCaptureProposal(): unknown {
         facts: [{ attribute: 'school', value: 'Roosevelt' }],
       },
     ],
-    followUps: [{ title: 'Send the neighborhood list', personNames: ['Ana Torres'] }],
+    followUps: [
+      {
+        title: 'Send the neighborhood list by Friday',
+        personNames: ['Ana Torres'],
+        notes: null,
+        schedule: {
+          mode: 'deadline',
+          localDate: nextFriday(),
+          localTime: null,
+          timeZone: null,
+          sourceText: 'by Friday',
+          confidence: 'stated',
+        },
+      },
+    ],
   }
+}
+
+/// The canned deadline stays in the near future whenever the walk happens.
+function nextFriday(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + (((5 - d.getDay()) % 7 || 7)))
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 function cannedDayBrief(request: NormalizedRequest): unknown {

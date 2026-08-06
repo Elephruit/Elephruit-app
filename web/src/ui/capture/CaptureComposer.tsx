@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router-dom'
 import { Link } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
-import { ReviewPanel } from './ReviewPanel'
+import { EditableReviewPanel } from './EditableReviewPanel'
 import { CaptureError, CaptureStatus } from './CaptureStatus'
 import { CaptureSuggestions } from './CaptureSuggestions'
 import type { CaptureController } from './useCaptureController'
@@ -199,9 +199,8 @@ export function CaptureComposer({
                 </button>
               </div>
               <hr className="hairline" />
-              <ReviewPanel
-                items={controller.review.items}
-                warnings={controller.review.warnings}
+              <EditableReviewPanel
+                resolved={controller.review}
                 onClose={() => controller.editText()}
                 onSaved={() => controller.handleSaved()}
               />

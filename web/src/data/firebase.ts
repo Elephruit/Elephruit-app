@@ -16,12 +16,25 @@ const env = import.meta.env
 
 export const usingEmulators: boolean = env.DEV && env.VITE_USE_EMULATORS !== 'false'
 
-const app = initializeApp({
-  apiKey: env.VITE_FIREBASE_API_KEY || 'demo-api-key',
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || 'demo-elephruit.firebaseapp.com',
-  projectId: env.VITE_FIREBASE_PROJECT_ID || 'demo-elephruit',
-  appId: env.VITE_FIREBASE_APP_ID || 'demo-app-id',
-})
+// Emulator runs pin the fictional demo project no matter what .env says: the
+// emulators are started with --project demo-elephruit, the seed writes there,
+// and a real project id leaking in from .env would 404 every callable while
+// auth and Firestore silently namespace elsewhere.
+const app = initializeApp(
+  usingEmulators
+    ? {
+        apiKey: 'demo-api-key',
+        authDomain: 'demo-elephruit.firebaseapp.com',
+        projectId: 'demo-elephruit',
+        appId: 'demo-app-id',
+      }
+    : {
+        apiKey: env.VITE_FIREBASE_API_KEY || 'demo-api-key',
+        authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || 'demo-elephruit.firebaseapp.com',
+        projectId: env.VITE_FIREBASE_PROJECT_ID || 'demo-elephruit',
+        appId: env.VITE_FIREBASE_APP_ID || 'demo-app-id',
+      },
+)
 
 // App Check proves requests come from this app. Emulator runs skip it (there
 // is no App Check emulator); a production build without a configured site key

@@ -106,7 +106,10 @@ export function slotName(slot: PersonSlot): string {
   return slot.person.displayName
 }
 
-function foldAttribute(text: string): FactAttribute {
+/// Free attribute text → the curated registry when it matches, quickFact when
+/// it is nothing at all. Shared with the review-draft planner so edited
+/// attribute text folds identically to parsed attribute text.
+export function foldAttribute(text: string): FactAttribute {
   return customAttribute(text) ?? FactAttributes.quickFact
 }
 

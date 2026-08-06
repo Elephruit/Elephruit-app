@@ -1368,6 +1368,241 @@ textarea.field {
   }
 }
 
+/* MARK: Editable review — open rows between hairlines, never cards */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.editable-review-subtitle {
+  font: var(--text-sub);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-small);
+}
+
+.draft-warning {
+  font: var(--text-sub);
+  color: var(--color-due-today);
+  margin: var(--space-tight) 0;
+}
+
+.draft-people-row {
+  padding: var(--space-small) 0;
+  border-bottom: 1px solid var(--color-separator);
+}
+
+.draft-row {
+  padding: var(--space-medium) 0;
+  border-bottom: 1px solid var(--color-separator);
+}
+
+.draft-row-line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-medium);
+}
+
+.draft-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.draft-row-title {
+  font: var(--text-body);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.draft-row-sub {
+  font: var(--text-sub);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.draft-row-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-tight);
+}
+
+.draft-row-removed {
+  display: flex;
+  align-items: center;
+  gap: var(--space-tight);
+  opacity: 0.8;
+}
+
+.draft-problem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-medium);
+  flex-wrap: wrap;
+  margin-top: var(--space-small);
+  padding: var(--space-small) var(--space-medium);
+  border-left: 2px solid var(--color-due-today);
+  background: color-mix(in srgb, var(--color-due-today) 7%, transparent);
+}
+
+.draft-problem:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.draft-problem p {
+  font: var(--text-sub);
+  color: var(--color-due-today);
+}
+
+.draft-problem-actions {
+  display: flex;
+  gap: var(--space-small);
+}
+
+.draft-row-editor {
+  margin-top: var(--space-small);
+  padding: var(--space-small) var(--space-medium) var(--space-medium);
+  border-left: 2px solid var(--color-separator);
+}
+
+.draft-editor .form-field:first-child {
+  margin-top: 0;
+}
+
+.draft-editor-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-medium);
+}
+
+.draft-fieldset {
+  border: 0;
+  padding: 0;
+  margin: var(--space-medium) 0 0;
+}
+
+.draft-radio {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-small);
+  padding: var(--space-tight) 0;
+  font: var(--text-body);
+  cursor: pointer;
+}
+
+.draft-radio-note {
+  display: block;
+  font: var(--text-metadata);
+  color: var(--color-text-secondary);
+  font-style: normal;
+  margin-top: 2px;
+}
+
+.draft-fact-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-small);
+}
+
+.draft-fact-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto;
+  gap: var(--space-small);
+  align-items: center;
+}
+
+/* Slot picker — resolving who a proposed person is */
+
+.slot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-small);
+  font: var(--text-body);
+}
+
+.slot-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-small);
+  padding: var(--space-small) 0;
+}
+
+.slot-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-tight);
+}
+
+.slot-create-row {
+  display: flex;
+  gap: var(--space-small);
+  align-items: center;
+  padding-top: var(--space-tight);
+}
+
+.slot-picker > .button {
+  align-self: flex-start;
+}
+
+/* Schedule editor */
+
+.schedule-editor {
+  margin-top: var(--space-medium);
+}
+
+.schedule-detected {
+  font: var(--text-metadata);
+  color: var(--color-text-secondary);
+  margin-top: var(--space-small);
+}
+
+.schedule-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-small);
+  margin-top: var(--space-small);
+}
+
+.schedule-quick:empty {
+  display: none;
+}
+
+.schedule-fields {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: var(--space-small) var(--space-medium);
+  margin-top: var(--space-tight);
+}
+
+.schedule-fields .field-label {
+  flex-basis: 100%;
+  margin: var(--space-small) 0 0;
+}
+
+.schedule-fields input.field,
+.schedule-fields select.field {
+  width: auto;
+}
+
+.schedule-interpreted {
+  font: var(--text-label);
+  color: var(--color-text);
+  margin-top: var(--space-small);
+}
+
 @media (max-width: 719.98px) {
   .composer-foot,
   .composer-review .sheet-actions {
