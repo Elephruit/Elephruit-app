@@ -78,10 +78,23 @@ misconfigured as a dev machine fails at cold start, not at first request.
 
 ## 4. App Check
 
-1. Register the web app for App Check (reCAPTCHA v3) in the Firebase
-   console; add the site key to the client init (a small
-   `initializeAppCheck` block in `web/src/data/firebase.ts`, gated off in
-   emulator mode — not yet written, since there is no site key to write).
+1. Register the web app for App Check with **reCAPTCHA Enterprise** — not
+   classic v3. Google's admin flow creates Enterprise keys for org accounts,
+   and the key's kind must match everywhere or the token mint fails
+   silently and every callable is refused with a bare `Unauthenticated`.
+   Three pieces have to agree, all learned the hard way on first deploy:
+   - The Enterprise key's **allowed domains** must list the exact hosts
+     (`<project>.web.app`, `<project>.firebaseapp.com` — watch for typos;
+     `.web.com` cost an hour).
+   - The App Check registration carries the **site key** (Enterprise keys
+     have no classic secret). Registering via API instead of console:
+     `PATCH …/apps/<appId>/recaptchaEnterpriseConfig?updateMask=siteKey`.
+   - The App Check **service agent**
+     (`service-<project-number>@gcp-sa-firebaseappcheck.iam.gserviceaccount.com`)
+     needs `roles/recaptchaenterprise.agent` on the project — the console
+     registration grants it; the API path does not.
+   The client init in `web/src/data/firebase.ts` uses
+   `ReCaptchaEnterpriseProvider` with `VITE_APPCHECK_SITE_KEY`.
 2. **Stage the rollout:** deploy with enforcement ON for the callables (the
    code always enforces outside the emulator) only after monitoring the
    App Check metrics page shows legitimate traffic passing. If unverified

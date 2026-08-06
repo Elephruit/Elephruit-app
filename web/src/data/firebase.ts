@@ -7,7 +7,7 @@
 /// IndexedDB would outlive the emulator and serve ghost documents.
 
 import { initializeApp } from 'firebase/app'
-import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check'
 import { connectAuthEmulator, getAuth } from 'firebase/auth'
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
 import { connectFunctionsEmulator, getFunctions } from 'firebase/functions'
@@ -35,7 +35,10 @@ if (!usingEmulators && appCheckSiteKey) {
       env.VITE_APPCHECK_DEBUG_TOKEN
   }
   initializeAppCheck(app, {
-    provider: new ReCaptchaV3Provider(appCheckSiteKey),
+    // Enterprise, not classic v3: Google's admin routes org accounts into
+    // Enterprise keys, and the provider must match the key's kind or the
+    // token mint fails silently and every callable is refused.
+    provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
     isTokenAutoRefreshEnabled: true,
   })
 }
