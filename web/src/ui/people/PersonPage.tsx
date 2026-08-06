@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { planCompleteReminder, planReopenReminder } from '../../domain/capture'
+import { planCompleteReminder, planRenamePerson, planReopenReminder } from '../../domain/capture'
 import { deriveLastContact, lastContactLine } from '../../domain/contact'
 import {
   FILTER_LABELS,
@@ -20,13 +20,16 @@ import {
   usePeople,
   usePerson,
   usePersonInteractions,
+  useRelationshipsFor,
   useRemindersFor,
 } from '../../data/hooks'
 import { useUID } from '../UserContext'
 import { Avatar } from '../components/Avatar'
 import { Icon } from '../components/Icon'
+import { Sheet } from '../components/Sheet'
 import { TimelineRow } from '../components/TimelineRow'
 import { FactsSection } from './FactsSection'
+import { RelationshipsSection } from './RelationshipsSection'
 
 const VISIBLE_FILTERS: TimelineFilter[] = ['everything', 'conversations', 'notes', 'commitments']
 
@@ -55,7 +58,11 @@ export function PersonPage() {
   const interactions = usePersonInteractions(uid, personID!)
   const observations = useObservationsFor(uid, personID!)
   const reminders = useRemindersFor(uid, personID!)
+  const relationships = useRelationshipsFor(uid, personID!)
   const [filter, setFilter] = useState<TimelineFilter>('everything')
+  const [renaming, setRenaming] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [savingName, setSavingName] = useState(false)
 
   const entries = useMemo(() => {
     if (!interactions || !observations || !reminders || !people) return undefined
@@ -110,8 +117,20 @@ export function PersonPage() {
           <Avatar name={person.displayName} colorName={person.colorName} />
         </span>
         <span>
-          <h1 className="page-title" style={{ marginBottom: 2 }}>
+          <h1 className="page-title" style={{ marginBottom: 2, display: 'flex', alignItems: 'center', gap: 'var(--space-small)' }}>
             {person.displayName}
+            <button
+              type="button"
+              className="button button-plain"
+              style={{ padding: 2, color: 'var(--color-text-tertiary)' }}
+              aria-label="Rename"
+              onClick={() => {
+                setNewName(person.hasStatedName ? person.displayName : '')
+                setRenaming(true)
+              }}
+            >
+              <Icon name="pencil" size={16} />
+            </button>
           </h1>
           {roleLine && <p className="row-subtitle">{roleLine}</p>}
           <p className="row-subtitle">{lastContactLine(derivedLastContact, new Date())}</p>
@@ -128,6 +147,10 @@ export function PersonPage() {
       </button>
 
       {observations && <FactsSection person={person} observations={observations} />}
+
+      {relationships && people && (
+        <RelationshipsSection person={person} relationships={relationships} people={people} />
+      )}
 
       {openFollowUps.length > 0 && (
         <>
@@ -168,6 +191,44 @@ export function PersonPage() {
         <p className="row-subtitle" style={{ padding: 'var(--space-large) 0' }}>
           Nothing here yet.
         </p>
+      )}
+
+      {renaming && (
+        <Sheet title="Rename" onClose={() => setRenaming(false)}>
+          <p className="row-subtitle">
+            Unnamed relatives titled after this person — “{person.displayName}'s son” — are
+            re-phrased in the same save.
+          </p>
+          <input
+            className="field"
+            style={{ marginTop: 'var(--space-medium)' }}
+            value={newName}
+            onChange={(event) => setNewName(event.target.value)}
+            autoFocus
+          />
+          <div className="sheet-actions">
+            <button type="button" className="button button-quiet" onClick={() => setRenaming(false)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="button"
+              disabled={!newName.trim() || savingName}
+              onClick={() => {
+                if (!relationships || !people) return
+                setSavingName(true)
+                const peopleByID = new Map(people.map((p) => [p.id, p]))
+                const { plan } = planRenamePerson(person, newName, relationships, peopleByID, new Date())
+                void applyPlan(uid, plan).then(() => {
+                  setSavingName(false)
+                  setRenaming(false)
+                })
+              }}
+            >
+              Save
+            </button>
+          </div>
+        </Sheet>
       )}
 
       {months?.map((group, groupIndex) => (
