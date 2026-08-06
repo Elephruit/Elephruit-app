@@ -26,6 +26,7 @@ import { Avatar } from '../components/Avatar'
 import { Icon } from '../components/Icon'
 import { Dialog } from '../components/Dialog'
 import { planUnrelate } from '../../domain/capture'
+import { planMemoryRecord } from '../../domain/memory'
 
 function AddRelationshipSheet({
   subject,
@@ -76,23 +77,48 @@ function AddRelationshipSheet({
     ]
 
     let plan: WritePlan
+    let other: { id: string; displayName: string }
+    let relationshipIDs: string[]
+    const observationIDs: string[] = []
     if (existing) {
       const pair = planRelationshipPair(
         { subjectID: subject.id, otherID: existing.id, kind, customLabel: word || null },
         now,
       )
       plan = [...pair.plan]
+      relationshipIDs = [pair.pair[0].id, pair.pair[1].id]
+      other = existing
       for (const fact of factList) {
-        plan.push(...planObservation({ subjectID: existing.id, ...fact }, now).plan)
+        const { plan: factPlan, observation } = planObservation({ subjectID: existing.id, ...fact }, now)
+        observationIDs.push(observation.id)
+        plan.push(...factPlan)
       }
     } else {
-      plan = planRelativeCapture(
+      const capture = planRelativeCapture(
         subject,
         { kind, label: word || null, name: who.trim() || null, facts: factList },
         now,
-      ).plan
+      )
+      plan = capture.plan
+      relationshipIDs = [capture.pair[0].id, capture.pair[1].id]
+      other = capture.relative
+      for (const write of capture.plan) {
+        if (write.collection === 'observations' && write.op === 'set') observationIDs.push(write.id)
+      }
     }
-    await applyPlan(uid, plan)
+    const { plan: memoryPlan } = planMemoryRecord(
+      {
+        kind: 'manualUpdate',
+        title: `Connected ${subject.displayName} and ${other.displayName}`,
+        occurredAt: now,
+        personIDs: [subject.id, other.id],
+        relationshipIDs,
+        observationIDs,
+        origin: 'manualRelationship',
+      },
+      now,
+    )
+    await applyPlan(uid, [...plan, ...memoryPlan])
     onClose()
   }
 

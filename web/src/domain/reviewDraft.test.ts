@@ -195,7 +195,7 @@ describe('planFromReviewDraft', () => {
     const fact = draft.items.find((i) => i.type === 'fact')!
     draft = reviewDraftReducer(draft, { type: 'update-fact', id: fact.id, changes: { value: 'Vertical Head' } })
 
-    const plan = planFromReviewDraft(draft, NOW, CHICAGO)
+    const { plan } = planFromReviewDraft(draft, NOW, CHICAGO)
     const observations = plan.filter((w) => w.collection === 'observations' && w.op === 'set')
     const values = observations.map((w) => (w as { data: { value: string } }).data.value)
     expect(values).toContain('Vertical Head')
@@ -210,7 +210,7 @@ describe('planFromReviewDraft', () => {
         draft = reviewDraftReducer(draft, { type: 'remove-item', id: item.id })
       }
     }
-    const plan = planFromReviewDraft(draft, NOW, CHICAGO)
+    const { plan } = planFromReviewDraft(draft, NOW, CHICAGO)
     const createdNames = plan
       .filter((w) => w.collection === 'people' && w.op === 'set')
       .map((w) => (w as { data: { displayName: string } }).data.displayName)
@@ -231,7 +231,7 @@ describe('planFromReviewDraft', () => {
       changes: { schedule: { scheduleMode: 'deadline', localDate: '2026-08-11', localTime: '14:00', timeZone: 'America/Chicago' } },
     })
 
-    const plan = planFromReviewDraft(draft, NOW, CHICAGO)
+    const { plan } = planFromReviewDraft(draft, NOW, CHICAGO)
     const interactionWrite = plan.find((w) => w.collection === 'interactions')
     expect((interactionWrite as { data: { occurredAt: Date } }).data.occurredAt).toEqual(occurredAt)
     const reminderWrite = plan.find((w) => w.collection === 'reminders')
@@ -242,7 +242,7 @@ describe('planFromReviewDraft', () => {
     let draft = kellyDraft()
     const fact = draft.items.find((i) => i.type === 'fact')!
     draft = reviewDraftReducer(draft, { type: 'update-fact', id: fact.id, changes: { attribute: 'Works at' } })
-    const plan = planFromReviewDraft(draft, NOW, CHICAGO)
+    const { plan } = planFromReviewDraft(draft, NOW, CHICAGO)
     const attributes = plan
       .filter((w) => w.collection === 'observations')
       .map((w) => (w as { data: { attribute: string } }).data.attribute)
@@ -260,7 +260,7 @@ describe('planFromReviewDraft', () => {
       resolution: { ref: 'existing', person: existingKelly },
     })
 
-    const plan = planFromReviewDraft(draft, NOW, CHICAGO)
+    const { plan } = planFromReviewDraft(draft, NOW, CHICAGO)
     const createdNames = plan
       .filter((w) => w.collection === 'people' && w.op === 'set')
       .map((w) => (w as { data: { displayName: string } }).data.displayName)

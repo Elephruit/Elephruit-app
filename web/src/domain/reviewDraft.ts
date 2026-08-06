@@ -15,6 +15,7 @@ import {
 } from './capture'
 import type { FactConfidence, FactSensitivity } from './facts'
 import type { InteractionKind } from './interaction'
+import { defaultMemoryTitle, planMemoryRecord, type MemoryRecord } from './memory'
 import type { Person } from './person'
 import { kindLabel, type RelationshipKind } from './relationships'
 import {
@@ -99,6 +100,10 @@ export interface ResolvedCaptureDraft {
   slots: PersonSlotEntry[]
   items: ReviewDraftItem[]
   warnings: string[]
+  /// The memory's title — defaulted deterministically, editable in review.
+  title: string
+  /// True once the user edits the title; automatic recomputation stops.
+  titleEdited: boolean
   revision: number
 }
 
@@ -186,7 +191,62 @@ export function draftFromResolved(resolved: ResolvedCapture, now: Date): Resolve
     }
   }
 
-  return { slots: [...slots.values()], items, warnings: resolved.warnings, revision: 0 }
+  const draft: ResolvedCaptureDraft = {
+    slots: [...slots.values()],
+    items,
+    warnings: resolved.warnings,
+    title: '',
+    titleEdited: false,
+    revision: 0,
+  }
+  draft.title = computeDefaultTitle(draft)
+  return draft
+}
+
+/// The deterministic default title from the draft's current shape.
+export function computeDefaultTitle(draft: ResolvedCaptureDraft): string {
+  const active = draft.items.filter((item) => !item.removed)
+  const interaction = active.find((item) => item.type === 'interaction')
+  const facts = active.filter((item) => item.type === 'fact')
+  const relationships = active.filter((item) => item.type === 'relationship')
+  const followUps = active.filter((item) => item.type === 'followUp')
+
+  const referenced: Person[] = []
+  for (const item of active) {
+    const refs =
+      item.type === 'interaction'
+        ? item.participantSlotIDs
+        : item.type === 'fact'
+          ? [item.subjectSlotID]
+          : item.type === 'relationship'
+            ? [item.subjectSlotID, ...(item.otherSlotID ? [item.otherSlotID] : [])]
+            : item.personSlotIDs
+    for (const slotID of refs) {
+      const person = slotPerson(draft, slotID)
+      if (person && !referenced.some((p) => p.id === person.id)) referenced.push(person)
+    }
+  }
+  const created = referenced.filter((person) =>
+    draft.slots.some((slot) => slot.resolution.person.id === person.id && slot.resolution.ref === 'create'),
+  )
+
+  const firstRelationship = relationships[0]
+  let connectedPair: [Person, Person] | null = null
+  if (firstRelationship && firstRelationship.type === 'relationship' && firstRelationship.otherSlotID) {
+    const a = slotPerson(draft, firstRelationship.subjectSlotID)
+    const b = slotPerson(draft, firstRelationship.otherSlotID)
+    if (a && b) connectedPair = [a, b]
+  }
+
+  return defaultMemoryTitle({
+    interactionSummary: interaction && interaction.type === 'interaction' ? interaction.summary : null,
+    primaryPerson: referenced[0] ?? null,
+    createdPeople: created,
+    connectedPair: relationships.length > 0 && facts.length === 0 && followUps.length === 0 ? connectedPair : null,
+    hasFacts: facts.length > 0,
+    hasRelationships: relationships.length > 0,
+    followUpOnly: followUps.length > 0 && facts.length === 0 && relationships.length === 0 && !interaction,
+  })
 }
 
 // MARK: Actions
@@ -196,17 +256,22 @@ export type ReviewDraftAction =
   | { type: 'update-fact'; id: string; changes: Partial<Omit<FactDraftItem, 'id' | 'type' | 'removed'>> }
   | { type: 'update-relationship'; id: string; changes: Partial<Omit<RelationshipDraftItem, 'id' | 'type' | 'removed'>> }
   | { type: 'update-follow-up'; id: string; changes: Partial<Omit<FollowUpDraftItem, 'id' | 'type' | 'removed'>> }
+  | { type: 'update-title'; title: string }
   | { type: 'resolve-person'; slotID: string; resolution: PersonSlotResolution }
   | { type: 'add-person-slot'; slot: PersonSlotEntry }
   | { type: 'remove-item'; id: string }
   | { type: 'restore-item'; id: string }
 
 export function reviewDraftReducer(draft: ResolvedCaptureDraft, action: ReviewDraftAction): ResolvedCaptureDraft {
-  const bump = (next: Partial<ResolvedCaptureDraft>): ResolvedCaptureDraft => ({
-    ...draft,
-    ...next,
-    revision: draft.revision + 1,
-  })
+  const bump = (next: Partial<ResolvedCaptureDraft>): ResolvedCaptureDraft => {
+    const merged = { ...draft, ...next, revision: draft.revision + 1 }
+    // An unedited title keeps tracking the draft's shape; the first manual
+    // edit pins it.
+    if (!merged.titleEdited && action.type !== 'update-title') {
+      merged.title = computeDefaultTitle(merged)
+    }
+    return merged
+  }
 
   switch (action.type) {
     case 'update-interaction':
@@ -227,6 +292,8 @@ export function reviewDraftReducer(draft: ResolvedCaptureDraft, action: ReviewDr
         ),
       })
     }
+    case 'update-title':
+      return { ...draft, title: action.title, titleEdited: true, revision: draft.revision + 1 }
     case 'resolve-person':
       return bump({
         slots: draft.slots.map((slot) =>
@@ -323,23 +390,34 @@ export function validateDraft(draft: ResolvedCaptureDraft): DraftProblem[] {
 
 // MARK: The plan
 
-/// The write plan from the *edited* draft. Removed items plan nothing and the
-/// people only they referenced are never created; the interaction's edited
-/// occurredAt drives both the record and the last-contact cache.
+/// The write plan from the *edited* draft, plus the one MemoryRecord that
+/// makes the save feedable. Removed items plan nothing and the people only
+/// they referenced are never created; the interaction's edited occurredAt
+/// drives the record, the last-contact cache, and the memory's own time.
+/// Every entity ID the plan schedules lands in the memory before the caller's
+/// single atomic applyPlan — a partial memory is never committed. A save with
+/// no active items returns an empty plan and no memory.
 export function planFromReviewDraft(
   draft: ResolvedCaptureDraft,
   now: Date,
   temporal: TemporalContext,
-): WritePlan {
+): { plan: WritePlan; memory: MemoryRecord | null } {
   const active = activeItems(draft)
+  if (active.length === 0) return { plan: [], memory: null }
   const plan: WritePlan = []
+
+  const personIDs = new Set<string>()
+  const observationIDs: string[] = []
+  const relationshipIDs: string[] = []
+  const reminderIDs: string[] = []
 
   const created = new Map<string, Person>()
   function ensureCreated(slotID: string): Person {
     const entry = slotByID(draft, slotID)
     if (!entry) throw new Error(`Draft references a missing person slot: ${slotID}`)
-    if (entry.resolution.ref === 'existing') return entry.resolution.person
     const person = entry.resolution.person
+    personIDs.add(person.id)
+    if (entry.resolution.ref === 'existing') return person
     if (!created.has(person.id)) {
       created.set(person.id, person)
       plan.push({ op: 'set', collection: 'people', id: person.id, data: person })
@@ -348,6 +426,7 @@ export function planFromReviewDraft(
   }
 
   let interactionID: string | null = null
+  let occurredAt = now
 
   const interaction = active.find((item) => item.type === 'interaction')
   if (interaction && interaction.type === 'interaction') {
@@ -365,6 +444,7 @@ export function planFromReviewDraft(
       now,
     )
     interactionID = bundle.interaction.id
+    occurredAt = bundle.interaction.occurredAt
     plan.push(...bundle.plan)
   }
 
@@ -374,19 +454,19 @@ export function planFromReviewDraft(
         break
       case 'fact': {
         const person = ensureCreated(item.subjectSlotID)
-        plan.push(
-          ...planObservation(
-            {
-              subjectID: person.id,
-              attribute: foldAttribute(item.attribute),
-              value: item.value,
-              confidence: item.confidence,
-              sensitivity: item.sensitivity,
-              sourceInteractionID: interactionID,
-            },
-            now,
-          ).plan,
+        const { plan: factPlan, observation } = planObservation(
+          {
+            subjectID: person.id,
+            attribute: foldAttribute(item.attribute),
+            value: item.value,
+            confidence: item.confidence,
+            sensitivity: item.sensitivity,
+            sourceInteractionID: interactionID,
+          },
+          now,
         )
+        observationIDs.push(observation.id)
+        plan.push(...factPlan)
         break
       }
       case 'relationship': {
@@ -404,28 +484,35 @@ export function planFromReviewDraft(
             },
             now,
           )
+          personIDs.add(capture.relative.id)
+          relationshipIDs.push(capture.pair[0].id, capture.pair[1].id)
+          // The relative's distinguishing facts ride in capture.plan; collect
+          // their ids from the plan writes themselves.
+          for (const write of capture.plan) {
+            if (write.collection === 'observations' && write.op === 'set') observationIDs.push(write.id)
+          }
           plan.push(...capture.plan)
         } else {
           const other = ensureCreated(item.otherSlotID)
-          plan.push(
-            ...planRelationshipPair(
-              { subjectID: subject.id, otherID: other.id, kind: item.kind, customLabel: label },
-              now,
-            ).plan,
+          const { plan: pairPlan, pair } = planRelationshipPair(
+            { subjectID: subject.id, otherID: other.id, kind: item.kind, customLabel: label },
+            now,
           )
+          relationshipIDs.push(pair[0].id, pair[1].id)
+          plan.push(...pairPlan)
           for (const fact of item.facts) {
             if (!fact.value.trim()) continue
-            plan.push(
-              ...planObservation(
-                {
-                  subjectID: other.id,
-                  attribute: foldAttribute(fact.attribute),
-                  value: fact.value,
-                  sourceInteractionID: interactionID,
-                },
-                now,
-              ).plan,
+            const { plan: factPlan, observation } = planObservation(
+              {
+                subjectID: other.id,
+                attribute: foldAttribute(fact.attribute),
+                value: fact.value,
+                sourceInteractionID: interactionID,
+              },
+              now,
             )
+            observationIDs.push(observation.id)
+            plan.push(...factPlan)
           }
         }
         break
@@ -433,29 +520,45 @@ export function planFromReviewDraft(
       case 'followUp': {
         const people = item.personSlotIDs.map(ensureCreated)
         const schedule = resolveScheduleDraft(item.schedule, temporal)
-        plan.push(
-          ...planCreateReminder(
-            {
-              title: item.title,
-              notes: item.notes || null,
-              personIDs: people.map((p) => p.id),
-              sourceInteractionID: interactionID,
-              startAt: schedule.startAt,
-              dueAt: schedule.dueAt,
-              isSomeday: schedule.isSomeday,
-              scheduleTimeZone: schedule.scheduleTimeZone,
-              duePrecision: schedule.duePrecision,
-              startPrecision: schedule.startPrecision,
-            },
-            now,
-          ).plan,
+        const { plan: reminderPlan, reminder } = planCreateReminder(
+          {
+            title: item.title,
+            notes: item.notes || null,
+            personIDs: people.map((p) => p.id),
+            sourceInteractionID: interactionID,
+            startAt: schedule.startAt,
+            dueAt: schedule.dueAt,
+            isSomeday: schedule.isSomeday,
+            scheduleTimeZone: schedule.scheduleTimeZone,
+            duePrecision: schedule.duePrecision,
+            startPrecision: schedule.startPrecision,
+          },
+          now,
         )
+        reminderIDs.push(reminder.id)
+        plan.push(...reminderPlan)
         break
       }
     }
   }
 
-  return plan
+  const { plan: memoryPlan, memory } = planMemoryRecord(
+    {
+      kind: interactionID ? 'interaction' : 'profileUpdate',
+      title: draft.title,
+      occurredAt,
+      personIDs: [...personIDs],
+      interactionID,
+      observationIDs,
+      relationshipIDs,
+      reminderIDs,
+      origin: 'capture',
+    },
+    now,
+  )
+  plan.push(...memoryPlan)
+
+  return { plan, memory }
 }
 
 // MARK: Display

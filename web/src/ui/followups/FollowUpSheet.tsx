@@ -15,6 +15,7 @@ import {
   validateFollowUpDraft,
   type FollowUpDraft,
 } from '../../domain/followUpDraft'
+import { planMemoryRecord } from '../../domain/memory'
 import type { Person } from '../../domain/person'
 import type { Reminder } from '../../domain/reminders'
 import { detectDeadlineFromText } from '../../domain/temporal'
@@ -62,9 +63,27 @@ export function FollowUpSheet({
     setSaving(true)
     setError(null)
     try {
+      const now = new Date()
       const fields = reminderFieldsFromDraft(current, { timeZone: USER_ZONE })
-      const { plan } = existing ? planUpdateReminder(existing.id, fields) : planCreateReminder(fields, new Date())
-      await applyPlan(uid, plan)
+      if (existing) {
+        await applyPlan(uid, planUpdateReminder(existing.id, fields).plan)
+      } else {
+        // A new manual follow-up is a memory like any other save.
+        const { plan, reminder } = planCreateReminder(fields, now)
+        const firstPerson = people.find((p) => fields.personIDs.includes(p.id))
+        const { plan: memoryPlan } = planMemoryRecord(
+          {
+            kind: 'manualUpdate',
+            title: firstPerson ? `Added a follow-up for ${firstPerson.displayName}` : `Added a follow-up`,
+            occurredAt: now,
+            personIDs: fields.personIDs,
+            reminderIDs: [reminder.id],
+            origin: 'manualReminder',
+          },
+          now,
+        )
+        await applyPlan(uid, [...plan, ...memoryPlan])
+      }
       onClose()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not save.')

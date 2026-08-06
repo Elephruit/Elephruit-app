@@ -6,14 +6,12 @@
 /// into the same WritePlan every other capture path uses. No SDK imports; the
 /// hygiene test watches this file too.
 
-import { planCreateReminder, planInteractionBundle, planObservation, planRelationshipPair, planRelativeCapture } from './capture'
 import { FactAttributes, customAttribute, type FactAttribute, type FactConfidence } from './facts'
 import type { InteractionKind } from './interaction'
 import { makePerson } from './capture'
 import { foldedForMatching, type Person } from './person'
 import type { RelationshipKind } from './relationships'
-import { resolveProposedSchedule, type ProposedSchedule, type TemporalContext } from './temporal'
-import type { WritePlan } from './writePlan'
+import type { ProposedSchedule } from './temporal'
 
 // MARK: What the parser proposes
 
@@ -201,127 +199,4 @@ export function resolveProposal(proposal: CaptureProposal, existingPeople: Perso
   }
 
   return { items, warnings }
-}
-
-// MARK: From confirmed selection to the one write path
-
-/// Builds the plan for exactly the items the user kept. People pending creation
-/// are written once no matter how many kept items reference them; people only
-/// referenced by discarded items are never created at all. `temporal` supplies
-/// the user's zone for schedule resolution — callers must pass the real one;
-/// the UTC default exists only for schedule-free fixtures.
-export function planFromResolved(
-  items: ResolvedItem[],
-  keptIDs: Set<string>,
-  now: Date,
-  temporal: TemporalContext = { timeZone: 'UTC' },
-): WritePlan {
-  const kept = items.filter((item) => keptIDs.has(item.id))
-  const plan: WritePlan = []
-
-  const created = new Map<string, Person>()
-  function ensureCreated(slot: PersonSlot): Person {
-    if (slot.ref === 'existing') return slot.person
-    if (!created.has(slot.person.id)) {
-      created.set(slot.person.id, slot.person)
-      plan.push({ op: 'set', collection: 'people', id: slot.person.id, data: slot.person })
-    }
-    return slot.person
-  }
-
-  let interactionID: string | null = null
-
-  const interaction = kept.find((item) => item.type === 'interaction')
-  if (interaction && interaction.type === 'interaction') {
-    const participants = interaction.participants.map(ensureCreated)
-    const bundle = planInteractionBundle(
-      {
-        kind: interaction.kind,
-        participantIDs: participants.map((p) => p.id),
-        summary: interaction.summary,
-        discussion: interaction.discussion ?? '',
-        followUps: '',
-        occurredAt: now,
-      },
-      participants,
-      now,
-    )
-    interactionID = bundle.interaction.id
-    plan.push(...bundle.plan)
-  }
-
-  for (const item of kept) {
-    switch (item.type) {
-      case 'interaction':
-        break
-      case 'fact': {
-        const person = ensureCreated(item.person)
-        plan.push(
-          ...planObservation(
-            {
-              subjectID: person.id,
-              attribute: item.attribute,
-              value: item.value,
-              confidence: item.confidence,
-              sourceInteractionID: interactionID,
-            },
-            now,
-          ).plan,
-        )
-        break
-      }
-      case 'relationship': {
-        const subject = ensureCreated(item.subject)
-        if (item.other === null) {
-          const capture = planRelativeCapture(
-            subject,
-            { kind: item.kind, label: item.label, name: null, facts: item.facts, sourceInteractionID: interactionID },
-            now,
-          )
-          plan.push(...capture.plan)
-        } else {
-          const other = ensureCreated(item.other)
-          plan.push(
-            ...planRelationshipPair(
-              { subjectID: subject.id, otherID: other.id, kind: item.kind, customLabel: item.label },
-              now,
-            ).plan,
-          )
-          for (const fact of item.facts) {
-            plan.push(
-              ...planObservation(
-                { subjectID: other.id, attribute: fact.attribute, value: fact.value, sourceInteractionID: interactionID },
-                now,
-              ).plan,
-            )
-          }
-        }
-        break
-      }
-      case 'followUp': {
-        const people = item.people.map(ensureCreated)
-        const schedule = resolveProposedSchedule(item.schedule, temporal)
-        plan.push(
-          ...planCreateReminder(
-            {
-              title: item.title,
-              notes: item.notes,
-              personIDs: people.map((p) => p.id),
-              sourceInteractionID: interactionID,
-              startAt: schedule.startAt,
-              dueAt: schedule.dueAt,
-              isSomeday: schedule.isSomeday,
-              scheduleTimeZone: schedule.scheduleTimeZone,
-              duePrecision: schedule.duePrecision,
-              startPrecision: schedule.startPrecision,
-            },
-            now,
-          ).plan,
-        )
-        break
-      }
-    }
-  }
-
-  return plan
 }

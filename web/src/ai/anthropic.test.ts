@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { planFromResolved, resolveProposal } from '../domain/assist'
+import { resolveProposal } from '../domain/assist'
 import { FactAttributes } from '../domain/facts'
+import { draftFromResolved, planFromReviewDraft, reviewDraftReducer } from '../domain/reviewDraft'
 import { CaptureProposalSchema, buildRequestParams, buildSystemPrompt } from './anthropic'
 
 const NO_SCHEDULE = {
@@ -151,8 +152,8 @@ describe('the Harbinder/Kelly regression', () => {
 
   it('parses, resolves, and plans the meeting as a timed Central deadline', () => {
     const proposal = CaptureProposalSchema.parse(KELLY_PROPOSAL)
-    const { items } = resolveProposal(proposal, [], NOW)
-    const plan = planFromResolved(items, new Set(items.map((i) => i.id)), NOW, { timeZone: 'America/Chicago' })
+    const draft = draftFromResolved(resolveProposal(proposal, [], NOW), NOW)
+    const { plan } = planFromReviewDraft(draft, NOW, { timeZone: 'America/Chicago' })
 
     const reminderWrite = plan.find((w) => w.collection === 'reminders')
     if (!reminderWrite || reminderWrite.op !== 'set') throw new Error('no reminder write')
@@ -180,8 +181,10 @@ describe('the Harbinder/Kelly regression', () => {
     expect(interaction.participants).toHaveLength(2)
 
     // Removing the interaction keeps everything else plannable.
-    const withoutInteraction = new Set(items.filter((i) => i.type !== 'interaction').map((i) => i.id))
-    const plan = planFromResolved(items, withoutInteraction, NOW, { timeZone: 'America/Chicago' })
+    let draft = draftFromResolved({ items, warnings: [] }, NOW)
+    const interactionItem = draft.items.find((i) => i.type === 'interaction')!
+    draft = reviewDraftReducer(draft, { type: 'remove-item', id: interactionItem.id })
+    const { plan } = planFromReviewDraft(draft, NOW, { timeZone: 'America/Chicago' })
     expect(plan.some((w) => w.collection === 'interactions')).toBe(false)
     expect(plan.filter((w) => w.collection === 'observations')).toHaveLength(2)
     expect(plan.filter((w) => w.collection === 'relationships')).toHaveLength(2)

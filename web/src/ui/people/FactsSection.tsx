@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { planConfirmObservation, planCorrection, planObservation } from '../../domain/capture'
+import { planMemoryRecord } from '../../domain/memory'
 import {
   CONFIDENCE_LABELS,
   CURATED_ATTRIBUTES,
@@ -55,7 +56,8 @@ function AddFactSheet({
   async function save() {
     if (!valid || saving || resolvedAttribute === null) return
     setSaving(true)
-    const { plan } = planObservation(
+    const now = new Date()
+    const { plan, observation } = planObservation(
       {
         subjectID: person.id,
         attribute: resolvedAttribute,
@@ -65,9 +67,20 @@ function AddFactSheet({
         observedOn: fromLocalInputValue(`${observedOn}T12:00`),
         sourceInteractionID,
       },
-      new Date(),
+      now,
     )
-    await applyPlan(uid, plan)
+    const { plan: memoryPlan } = planMemoryRecord(
+      {
+        kind: 'manualUpdate',
+        title: `Updated ${person.displayName}`,
+        occurredAt: now,
+        personIDs: [person.id],
+        observationIDs: [observation.id],
+        origin: 'manualFact',
+      },
+      now,
+    )
+    await applyPlan(uid, [...plan, ...memoryPlan])
     onClose()
   }
 

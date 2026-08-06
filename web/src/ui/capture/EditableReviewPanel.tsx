@@ -196,7 +196,7 @@ export function EditableReviewPanel({
       window.setTimeout(() => problemRefs.current.get(first.itemID)?.focus(), 50)
       return
     }
-    const plan = planFromReviewDraft(draft, new Date(), { timeZone: USER_ZONE })
+    const { plan } = planFromReviewDraft(draft, new Date(), { timeZone: USER_ZONE })
     if (plan.length === 0) return
     setSaving(true)
     setSaveError(null)
@@ -212,6 +212,16 @@ export function EditableReviewPanel({
   return (
     <div className="editable-review">
       <p className="editable-review-subtitle">Edit anything that was misunderstood. Nothing is saved until you confirm.</p>
+
+      <label className="field-label" htmlFor="memory-title">
+        Memory title
+      </label>
+      <input
+        id="memory-title"
+        className="field"
+        value={draft.title}
+        onChange={(event) => dispatch({ type: 'update-title', title: event.target.value })}
+      />
 
       <p className="visually-hidden" aria-live="polite">
         {announcement}

@@ -15,6 +15,7 @@ import {
   planCreateReminder,
 } from './capture'
 import { currentValues, isMultiValued, type FactConfidence, type FactSensitivity, type Observation } from './facts'
+import { defaultMemoryTitle, planMemoryRecord, type MemoryRecord } from './memory'
 import { foldedForMatching, type Person } from './person'
 import { kindLabel, type RelationshipKind } from './relationships'
 import { makeSourceDocument, planSourceDocument, type SourceDocument } from './sources'
@@ -214,6 +215,7 @@ export interface DossierPlanResult {
   plan: WritePlan
   person: Person
   sources: SourceDocument[]
+  memory: MemoryRecord | null
 }
 
 /// One atomic plan: the person (created or identity-updated), every included
@@ -386,5 +388,45 @@ export function planFromDossierDraft(
     plan.push(...planSourceDocument(source))
   }
 
-  return { plan, person, sources }
+  // Nothing beyond an untouched existing person means nothing to remember.
+  if (plan.length === 0) return { plan, person, sources, memory: null }
+
+  // The one memory record: every entity this import wrote, grouped. Collected
+  // from the plan itself so the ids can never drift from what is written.
+  const memoryPersonIDs = new Set<string>([person.id])
+  const observationIDs: string[] = []
+  const relationshipIDs: string[] = []
+  const reminderIDs: string[] = []
+  for (const write of plan) {
+    if (write.op !== 'set') continue
+    if (write.collection === 'people') memoryPersonIDs.add(write.id)
+    if (write.collection === 'observations') observationIDs.push(write.id)
+    if (write.collection === 'relationships') relationshipIDs.push(write.id)
+    if (write.collection === 'reminders') reminderIDs.push(write.id)
+  }
+
+  const { plan: memoryPlan, memory } = planMemoryRecord(
+    {
+      kind: 'dossierImport',
+      title: defaultMemoryTitle({
+        interactionSummary: null,
+        dossierFileCount: sources.length,
+        primaryPerson: person,
+        createdPeople: args.targetPerson ? [] : [person],
+        hasFacts: observationIDs.length > 0,
+        hasRelationships: relationshipIDs.length > 0,
+      }),
+      occurredAt: now,
+      personIDs: [...memoryPersonIDs],
+      observationIDs,
+      relationshipIDs,
+      reminderIDs,
+      sourceDocumentIDs: sources.map((source) => source.id),
+      origin: 'dossier',
+    },
+    now,
+  )
+  plan.push(...memoryPlan)
+
+  return { plan, person, sources, memory }
 }

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { makePerson, planInteractionBundle, type InteractionDraft } from '../../domain/capture'
 import { INTERACTION_KINDS, INTERACTION_KIND_LABELS, type InteractionKind } from '../../domain/interaction'
+import { planMemoryRecord } from '../../domain/memory'
 import type { Person } from '../../domain/person'
 import type { WritePlan } from '../../domain/writePlan'
 import { applyPlan } from '../../data/applyPlan'
@@ -75,7 +76,21 @@ export function LogPage() {
       const creations: WritePlan = pendingNew
         .filter((person) => selectedIDs.has(person.id))
         .map((person) => ({ op: 'set', collection: 'people', id: person.id, data: person }))
-      await applyPlan(uid, [...creations, ...bundle.plan])
+      // Manual logging honors the same feed contract as capture: one memory
+      // record naming everything this save writes.
+      const { plan: memoryPlan } = planMemoryRecord(
+        {
+          kind: 'interaction',
+          title: bundle.interaction.summary,
+          occurredAt: bundle.interaction.occurredAt,
+          personIDs: bundle.interaction.participantIDs,
+          interactionID: bundle.interaction.id,
+          reminderIDs: bundle.reminders.map((r) => r.id),
+          origin: 'manualInteraction',
+        },
+        now,
+      )
+      await applyPlan(uid, [...creations, ...bundle.plan, ...memoryPlan])
       navigate(preselected ? `/people/${preselected}` : '/')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not save.')
