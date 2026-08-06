@@ -882,6 +882,39 @@ textarea.field {
   margin: var(--space-tight) 0;
 }
 
+.brief-inline-headline {
+  font: var(--text-sub);
+  color: var(--color-text);
+  margin-bottom: var(--space-small);
+}
+
+.brief-inline ul {
+  margin: 0 0 var(--space-small);
+  padding-left: 1.1em;
+}
+
+.brief-inline li {
+  font: var(--text-sub);
+  color: var(--color-text-secondary);
+  margin: var(--space-tight) 0;
+}
+
+.brief-inline-label {
+  font: var(--text-section);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--color-text-tertiary);
+  margin: var(--space-small) 0 var(--space-tight);
+}
+
+.inline-link {
+  color: var(--color-accent);
+}
+
+.inline-link:hover {
+  text-decoration: underline;
+}
+
 .composer-entry {
   display: flex;
   align-items: center;

@@ -35,6 +35,7 @@ import { TimelineRow } from '../components/TimelineRow'
 import { PageScaffold } from '../shell/PageScaffold'
 import { FactsSection } from './FactsSection'
 import { RelationshipsSection } from './RelationshipsSection'
+import { TalkingPointsPanel } from './TalkingPointsPanel'
 
 const VISIBLE_FILTERS: TimelineFilter[] = ['everything', 'conversations', 'notes', 'commitments']
 
@@ -223,6 +224,16 @@ export function PersonPage() {
         </div>
 
         <aside className="person-context">
+          {observations && relationships && reminders && interactions && people && (
+            <TalkingPointsPanel
+              person={person}
+              people={people}
+              observations={observations}
+              relationships={relationships}
+              reminders={reminders}
+              interactions={interactions}
+            />
+          )}
           {observations && <FactsSection person={person} observations={observations} />}
           {relationships && people && (
             <RelationshipsSection person={person} relationships={relationships} people={people} />
