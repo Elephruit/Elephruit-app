@@ -31,6 +31,7 @@ import { Button, IconButton } from '../components/Button'
 import { Dialog } from '../components/Dialog'
 import { Icon } from '../components/Icon'
 import { SegmentedControl } from '../components/SegmentedControl'
+import { SkeletonRows } from '../components/Skeleton'
 import { TimelineRow } from '../components/TimelineRow'
 import { PageScaffold } from '../shell/PageScaffold'
 import { FactsSection } from './FactsSection'
@@ -88,7 +89,13 @@ export function PersonPage() {
 
   const openFollowUps = reminders?.filter((r) => r.status === 'open') ?? []
 
-  if (person === undefined) return <PageScaffold width="wide">{null}</PageScaffold>
+  if (person === undefined) {
+    return (
+      <PageScaffold width="wide">
+        <SkeletonRows avatar count={7} />
+      </PageScaffold>
+    )
+  }
   if (person === null) {
     return (
       <PageScaffold width="wide">

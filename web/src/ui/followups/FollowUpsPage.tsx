@@ -4,6 +4,7 @@ import { Avatar } from '../components/Avatar'
 import { Button } from '../components/Button'
 import { MetricTile } from '../components/MetricTile'
 import { SegmentedControl } from '../components/SegmentedControl'
+import { SkeletonRows } from '../components/Skeleton'
 import { PageHeader } from '../shell/PageHeader'
 import { PageScaffold } from '../shell/PageScaffold'
 import {
@@ -221,6 +222,8 @@ export function FollowUpsPage() {
             <MetricTile value={counts.unscheduled} label="Unscheduled" />
           </div>
         )}
+
+        {groups === undefined && <SkeletonRows count={5} />}
 
         {view === 'open' && groups && groups.length === 0 && (
           <EmptyState

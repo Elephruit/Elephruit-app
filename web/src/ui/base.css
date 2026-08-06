@@ -2172,6 +2172,57 @@ button.timeline-badge {
   color: var(--color-text-secondary);
 }
 
+/* MARK: Skeletons */
+
+.skeleton {
+  display: inline-block;
+  border-radius: var(--radius-small);
+  background: linear-gradient(
+    100deg,
+    var(--color-subtle-fill) 40%,
+    var(--color-hover-fill) 50%,
+    var(--color-subtle-fill) 60%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -80% 0;
+  }
+}
+
+.skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-large);
+  padding: var(--space-large) 0;
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-medium);
+}
+
+.skeleton-circle {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.skeleton-row-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-small);
+}
+
 /* MARK: Avatar */
 
 .avatar {

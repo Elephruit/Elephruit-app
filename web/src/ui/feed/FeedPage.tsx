@@ -19,6 +19,7 @@ import { useUID } from '../UserContext'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import { MetricTile } from '../components/MetricTile'
+import { SkeletonRows } from '../components/Skeleton'
 import { TimelineDayHeader, TimelineRow } from '../components/TimelineRow'
 import { PageScaffold } from '../shell/PageScaffold'
 import { DayBriefPanel } from './DayBriefPanel'
@@ -245,6 +246,8 @@ export function FeedPage() {
           />
         </div>
       )}
+
+      {groups === undefined && <SkeletonRows avatar />}
 
       {groups && groups.length === 0 && (
         <EmptyState

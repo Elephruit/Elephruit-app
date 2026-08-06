@@ -9,6 +9,7 @@ import { useUID } from '../UserContext'
 import { Avatar } from '../components/Avatar'
 import { Button } from '../components/Button'
 import { EmptyState } from '../components/EmptyState'
+import { SkeletonRows } from '../components/Skeleton'
 import { PageHeader } from '../shell/PageHeader'
 import { PageScaffold } from '../shell/PageScaffold'
 import { CreatePersonSheet } from './CreatePersonSheet'
@@ -110,6 +111,8 @@ export function PeopleListPage() {
           </>
         }
       />
+
+      {listed === undefined && <SkeletonRows avatar count={8} />}
 
       {listed && listed.length === 0 && !query && (
         <EmptyState
