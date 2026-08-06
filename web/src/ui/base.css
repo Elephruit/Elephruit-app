@@ -764,6 +764,115 @@ textarea.field {
   color: var(--color-accent);
 }
 
+/* The feed's two columns: reading measure beside a 300px rail from 1280. */
+.feed-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.feed-main {
+  min-width: 0;
+  width: 100%;
+  max-width: var(--content-reading);
+  margin: 0 auto;
+}
+
+.feed-aside {
+  display: none;
+}
+
+@media (min-width: 1280px) {
+  .feed-layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: var(--space-generous);
+  }
+
+  .feed-main {
+    margin: 0;
+  }
+
+  .feed-aside {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-large);
+    padding-top: var(--space-small);
+  }
+}
+
+.aside-panel {
+  background: var(--color-background-elevated);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-large);
+  box-shadow: var(--shadow-raised);
+  padding: var(--space-large);
+}
+
+.aside-title {
+  font: var(--text-section);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-small);
+}
+
+.aside-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-small);
+  width: 100%;
+  padding: var(--space-small) 0;
+  border: 0;
+  border-top: 1px solid var(--color-separator);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: var(--text-sub);
+}
+
+.aside-row[data-static] {
+  cursor: default;
+}
+
+.aside-row:first-of-type {
+  border-top: 0;
+}
+
+.aside-row-text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.aside-row-text b {
+  font: var(--text-label);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aside-row-text span {
+  font: var(--text-metadata);
+  color: var(--color-text-tertiary);
+}
+
+/* Status chips — severity in the fill, readable in the figure */
+.chip-status-overdue {
+  background: color-mix(in srgb, var(--color-overdue) 12%, transparent);
+  color: var(--color-overdue);
+}
+
+.chip-status-today {
+  background: color-mix(in srgb, var(--color-due-today) 13%, transparent);
+  color: var(--color-due-today);
+}
+
+.chip-status-done {
+  background: color-mix(in srgb, var(--color-completed) 12%, transparent);
+  color: var(--color-completed);
+}
+
 /* MARK: Combobox — tokens in the field, options underneath */
 
 .combobox-control {

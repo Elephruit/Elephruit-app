@@ -4,6 +4,10 @@ import { auth } from '../../data/firebase'
 import { useFeed, usePeople, useReminders } from '../../data/hooks'
 import { startOfDay, wholeDaysBetween } from '../../domain/dates'
 import { feedOverview } from '../../domain/overview'
+import { bucketFor, sections, type Reminder } from '../../domain/reminders'
+import type { Person } from '../../domain/person'
+import { Avatar } from '../components/Avatar'
+import { Button } from '../components/Button'
 import {
   entryFromInteraction,
   entryIsContact,
@@ -34,6 +38,89 @@ function greeting(now: Date): string {
   const daypart = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening'
   const first = auth.currentUser?.displayName?.trim().split(/\s+/)[0]
   return first ? `Good ${daypart}, ${first}.` : `Good ${daypart}.`
+}
+
+function dueChip(reminder: Reminder, now: Date): { label: string; className: string } {
+  const bucket = bucketFor(reminder, now)
+  if (bucket === 'overdue') {
+    const days = wholeDaysBetween(startOfDay(reminder.dueAt!), startOfDay(now))
+    return { label: `${days}d late`, className: 'chip chip-status-overdue' }
+  }
+  if (bucket === 'today') return { label: 'today', className: 'chip chip-status-today' }
+  const date = reminder.dueAt ?? reminder.startAt
+  if (!date) return { label: 'anytime', className: 'chip' }
+  const days = wholeDaysBetween(startOfDay(now), startOfDay(date))
+  const label =
+    days <= 6
+      ? date.toLocaleDateString(undefined, { weekday: 'short' })
+      : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return { label: reminder.dueAt ? label : `starts ${label}`, className: 'chip' }
+}
+
+function FeedAside({
+  reminders,
+  people,
+  quiet,
+  now,
+}: {
+  reminders: Reminder[]
+  people: Person[]
+  quiet: Array<{ personID: string; displayName: string; daysSinceContact: number }>
+  now: Date
+}) {
+  const navigate = useNavigate()
+  const byID = useMemo(() => new Map(people.map((p) => [p.id, p])), [people])
+  const upcoming = useMemo(
+    () =>
+      sections(reminders, now)
+        .filter((group) => group.bucket === 'overdue' || group.bucket === 'today' || group.bucket === 'upcoming')
+        .flatMap((group) => group.reminders)
+        .slice(0, 5),
+    [reminders, now],
+  )
+
+  return (
+    <aside className="feed-aside">
+      {upcoming.length > 0 && (
+        <div className="aside-panel">
+          <h4 className="aside-title">Coming up</h4>
+          {upcoming.map((reminder) => {
+            const chip = dueChip(reminder, now)
+            const first = reminder.personIDs.map((id) => byID.get(id)).find(Boolean)
+            return (
+              <button key={reminder.id} type="button" className="aside-row" onClick={() => navigate('/followups')}>
+                <span className="aside-row-text">
+                  <b>{reminder.title}</b>
+                  {first && <span>with {first.displayName}</span>}
+                </span>
+                <span className={chip.className}>{chip.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+      {quiet.length > 0 && (
+        <div className="aside-panel">
+          <h4 className="aside-title">Reconnect</h4>
+          {quiet.slice(0, 3).map((suggestion) => {
+            const person = byID.get(suggestion.personID)
+            return (
+              <div key={suggestion.personID} className="aside-row" data-static>
+                {person && <Avatar name={person.displayName} colorName={person.colorName} />}
+                <span className="aside-row-text">
+                  <b>{suggestion.displayName}</b>
+                  <span>{Math.floor(suggestion.daysSinceContact / 7)} weeks since you spoke</span>
+                </span>
+                <Button variant="ghost" small onClick={() => navigate(`/log?person=${suggestion.personID}`)}>
+                  Log
+                </Button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </aside>
+  )
 }
 
 function FeedRowContent({ entry }: { entry: TimelineEntry }) {
@@ -83,8 +170,10 @@ export function FeedPage() {
   const dateLine = now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
 
   return (
-    <PageScaffold width="reading">
-      <header className="feed-greeting">
+    <PageScaffold width="wide">
+      <div className="feed-layout">
+        <div className="feed-main">
+          <header className="feed-greeting">
         <h1>{greeting(now)}</h1>
         <p>
           {dateLine}
@@ -173,6 +262,11 @@ export function FeedPage() {
           })}
         </section>
       ))}
+        </div>
+        {reminders && people && overview && (
+          <FeedAside reminders={reminders} people={people} quiet={overview.quiet} now={now} />
+        )}
+      </div>
     </PageScaffold>
   )
 }
