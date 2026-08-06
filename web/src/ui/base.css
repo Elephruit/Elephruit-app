@@ -1032,6 +1032,17 @@ textarea.field {
   margin-bottom: var(--space-small);
 }
 
+.aside-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-small);
+}
+
+.aside-panel-head .aside-title {
+  margin-bottom: 0;
+}
+
 .aside-row {
   display: flex;
   align-items: center;

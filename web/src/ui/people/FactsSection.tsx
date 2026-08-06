@@ -252,10 +252,10 @@ export function FactsSection({ person, observations }: { person: Person; observa
   }
 
   return (
-    <>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-        <h2 className="section-header">Facts</h2>
-        <button type="button" className="button button-plain" onClick={() => setAdding(true)}>
+    <div className="aside-panel">
+      <div className="aside-panel-head">
+        <h2 className="aside-title">Facts</h2>
+        <button type="button" className="button button-plain button-small" onClick={() => setAdding(true)}>
           Add a fact
         </button>
       </div>
@@ -333,6 +333,6 @@ export function FactsSection({ person, observations }: { person: Person; observa
       {historyFor && (
         <HistorySheet attribute={historyFor} observations={observations} onClose={() => setHistoryFor(null)} />
       )}
-    </>
+    </div>
   )
 }

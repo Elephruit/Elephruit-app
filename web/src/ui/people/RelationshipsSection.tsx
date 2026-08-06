@@ -274,10 +274,10 @@ export function RelationshipsSection({
   }
 
   return (
-    <>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-        <h2 className="section-header">Relationships</h2>
-        <button type="button" className="button button-plain" onClick={() => setAdding(true)}>
+    <div className="aside-panel">
+      <div className="aside-panel-head">
+        <h2 className="aside-title">Relationships</h2>
+        <button type="button" className="button button-plain button-small" onClick={() => setAdding(true)}>
           Add
         </button>
       </div>
@@ -328,7 +328,7 @@ export function RelationshipsSection({
 
       {unnamed.length > 0 && (
         <>
-          <h2 className="section-header">To fill in</h2>
+          <h2 className="aside-title" style={{ marginTop: 'var(--space-medium)' }}>To fill in</h2>
           {unnamed.map((placeholder) => (
             <div key={placeholder.id} className="row" style={{ cursor: 'default' }}>
               <span className="row-title">{placeholder.displayName}</span>
@@ -344,6 +344,6 @@ export function RelationshipsSection({
 
       {adding && <AddRelationshipSheet subject={person} people={people} onClose={() => setAdding(false)} />}
       {naming && <NameSheet person={naming} onClose={() => setNaming(null)} />}
-    </>
+    </div>
   )
 }
