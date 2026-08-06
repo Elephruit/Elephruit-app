@@ -1003,6 +1003,35 @@ textarea.field {
   margin: var(--space-small) 0 var(--space-tight);
 }
 
+.settings-panel {
+  margin-bottom: var(--space-large);
+}
+
+.settings-help {
+  font: var(--text-sub);
+  color: var(--color-text-secondary);
+  margin: var(--space-small) 0 var(--space-medium);
+}
+
+.settings-key-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-small);
+  padding: var(--space-small) 0;
+}
+
+.settings-key-actions {
+  display: flex;
+  gap: var(--space-tight);
+}
+
+.settings-key-input {
+  display: flex;
+  gap: var(--space-small);
+  align-items: center;
+}
+
 .inline-link {
   color: var(--color-accent);
 }
