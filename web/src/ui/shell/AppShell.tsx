@@ -30,8 +30,11 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
       <NavRail onSearch={() => setPaletteOpen(true)} />
-      <div className="shell-content">
+      <div className="shell-content" id="main">
         <ErrorBoundary>
           <Outlet />
         </ErrorBoundary>

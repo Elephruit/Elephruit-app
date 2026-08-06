@@ -46,6 +46,23 @@ a {
 /* MARK: Shell — rail beside content from 720 up, bottom tabs below.
    Content scrolls with the document; the rail is sticky, full-height. */
 
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: var(--space-small);
+  z-index: 100;
+  background: var(--color-background-elevated);
+  color: var(--color-accent);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-medium);
+  padding: var(--space-small) var(--space-medium);
+  font: var(--text-label);
+}
+
+.skip-link:focus-visible {
+  left: var(--space-small);
+}
+
 .app-shell {
   min-height: 100dvh;
   display: flex;
