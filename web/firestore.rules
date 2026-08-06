@@ -1,10 +1,41 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // The entire graph is private to its owner. One rule, no exceptions:
-    // everything lives under users/{uid}, and only that user touches it.
+    // The user's own graph stays one owner-only wildcard — minus the BYOK
+    // collections, which only the server (Admin SDK, which bypasses rules)
+    // may write. Without the carve-out the wildcard would happily let a
+    // client forge credential metadata and audit events.
     match /users/{uid}/{collectionName}/{docID} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if request.auth != null
+        && request.auth.uid == uid
+        && !(collectionName in ['aiCredentials', 'aiCredentialAudit']);
+    }
+
+    // Credential metadata: server-written, owner-readable. Status, key hints,
+    // and timestamps are the server's testimony about the credential — a
+    // client that could write them could vouch for its own key.
+    match /users/{uid}/aiCredentials/{credentialId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Audit trail: same posture.
+    match /users/{uid}/aiCredentialAudit/{eventId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Encrypted key material. Unmatched paths are already denied; these
+    // explicit blocks are the standing declaration that no client rule may
+    // ever be added here — the owner included. Keys are write-only from the
+    // browser's point of view.
+    match /privateAiCredentials/{uid}/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Server-only rate-limit counters and stream leases.
+    match /aiRateLimits/{docId} {
+      allow read, write: if false;
     }
   }
 }
