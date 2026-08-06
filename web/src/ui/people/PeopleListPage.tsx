@@ -116,6 +116,11 @@ export function PeopleListPage() {
           icon="people"
           headline="Nobody recorded yet"
           message="Add the people you talk to; everything else hangs off them."
+          action={
+            <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
+              Add your first person
+            </Button>
+          }
         />
       )}
 

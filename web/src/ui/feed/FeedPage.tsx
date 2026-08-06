@@ -250,7 +250,18 @@ export function FeedPage() {
         <EmptyState
           icon="feed"
           headline="Nothing logged yet"
-          message="Interactions you log will read here as one continuous thread."
+          message="Interactions you log read here as one continuous thread — coffee with Ana, the call about the move, the photos from the lake."
+          action={
+            <>
+              <Button variant="primary" icon="plus" onClick={() => navigate('/capture')}>
+                Log your first interaction
+              </Button>
+              <Button variant="secondary" onClick={() => navigate('/people')}>
+                Add a person
+              </Button>
+            </>
+          }
+          hint="Dictate or type one thought; the review shows exactly what will be saved."
         />
       )}
 

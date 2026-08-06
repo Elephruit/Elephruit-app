@@ -227,6 +227,12 @@ export function FollowUpsPage() {
             icon="bell"
             headline="Nothing owed"
             message="Follow-ups from logged interactions gather here, bucketed by what their dates actually say."
+            action={
+              <Button variant="primary" icon="plus" onClick={() => navigate('/capture')}>
+                Log an interaction
+              </Button>
+            }
+            hint="End a capture with what you owe — “need to send her the list” becomes a follow-up."
           />
         )}
 
