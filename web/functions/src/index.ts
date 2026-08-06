@@ -4,8 +4,7 @@
 /// dependency eagerly; and onInit runs at real runtime startup, where env is
 /// present — so that is where the production invariants live. The onCall
 /// wrappers only authenticate, delegate to plain handlers, and translate
-/// failures into the public error vocabulary. gatewayPing is the streaming
-/// spike and dies when the real gateway lands.
+/// failures into the public error vocabulary.
 
 import { randomUUID } from 'node:crypto'
 import { initializeApp } from 'firebase-admin/app'
@@ -23,9 +22,12 @@ import {
 } from './credentials/handlers.js'
 import { FirestoreCredentialStore } from './credentials/store.js'
 import { buildEncryptionService } from './crypto/select.js'
+import { handleStreamAiResponse, STREAM_LEASE_TTL_SECONDS, type GatewayDeps } from './gateway/streamAiResponse.js'
+import { FirestoreStreamLeases } from './limits/leases.js'
 import { FirestoreRateLimiter } from './limits/rateLimiter.js'
 import { PublicError, toHttpsError } from './log/errors.js'
 import { createLogger } from './log/logger.js'
+import { buildAdapterRegistry } from './providers/registry.js'
 import { buildKeyVerifier } from './providers/verify.js'
 
 setGlobalOptions({ region: 'us-central1' })
@@ -106,22 +108,52 @@ export const verifyAiCredential = credentialCallable('credential_verify', handle
 export const replaceAiCredential = credentialCallable('credential_replace', handleReplaceCredential)
 export const deleteAiCredential = credentialCallable('credential_delete', handleDeleteCredential)
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-interface PingChunk {
-  type: 'ping'
-  index: number
-  sentAt: number
+let cachedGatewayDeps: GatewayDeps | null = null
+function getGatewayDeps(): GatewayDeps {
+  if (cachedGatewayDeps) return cachedGatewayDeps
+  const base = getDeps()
+  const config = readConfig()
+  const db = getFirestore()
+  cachedGatewayDeps = {
+    store: base.store,
+    encryption: base.encryption,
+    adapters: buildAdapterRegistry(config),
+    rateLimiter: base.rateLimiter,
+    leases: new FirestoreStreamLeases(db),
+    audit: base.audit,
+    log: base.log,
+    now: base.now,
+    newRequestId: base.newRequestId,
+    sampleUsedEvent: () => Math.random() < 0.05,
+  }
+  return cachedGatewayDeps
 }
 
-export const gatewayPing = onCall<unknown, Promise<object>, PingChunk>(
-  { enforceAppCheck: false },
+/// Streaming holds an instance for the life of the generation; maxInstances
+/// bounds what a runaway client can cost, and the lease TTL (which must
+/// outlive timeoutSeconds) frees slots that crashed without a finally.
+export const streamAiResponse = onCall(
+  {
+    enforceAppCheck: !isEmulatorManifest,
+    timeoutSeconds: STREAM_LEASE_TTL_SECONDS - 30,
+    maxInstances: 10,
+    concurrency: 20,
+    memory: '256MiB',
+  },
   async (request, response) => {
-    const spacingMs = 300
-    for (let index = 0; index < 3; index += 1) {
-      await response?.sendChunk({ type: 'ping', index, sentAt: Date.now() })
-      await sleep(spacingMs)
+    const uid = requireUid(request)
+    const deps = getGatewayDeps()
+    const sink = {
+      sendChunk: async (chunk: unknown) => (response ? response.sendChunk(chunk) : false),
+      signal: response?.signal ?? new AbortController().signal,
     }
-    return { done: true, chunks: 3, spacingMs, acceptsStreaming: request.acceptsStreaming }
+    try {
+      return await handleStreamAiResponse(deps, uid, request.data, sink)
+    } catch (error) {
+      const httpsError = toHttpsError(error)
+      const details = httpsError.details as { code?: string } | undefined
+      deps.log.warn('stream', { uid, status: 'error', normalizedErrorCode: details?.code ?? 'INTERNAL' })
+      throw httpsError
+    }
   },
 )

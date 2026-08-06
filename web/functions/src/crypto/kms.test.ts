@@ -9,18 +9,34 @@ const context: EncryptionContext = { uid: 'user-a', credentialId: 'cred-1', prov
 /// verify the AAD actually round-tripped through the service.
 function fakeClient(): KmsClientLike {
   return {
-    encrypt: vi.fn(async ({ plaintext, additionalAuthenticatedData }) => [
-      { ciphertext: Buffer.concat([Buffer.from('enc:'), plaintext, Buffer.from('#'), additionalAuthenticatedData]) },
-    ]),
-    decrypt: vi.fn(async ({ ciphertext, additionalAuthenticatedData }) => {
-      const raw = Buffer.from(ciphertext).toString('utf8')
-      const [, body] = raw.split('enc:')
-      const [plaintext, aad] = (body ?? '').split('#')
-      if (aad !== Buffer.from(additionalAuthenticatedData).toString('utf8')) {
-        throw new Error('AAD mismatch')
-      }
-      return [{ plaintext: Buffer.from(plaintext ?? '', 'utf8') }]
-    }),
+    encrypt: vi.fn(
+      async ({
+        plaintext,
+        additionalAuthenticatedData,
+      }: {
+        plaintext: Uint8Array
+        additionalAuthenticatedData: Uint8Array
+      }): Promise<[{ ciphertext: Uint8Array }]> => [
+        { ciphertext: Buffer.concat([Buffer.from('enc:'), plaintext, Buffer.from('#'), additionalAuthenticatedData]) },
+      ],
+    ),
+    decrypt: vi.fn(
+      async ({
+        ciphertext,
+        additionalAuthenticatedData,
+      }: {
+        ciphertext: Uint8Array
+        additionalAuthenticatedData: Uint8Array
+      }): Promise<[{ plaintext: Uint8Array }]> => {
+        const raw = Buffer.from(ciphertext).toString('utf8')
+        const [, body] = raw.split('enc:')
+        const [plaintext, aad] = (body ?? '').split('#')
+        if (aad !== Buffer.from(additionalAuthenticatedData).toString('utf8')) {
+          throw new Error('AAD mismatch')
+        }
+        return [{ plaintext: Buffer.from(plaintext ?? '', 'utf8') }]
+      },
+    ),
   }
 }
 

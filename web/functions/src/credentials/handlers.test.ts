@@ -6,10 +6,9 @@
 /// another user's credential id behaves exactly like a missing one.
 
 import { describe, expect, it } from 'vitest'
-import type { EncryptedCredential, EncryptionContext, EncryptionService } from '../crypto/encryption.js'
 import { PublicError } from '../log/errors.js'
-import type { Logger } from '../log/logger.js'
 import type { KeyVerification } from '../providers/types.js'
+import { MemoryStore, fakeEncryption, silentLog } from '../testing/fakes.js'
 import {
   handleAddCredential,
   handleDeleteCredential,
@@ -17,70 +16,9 @@ import {
   handleVerifyCredential,
   type CredentialDeps,
 } from './handlers.js'
-import type { CredentialRecord, CredentialStore } from './store.js'
-import type { AuditEvent, CredentialMetadataDoc, PrivateCredentialDoc } from './types.js'
+import type { AuditEvent } from './types.js'
 
 const RAW_KEY = 'sk-ant-test-valid-00000000007XqP'
-
-class MemoryStore implements CredentialStore {
-  records = new Map<string, { metadata: CredentialMetadataDoc; privateDoc: PrivateCredentialDoc }>()
-
-  private key(uid: string, credentialId: string) {
-    return `${uid}/${credentialId}`
-  }
-
-  async loadPrivate(uid: string, credentialId: string) {
-    return this.records.get(this.key(uid, credentialId))?.privateDoc ?? null
-  }
-
-  async loadMetadata(uid: string, credentialId: string) {
-    return this.records.get(this.key(uid, credentialId))?.metadata ?? null
-  }
-
-  async create(uid: string, credentialId: string, record: Omit<CredentialRecord, 'credentialId'>) {
-    this.records.set(this.key(uid, credentialId), { metadata: record.metadata, privateDoc: record.privateDoc })
-  }
-
-  async replace(
-    uid: string,
-    credentialId: string,
-    privatePatch: Pick<PrivateCredentialDoc, 'ciphertext' | 'kmsKeyName' | 'rotatedAt'>,
-    metadataPatch: Partial<CredentialMetadataDoc>,
-  ) {
-    const record = this.records.get(this.key(uid, credentialId))
-    if (!record) throw new Error('replace on missing record')
-    Object.assign(record.privateDoc, privatePatch)
-    Object.assign(record.metadata, metadataPatch)
-  }
-
-  async updateMetadata(uid: string, credentialId: string, patch: Partial<CredentialMetadataDoc>) {
-    const record = this.records.get(this.key(uid, credentialId))
-    if (!record) throw new Error('update on missing record')
-    Object.assign(record.metadata, patch)
-  }
-
-  async delete(uid: string, credentialId: string) {
-    this.records.delete(this.key(uid, credentialId))
-  }
-}
-
-const contextTag = (ctx: EncryptionContext) => `${ctx.uid}|${ctx.credentialId}|${ctx.provider}`
-
-const fakeEncryption: EncryptionService = {
-  async encrypt(plaintext, ctx) {
-    return {
-      ciphertext: Buffer.from(`${plaintext}::${contextTag(ctx)}`, 'utf8').toString('base64'),
-      kmsKeyName: 'fake-kms',
-    }
-  },
-  async decrypt(encrypted: EncryptedCredential, ctx) {
-    const [plaintext, tag] = Buffer.from(encrypted.ciphertext, 'base64').toString('utf8').split('::')
-    if (tag !== contextTag(ctx)) throw new Error('context mismatch — ciphertext bound to a different record')
-    return plaintext ?? ''
-  },
-}
-
-const silentLog: Logger = { info: () => {}, warn: () => {}, error: () => {} }
 
 interface Overrides {
   verdict?: KeyVerification
