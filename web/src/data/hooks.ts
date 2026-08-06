@@ -3,6 +3,7 @@
 /// deserialize, hand the domain plain objects with real Dates.
 
 import {
+  collection,
   limit as limitTo,
   onSnapshot,
   orderBy,
@@ -11,6 +12,7 @@ import {
   type Query,
 } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
+import type { AiCredential } from '../ai/credentials'
 import type { Interaction } from '../domain/interaction'
 import type { Observation } from '../domain/facts'
 import type { Person } from '../domain/person'
@@ -19,6 +21,7 @@ import type { Relationship } from '../domain/relationships'
 import type { Reminder } from '../domain/reminders'
 import { collectionRef, docRef } from './collections'
 import { deserialize } from './converters'
+import { db } from './firebase'
 
 /// `undefined` means still loading; an empty array means genuinely empty. The
 /// distinction keeps empty states from flashing while the first snapshot loads.
@@ -128,5 +131,16 @@ export function useRemindersFor(uid: string, personID: string): Reminder[] | und
   return useQuerySnapshot<Reminder>(
     () => query(collectionRef(uid, 'reminders'), where('personIDs', 'array-contains', personID)),
     [uid, personID],
+  )
+}
+
+/// Server-written credential metadata, owner-readable under the rules. The
+/// ref is deliberately built inline rather than through collections.ts:
+/// aiCredentials is not a WritePlan collection, and keeping it out of that
+/// vocabulary means applyPlan can never address it.
+export function useAiCredentials(uid: string): AiCredential[] | undefined {
+  return useQuerySnapshot<AiCredential>(
+    () => query(collection(db, 'users', uid, 'aiCredentials'), orderBy('createdAt', 'desc')),
+    [uid],
   )
 }
