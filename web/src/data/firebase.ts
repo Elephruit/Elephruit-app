@@ -7,6 +7,7 @@
 /// IndexedDB would outlive the emulator and serve ghost documents.
 
 import { initializeApp } from 'firebase/app'
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
 import { connectAuthEmulator, getAuth } from 'firebase/auth'
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
 import { connectFunctionsEmulator, getFunctions } from 'firebase/functions'
@@ -21,6 +22,23 @@ const app = initializeApp({
   projectId: env.VITE_FIREBASE_PROJECT_ID || 'demo-elephruit',
   appId: env.VITE_FIREBASE_APP_ID || 'demo-app-id',
 })
+
+// App Check proves requests come from this app. Emulator runs skip it (there
+// is no App Check emulator); a production build without a configured site key
+// simply doesn't initialize it — the server side enforces regardless. For
+// local dev against the real project, a debug token from the App Check
+// console goes in .env as VITE_APPCHECK_DEBUG_TOKEN, never in code.
+const appCheckSiteKey = env.VITE_APPCHECK_SITE_KEY
+if (!usingEmulators && appCheckSiteKey) {
+  if (env.VITE_APPCHECK_DEBUG_TOKEN) {
+    ;(globalThis as { FIREBASE_APPCHECK_DEBUG_TOKEN?: string }).FIREBASE_APPCHECK_DEBUG_TOKEN =
+      env.VITE_APPCHECK_DEBUG_TOKEN
+  }
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider(appCheckSiteKey),
+    isTokenAutoRefreshEnabled: true,
+  })
+}
 
 export const auth = getAuth(app)
 export const db = getFirestore(app)
