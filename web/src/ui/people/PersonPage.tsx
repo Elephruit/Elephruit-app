@@ -26,6 +26,7 @@ import { useUID } from '../UserContext'
 import { Avatar } from '../components/Avatar'
 import { Icon } from '../components/Icon'
 import { TimelineRow } from '../components/TimelineRow'
+import { FactsSection } from './FactsSection'
 
 const VISIBLE_FILTERS: TimelineFilter[] = ['everything', 'conversations', 'notes', 'commitments']
 
@@ -125,6 +126,8 @@ export function PersonPage() {
       >
         <Icon name="plus" size={16} /> Log an interaction
       </button>
+
+      {observations && <FactsSection person={person} observations={observations} />}
 
       {openFollowUps.length > 0 && (
         <>
