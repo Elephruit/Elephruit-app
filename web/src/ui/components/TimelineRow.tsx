@@ -42,16 +42,3 @@ export function TimelineRow({
   )
 }
 
-/// A label on a continuous thing, not the lid of a box. The thread runs on
-/// behind it; the rule above says "this begins here".
-export function TimelineDayHeader({ title, first = false }: { title: string; first?: boolean }) {
-  return (
-    <>
-      {!first && <hr className="timeline-day-rule" />}
-      <div className="timeline-day-header">
-        <div className="timeline-rail" />
-        <h2 className="timeline-day-title">{title}</h2>
-      </div>
-    </>
-  )
-}

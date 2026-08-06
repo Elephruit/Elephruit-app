@@ -771,47 +771,6 @@ textarea.field {
 
 /* MARK: Capture — the signature surface */
 
-.capture-workspace {
-  max-width: 680px;
-  margin: 0 auto;
-  padding-top: var(--space-generous);
-}
-
-.capture-header {
-  margin-bottom: var(--space-large);
-}
-
-.capture-header p {
-  font: var(--text-sub);
-  color: var(--color-text-secondary);
-  margin-top: calc(-1 * var(--space-medium));
-}
-
-.field-hero {
-  min-height: 180px;
-  padding: var(--space-large);
-  font-size: 1.05rem;
-  line-height: 1.5;
-  border-radius: var(--radius-large);
-  box-shadow: var(--shadow-raised);
-}
-
-.capture-hint {
-  font: var(--text-metadata);
-  color: var(--color-text-tertiary);
-  margin-top: var(--space-tight);
-}
-
-.mobile-only {
-  display: none;
-}
-
-@media (max-width: 719.98px) {
-  .mobile-only {
-    display: block;
-  }
-}
-
 .capture-examples {
   display: flex;
   flex-wrap: wrap;
@@ -861,39 +820,8 @@ textarea.field {
   align-items: stretch;
 }
 
-.capture-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-small);
-  margin-top: var(--space-large);
-}
-
 /* Parsed review beside the text from 1024 — capture stays visible while the
    proposal is judged. */
-.capture-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--space-xl);
-  align-items: start;
-}
-
-.capture-layout .capture-workspace {
-  margin: 0;
-  max-width: none;
-}
-
-.review-aside {
-  background: var(--color-background-elevated);
-  border: 1px solid var(--color-separator);
-  border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-panel);
-  padding: var(--space-section);
-  position: sticky;
-  top: var(--space-large);
-  max-height: calc(100dvh - 2 * var(--space-large));
-  overflow-y: auto;
-}
-
 /* MARK: Feed workspace — greeting, capture entry, overview tiles */
 
 .feed-greeting {
@@ -2720,48 +2648,6 @@ a.memory-person-link:hover {
 
 .aside-panel-head .aside-title {
   margin-bottom: 0;
-}
-
-.aside-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-small);
-  width: 100%;
-  padding: var(--space-small) 0;
-  border: 0;
-  border-top: 1px solid var(--color-separator);
-  background: none;
-  text-align: left;
-  cursor: pointer;
-  font: var(--text-sub);
-}
-
-.aside-row[data-static] {
-  cursor: default;
-}
-
-.aside-row:first-of-type {
-  border-top: 0;
-}
-
-.aside-row-text {
-  min-width: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.aside-row-text b {
-  font: var(--text-label);
-  color: var(--color-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.aside-row-text span {
-  font: var(--text-metadata);
-  color: var(--color-text-secondary);
 }
 
 /* Status chips — severity in the fill, readable in the figure */
