@@ -5,14 +5,19 @@ export function Avatar({
   name,
   colorName,
   small = false,
+  size,
 }: {
   name: string
   colorName: PaletteColor
+  /// Legacy shorthand for size="sm".
   small?: boolean
+  size?: 'sm' | 'md' | 'lg'
 }) {
+  const resolved = size ?? (small ? 'sm' : 'md')
+  const className = resolved === 'sm' ? 'avatar avatar-small' : resolved === 'lg' ? 'avatar avatar-large' : 'avatar'
   return (
     <span
-      className={small ? 'avatar avatar-small' : 'avatar'}
+      className={className}
       style={{ '--tint': `var(--palette-${colorName})` } as React.CSSProperties}
       aria-hidden="true"
     >

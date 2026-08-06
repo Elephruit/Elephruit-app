@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { planCompleteReminder, planRenamePerson, planReopenReminder } from '../../domain/capture'
 import { deriveLastContact, lastContactLine } from '../../domain/contact'
+import { startOfDay, wholeDaysBetween } from '../../domain/dates'
+import { bucketFor } from '../../domain/reminders'
 import {
   FILTER_LABELS,
   entryFromInteraction,
@@ -25,9 +27,12 @@ import {
 } from '../../data/hooks'
 import { useUID } from '../UserContext'
 import { Avatar } from '../components/Avatar'
-import { Icon } from '../components/Icon'
+import { Button, IconButton } from '../components/Button'
 import { Dialog } from '../components/Dialog'
+import { Icon } from '../components/Icon'
+import { SegmentedControl } from '../components/SegmentedControl'
 import { TimelineRow } from '../components/TimelineRow'
+import { PageScaffold } from '../shell/PageScaffold'
 import { FactsSection } from './FactsSection'
 import { RelationshipsSection } from './RelationshipsSection'
 
@@ -63,6 +68,7 @@ export function PersonPage() {
   const [renaming, setRenaming] = useState(false)
   const [newName, setNewName] = useState('')
   const [savingName, setSavingName] = useState(false)
+  const now = new Date()
 
   const entries = useMemo(() => {
     if (!interactions || !observations || !reminders || !people) return undefined
@@ -81,12 +87,12 @@ export function PersonPage() {
 
   const openFollowUps = reminders?.filter((r) => r.status === 'open') ?? []
 
-  if (person === undefined) return <main className="page" />
+  if (person === undefined) return <PageScaffold width="wide">{null}</PageScaffold>
   if (person === null) {
     return (
-      <main className="page">
+      <PageScaffold width="wide">
         <p className="row-subtitle">This record no longer exists.</p>
-      </main>
+      </PageScaffold>
     )
   }
 
@@ -100,104 +106,135 @@ export function PersonPage() {
   }
 
   return (
-    <main className="page">
-      <button type="button" className="button-plain button" onClick={() => navigate(-1)}>
-        <Icon name="back" size={16} /> Back
+    <PageScaffold width="wide">
+      <button type="button" className="backlink" onClick={() => navigate(-1)}>
+        <Icon name="back" size={14} /> Back
       </button>
 
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-large)',
-          margin: 'var(--space-large) 0 var(--space-small)',
-        }}
-      >
-        <span style={{ transform: 'scale(1.6)', transformOrigin: 'left center' }}>
-          <Avatar name={person.displayName} colorName={person.colorName} />
-        </span>
-        <span>
-          <h1 className="page-title" style={{ marginBottom: 2, display: 'flex', alignItems: 'center', gap: 'var(--space-small)' }}>
+      <header className="profile-header">
+        <Avatar name={person.displayName} colorName={person.colorName} size="lg" />
+        <div className="profile-id">
+          <h1>
             {person.displayName}
-            <button
-              type="button"
-              className="button button-plain"
-              style={{ padding: 2, color: 'var(--color-text-tertiary)' }}
-              aria-label="Rename"
+            <IconButton
+              label="Rename"
+              icon="pencil"
               onClick={() => {
                 setNewName(person.hasStatedName ? person.displayName : '')
                 setRenaming(true)
               }}
-            >
-              <Icon name="pencil" size={16} />
-            </button>
+            />
           </h1>
-          {roleLine && <p className="row-subtitle">{roleLine}</p>}
-          <p className="row-subtitle">{lastContactLine(derivedLastContact, new Date())}</p>
-        </span>
+          {roleLine && <p>{roleLine}</p>}
+          <p className="profile-last">{lastContactLine(derivedLastContact, now)}</p>
+        </div>
+        <div className="profile-actions">
+          <Button variant="primary" icon="plus" onClick={() => navigate(`/log?person=${person.id}`)}>
+            Log an interaction
+          </Button>
+        </div>
       </header>
 
-      <button
-        type="button"
-        className="button"
-        style={{ margin: 'var(--space-medium) 0' }}
-        onClick={() => navigate(`/log?person=${person.id}`)}
-      >
-        <Icon name="plus" size={16} /> Log an interaction
-      </button>
-
-      {observations && <FactsSection person={person} observations={observations} />}
-
-      {relationships && people && (
-        <RelationshipsSection person={person} relationships={relationships} people={people} />
-      )}
-
-      {openFollowUps.length > 0 && (
-        <>
-          <h2 className="section-header">Open follow-ups</h2>
-          {openFollowUps.map((reminder) => (
-            <div key={reminder.id} className="row" style={{ cursor: 'default' }}>
-              <button
-                type="button"
-                className="button-plain button"
-                style={{ padding: 0, color: 'var(--color-due-today)' }}
-                aria-label={`Complete ${reminder.title}`}
-                onClick={() => void toggleReminder(reminder.id, true)}
-              >
-                <Icon name="circle" size={20} />
-              </button>
-              <span className="row-title">{reminder.title}</span>
+      <div className="person-cols">
+        <div className="person-history">
+          {openFollowUps.length > 0 && (
+            <div className="aside-panel pinned-panel">
+              <h4 className="aside-title">Open follow-ups</h4>
+              {openFollowUps.map((reminder) => {
+                const bucket = bucketFor(reminder, now)
+                return (
+                  <div key={reminder.id} className="aside-row" data-static>
+                    <button
+                      type="button"
+                      className="complete-ring"
+                      aria-label={`Complete ${reminder.title}`}
+                      onClick={() => void toggleReminder(reminder.id, true)}
+                    />
+                    <span className="aside-row-text">
+                      <b>{reminder.title}</b>
+                    </span>
+                    {bucket === 'overdue' && reminder.dueAt && (
+                      <span className="chip chip-status-overdue">
+                        due {wholeDaysBetween(startOfDay(reminder.dueAt), startOfDay(now))} days ago
+                      </span>
+                    )}
+                    {bucket === 'today' && <span className="chip chip-status-today">due today</span>}
+                  </div>
+                )
+              })}
             </div>
+          )}
+
+          <div className="history-head">
+            <h2>History</h2>
+            <SegmentedControl
+              label="Filter history"
+              options={VISIBLE_FILTERS.map((f) => ({ value: f, label: FILTER_LABELS[f] }))}
+              value={filter}
+              onChange={setFilter}
+            />
+          </div>
+
+          {months && months.length === 0 && (
+            <p className="row-subtitle" style={{ padding: 'var(--space-large) 0' }}>
+              Nothing here yet.
+            </p>
+          )}
+
+          {months?.map((group, groupIndex) => (
+            <section key={group.month.getTime()}>
+              <div className="timeline-day-header">
+                <div className="timeline-rail" />
+                <h3 className="timeline-month-title">{monthLabel(group.month)}</h3>
+              </div>
+              {group.entries.map((entry, index) => {
+                const badge = entryBadge(entry)
+                const isLastRow = groupIndex === months.length - 1 && index === group.entries.length - 1
+                return (
+                  <TimelineRow
+                    key={`${entry.kind}-${entry.id}`}
+                    rail={isLastRow ? 'tail' : 'line'}
+                    tint={entry.kind === 'interaction' && !entryIsContact(entry) ? 'var(--color-personal)' : badge.tint}
+                    badge={<Icon name={badge.icon} size={13} />}
+                    badgeLabel={
+                      entry.kind === 'reminder'
+                        ? entry.isOpen
+                          ? `Complete ${entry.title}`
+                          : `Reopen ${entry.title}`
+                        : undefined
+                    }
+                    onBadgeClick={
+                      entry.kind === 'reminder' ? () => void toggleReminder(entry.id, entry.isOpen) : undefined
+                    }
+                  >
+                    <div className="timeline-title-line">
+                      <span className="timeline-title">{entry.title}</span>
+                      <span className="timeline-time">
+                        {entry.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                    <p className="timeline-subtitle">{provenanceLine(entry)}</p>
+                    {entry.excerpt && <p className="timeline-excerpt">{entry.excerpt}</p>}
+                  </TimelineRow>
+                )
+              })}
+            </section>
           ))}
-        </>
-      )}
+        </div>
 
-      <h2 className="section-header">History</h2>
-      <div className="chip-row-scroll">
-        {VISIBLE_FILTERS.map((f) => (
-          <button
-            key={f}
-            type="button"
-            className="chip"
-            aria-pressed={filter === f}
-            onClick={() => setFilter(f)}
-          >
-            {FILTER_LABELS[f]}
-          </button>
-        ))}
+        <aside className="person-context">
+          {observations && <FactsSection person={person} observations={observations} />}
+          {relationships && people && (
+            <RelationshipsSection person={person} relationships={relationships} people={people} />
+          )}
+        </aside>
       </div>
-
-      {months && months.length === 0 && (
-        <p className="row-subtitle" style={{ padding: 'var(--space-large) 0' }}>
-          Nothing here yet.
-        </p>
-      )}
 
       {renaming && (
         <Dialog title="Rename" onClose={() => setRenaming(false)}>
           <p className="row-subtitle">
-            Unnamed relatives titled after this person — “{person.displayName}'s son” — are
-            re-phrased in the same save.
+            Unnamed relatives titled after this person — “{person.displayName}'s son” — are re-phrased in the same
+            save.
           </p>
           <input
             className="field"
@@ -207,13 +244,13 @@ export function PersonPage() {
             autoFocus
           />
           <div className="sheet-actions">
-            <button type="button" className="button button-quiet" onClick={() => setRenaming(false)}>
+            <Button variant="quiet" onClick={() => setRenaming(false)}>
               Cancel
-            </button>
-            <button
-              type="button"
-              className="button"
-              disabled={!newName.trim() || savingName}
+            </Button>
+            <Button
+              variant="primary"
+              loading={savingName}
+              disabled={!newName.trim()}
               onClick={() => {
                 if (!relationships || !people) return
                 setSavingName(true)
@@ -226,54 +263,10 @@ export function PersonPage() {
               }}
             >
               Save
-            </button>
+            </Button>
           </div>
         </Dialog>
       )}
-
-      {months?.map((group, groupIndex) => (
-        <section key={group.month.getTime()}>
-          <div className="timeline-day-header">
-            <div className="timeline-rail" />
-            <h3 className="timeline-day-title" style={{ font: 'var(--text-section)', textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--color-text-secondary)' }}>
-              {monthLabel(group.month)}
-            </h3>
-          </div>
-          {group.entries.map((entry, index) => {
-            const badge = entryBadge(entry)
-            const isLastRow = groupIndex === months.length - 1 && index === group.entries.length - 1
-            return (
-              <TimelineRow
-                key={`${entry.kind}-${entry.id}`}
-                rail={isLastRow ? 'tail' : 'line'}
-                tint={entry.kind === 'interaction' && !entryIsContact(entry) ? 'var(--color-personal)' : badge.tint}
-                badge={<Icon name={badge.icon} size={13} />}
-                badgeLabel={
-                  entry.kind === 'reminder'
-                    ? entry.isOpen
-                      ? `Complete ${entry.title}`
-                      : `Reopen ${entry.title}`
-                    : undefined
-                }
-                onBadgeClick={
-                  entry.kind === 'reminder'
-                    ? () => void toggleReminder(entry.id, entry.isOpen)
-                    : undefined
-                }
-              >
-                <div className="timeline-title-line">
-                  <span className="timeline-title">{entry.title}</span>
-                  <span className="timeline-time">
-                    {entry.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                  </span>
-                </div>
-                <p className="timeline-subtitle">{provenanceLine(entry)}</p>
-                {entry.excerpt && <p className="timeline-excerpt">{entry.excerpt}</p>}
-              </TimelineRow>
-            )
-          })}
-        </section>
-      ))}
-    </main>
+    </PageScaffold>
   )
 }
