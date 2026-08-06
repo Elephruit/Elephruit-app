@@ -499,6 +499,122 @@ textarea.field {
   margin-top: var(--space-tight);
 }
 
+/* MARK: Combobox — tokens in the field, options underneath */
+
+.combobox-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-tight);
+  min-height: var(--control-height);
+  padding: var(--space-tight) var(--space-small);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-medium);
+  background: var(--color-background-elevated);
+  cursor: text;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.combobox-control:hover {
+  border-color: var(--color-border-strong);
+}
+
+.combobox-control:focus-within {
+  border-color: var(--color-accent);
+}
+
+.combobox-token {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-tight);
+  font: var(--text-chip);
+  border-radius: 999px;
+  padding: 2px 4px 2px 2px;
+  white-space: nowrap;
+}
+
+.combobox-token .avatar-small {
+  width: 20px;
+  height: 20px;
+  font-size: 0.55rem;
+  background: var(--color-background-elevated);
+}
+
+.combobox-token-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.combobox-token-remove:hover {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 15%, transparent);
+}
+
+.combobox-input {
+  flex: 1;
+  min-width: 90px;
+  border: 0;
+  background: none;
+  padding: 4px;
+  font: var(--text-body);
+  color: var(--color-text);
+}
+
+.combobox-input:focus,
+.combobox-input:focus-visible {
+  outline: none;
+}
+
+.combobox-list {
+  margin-top: var(--space-tight);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-medium);
+  background: var(--color-background-elevated);
+  box-shadow: var(--shadow-floating);
+  max-height: 224px;
+  overflow-y: auto;
+}
+
+.combobox-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-small);
+  width: 100%;
+  padding: var(--space-small) var(--space-medium);
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: var(--text-body);
+}
+
+.combobox-option[data-active] {
+  background: var(--color-hover-fill);
+}
+
+.combobox-option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combobox-option-detail {
+  margin-left: auto;
+  font: var(--text-metadata);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
 /* MARK: Chips */
 
 .chip {

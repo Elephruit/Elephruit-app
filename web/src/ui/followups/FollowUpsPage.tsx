@@ -122,6 +122,7 @@ function ReminderSheet({
         people={people}
         pendingNew={[]}
         selectedIDs={personIDs}
+        allowCreate={false}
         onToggle={(id) =>
           setPersonIDs((current) => {
             const next = new Set(current)
