@@ -16,7 +16,7 @@ import type { CaptureProposal } from '../domain/assist'
 import { CURATED_ATTRIBUTES, attributeLabel } from '../domain/facts'
 import { INTERACTION_KINDS } from '../domain/interaction'
 import { RELATIONSHIP_KINDS, kindLabel } from '../domain/relationships'
-import { GatewayError, runAiTask, type GatewayRequest } from './gateway'
+import { GatewayError, runAiTask, wireOutputFormat, type GatewayRequest } from './gateway'
 
 // Structured outputs want every property present and no extras; optionality is
 // expressed as null. Kept flat — recursive schemas are unsupported there.
@@ -97,7 +97,7 @@ export function buildRequestParams(model: string, system: string, text: string) 
     system,
     messages: [{ role: 'user' as const, content: text }],
     effort: 'low' as const,
-    outputFormat: zodOutputFormat(CaptureProposalSchema) as unknown as Record<string, unknown>,
+    outputFormat: wireOutputFormat(zodOutputFormat(CaptureProposalSchema)),
   }
 }
 

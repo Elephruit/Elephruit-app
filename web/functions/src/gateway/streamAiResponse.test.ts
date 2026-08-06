@@ -163,6 +163,16 @@ describe('handleStreamAiResponse', () => {
     expect(seen.request?.outputFormat).toEqual(goodRequest.outputFormat)
   })
 
+  it('strips everything but type and schema from the output format', async () => {
+    const { deps, seen } = await makeDeps()
+    const contaminated = {
+      ...goodRequest,
+      outputFormat: { type: 'json_schema', schema: { properties: {} }, parse: {}, extra: 'nope' },
+    }
+    await handleStreamAiResponse(deps, 'alice', contaminated, makeSink().sink)
+    expect(seen.request?.outputFormat).toEqual({ type: 'json_schema', schema: { properties: {} } })
+  })
+
   it('rejects malformed shapes, oversized prompts, and oversized output formats', async () => {
     const { deps } = await makeDeps()
     const { sink } = makeSink()

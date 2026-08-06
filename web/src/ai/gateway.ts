@@ -108,6 +108,13 @@ export interface AiTaskResult {
   final: GatewayFinal
 }
 
+/// The SDK's zodOutputFormat carries a client-side parse helper alongside the
+/// wire fields; only type and schema may travel. The server strips to the
+/// same pair regardless — this keeps the request honest at the source.
+export function wireOutputFormat(format: { type: string; schema: unknown }): Record<string, unknown> {
+  return { type: format.type, schema: format.schema }
+}
+
 interface StreamSource {
   stream: AsyncIterable<GatewayChunk>
   data: Promise<GatewayFinal>

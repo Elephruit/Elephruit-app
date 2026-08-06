@@ -8,7 +8,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { z } from 'zod'
 import type { BriefingInput } from '../domain/briefing'
 import { AICaptureError } from './anthropic'
-import { GatewayError, runAiTask, type GatewayRequest } from './gateway'
+import { GatewayError, runAiTask, wireOutputFormat, type GatewayRequest } from './gateway'
 
 export const DayBriefSchema = z.object({
   people: z.array(
@@ -46,7 +46,7 @@ export function buildBriefingRequestParams(model: string, input: BriefingInput) 
     system: buildBriefingSystemPrompt(),
     messages: [{ role: 'user' as const, content: JSON.stringify(input) }],
     effort: 'low' as const,
-    outputFormat: zodOutputFormat(DayBriefSchema) as unknown as Record<string, unknown>,
+    outputFormat: wireOutputFormat(zodOutputFormat(DayBriefSchema)),
   }
 }
 

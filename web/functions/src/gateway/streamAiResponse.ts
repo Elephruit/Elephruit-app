@@ -91,7 +91,14 @@ export async function handleStreamAiResponse(
       messages: request.messages,
       maxTokens: request.maxTokens ?? GATEWAY_LIMITS.defaultMaxTokens,
       effort: request.effort ?? null,
-      outputFormat: request.outputFormat ?? null,
+      // Reduced to exactly the two fields the provider accepts. The SDK's
+      // zodOutputFormat carries a client-side parse helper that some
+      // serialization paths turn into a literal key the API then rejects
+      // ("format.parse: Extra inputs are not permitted") — and whatever
+      // else a client ever sends, only type and schema go upstream.
+      outputFormat: request.outputFormat
+        ? { type: request.outputFormat.type, schema: request.outputFormat.schema }
+        : null,
     }
 
     const adapter = deps.adapters[request.provider]
