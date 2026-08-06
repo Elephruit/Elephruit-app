@@ -391,7 +391,8 @@ dialog.palette::backdrop {
 .page-header-row {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-large);
+  gap: var(--space-medium) var(--space-large);
+  flex-wrap: wrap;
 }
 
 .page-header-text {
@@ -470,7 +471,14 @@ dialog.palette::backdrop {
 
 @media (max-width: 719.98px) {
   .metric-tiles.metric-tiles-four {
+    display: grid;
     grid-template-columns: repeat(2, 1fr);
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+
+  .metric-tiles.metric-tiles-four .metric-tile {
+    min-width: 0;
   }
 }
 
@@ -1099,8 +1107,29 @@ textarea.field {
 }
 
 @media (max-width: 719.98px) {
+  .feed-greeting {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-medium);
+  }
+
+  /* Tiles become a scrollable strip rather than a clipped grid. */
   .metric-tiles {
+    display: flex;
     gap: var(--space-small);
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-inline: calc(-1 * var(--space-large));
+    padding-inline: var(--space-large);
+  }
+
+  .metric-tiles::-webkit-scrollbar {
+    display: none;
+  }
+
+  .metric-tiles .metric-tile {
+    flex: 0 0 auto;
+    min-width: 46%;
   }
 }
 
@@ -1261,17 +1290,17 @@ textarea.field {
 }
 
 /* Status chips — severity in the fill, readable in the figure */
-.chip-status-overdue {
+.chip.chip-status-overdue {
   background: color-mix(in srgb, var(--color-overdue) 12%, transparent);
   color: var(--color-overdue);
 }
 
-.chip-status-today {
+.chip.chip-status-today {
   background: color-mix(in srgb, var(--color-due-today) 13%, transparent);
   color: var(--color-due-today);
 }
 
-.chip-status-done {
+.chip.chip-status-done {
   background: color-mix(in srgb, var(--color-completed) 12%, transparent);
   color: var(--color-completed);
 }
