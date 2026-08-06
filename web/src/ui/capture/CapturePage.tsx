@@ -5,10 +5,12 @@ import { aiCaptureReady, storedAPIKey, storedModel } from '../../ai/settings'
 import { resolveProposal, type ResolvedCapture } from '../../domain/assist'
 import { usePeople } from '../../data/hooks'
 import { useUID } from '../UserContext'
+import { useViewport } from '../breakpoints'
 import { Button } from '../components/Button'
+import { Dialog } from '../components/Dialog'
 import { Icon } from '../components/Icon'
 import { PageScaffold } from '../shell/PageScaffold'
-import { ReviewSheet } from './ReviewSheet'
+import { ReviewPanel } from './ReviewPanel'
 
 const EXAMPLES = [
   'Coffee with Ana. Her son starts at South High this fall. Need to send her the neighborhood list.',
@@ -26,6 +28,8 @@ export function CapturePage() {
   const [error, setError] = useState<string | null>(null)
   const [review, setReview] = useState<ResolvedCapture | null>(null)
 
+  const viewport = useViewport()
+  const reviewInline = viewport === 'desktop' || viewport === 'wide'
   const ready = aiCaptureReady()
   const canParse = ready && text.trim().length > 0 && !busy && people !== undefined
   const canLogManually = text.trim().length > 0
@@ -56,9 +60,12 @@ export function CapturePage() {
     if (canLogManually) navigate(`/log?text=${encodeURIComponent(text)}`)
   }
 
+  const showAside = review !== null && reviewInline
+
   return (
-    <PageScaffold width="narrow">
-      <div className="capture-workspace">
+    <PageScaffold width={showAside ? 'wide' : 'narrow'}>
+      <div className={showAside ? 'capture-layout' : undefined}>
+        <div className="capture-workspace">
         <header className="capture-header">
           <h1 className="page-title">What happened?</h1>
           <p>One box for the whole thought — who it was, what you learned, what you owe.</p>
@@ -126,15 +133,30 @@ export function CapturePage() {
             </Button>
           )}
         </div>
+        </div>
+
+        {showAside && review && (
+          <aside className="review-aside" aria-label="Here’s what was heard">
+            <h2 className="dialog-title">Here’s what was heard</h2>
+            <ReviewPanel
+              items={review.items}
+              warnings={review.warnings}
+              onClose={() => setReview(null)}
+              onSaved={() => navigate('/')}
+            />
+          </aside>
+        )}
       </div>
 
-      {review && (
-        <ReviewSheet
-          items={review.items}
-          warnings={review.warnings}
-          onClose={() => setReview(null)}
-          onSaved={() => navigate('/')}
-        />
+      {review && !reviewInline && (
+        <Dialog size="wide" title="Here’s what was heard" onClose={() => setReview(null)}>
+          <ReviewPanel
+            items={review.items}
+            warnings={review.warnings}
+            onClose={() => setReview(null)}
+            onSaved={() => navigate('/')}
+          />
+        </Dialog>
       )}
     </PageScaffold>
   )
