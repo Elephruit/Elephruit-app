@@ -10,7 +10,7 @@ import {
   where,
   type Query,
 } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Interaction } from '../domain/interaction'
 import type { Observation } from '../domain/facts'
 import type { Person } from '../domain/person'
@@ -45,7 +45,14 @@ function useQuerySnapshot<T>(make: () => Query, deps: unknown[]): T[] | undefine
 
 export function usePeople(uid: string): Person[] | undefined {
   const people = useQuerySnapshot<Person>(() => query(collectionRef(uid, 'people')), [uid])
-  return people?.sort((a, b) => foldedForMatching(a.displayName).localeCompare(foldedForMatching(b.displayName)))
+  return useMemo(
+    () =>
+      people &&
+      [...people].sort((a, b) =>
+        foldedForMatching(a.displayName).localeCompare(foldedForMatching(b.displayName)),
+      ),
+    [people],
+  )
 }
 
 export function usePerson(uid: string, personID: string): Person | null | undefined {
