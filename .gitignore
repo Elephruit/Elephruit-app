@@ -16,3 +16,13 @@ Package.resolved
 
 # Per-worktree Xcode state — see Scripts/xctest.sh
 .xcode-local/
+
+# Web spike (web/) — Node toolchain and Firebase emulator artifacts
+web/node_modules/
+web/dist/
+web/.env
+web/.env.*
+!web/.env.example
+web/.emulator-data/
+web/*-debug.log
+web/.firebase/
