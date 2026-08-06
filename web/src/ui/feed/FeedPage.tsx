@@ -154,7 +154,8 @@ export function FeedPage() {
                 <div
                   role="button"
                   tabIndex={0}
-                  style={{ cursor: entry.otherPeople.length > 0 ? 'pointer' : 'default' }}
+                  className="timeline-click"
+                  data-link={entry.otherPeople.length > 0 || undefined}
                   onClick={() => {
                     const first = entry.otherPeople[0]
                     if (first) navigate(`/people/${first.id}`)

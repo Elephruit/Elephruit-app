@@ -1106,8 +1106,26 @@ button.timeline-badge {
 
 .timeline-excerpt {
   font: var(--text-sub);
-  color: var(--color-text);
-  margin-top: var(--space-tight);
+  color: var(--color-text-secondary);
+  margin-top: var(--space-small);
+  border-left: 2px solid var(--color-border-strong);
+  padding-left: var(--space-medium);
+}
+
+/* The clickable body of a feed row: a quiet pill on hover, no card at rest. */
+.timeline-click {
+  border-radius: var(--radius-medium);
+  margin: calc(-1 * var(--space-tight)) calc(-1 * var(--space-small));
+  padding: var(--space-tight) var(--space-small);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.timeline-click[data-link] {
+  cursor: pointer;
+}
+
+.timeline-click[data-link]:hover {
+  background: var(--color-subtle-fill);
 }
 
 /* A day boundary: a rule that says "this begins here", clear air, and the
