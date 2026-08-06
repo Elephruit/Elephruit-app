@@ -1,17 +1,26 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AICaptureError, parseCapture } from '../../ai/anthropic'
 import { aiCaptureReady, storedAPIKey, storedModel } from '../../ai/settings'
 import { resolveProposal, type ResolvedCapture } from '../../domain/assist'
 import { usePeople } from '../../data/hooks'
 import { useUID } from '../UserContext'
+import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
+import { PageScaffold } from '../shell/PageScaffold'
 import { ReviewSheet } from './ReviewSheet'
+
+const EXAMPLES = [
+  'Coffee with Ana. Her son starts at South High this fall. Need to send her the neighborhood list.',
+  'Called Marisol about the co-op vote — she is leaning yes. Follow up Friday.',
+  "Met Jonas's partner Elke at the gallery. She teaches printmaking in Oakland.",
+]
 
 export function CapturePage() {
   const uid = useUID()
   const navigate = useNavigate()
   const people = usePeople(uid)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -19,6 +28,7 @@ export function CapturePage() {
 
   const ready = aiCaptureReady()
   const canParse = ready && text.trim().length > 0 && !busy && people !== undefined
+  const canLogManually = text.trim().length > 0
 
   async function parse() {
     const apiKey = storedAPIKey()
@@ -42,52 +52,80 @@ export function CapturePage() {
     }
   }
 
+  function logManually() {
+    if (canLogManually) navigate(`/log?text=${encodeURIComponent(text)}`)
+  }
+
   return (
-    <main className="page">
-      <h1 className="page-title">What happened?</h1>
+    <PageScaffold width="narrow">
+      <div className="capture-workspace">
+        <header className="capture-header">
+          <h1 className="page-title">What happened?</h1>
+          <p>One box for the whole thought — who it was, what you learned, what you owe.</p>
+        </header>
 
-      <textarea
-        className="field"
-        style={{ minHeight: 140 }}
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        placeholder="Speak or type — “Coffee with Ana. Her son starts at South High this fall. Need to send her the neighborhood list.”"
-        autoFocus
-      />
-      <p className="row-subtitle" style={{ marginTop: 'var(--space-tight)' }}>
-        On a phone, the keyboard's mic button dictates straight into this box.
-      </p>
+        <textarea
+          ref={textareaRef}
+          className="field field-hero"
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault()
+              if (canParse) void parse()
+              else logManually()
+            }
+          }}
+          placeholder="Speak or type — everything on your mind about the conversation."
+          autoFocus
+        />
+        <p className="capture-hint mobile-only">On a phone, the keyboard's mic button dictates straight into this box.</p>
 
-      {!ready && (
-        <p className="row-subtitle" style={{ marginTop: 'var(--space-small)' }}>
-          <Link to="/settings" style={{ color: 'var(--color-accent)' }}>
-            Link an Anthropic API key in Settings
-          </Link>{' '}
-          and this box parses itself into interactions, facts, and follow-ups.
-        </p>
-      )}
-
-      {error && (
-        <p role="alert" style={{ color: 'var(--color-destructive)', marginTop: 'var(--space-small)' }}>
-          {error}
-        </p>
-      )}
-
-      <div className="sheet-actions">
-        <button
-          type="button"
-          className="button button-quiet"
-          disabled={text.trim().length === 0}
-          onClick={() => navigate(`/log?text=${encodeURIComponent(text)}`)}
-        >
-          Log manually
-        </button>
-        {ready && (
-          <button type="button" className="button" disabled={!canParse} onClick={() => void parse()}>
-            <Icon name="sparkle" size={16} />
-            {busy ? 'Reading…' : 'Parse with AI'}
-          </button>
+        {text.trim().length === 0 && (
+          <div className="capture-examples">
+            <span>Try</span>
+            {EXAMPLES.map((example) => (
+              <button
+                key={example}
+                type="button"
+                className="chip"
+                onClick={() => {
+                  setText(example)
+                  textareaRef.current?.focus()
+                }}
+              >
+                {example.split('.')[0]}…
+              </button>
+            ))}
+          </div>
         )}
+
+        {!ready && (
+          <div className="callout">
+            <Icon name="sparkle" size={18} />
+            <p>
+              <Link to="/settings">Link an Anthropic API key in Settings</Link> and this box parses itself into
+              interactions, facts, relationships, and follow-ups — always shown for review before anything is saved.
+            </p>
+          </div>
+        )}
+
+        {error && (
+          <p className="field-error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <div className="capture-actions">
+          <Button variant="quiet" disabled={!canLogManually} onClick={logManually}>
+            Log manually
+          </Button>
+          {ready && (
+            <Button variant="primary" icon="sparkle" loading={busy} disabled={!canParse} onClick={() => void parse()}>
+              {busy ? 'Reading…' : 'Parse with AI'}
+            </Button>
+          )}
+        </div>
       </div>
 
       {review && (
@@ -98,6 +136,6 @@ export function CapturePage() {
           onSaved={() => navigate('/')}
         />
       )}
-    </main>
+    </PageScaffold>
   )
 }

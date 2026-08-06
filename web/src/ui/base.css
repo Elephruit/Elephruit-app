@@ -648,6 +648,99 @@ textarea.field {
   margin-top: var(--space-tight);
 }
 
+/* MARK: Capture — the signature surface */
+
+.capture-workspace {
+  max-width: 680px;
+  margin: 0 auto;
+  padding-top: var(--space-generous);
+}
+
+.capture-header {
+  margin-bottom: var(--space-large);
+}
+
+.capture-header p {
+  font: var(--text-sub);
+  color: var(--color-text-secondary);
+  margin-top: calc(-1 * var(--space-medium));
+}
+
+.field-hero {
+  min-height: 180px;
+  padding: var(--space-large);
+  font-size: 1.05rem;
+  line-height: 1.5;
+  border-radius: var(--radius-large);
+  box-shadow: var(--shadow-raised);
+}
+
+.capture-hint {
+  font: var(--text-metadata);
+  color: var(--color-text-tertiary);
+  margin-top: var(--space-tight);
+}
+
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 719.98px) {
+  .mobile-only {
+    display: block;
+  }
+}
+
+.capture-examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-small);
+  margin-top: var(--space-medium);
+}
+
+.capture-examples > span {
+  font: var(--text-metadata);
+  color: var(--color-text-tertiary);
+}
+
+.callout {
+  display: flex;
+  gap: var(--space-medium);
+  align-items: flex-start;
+  background: var(--color-background-elevated);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-large);
+  padding: var(--space-large);
+  margin-top: var(--space-large);
+}
+
+.callout svg {
+  color: var(--color-brand);
+  flex: none;
+  margin-top: 2px;
+}
+
+.callout p {
+  font: var(--text-sub);
+  color: var(--color-text-secondary);
+}
+
+.callout a {
+  color: var(--color-accent);
+}
+
+.callout a:hover {
+  text-decoration: underline;
+}
+
+.capture-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-small);
+  margin-top: var(--space-large);
+}
+
 /* MARK: Feed workspace — greeting, capture entry, overview tiles */
 
 .feed-greeting {
