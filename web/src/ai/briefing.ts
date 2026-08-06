@@ -1,13 +1,14 @@
 /// The read direction of the AI street: turning the domain-assembled briefing
-/// payload into talking points. Same posture as capture parsing — the user's
-/// own key, browser-direct, schema-validated output, and the model sees only
-/// what domain/briefing.ts decided it may see.
+/// payload into talking points, through the app's AI gateway under the user's
+/// stored key. Same posture as capture parsing — a credential id instead of a
+/// key, schema-validated output, and the model sees only what
+/// domain/briefing.ts decided it may see.
 
-import Anthropic from '@anthropic-ai/sdk'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { z } from 'zod'
 import type { BriefingInput } from '../domain/briefing'
 import { AICaptureError } from './anthropic'
+import { GatewayError, runAiTask, type GatewayRequest } from './gateway'
 
 export const DayBriefSchema = z.object({
   people: z.array(
@@ -39,46 +40,40 @@ export function buildBriefingSystemPrompt(): string {
 
 export function buildBriefingRequestParams(model: string, input: BriefingInput) {
   return {
+    provider: 'anthropic' as const,
     model,
-    max_tokens: 8192,
+    maxTokens: 8192,
     system: buildBriefingSystemPrompt(),
     messages: [{ role: 'user' as const, content: JSON.stringify(input) }],
-    output_config: {
-      effort: 'low' as const,
-      format: zodOutputFormat(DayBriefSchema),
-    },
+    effort: 'low' as const,
+    outputFormat: zodOutputFormat(DayBriefSchema) as unknown as Record<string, unknown>,
   }
 }
 
 export async function generateDayBrief(
   input: BriefingInput,
-  options: { apiKey: string; model: string },
+  options: { credentialId: string; model: string },
 ): Promise<DayBrief> {
-  const client = new Anthropic({ apiKey: options.apiKey, dangerouslyAllowBrowser: true })
-
   try {
-    const response = await client.messages.parse(buildBriefingRequestParams(options.model, input))
+    const request: GatewayRequest = {
+      ...buildBriefingRequestParams(options.model, input),
+      credentialId: options.credentialId,
+    }
+    const { text, final } = await runAiTask(request)
 
-    if (response.stop_reason === 'refusal') {
+    if (final.stopReason === 'refusal') {
       throw new AICaptureError('The model declined to prepare this brief.')
     }
-
-    const brief = response.parsed_output
-    if (!brief) {
+    try {
+      return DayBriefSchema.parse(JSON.parse(text))
+    } catch {
       throw new AICaptureError('The reply did not match the expected shape. Try again.')
     }
-    return brief
   } catch (cause) {
     if (cause instanceof AICaptureError) throw cause
-    if (cause instanceof Anthropic.AuthenticationError) {
-      throw new AICaptureError('That API key was not accepted. Check it in Settings.', false)
+    if (cause instanceof GatewayError) {
+      throw new AICaptureError(cause.message, cause.recoverable)
     }
-    if (cause instanceof Anthropic.RateLimitError) {
-      throw new AICaptureError('The API is rate-limiting right now — try again in a moment.')
-    }
-    if (cause instanceof Anthropic.APIError) {
-      throw new AICaptureError(`The API returned an error (${cause.status ?? 'network'}).`)
-    }
-    throw new AICaptureError('Could not reach the API. Nothing was lost.')
+    throw new AICaptureError('Could not reach the AI gateway. Nothing was lost.')
   }
 }

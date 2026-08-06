@@ -6,13 +6,16 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AICaptureError } from '../../ai/anthropic'
 import { generateDayBrief, type DayBrief } from '../../ai/briefing'
-import { aiCaptureReady, storedAPIKey, storedModel } from '../../ai/settings'
+import { activeCredential } from '../../ai/credentials'
+import { storedModel } from '../../ai/settings'
+import { useAiCredentials } from '../../data/hooks'
 import { briefingInputFor } from '../../domain/briefing'
 import type { Observation } from '../../domain/facts'
 import type { Interaction } from '../../domain/interaction'
 import type { Person } from '../../domain/person'
 import type { Relationship } from '../../domain/relationships'
 import type { Reminder } from '../../domain/reminders'
+import { useUID } from '../UserContext'
 import { Button } from '../components/Button'
 
 export function TalkingPointsPanel({
@@ -30,14 +33,16 @@ export function TalkingPointsPanel({
   reminders: Reminder[]
   interactions: Interaction[]
 }) {
+  const uid = useUID()
   const [brief, setBrief] = useState<DayBrief | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const ready = aiCaptureReady()
+  const credentials = useAiCredentials(uid)
+  const credential = activeCredential(credentials)
+  const ready = credential !== null
 
   async function generate() {
-    const apiKey = storedAPIKey()
-    if (!apiKey || busy) return
+    if (!credential || busy) return
     setBusy(true)
     setError(null)
     try {
@@ -50,7 +55,7 @@ export function TalkingPointsPanel({
         interactions,
         new Date(),
       )
-      setBrief(await generateDayBrief(input, { apiKey, model: storedModel() }))
+      setBrief(await generateDayBrief(input, { credentialId: credential.id, model: storedModel() }))
     } catch (cause) {
       setError(cause instanceof AICaptureError ? cause.message : 'Something went wrong.')
     } finally {
@@ -71,7 +76,7 @@ export function TalkingPointsPanel({
         )}
       </div>
 
-      {!ready && (
+      {credentials !== undefined && !ready && (
         <p className="row-subtitle">
           <Link to="/settings" className="inline-link">
             Link an API key

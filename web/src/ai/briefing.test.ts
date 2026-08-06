@@ -34,12 +34,13 @@ describe('the day brief', () => {
     expect(() => DayBriefSchema.parse({ people: [{ name: 'X' }], dayNote: null })).toThrow()
   })
 
-  it('pins the request shape: chosen model, low effort, the payload as one user turn', () => {
+  it('pins the gateway request shape: chosen model, low effort, the payload as one user turn', () => {
     const params = buildBriefingRequestParams('claude-opus-5', INPUT)
+    expect(params.provider).toBe('anthropic')
     expect(params.model).toBe('claude-opus-5')
-    expect(params.max_tokens).toBe(8192)
-    expect(params.output_config.effort).toBe('low')
-    expect(params.output_config.format).toBeDefined()
+    expect(params.maxTokens).toBe(8192)
+    expect(params.effort).toBe('low')
+    expect(params.outputFormat).toMatchObject({ type: 'json_schema' })
     expect(params.messages).toEqual([{ role: 'user', content: JSON.stringify(INPUT) }])
   })
 

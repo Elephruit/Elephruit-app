@@ -8,8 +8,9 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { generateDayBrief, type DayBrief } from '../../ai/briefing'
 import { AICaptureError } from '../../ai/anthropic'
-import { aiCaptureReady, storedAPIKey, storedModel } from '../../ai/settings'
-import { useAllObservations, useAllRelationships } from '../../data/hooks'
+import { activeCredential } from '../../ai/credentials'
+import { storedModel } from '../../ai/settings'
+import { useAiCredentials, useAllObservations, useAllRelationships } from '../../data/hooks'
 import { briefingInputFor, defaultBriefingPersonIDs } from '../../domain/briefing'
 import type { Observation } from '../../domain/facts'
 import type { Interaction } from '../../domain/interaction'
@@ -42,7 +43,9 @@ export function DayBriefPanel({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const ready = aiCaptureReady()
+  const credentials = useAiCredentials(uid)
+  const credential = activeCredential(credentials)
+  const ready = credential !== null
   const peopleByID = useMemo(() => new Map(people.map((p) => [p.id, p])), [people])
   const peopleByName = useMemo(() => new Map(people.map((p) => [p.displayName, p])), [people])
   const loaded = observations !== undefined && relationships !== undefined
@@ -58,8 +61,7 @@ export function DayBriefPanel({
   }
 
   async function generate() {
-    const apiKey = storedAPIKey()
-    if (!apiKey || !canGenerate) return
+    if (!credential || !canGenerate) return
     setBusy(true)
     setError(null)
     try {
@@ -80,7 +82,7 @@ export function DayBriefPanel({
         interactions,
         new Date(),
       )
-      setBrief(await generateDayBrief(input, { apiKey, model: storedModel() }))
+      setBrief(await generateDayBrief(input, { credentialId: credential.id, model: storedModel() }))
     } catch (cause) {
       setError(cause instanceof AICaptureError ? cause.message : 'Something went wrong. Nothing was lost.')
     } finally {
@@ -115,7 +117,7 @@ export function DayBriefPanel({
             interactions for the people selected.
           </p>
 
-          {!ready && (
+          {credentials !== undefined && !ready && (
             <div className="callout">
               <Icon name="sparkle" size={18} />
               <p>
