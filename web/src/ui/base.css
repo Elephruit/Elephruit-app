@@ -648,6 +648,122 @@ textarea.field {
   margin-top: var(--space-tight);
 }
 
+/* MARK: Feed workspace — greeting, capture entry, overview tiles */
+
+.feed-greeting {
+  margin: var(--space-small) 0 var(--space-section);
+}
+
+.feed-greeting h1 {
+  font: var(--text-display);
+  color: var(--color-text);
+  margin-bottom: var(--space-tight);
+}
+
+.feed-greeting p {
+  font: var(--text-sub);
+  color: var(--color-text-secondary);
+}
+
+.composer-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--space-medium);
+  width: 100%;
+  padding: var(--space-large) var(--space-large);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-large);
+  background: var(--color-background-elevated);
+  box-shadow: var(--shadow-raised);
+  color: var(--color-text-tertiary);
+  font: var(--text-body);
+  cursor: text;
+  text-align: left;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.composer-entry:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-floating);
+}
+
+.composer-entry svg {
+  color: var(--color-accent);
+}
+
+.composer-entry-hint {
+  margin-left: auto;
+  font: var(--text-metadata);
+  color: var(--color-text-tertiary);
+}
+
+.metric-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-medium);
+  margin: var(--space-large) 0 var(--space-small);
+}
+
+@media (max-width: 719.98px) {
+  .metric-tiles {
+    gap: var(--space-small);
+  }
+}
+
+.metric-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-hairline);
+  padding: var(--space-medium) var(--space-large);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-large);
+  background: var(--color-background-elevated);
+  box-shadow: var(--shadow-raised);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.metric-tile:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-floating);
+}
+
+.metric-tile b {
+  font: 600 1.35rem/1.2 var(--font-sans);
+}
+
+.metric-tile span {
+  font: var(--text-label);
+  color: var(--color-text-secondary);
+}
+
+.metric-tile small {
+  font: var(--text-metadata);
+  color: var(--color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.metric-tile[data-tone='overdue'] b {
+  color: var(--color-overdue);
+}
+
+.metric-tile[data-tone='today'] b {
+  color: var(--color-due-today);
+}
+
+.metric-tile[data-tone='accent'] b {
+  color: var(--color-accent);
+}
+
 /* MARK: Combobox — tokens in the field, options underneath */
 
 .combobox-control {
