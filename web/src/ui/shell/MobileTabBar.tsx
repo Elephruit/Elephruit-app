@@ -1,5 +1,8 @@
+/// The bottom navigation, mobile only — the rail takes over from 720. Same
+/// destinations, plus the center capture button.
+
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Icon } from './Icon'
+import { Icon } from '../components/Icon'
 
 const TABS = [
   { to: '/', label: 'Feed', icon: 'feed', end: true },
@@ -7,34 +10,29 @@ const TABS = [
 ] as const
 
 const TRAILING_TABS = [
-  { to: '/followups', label: 'Follow-ups', icon: 'bell', end: false },
-  { to: '/settings', label: 'Settings', icon: 'gear', end: false },
+  { to: '/followups', label: 'Follow-ups', icon: 'bell' },
+  { to: '/settings', label: 'Settings', icon: 'gear' },
 ] as const
 
-export function TabBar() {
+export function MobileTabBar() {
   const navigate = useNavigate()
 
   return (
-    <nav className="tab-bar">
+    <nav className="tab-bar" aria-label="Primary">
       {TABS.map((tab) => (
         <NavLink key={tab.to} to={tab.to} end={tab.end} className="tab">
-          <Icon name={tab.icon} />
+          <Icon name={tab.icon} size={22} />
           {tab.label}
         </NavLink>
       ))}
       <div className="tab tab-log">
-        <button
-          type="button"
-          className="tab-log-circle"
-          aria-label="Log an interaction"
-          onClick={() => navigate('/capture')}
-        >
+        <button className="tab-log-circle" aria-label="Log an interaction" onClick={() => navigate('/capture')}>
           <Icon name="plus" size={24} />
         </button>
       </div>
       {TRAILING_TABS.map((tab) => (
-        <NavLink key={tab.to} to={tab.to} end={tab.end} className="tab">
-          <Icon name={tab.icon} />
+        <NavLink key={tab.to} to={tab.to} className="tab">
+          <Icon name={tab.icon} size={22} />
           {tab.label}
         </NavLink>
       ))}

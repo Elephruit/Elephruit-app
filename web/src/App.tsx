@@ -2,7 +2,8 @@ import { Route, Routes } from 'react-router-dom'
 import { useAuthUser } from './data/auth'
 import { SignInPage } from './ui/SignInPage'
 import { UIDProvider } from './ui/UserContext'
-import { TabBar } from './ui/components/TabBar'
+import { AppShell } from './ui/shell/AppShell'
+import { NotFound } from './ui/shell/NotFound'
 import { CapturePage } from './ui/capture/CapturePage'
 import { FeedPage } from './ui/feed/FeedPage'
 import { FollowUpsPage } from './ui/followups/FollowUpsPage'
@@ -20,15 +21,17 @@ function App() {
   return (
     <UIDProvider uid={user.uid}>
       <Routes>
-        <Route path="/" element={<FeedPage />} />
-        <Route path="/people" element={<PeopleListPage />} />
-        <Route path="/people/:personID" element={<PersonPage />} />
-        <Route path="/followups" element={<FollowUpsPage />} />
-        <Route path="/log" element={<LogPage />} />
-        <Route path="/capture" element={<CapturePage />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        <Route element={<AppShell />}>
+          <Route index element={<FeedPage />} />
+          <Route path="/people" element={<PeopleListPage />} />
+          <Route path="/people/:personID" element={<PersonPage />} />
+          <Route path="/followups" element={<FollowUpsPage />} />
+          <Route path="/log" element={<LogPage />} />
+          <Route path="/capture" element={<CapturePage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
       </Routes>
-      <TabBar />
     </UIDProvider>
   )
 }

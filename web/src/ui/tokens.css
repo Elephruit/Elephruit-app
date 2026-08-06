@@ -107,6 +107,7 @@
   --color-hover-fill: rgba(58, 48, 30, 0.085);
   --color-separator: var(--ink-150);
   --color-border-strong: var(--stone-200);
+  --color-rail: var(--stone-100);
   --color-accent: var(--azure-600);
   --color-accent-hover: var(--azure-700);
   --color-brand: var(--azure-500);
