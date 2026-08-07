@@ -15,19 +15,24 @@ interface FilterOption {
 }
 
 function FilterMenu({
+  id,
   label,
   icon,
   value,
   options,
+  open,
+  onOpenChange,
   onChange,
 }: {
+  id: string
   label: string
   icon: string
   value: string
   options: FilterOption[]
+  open: boolean
+  onOpenChange: (open: boolean) => void
   onChange: (value: string) => void
 }) {
-  const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const selected = options.find((option) => option.value === value) ?? options[0]
   const active = value !== options[0].value
@@ -39,13 +44,13 @@ function FilterMenu({
   }
 
   function openAndFocus(index: number) {
-    setOpen(true)
+    onOpenChange(true)
     window.setTimeout(() => focusOption(index), 0)
   }
 
   function choose(nextValue: string) {
     onChange(nextValue)
-    setOpen(false)
+    onOpenChange(false)
     window.setTimeout(() => {
       rootRef.current?.querySelector<HTMLButtonElement>('.followup-filter-menu-trigger')?.focus()
     }, 0)
@@ -55,14 +60,15 @@ function FilterMenu({
     <div
       ref={rootRef}
       className="followup-filter-menu"
+      data-filter-menu={id}
       onBlur={(event) => {
         if (event.relatedTarget instanceof Node && rootRef.current?.contains(event.relatedTarget)) return
-        setOpen(false)
+        onOpenChange(false)
       }}
       onKeyDown={(event) => {
         if (event.key !== 'Escape' || !open) return
         event.stopPropagation()
-        setOpen(false)
+        onOpenChange(false)
         rootRef.current?.querySelector<HTMLButtonElement>('.followup-filter-menu-trigger')?.focus()
       }}
     >
@@ -72,7 +78,7 @@ function FilterMenu({
         data-active={active || undefined}
         aria-label={`${label}: ${selected.label}`}
         aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => onOpenChange(!open)}
         onKeyDown={(event) => {
           if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
           event.preventDefault()
@@ -140,6 +146,7 @@ export function FollowUpFilterBar({
   onCategoryChange: (value: string) => void
   onClear: () => void
 }) {
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
   const hasFilters = status !== 'all' || personID !== '' || due !== 'any' || category !== ''
   const statuses: Array<{ value: FollowUpStatusFilter; label: string }> = [
     { value: 'all', label: 'All' },
@@ -182,7 +189,10 @@ export function FollowUpFilterBar({
             type="button"
             aria-pressed={status === option.value}
             data-tone={option.value === 'overdue' ? 'overdue' : undefined}
-            onClick={() => onStatusChange(option.value)}
+            onClick={() => {
+              setOpenMenu(null)
+              onStatusChange(option.value)
+            }}
           >
             <span>{option.label}</span>
           </button>
@@ -191,28 +201,44 @@ export function FollowUpFilterBar({
       <span className="followup-filter-divider" aria-hidden="true" />
       <div className="followup-facet-filters">
         <FilterMenu
+          id="people"
           label="People"
           icon="people"
           value={personID}
           options={peopleOptions}
+          open={openMenu === 'people'}
+          onOpenChange={(open) => setOpenMenu(open ? 'people' : null)}
           onChange={onPersonChange}
         />
         <FilterMenu
+          id="due"
           label="Due date"
           icon="calendar"
           value={due}
           options={dueOptions}
+          open={openMenu === 'due'}
+          onOpenChange={(open) => setOpenMenu(open ? 'due' : null)}
           onChange={(value) => onDueChange(value as FollowUpDueFilter)}
         />
         <FilterMenu
+          id="category"
           label="Category"
           icon="tag"
           value={category}
           options={categoryOptions}
+          open={openMenu === 'category'}
+          onOpenChange={(open) => setOpenMenu(open ? 'category' : null)}
           onChange={onCategoryChange}
         />
         {hasFilters && (
-          <button type="button" className="followup-filter-clear" onClick={onClear}>
+          <button
+            type="button"
+            className="followup-filter-clear"
+            onClick={() => {
+              setOpenMenu(null)
+              onClear()
+            }}
+          >
             Clear
           </button>
         )}
