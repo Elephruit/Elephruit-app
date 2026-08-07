@@ -240,12 +240,6 @@ export function InlineFollowUpComposer({
     }
   }
 
-  function togglePanel(panel: Exclude<OpenPanel, null>) {
-    setOpenPanel((current) => (current === panel ? null : panel))
-    setEscapeArmed(false)
-    setConfirmingDelete(false)
-  }
-
   function setDueDate(localDate: string) {
     set({
       schedule: {
@@ -517,7 +511,8 @@ export function InlineFollowUpComposer({
             aria-expanded={openPanel === 'checklist'}
             data-selected={draft.checklist.some((item) => item.title.trim()) || undefined}
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => togglePanel('checklist')}
+            onFocus={() => openPanelFromTab('checklist')}
+            onClick={() => openPanelFromTab('checklist')}
             onKeyDown={(event) => {
               if (event.key !== 'Tab') return
               event.preventDefault()
@@ -535,7 +530,8 @@ export function InlineFollowUpComposer({
             aria-expanded={openPanel === 'people'}
             data-selected={draft.personIDs.size > 0 || undefined}
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => togglePanel('people')}
+            onFocus={() => openPanelFromTab('people')}
+            onClick={() => openPanelFromTab('people')}
             onKeyDown={(event) => {
               if (event.key !== 'Tab') return
               event.preventDefault()
@@ -553,7 +549,8 @@ export function InlineFollowUpComposer({
             aria-expanded={openPanel === 'date'}
             data-selected={draft.schedule.scheduleMode !== 'none' || undefined}
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => togglePanel('date')}
+            onFocus={() => openPanelFromTab('date')}
+            onClick={() => openPanelFromTab('date')}
             onKeyDown={(event) => {
               if (event.key !== 'Tab') return
               event.preventDefault()
@@ -570,7 +567,8 @@ export function InlineFollowUpComposer({
             aria-expanded={openPanel === 'categories'}
             data-selected={draft.categoryTags.size > 0 || undefined}
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => togglePanel('categories')}
+            onFocus={() => openPanelFromTab('categories')}
+            onClick={() => openPanelFromTab('categories')}
             onKeyDown={(event) => {
               if (event.key !== 'Tab') return
               event.preventDefault()
@@ -633,10 +631,6 @@ export function InlineFollowUpComposer({
 
         {openPanel === 'checklist' && (
           <div className="inline-followup-panel inline-checklist-panel">
-            <div className="inline-panel-heading">
-              <span className="inline-panel-icon"><Icon name="check-circle" size={17} /></span>
-              <span><strong>Checklist</strong></span>
-            </div>
             <input
               className="inline-checklist-add"
               aria-label="Add a checklist item"
@@ -657,10 +651,6 @@ export function InlineFollowUpComposer({
 
         {openPanel === 'people' && (
           <div className="inline-followup-panel inline-people-panel">
-            <div className="inline-panel-heading">
-              <span className="inline-panel-icon"><Icon name="people" size={17} /></span>
-              <span><strong>Tag people</strong></span>
-            </div>
             <ParticipantPicker
               people={people}
               pendingNew={[]}
@@ -682,10 +672,6 @@ export function InlineFollowUpComposer({
 
         {openPanel === 'date' && (
           <div className="inline-followup-panel inline-date-panel">
-            <div className="inline-panel-heading">
-              <span className="inline-panel-icon"><Icon name="calendar" size={17} /></span>
-              <span><strong>{dueDate ? `Due ${formatDueDate(dueDate)}` : 'Choose a due date'}</strong></span>
-            </div>
             <FollowUpDatePicker
               value={dueDate}
               autoFocus
@@ -705,10 +691,6 @@ export function InlineFollowUpComposer({
 
         {openPanel === 'categories' && (
           <div className="inline-followup-panel inline-category-panel">
-            <div className="inline-panel-heading">
-              <span className="inline-panel-icon"><Icon name="tag" size={17} /></span>
-              <span><strong>Categories</strong></span>
-            </div>
             <CategoryTagPicker
               selected={draft.categoryTags}
               suggestions={tagSuggestions}
