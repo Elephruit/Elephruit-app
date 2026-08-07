@@ -8,6 +8,7 @@ import {
   planQuickReschedule,
   planRelativeCapture,
   planRenamePerson,
+  planUpdatePersonContext,
   planUnrelate,
   emptyInteractionDraft,
   makeObservation,
@@ -197,5 +198,28 @@ describe('people planners', () => {
     expect(p.familyName).toBe('Torres')
     const { person: again } = planCreatePerson({ displayName: 'Ana Torres' }, NOW)
     expect(again.colorName).toBe(p.colorName)
+  })
+
+  it('updates role and company through the shared person-context planner', () => {
+    const kelly = person({ displayName: 'Kelly Tsaur' })
+
+    expect(
+      planUpdatePersonContext(kelly, {
+        profileFocus: 'professional',
+        roleTitle: 'Head of Vertical',
+        organizationName: 'ZS',
+      }).plan,
+    ).toEqual([
+      {
+        op: 'update',
+        collection: 'people',
+        id: kelly.id,
+        data: {
+          profileFocus: 'professional',
+          roleTitle: 'Head of Vertical',
+          organizationName: 'ZS',
+        },
+      },
+    ])
   })
 })

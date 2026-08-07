@@ -166,6 +166,68 @@ function ConnectionContextDialog({
   )
 }
 
+function WorkDetailsDialog({
+  person,
+  role,
+  organization,
+  onClose,
+  onSave,
+}: {
+  person: Person
+  role: string
+  organization: string
+  onClose: () => void
+  onSave: (details: { roleTitle: string | null; organizationName: string | null }) => Promise<void>
+}) {
+  const [nextRole, setNextRole] = useState(role)
+  const [nextOrganization, setNextOrganization] = useState(organization)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  return (
+    <Dialog title={`Role and company for ${person.displayName}`} onClose={onClose}>
+      <label className="field-label" htmlFor="person-role-title">Role</label>
+      <input
+        id="person-role-title"
+        className="field"
+        value={nextRole}
+        onChange={(event) => setNextRole(event.target.value)}
+        placeholder="Managing director"
+        autoFocus
+      />
+      <label className="field-label" htmlFor="person-organization-name">Company</label>
+      <input
+        id="person-organization-name"
+        className="field"
+        value={nextOrganization}
+        onChange={(event) => setNextOrganization(event.target.value)}
+        placeholder="BCG"
+      />
+      {error && <p className="field-error" role="alert">{error}</p>}
+      <div className="sheet-actions">
+        <Button variant="quiet" onClick={onClose}>Cancel</Button>
+        <Button
+          variant="primary"
+          loading={saving}
+          onClick={() => {
+            setSaving(true)
+            setError(null)
+            void onSave({
+              roleTitle: nextRole.trim() || null,
+              organizationName: nextOrganization.trim() || null,
+            }).catch((cause) => {
+              setError(cause instanceof Error ? cause.message : 'Could not save work details.')
+              setSaving(false)
+            })
+          }}
+        >
+          Save work details
+        </Button>
+      </div>
+    </Dialog>
+  )
+}
+
 export function PersonPage() {
   const uid = useUID()
   const navigate = useNavigate()
@@ -186,6 +248,7 @@ export function PersonPage() {
   const [addRelationshipSignal, setAddRelationshipSignal] = useState(0)
   const [loggingInteraction, setLoggingInteraction] = useState(false)
   const [editingConnection, setEditingConnection] = useState(false)
+  const [editingWork, setEditingWork] = useState(false)
   const [now] = useState(() => new Date())
 
   const entries = useMemo(() => {
@@ -313,7 +376,14 @@ export function PersonPage() {
               {identityTitle}
               {!person.hasStatedName && <span className="profile-badge">Name unknown</span>}
             </h1>
-            {identitySubtitle && <p>{identitySubtitle}</p>}
+            {person.hasStatedName ? (
+              <p className="profile-connection-line">
+                {roleLine || 'No role or company recorded'}
+                <button type="button" className="profile-context-edit" onClick={() => setEditingWork(true)}>
+                  {roleLine ? 'Edit role and company' : 'Add role and company'}
+                </button>
+              </p>
+            ) : identitySubtitle ? <p>{identitySubtitle}</p> : null}
             <p className="profile-connection-line">
               {originParts.join(' · ')}
               <button type="button" className="profile-context-edit" onClick={() => setEditingConnection(true)}>
@@ -361,6 +431,17 @@ export function PersonPage() {
                   }}
                 >
                   {person.hasStatedName ? 'Edit name' : 'Add their name'}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="memory-menu-item"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setEditingWork(true)
+                  }}
+                >
+                  Edit role and company
                 </button>
                 <button
                   type="button"
@@ -579,6 +660,24 @@ export function PersonPage() {
           onSave={async (origin) => {
             await applyPlan(uid, planUpdatePersonContext(person, { connectionOrigin: origin }).plan)
             setEditingConnection(false)
+          }}
+        />
+      )}
+      {editingWork && (
+        <WorkDetailsDialog
+          person={person}
+          role={summary?.role ?? ''}
+          organization={summary?.organization ?? ''}
+          onClose={() => setEditingWork(false)}
+          onSave={async (details) => {
+            await applyPlan(
+              uid,
+              planUpdatePersonContext(person, {
+                ...details,
+                ...(details.roleTitle || details.organizationName ? { profileFocus: 'professional' as const } : {}),
+              }).plan,
+            )
+            setEditingWork(false)
           }}
         />
       )}

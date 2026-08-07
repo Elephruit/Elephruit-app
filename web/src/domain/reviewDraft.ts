@@ -17,6 +17,7 @@ import {
   planCorrection,
   planObservation,
   planRelationshipPair,
+  planUpdatePersonContext,
   planUnrelate,
   planRelativeCapture,
 } from './capture'
@@ -599,11 +600,8 @@ export function planFromReviewDraft(
       case 'personContext': {
         const person = ensureCreated(item.subjectSlotID)
         const introducedBy = item.introducedBySlotID ? ensureCreated(item.introducedBySlotID) : null
-        plan.push({
-          op: 'update',
-          collection: 'people',
-          id: person.id,
-          data: {
+        plan.push(
+          ...planUpdatePersonContext(person, {
             profileFocus: item.profileFocus,
             roleTitle: item.roleTitle.trim() || null,
             organizationName: item.organizationName.trim() || null,
@@ -613,8 +611,8 @@ export function planFromReviewDraft(
               context: item.context.trim() || null,
               introducedByPersonID: introducedBy?.id ?? null,
             },
-          },
-        })
+          }).plan,
+        )
         break
       }
       case 'relationship': {
