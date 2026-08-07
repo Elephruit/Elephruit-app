@@ -16,3 +16,13 @@ export function toLocalDateValue(date: Date): string {
 export function fromLocalInputValue(value: string): Date {
   return new Date(value)
 }
+
+/// `<input type="date">` speaks 'YYYY-MM-DD', and `new Date(that)` parses it as
+/// UTC midnight — which lands on the previous day for anybody west of
+/// Greenwich. Built from parts so a date the user picked is the date they get.
+export function fromLocalDateValue(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return null
+  const [, year, month, day] = match
+  return new Date(Number(year), Number(month) - 1, Number(day))
+}

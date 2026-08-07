@@ -60,8 +60,20 @@ export const auth = getAuth(app)
 export const db = getFirestore(app)
 export const functions = getFunctions(app, 'us-central1')
 
+/// Emulator ports are configurable so two worktrees can run their own suites at
+/// once. They share one machine, one set of default ports, and — because the
+/// emulators are started with `--export-on-exit` — one persisted data directory
+/// per checkout: a second instance does not fail loudly, it quietly attaches to
+/// the first and writes into somebody else's demo library. The defaults are
+/// firebase.json's, so a single-worktree run needs no .env at all.
+function emulatorPort(value: string | undefined, fallback: number): number {
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
+}
+
 if (usingEmulators) {
-  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })
-  connectFirestoreEmulator(db, '127.0.0.1', 8080)
-  connectFunctionsEmulator(functions, '127.0.0.1', 5001)
+  const authPort = emulatorPort(env.VITE_EMULATOR_AUTH_PORT, 9099)
+  connectAuthEmulator(auth, `http://127.0.0.1:${authPort}`, { disableWarnings: true })
+  connectFirestoreEmulator(db, '127.0.0.1', emulatorPort(env.VITE_EMULATOR_FIRESTORE_PORT, 8080))
+  connectFunctionsEmulator(functions, '127.0.0.1', emulatorPort(env.VITE_EMULATOR_FUNCTIONS_PORT, 5001))
 }

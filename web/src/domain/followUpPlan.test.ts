@@ -9,7 +9,7 @@ const ZONE = 'America/Chicago'
 describe('planPersistFollowUp', () => {
   it('creates the reminder and its manual memory in one plan', () => {
     const person = { ...makePerson({ displayName: 'Kelly Tsaur' }, NOW), id: 'kelly' }
-    const draft = emptyFollowUpDraft(ZONE)
+    const draft = emptyFollowUpDraft(ZONE, 'folder-project')
     draft.title = 'Send the notes'
     draft.personIDs.add(person.id)
     draft.categoryTags.add('work')
@@ -28,6 +28,7 @@ describe('planPersistFollowUp', () => {
         checklist: [{ id: 'step-1', title: 'Attach the deck', isCompleted: false }],
         personIDs: ['kelly'],
         categoryTags: ['work'],
+        folderID: 'folder-project',
       },
     })
     expect(plan[1]).toMatchObject({

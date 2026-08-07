@@ -26,6 +26,9 @@ export interface Reminder {
   /// Small, independently completable steps. Optional keeps reminders written
   /// before checklists were introduced readable without a migration.
   checklist?: ChecklistItem[]
+  /// The folder it is filed in, when it is filed in one. This remains
+  /// independent of the people the follow-up is owed to or about.
+  folderID?: string | null
   /// The interaction it fell out of, when it fell out of one.
   sourceInteractionID: string | null
   /// The imported document it fell out of, for dossier-derived follow-ups.

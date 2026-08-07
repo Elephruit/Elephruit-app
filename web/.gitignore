@@ -28,3 +28,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# A local emulator port map, for running a second suite beside another worktree.
+firebase.local.json

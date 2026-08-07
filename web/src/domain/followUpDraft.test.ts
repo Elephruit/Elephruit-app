@@ -87,6 +87,14 @@ describe('draftFromReminder', () => {
     expect(reminderFieldsFromDraft(draft, { timeZone: USER_ZONE }).categoryTags).toEqual(['work', 'waiting'])
   })
 
+  it('round-trips a folder and defaults legacy reminders to unfiled', () => {
+    expect(draftFromReminder(reminder({}), USER_ZONE).folderID).toBeNull()
+
+    const draft = draftFromReminder(reminder({ folderID: 'folder-trip' }), USER_ZONE)
+    expect(draft.folderID).toBe('folder-trip')
+    expect(reminderFieldsFromDraft(draft, { timeZone: USER_ZONE }).folderID).toBe('folder-trip')
+  })
+
   it('round-trips checklist items and drops empty draft rows', () => {
     expect(draftFromReminder(reminder({}), USER_ZONE).checklist).toEqual([])
 

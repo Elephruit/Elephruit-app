@@ -21,16 +21,19 @@ export interface FollowUpDraft {
   checklist: ChecklistItem[]
   personIDs: Set<string>
   categoryTags: Set<string>
+  /// The folder this is filed in, independently of the people it concerns.
+  folderID: string | null
   schedule: ScheduleDraftFields
 }
 
-export function emptyFollowUpDraft(userZone: string): FollowUpDraft {
+export function emptyFollowUpDraft(userZone: string, folderID: string | null = null): FollowUpDraft {
   return {
     title: '',
     notes: '',
     checklist: [],
     personIDs: new Set(),
     categoryTags: new Set(),
+    folderID,
     schedule: { scheduleMode: 'none', localDate: '', localTime: '', timeZone: userZone },
   }
 }
@@ -75,6 +78,7 @@ export function draftFromReminder(reminder: Reminder, userZone: string): FollowU
     checklist: (reminder.checklist ?? []).map((item) => ({ ...item })),
     personIDs: new Set(reminder.personIDs),
     categoryTags: new Set(uniqueCategoryTags(reminder.categoryTags ?? [])),
+    folderID: reminder.folderID ?? null,
     schedule,
   }
 }
@@ -96,6 +100,7 @@ export interface ReminderFields {
   checklist: ChecklistItem[]
   personIDs: string[]
   categoryTags: string[]
+  folderID: string | null
   startAt: Date | null
   dueAt: Date | null
   isSomeday: boolean
@@ -115,6 +120,7 @@ export function reminderFieldsFromDraft(draft: FollowUpDraft, context: TemporalC
       .filter((item) => item.title.length > 0),
     personIDs: [...draft.personIDs],
     categoryTags: uniqueCategoryTags(draft.categoryTags),
+    folderID: draft.folderID,
     startAt: resolved.startAt,
     dueAt: resolved.dueAt,
     isSomeday: resolved.isSomeday,

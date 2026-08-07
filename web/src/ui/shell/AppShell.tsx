@@ -5,16 +5,12 @@
 
 import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
-import { usePeople } from '../../data/hooks'
-import { useUID } from '../UserContext'
 import { CommandPalette } from '../components/CommandPalette'
 import { ErrorBoundary } from './ErrorBoundary'
 import { MobileTabBar } from './MobileTabBar'
 import { NavRail } from './NavRail'
 
 export function AppShell() {
-  const uid = useUID()
-  const people = usePeople(uid)
   const [paletteOpen, setPaletteOpen] = useState(false)
 
   useEffect(() => {
@@ -40,7 +36,7 @@ export function AppShell() {
         </ErrorBoundary>
       </div>
       <MobileTabBar />
-      {paletteOpen && <CommandPalette people={people ?? []} onClose={() => setPaletteOpen(false)} />}
+      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
     </div>
   )
 }

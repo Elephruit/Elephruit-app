@@ -27,7 +27,7 @@ beforeAll(async () => {
     projectId: 'demo-elephruit-rules',
     firestore: {
       host: '127.0.0.1',
-      port: 8080,
+      port: Number(process.env.FIRESTORE_EMULATOR_PORT ?? 8080),
       rules: readFileSync(resolve(here, '../../firestore.rules'), 'utf8'),
     },
   })

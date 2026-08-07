@@ -13,9 +13,12 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AiCredential } from '../ai/credentials'
+import { archivedFolderIDs, isSuppressedByArchive, type Folder } from '../domain/folder'
 import type { Interaction } from '../domain/interaction'
 import type { Observation } from '../domain/facts'
 import type { MemoryRecord } from '../domain/memory'
+import type { Note } from '../domain/note'
+import { parseDocument, type NoteDocument } from '../domain/noteDocument'
 import type { Person } from '../domain/person'
 import { foldedForMatching } from '../domain/person'
 import type { Relationship } from '../domain/relationships'
@@ -87,6 +90,14 @@ export function useFeed(uid: string, count = 100): Interaction[] | undefined {
   )
 }
 
+/// The interactions search reads. Deliberately a bigger window than the feed's
+/// 100 and still a window: this is the one collection that grows without bound,
+/// and CLIENT_SEARCH_CEILING in domain/search.ts is where the whole approach
+/// stops being right.
+export function useSearchableInteractions(uid: string, count = 500): Interaction[] | undefined {
+  return useFeed(uid, count)
+}
+
 /// The person-timeline query — the one composite index in firestore.indexes.json.
 export function usePersonInteractions(uid: string, personID: string): Interaction[] | undefined {
   return useQuerySnapshot<Interaction>(
@@ -130,11 +141,110 @@ export function useReminders(uid: string): Reminder[] | undefined {
   return useQuerySnapshot<Reminder>(() => query(collectionRef(uid, 'reminders')), [uid])
 }
 
+/// The reminders a *live* surface should draw: everything except the work of a
+/// project or folder that has been archived.
+///
+/// A hook rather than a filter each page applies, because the rule has to hold
+/// everywhere at once. Follow-ups, the Feed's Next up, the open count and the
+/// day brief are four surfaces asking the same question, and the fourth one
+/// added is the one that would have got it wrong. See `isSuppressedByArchive`
+/// for why the reminders' own status is never touched.
+///
+/// Returns `undefined` until *both* subscriptions have settled. They arrive
+/// independently and reminders usually win, so answering early means an
+/// archived trip's work flashes into Overdue for a frame.
+export function useLiveReminders(uid: string): Reminder[] | undefined {
+  const reminders = useReminders(uid)
+  const folders = useFolders(uid)
+
+  return useMemo(() => {
+    if (!reminders || !folders) return undefined
+    const archived = archivedFolderIDs(folders)
+    if (archived.size === 0) return reminders
+    return reminders.filter((reminder) => !isSuppressedByArchive(reminder, archived))
+  }, [reminders, folders])
+}
+
+/// The whole tree. Folders are few — a handful of them across a life — so this
+/// is the one collection where the spike-scale posture is not a compromise but
+/// the right answer.
+export function useFolders(uid: string): Folder[] | undefined {
+  return useQuerySnapshot<Folder>(() => query(collectionRef(uid, 'folders')), [uid])
+}
+
+export function useFolder(uid: string, folderID: string): Folder | null | undefined {
+  const [folder, setFolder] = useState<Folder | null | undefined>(undefined)
+
+  useEffect(() => {
+    setFolder(undefined)
+    return onSnapshot(docRef(uid, 'folders', folderID), (snapshot) => {
+      if (!snapshot.exists()) {
+        setFolder(null)
+        return
+      }
+      const data = deserialize(snapshot.data()) as Folder
+      data.id = snapshot.id
+      setFolder(data)
+    })
+  }, [uid, folderID])
+
+  return folder
+}
+
+export function useRemindersIn(uid: string, folderID: string): Reminder[] | undefined {
+  return useQuerySnapshot<Reminder>(
+    () => query(collectionRef(uid, 'reminders'), where('folderID', '==', folderID)),
+    [uid, folderID],
+  )
+}
+
 export function useRemindersFor(uid: string, personID: string): Reminder[] | undefined {
   return useQuerySnapshot<Reminder>(
     () => query(collectionRef(uid, 'reminders'), where('personIDs', 'array-contains', personID)),
     [uid, personID],
   )
+}
+
+export function useNotes(uid: string): Note[] | undefined {
+  return useQuerySnapshot<Note>(() => query(collectionRef(uid, 'notes')), [uid])
+}
+
+export function useNote(uid: string, noteID: string): Note | null | undefined {
+  const [note, setNote] = useState<Note | null | undefined>(undefined)
+
+  useEffect(() => {
+    setNote(undefined)
+    return onSnapshot(docRef(uid, 'notes', noteID), (snapshot) => {
+      if (!snapshot.exists()) {
+        setNote(null)
+        return
+      }
+      const data = deserialize(snapshot.data()) as Note
+      data.id = snapshot.id
+      setNote(data)
+    })
+  }, [uid, noteID])
+
+  return note
+}
+
+/// A note's rich content, read only when the note is open.
+///
+/// `null` means the note has metadata but has never been saved — a note created
+/// and not yet typed into. That is a real state, distinct from `undefined`
+/// meaning the read has not finished, and the editor must tell them apart or it
+/// will show an empty page over a note that is merely still loading.
+export function useNoteContent(uid: string, noteID: string): NoteDocument | null | undefined {
+  const [content, setContent] = useState<NoteDocument | null | undefined>(undefined)
+
+  useEffect(() => {
+    setContent(undefined)
+    return onSnapshot(docRef(uid, 'noteContents', noteID), (snapshot) => {
+      setContent(snapshot.exists() ? parseDocument(deserialize(snapshot.data())) : null)
+    })
+  }, [uid, noteID])
+
+  return content
 }
 
 export function useSources(uid: string): SourceDocument[] | undefined {

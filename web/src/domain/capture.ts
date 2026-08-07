@@ -360,6 +360,7 @@ export interface ReminderDraft {
   checklist?: ChecklistItem[]
   personIDs?: string[]
   categoryTags?: string[]
+  folderID?: string | null
   sourceInteractionID?: string | null
   sourceDocumentID?: string | null
   startAt?: Date | null
@@ -380,6 +381,7 @@ export function planCreateReminder(draft: ReminderDraft, now: Date): { plan: Wri
       .filter((item) => item.title.length > 0),
     personIDs: [...new Set(draft.personIDs ?? [])],
     categoryTags: uniqueCategoryTags(draft.categoryTags ?? []),
+    folderID: draft.folderID ?? null,
     sourceInteractionID: draft.sourceInteractionID ?? null,
     sourceDocumentID: draft.sourceDocumentID ?? null,
     startAt: draft.startAt ?? null,
@@ -408,6 +410,7 @@ export function planUpdateReminder(
       | 'isSomeday'
       | 'personIDs'
       | 'categoryTags'
+      | 'folderID'
       | 'scheduleTimeZone'
       | 'duePrecision'
       | 'startPrecision'

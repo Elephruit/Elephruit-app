@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CaptureComposer } from '../capture/CaptureComposer'
 import { useCaptureController } from '../capture/useCaptureController'
 import { auth } from '../../data/firebase'
-import { useFeed, useMemoryFeed, usePeople, useReminders } from '../../data/hooks'
+import { useFeed, useLiveReminders, useMemoryFeed, usePeople } from '../../data/hooks'
 import { feedOverview } from '../../domain/overview'
 import { sections, type Reminder } from '../../domain/reminders'
 import { formatScheduleSummary } from '../../domain/temporal'
@@ -131,7 +131,10 @@ export function FeedPage() {
   const navigate = useNavigate()
   const feed = useMemoryFeed(uid)
   const people = usePeople(uid)
-  const reminders = useReminders(uid)
+  // Next up, the open count and the day brief are all statements about what is
+  // still being asked of you, so none of them may include the work of a trip
+  // that is over. One hook, so a fourth surface cannot disagree.
+  const reminders = useLiveReminders(uid)
   const interactions = useFeed(uid)
   const now = new Date()
   const [briefOpen, setBriefOpen] = useState(false)

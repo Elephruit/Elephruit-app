@@ -19,6 +19,9 @@ Package.resolved
 
 # Web spike (web/) — Node toolchain and Firebase emulator artifacts
 web/node_modules/
+# Any node_modules, wherever a stray `npx` run creates one — the root has no
+# package.json, so one appearing there is always an accident.
+node_modules/
 web/dist/
 web/.env
 web/.env.*
