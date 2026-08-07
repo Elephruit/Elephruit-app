@@ -92,6 +92,7 @@ export function InlineFollowUpComposer({
   existing = null,
   activationRequest = 0,
   hideTrigger = false,
+  defaultFolderID = null,
   onClose,
 }: {
   people: Person[]
@@ -100,13 +101,14 @@ export function InlineFollowUpComposer({
   existing?: Reminder | null
   activationRequest?: number
   hideTrigger?: boolean
+  defaultFolderID?: string | null
   onClose?: () => void
 }) {
   const uid = useUID()
   const existingID = existing?.id ?? null
   const [active, setActive] = useState(Boolean(existing))
   const [draft, setDraft] = useState(() =>
-    existing ? draftFromReminder(existing, USER_ZONE) : emptyFollowUpDraft(USER_ZONE),
+    existing ? draftFromReminder(existing, USER_ZONE) : emptyFollowUpDraft(USER_ZONE, defaultFolderID),
   )
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null)
   const [saving, setSaving] = useState(false)
@@ -146,6 +148,7 @@ export function InlineFollowUpComposer({
   useLayoutEffect(() => {
     if (existing || activationRequest === 0) return
     suppressBlurRef.current = true
+    setDraft(emptyFollowUpDraft(USER_ZONE, defaultFolderID))
     setActive(true)
     setOpenPanel(null)
     window.setTimeout(() => {
@@ -155,7 +158,7 @@ export function InlineFollowUpComposer({
         suppressBlurRef.current = false
       }, 0)
     }, 0)
-  }, [activationRequest, existing])
+  }, [activationRequest, defaultFolderID, existing])
 
   useLayoutEffect(() => {
     const field = notesRef.current
@@ -188,12 +191,12 @@ export function InlineFollowUpComposer({
       onClose?.()
       return
     }
-    setDraft(emptyFollowUpDraft(USER_ZONE))
+    setDraft(emptyFollowUpDraft(USER_ZONE, defaultFolderID))
     setActive(false)
   }
 
   function resetForAnother() {
-    setDraft(emptyFollowUpDraft(USER_ZONE))
+    setDraft(emptyFollowUpDraft(USER_ZONE, defaultFolderID))
     setOpenPanel(null)
     setError(null)
     setGuardActive(false)

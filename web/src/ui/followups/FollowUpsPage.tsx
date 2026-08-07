@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Avatar } from '../components/Avatar'
-import { Button, IconButton } from '../components/Button'
+import { useSearchParams } from 'react-router-dom'
+import { IconButton } from '../components/Button'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { SkeletonRows } from '../components/Skeleton'
 import { PageHeader } from '../shell/PageHeader'
@@ -9,44 +8,23 @@ import { PageScaffold } from '../shell/PageScaffold'
 import { planCompleteReminder, planQuickReschedule, planReopenReminder, planUpdateReminder } from '../../domain/capture'
 import { relativeDescription } from '../../domain/contact'
 import { isSameDay, startOfDay } from '../../domain/dates'
-import { BUCKET_TITLES, bucketFor, completedList, sections, type Reminder } from '../../domain/reminders'
-import { formatScheduleSummary } from '../../domain/temporal'
+import { BUCKET_TITLES, completedList, sections, type Reminder } from '../../domain/reminders'
 import { applyPlan } from '../../data/applyPlan'
 import { categoryKey, uniqueCategoryTags } from '../../domain/categoryTags'
 import { useFolders, useLiveReminders, usePeople } from '../../data/hooks'
-import { descendantIDs, folderTint, isArchived } from '../../domain/folder'
+import { descendantIDs, isArchived } from '../../domain/folder'
 import { useUID } from '../UserContext'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
-import { DEFAULT_FOLLOWUP_CATEGORIES, categoryTintStyle } from './categoryStyle'
+import { DEFAULT_FOLLOWUP_CATEGORIES } from './categoryStyle'
 import { InlineFollowUpComposer } from './InlineFollowUpComposer'
+import { FollowUpRow } from './FollowUpRow'
 import {
   FollowUpFilterBar,
   type FollowUpDueFilter,
   type FollowUpResponsibilityFilter,
   type FollowUpStatusFilter,
 } from './FollowUpFilterBar'
-
-/// The structured schedule chip — never the title's embedded phrase. Someday
-/// rows sit under their heading, so the chip is redundant there.
-function dateChip(reminder: Reminder, now: Date): { text: string; tone: 'overdue' | 'today' | null } | null {
-  if (reminder.isSomeday) return null
-  const summary = formatScheduleSummary(reminder)
-  if (!summary) return null
-  const text = summary.replace(/^(Due|Starts) /, '')
-  const bucket = bucketFor(reminder, now)
-  if (bucket === 'overdue') return { text, tone: 'overdue' }
-  if (bucket === 'today') return { text, tone: 'today' }
-  return { text, tone: null }
-}
-
-/// The quick action follows the schedule mode: a deadline moves, a start-only
-/// item starts, an unscheduled one gets scheduled — the copy says which.
-function quickAction(reminder: Reminder): { label: string; kind: 'deadline' | 'start' } {
-  if (reminder.dueAt) return { label: 'Move to tomorrow', kind: 'deadline' }
-  if (reminder.startAt) return { label: 'Move to tomorrow', kind: 'start' }
-  return { label: 'Schedule tomorrow', kind: 'deadline' }
-}
 
 function matchesDueFilter(reminder: Reminder, filter: FollowUpDueFilter, now: Date): boolean {
   if (filter === 'any') return true
@@ -72,7 +50,6 @@ function statusFilterFromSearch(value: string | null): FollowUpStatusFilter {
 
 export function FollowUpsPage() {
   const uid = useUID()
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const live = useLiveReminders(uid)
   const people = usePeople(uid)
@@ -190,8 +167,7 @@ export function FollowUpsPage() {
   async function rescheduleTomorrow(reminder: Reminder) {
     const tomorrow = new Date(startOfDay(new Date()))
     tomorrow.setDate(tomorrow.getDate() + 1)
-    const action = quickAction(reminder)
-    if (action.kind === 'start') {
+    if (!reminder.dueAt && reminder.startAt) {
       await applyPlan(uid, planQuickReschedule(reminder.id, tomorrow).plan)
       return
     }
@@ -316,7 +292,6 @@ export function FollowUpsPage() {
                 {BUCKET_TITLES[group.bucket]}
               </h2>
               {group.reminders.map((reminder) => {
-                const chip = dateChip(reminder, now)
                 if (editing?.id === reminder.id && people) {
                   return (
                     <InlineFollowUpComposer
@@ -332,90 +307,16 @@ export function FollowUpsPage() {
                   )
                 }
                 return (
-                  <div key={reminder.id} className="task-row">
-                    <button
-                      type="button"
-                      className="complete-ring"
-                      aria-label={`Complete ${reminder.title}`}
-                      onClick={() => void complete(reminder)}
-                    />
-                    <button type="button" className="task-main" onClick={() => setEditing(reminder)}>
-                      <span className="row-title">{reminder.title}</span>
-                      <span className="task-meta">
-                        {(() => {
-                          // What it belongs to, when it belongs to something.
-                          // Without this the trip's work and the day's work are
-                          // indistinguishable here, and the page's whole claim
-                          // is that they are the same list seen differently.
-                          const folder = reminder.folderID ? foldersByID.get(reminder.folderID) : undefined
-                          if (!folder) return null
-                          return (
-                            <span
-                              role="link"
-                              tabIndex={0}
-                              className="task-container"
-                              style={{ '--tint': folderTint(folder.colorName) } as React.CSSProperties}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                navigate(`/folders/${folder.id}`)
-                              }}
-                              onKeyDown={(event) => event.key === 'Enter' && navigate(`/folders/${folder.id}`)}
-                            >
-                              <Icon name="folder" size={13} />
-                              {folder.title}
-                            </span>
-                          )
-                        })()}
-                        {chip && (
-                          <span
-                            className={
-                              chip.tone === 'overdue'
-                                ? 'chip chip-status-overdue'
-                                : chip.tone === 'today'
-                                  ? 'chip chip-status-today'
-                                  : 'chip'
-                            }
-                          >
-                            {chip.text}
-                          </span>
-                        )}
-                        {reminder.responsibility === 'theirs' && reminder.progress && reminder.progress !== 'notStarted' && (
-                          <span className="chip">{reminder.progress === 'blocked' ? 'Blocked' : 'In progress'}</span>
-                        )}
-                        {reminder.personIDs.map((id) => {
-                          const person = peopleByID.get(id)
-                          if (!person) return null
-                          return (
-                            <span
-                              key={id}
-                              role="link"
-                              tabIndex={0}
-                              className="task-person"
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                navigate(`/people/${id}`)
-                              }}
-                              onKeyDown={(event) => event.key === 'Enter' && navigate(`/people/${id}`)}
-                            >
-                              <Avatar name={person.displayName} colorName={person.colorName} small />
-                              {person.displayName}
-                            </span>
-                          )
-                        })}
-                        {uniqueCategoryTags(reminder.categoryTags ?? []).map((tag) => (
-                          <span key={tag} className="task-category" style={categoryTintStyle(tag)}>
-                            <span className="category-option-dot" aria-hidden="true" />
-                            {tag}
-                          </span>
-                        ))}
-                      </span>
-                    </button>
-                    <span className="task-actions">
-                      <Button variant="ghost" small onClick={() => void rescheduleTomorrow(reminder)}>
-                        {quickAction(reminder).label}
-                      </Button>
-                    </span>
-                  </div>
+                  <FollowUpRow
+                    key={reminder.id}
+                    reminder={reminder}
+                    now={now}
+                    peopleByID={peopleByID}
+                    foldersByID={foldersByID}
+                    onComplete={() => void complete(reminder)}
+                    onEdit={() => setEditing(reminder)}
+                    onReschedule={() => void rescheduleTomorrow(reminder)}
+                  />
                 )
               })}
             </section>
