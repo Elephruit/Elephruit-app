@@ -165,6 +165,9 @@ describe('the request', () => {
     expect(prompt).toContain('Tags never substitute for a folder')
     expect(prompt).toContain('Return only one raw JSON object')
     expect(prompt).toContain('Always include these top-level keys')
+    expect(prompt).toContain('Match this JSON shape exactly')
+    expect(prompt).toContain('[in-person|phone|video|message|email|other]')
+    expect(prompt).toContain('petOwner|pet|unknown')
   })
 
   it('grounds temporal resolution in the user absolute date, zone, and offset', () => {

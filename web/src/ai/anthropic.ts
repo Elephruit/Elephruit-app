@@ -465,7 +465,19 @@ Rules, in order of importance:
 - Empty arrays are correct when the update contains nothing of that type.
 - Return only one raw JSON object, without markdown or commentary. Always include these top-level keys: interaction, participantNames, personContexts, facts, relationships, followUps, reminderChanges, factChanges, relationshipChanges.
 - Use arrays for every plural field, including participantNames, facts, relationship facts, personNames, and tags. Use null for an unknown optional scalar.
-- Use only the exact interaction, relationship, confidence, sensitivity, context, connection, progress, responsibility, action, and schedule enum values listed above.`
+- Use only the exact interaction, relationship, confidence, sensitivity, context, connection, progress, responsibility, action, and schedule enum values listed above.
+- Match this JSON shape exactly (the bracketed words show allowed enum values, not literal output):
+{
+  "interaction": { "kind": "[in-person|phone|video|message|email|other]", "summary": "...", "discussion": null, "occurredAt": null } or null,
+  "participantNames": ["..."],
+  "personContexts": [{ "personName": "...", "profileFocus": "[professional|personal]", "roleTitle": null, "organizationName": null, "connectionStatus": "[met|introductionPlanned|unknown]", "firstMetOn": null, "context": null, "introducedByName": null }],
+  "facts": [{ "personName": "...", "attribute": "...", "value": "...", "confidence": "[stated|inferred|uncertain]", "sensitivity": "[normal|sensitive|restricted]", "context": "[professional|personal|identity]", "observedOn": null, "effectiveOn": null }],
+  "relationships": [{ "subjectName": "...", "kind": "[partner|parent|child|sibling|friend|colleague|manager|directReport|introducedBy|introduced|worksWith|householdMember|petOwner|pet|unknown]", "label": null, "otherName": null, "facts": [{ "attribute": "...", "value": "..." }] }],
+  "followUps": [{ "title": "...", "personNames": ["..."], "notes": null, "schedule": { "mode": "[deadline|start|someday|none]", "localDate": null, "localTime": null, "timeZone": null, "sourceText": null, "confidence": "[stated|inferred|uncertain]" }, "responsibility": "[mine|theirs]", "progress": "[notStarted|inProgress|blocked]", "tags": [], "folderPath": null }],
+  "reminderChanges": [{ "reminderID": "...", "action": "[complete|reopen|delete|update]", "progress": null, "notes": null, "responsibility": null }],
+  "factChanges": [{ "observationID": "...", "action": "[confirm|correct]", "value": null, "correctionNote": null, "confidence": null, "sensitivity": null }],
+  "relationshipChanges": [{ "relationshipID": "...", "action": "remove" }]
+}`
 }
 
 /// The request minus the credential — pure, so a test can pin the shape
@@ -496,6 +508,12 @@ export class AICaptureError extends Error {
 /// separate so no unvalidated string reaches the domain planner.
 export function extractJsonPayload(raw: string): string {
   const trimmed = raw.trim()
+  const fenceStart = trimmed.indexOf('```')
+  if (fenceStart >= 0) {
+    const contentStart = trimmed.indexOf('\n', fenceStart)
+    const fenceEnd = trimmed.lastIndexOf('```')
+    if (contentStart >= 0 && fenceEnd > contentStart) return trimmed.slice(contentStart + 1, fenceEnd).trim()
+  }
   const firstBrace = trimmed.indexOf('{')
   const lastBrace = trimmed.lastIndexOf('}')
   return firstBrace >= 0 && lastBrace > firstBrace ? trimmed.slice(firstBrace, lastBrace + 1) : trimmed
