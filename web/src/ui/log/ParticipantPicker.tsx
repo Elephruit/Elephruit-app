@@ -17,6 +17,7 @@ export function ParticipantPicker({
   allowCreate = true,
   placeholder = 'Who was there?',
   ariaLabel = 'Search people',
+  autoFocus = false,
 }: {
   people: Person[]
   pendingNew: Person[]
@@ -26,6 +27,7 @@ export function ParticipantPicker({
   allowCreate?: boolean
   placeholder?: string
   ariaLabel?: string
+  autoFocus?: boolean
 }) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
@@ -109,6 +111,7 @@ export function ParticipantPicker({
           aria-label={ariaLabel}
           value={search}
           placeholder={selected.length === 0 ? placeholder : undefined}
+          autoFocus={autoFocus}
           onChange={(event) => {
             setSearch(event.target.value)
             setOpen(true)

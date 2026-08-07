@@ -9,10 +9,12 @@ export function CategoryTagPicker({
   selected,
   suggestions,
   onChange,
+  autoFocus = false,
 }: {
   selected: Set<string>
   suggestions: string[]
   onChange: (next: Set<string>) => void
+  autoFocus?: boolean
 }) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
@@ -99,6 +101,7 @@ export function CategoryTagPicker({
           aria-activedescendant={open && optionCount > 0 ? `${listID}-option-${clampedActive}` : undefined}
           aria-label="Add a category"
           placeholder={selected.size === 0 ? 'Add a category' : undefined}
+          autoFocus={autoFocus}
           value={search}
           onChange={(event) => {
             setSearch(event.target.value)

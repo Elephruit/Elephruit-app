@@ -32,6 +32,15 @@ function nextMonday(): string {
   return toLocalDateValue(date)
 }
 
+function formatDueDate(localDate: string): string {
+  if (!localDate) return 'Due date'
+  if (localDate === shiftedDate(0)) return 'Today'
+  if (localDate === shiftedDate(1)) return 'Tomorrow'
+  return new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).format(
+    new Date(`${localDate}T12:00:00`),
+  )
+}
+
 function hasDraftContent(draft: FollowUpDraft): boolean {
   return (
     draft.title.trim().length > 0 ||
@@ -217,6 +226,7 @@ export function InlineFollowUpComposer({
             className="inline-detail-button"
             aria-expanded={openPanel === 'people'}
             data-selected={draft.personIDs.size > 0 || undefined}
+            onMouseDown={(event) => event.preventDefault()}
             onClick={() => togglePanel('people')}
           >
             <Icon name="people" size={16} />
@@ -227,16 +237,18 @@ export function InlineFollowUpComposer({
             className="inline-detail-button"
             aria-expanded={openPanel === 'date'}
             data-selected={Boolean(dueDate) || undefined}
+            onMouseDown={(event) => event.preventDefault()}
             onClick={() => togglePanel('date')}
           >
             <Icon name="calendar" size={16} />
-            {dueDate || 'Due date'}
+            {formatDueDate(dueDate)}
           </button>
           <button
             type="button"
             className="inline-detail-button"
             aria-expanded={openPanel === 'categories'}
             data-selected={draft.categoryTags.size > 0 || undefined}
+            onMouseDown={(event) => event.preventDefault()}
             onClick={() => togglePanel('categories')}
           >
             <Icon name="tag" size={16} />
@@ -260,6 +272,7 @@ export function InlineFollowUpComposer({
               allowCreate={false}
               placeholder="Tag people"
               ariaLabel="Tag people"
+              autoFocus
               onToggle={(id) => {
                 const personIDs = new Set(draft.personIDs)
                 if (personIDs.has(id)) personIDs.delete(id)
@@ -304,6 +317,7 @@ export function InlineFollowUpComposer({
             <CategoryTagPicker
               selected={draft.categoryTags}
               suggestions={tagSuggestions}
+              autoFocus
               onChange={(categoryTags) => set({ categoryTags })}
             />
           </div>
