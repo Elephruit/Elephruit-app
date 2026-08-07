@@ -17,7 +17,7 @@
 ///   the indent is meaningless once the tree is cut up, and "Museums" alone
 ///   does not say which trip.
 
-import { useEffect, useMemo, useRef, useState, type Ref } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEventHandler, type Ref } from 'react'
 import { buildTree, flattenTree, folderTint, pathLabel, type Folder } from '../../domain/folder'
 import { foldedForMatching } from '../../domain/person'
 import { Icon } from '../components/Icon'
@@ -34,6 +34,7 @@ export function FolderPicker({
   compact = false,
   className,
   buttonRef,
+  onButtonMouseDown,
   onOpenChange,
   onTabBackward,
   onTabForward,
@@ -47,6 +48,7 @@ export function FolderPicker({
   compact?: boolean
   className?: string
   buttonRef?: Ref<HTMLButtonElement>
+  onButtonMouseDown?: MouseEventHandler<HTMLButtonElement>
   onOpenChange?: (open: boolean) => void
   onTabBackward?: () => void
   onTabForward?: () => void
@@ -109,6 +111,7 @@ export function FolderPicker({
         aria-label={compact ? `${label}: ${selected?.title ?? emptyLabel}` : label}
         title={compact ? `${label}: ${selected?.title ?? emptyLabel}` : undefined}
         disabled={disabled}
+        onMouseDown={onButtonMouseDown}
         onClick={() => {
           setOpen((current) => {
             onOpenChange?.(!current)

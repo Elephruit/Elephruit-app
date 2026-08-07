@@ -1135,6 +1135,13 @@ dialog.palette::backdrop {
   color: var(--color-text);
 }
 
+.inline-folder-picker .folder-picker-glyph {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+}
+
 .inline-detail-button {
   display: inline-flex;
   align-items: center;
