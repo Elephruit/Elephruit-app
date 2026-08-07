@@ -97,6 +97,24 @@ const PATHS: Record<string, React.ReactNode> = {
     </>
   ),
   filter: <path d="M4 6h16M7 12h10M10 18h4" />,
+  sort: (
+    <>
+      <path d="M5 7h11M5 12h8M5 17h5" />
+      <path d="M18 11v8M15 16l3 3 3-3" />
+    </>
+  ),
+  expand: (
+    <>
+      <path d="M13 4h7v7M20 4l-7 7" />
+      <path d="M11 20H4v-7M4 20l7-7" />
+    </>
+  ),
+  collapse: (
+    <>
+      <path d="M20 4l-7 7M13 5v6h6" />
+      <path d="M4 20l7-7M11 19v-6H5" />
+    </>
+  ),
   'arrow-right': <path d="M5 12h14M13 6l6 6-6 6" />,
   folder: <path d="M4 7.5A1.5 1.5 0 0 1 5.5 6h3.2a1.5 1.5 0 0 1 1.2.6l1 1.4h7.6A1.5 1.5 0 0 1 20 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" />,
   project: (

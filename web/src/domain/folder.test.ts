@@ -4,6 +4,7 @@ import {
   buildTree,
   descendantIDs,
   flattenTree,
+  folderTint,
   hasDates,
   isArchived,
   isSuppressedByArchive,
@@ -16,6 +17,7 @@ import {
   planCreateFolder,
   planDeleteFolder,
   planMoveFolder,
+  planReorderFolder,
   planUnarchiveFolder,
   progressOf,
   progressSentence,
@@ -79,6 +81,13 @@ describe('creation', () => {
     expect(makeFolder({ title: 'Travel' }, now).archivedAt).toBeNull()
   })
 
+  it('keeps custom RGB colors as CSS-ready values', () => {
+    const made = makeFolder({ title: 'Studio', colorName: '#4f7bd9' }, now)
+    expect(made.colorName).toBe('#4f7bd9')
+    expect(folderTint(made.colorName)).toBe('#4f7bd9')
+    expect(folderTint('blue')).toBe('var(--palette-blue)')
+  })
+
   it('knows whether it has dates worth showing', () => {
     expect(hasDates(travel)).toBe(false)
     expect(hasDates(chicago)).toBe(true)
@@ -91,6 +100,12 @@ describe('the tree', () => {
   it('reads alphabetically at each level', () => {
     const flat = flattenTree(buildTree(all)).map((node) => node.folder.id)
     expect(flat).toEqual(['recipes', 'travel', 'chicago'])
+  })
+
+  it('uses saved sibling order when it exists', () => {
+    const first = folder({ id: 'z', title: 'Zebra', sortOrder: 0 })
+    const second = folder({ id: 'a', title: 'Apple', sortOrder: 1 })
+    expect(buildTree([second, first]).map((node) => node.folder.id)).toEqual(['z', 'a'])
   })
 
   it('gives each node its depth', () => {
@@ -166,6 +181,33 @@ describe('moving', () => {
     expect(planMoveFolder(all, chicago, null, now).plan).toEqual([
       { op: 'update', collection: 'folders', id: 'chicago', data: { parentID: null, updatedAt: now } },
     ])
+  })
+
+  it('reorders siblings and normalizes their saved positions', () => {
+    const recipes = folder({ id: 'recipes', title: 'Recipes' })
+    const work = folder({ id: 'work', title: 'Work' })
+    const plan = planReorderFolder([recipes, travel, work], work, null, 'recipes', now).plan
+
+    expect(plan).toEqual([
+      { op: 'update', collection: 'folders', id: 'work', data: { sortOrder: 0, parentID: null, updatedAt: now } },
+      { op: 'update', collection: 'folders', id: 'recipes', data: { sortOrder: 1, updatedAt: now } },
+      { op: 'update', collection: 'folders', id: 'travel', data: { sortOrder: 2, updatedAt: now } },
+    ])
+  })
+
+  it('moves into another folder and closes the gap it left', () => {
+    const recipes = folder({ id: 'recipes', title: 'Recipes' })
+    const plan = planReorderFolder([recipes, travel, chicago], recipes, 'travel', null, now).plan
+
+    expect(plan).toContainEqual({
+      op: 'update', collection: 'folders', id: 'travel', data: { sortOrder: 0, updatedAt: now },
+    })
+    expect(plan).toContainEqual({
+      op: 'update',
+      collection: 'folders',
+      id: 'recipes',
+      data: { sortOrder: 1, parentID: 'travel', updatedAt: now },
+    })
   })
 })
 

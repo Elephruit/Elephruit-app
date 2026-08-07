@@ -1,6 +1,6 @@
 /// The inline "What happened?" composer — the first actionable node on the
-/// memory rail. Collapsed it is one 56px rail-connected row; open it expands
-/// in place while the accent node and its branch stay fixed, so composing
+/// memory rail. Collapsed it is one compact, rail-connected panel; open it
+/// expands in place while the accent node and its branch stay fixed, so composing
 /// happens inside the feed rather than on a separate page. FeedPage owns the
 /// URL (?capture=1) and passes open/close requests; this component owns focus,
 /// the textarea, and the embedded review.

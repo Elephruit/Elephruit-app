@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
+import { buildTree, flattenTree, folderTint, pathLabel, type Folder } from '../../domain/folder'
 import type { Person } from '../../domain/person'
 import { Avatar } from '../components/Avatar'
 import { Icon } from '../components/Icon'
@@ -6,6 +7,7 @@ import { categoryTintStyle } from './categoryStyle'
 
 export type FollowUpStatusFilter = 'all' | 'overdue' | 'today' | 'upcoming' | 'unscheduled'
 export type FollowUpDueFilter = 'any' | 'today' | 'tomorrow' | 'next7' | 'none'
+export type FollowUpResponsibilityFilter = 'all' | 'mine' | 'theirs'
 
 interface FilterOption {
   value: string
@@ -15,19 +17,24 @@ interface FilterOption {
 }
 
 function FilterMenu({
+  id,
   label,
   icon,
   value,
   options,
+  open,
+  onOpenChange,
   onChange,
 }: {
+  id: string
   label: string
   icon: string
   value: string
   options: FilterOption[]
+  open: boolean
+  onOpenChange: (open: boolean) => void
   onChange: (value: string) => void
 }) {
-  const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const selected = options.find((option) => option.value === value) ?? options[0]
   const active = value !== options[0].value
@@ -39,13 +46,13 @@ function FilterMenu({
   }
 
   function openAndFocus(index: number) {
-    setOpen(true)
+    onOpenChange(true)
     window.setTimeout(() => focusOption(index), 0)
   }
 
   function choose(nextValue: string) {
     onChange(nextValue)
-    setOpen(false)
+    onOpenChange(false)
     window.setTimeout(() => {
       rootRef.current?.querySelector<HTMLButtonElement>('.followup-filter-menu-trigger')?.focus()
     }, 0)
@@ -55,14 +62,15 @@ function FilterMenu({
     <div
       ref={rootRef}
       className="followup-filter-menu"
+      data-filter-menu={id}
       onBlur={(event) => {
         if (event.relatedTarget instanceof Node && rootRef.current?.contains(event.relatedTarget)) return
-        setOpen(false)
+        onOpenChange(false)
       }}
       onKeyDown={(event) => {
         if (event.key !== 'Escape' || !open) return
         event.stopPropagation()
-        setOpen(false)
+        onOpenChange(false)
         rootRef.current?.querySelector<HTMLButtonElement>('.followup-filter-menu-trigger')?.focus()
       }}
     >
@@ -72,7 +80,7 @@ function FilterMenu({
         data-active={active || undefined}
         aria-label={`${label}: ${selected.label}`}
         aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => onOpenChange(!open)}
         onKeyDown={(event) => {
           if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
           event.preventDefault()
@@ -122,10 +130,15 @@ export function FollowUpFilterBar({
   due,
   category,
   categories,
+  folderID,
+  folders,
+  responsibility,
   onStatusChange,
   onPersonChange,
   onDueChange,
   onCategoryChange,
+  onFolderChange,
+  onResponsibilityChange,
   onClear,
 }: {
   status: FollowUpStatusFilter
@@ -134,13 +147,25 @@ export function FollowUpFilterBar({
   due: FollowUpDueFilter
   category: string
   categories: string[]
+  folderID: string
+  folders: Folder[]
+  responsibility: FollowUpResponsibilityFilter
   onStatusChange: (value: FollowUpStatusFilter) => void
   onPersonChange: (value: string) => void
   onDueChange: (value: FollowUpDueFilter) => void
   onCategoryChange: (value: string) => void
+  onFolderChange: (value: string) => void
+  onResponsibilityChange: (value: FollowUpResponsibilityFilter) => void
   onClear: () => void
 }) {
-  const hasFilters = status !== 'all' || personID !== '' || due !== 'any' || category !== ''
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
+  const hasFilters =
+    status !== 'all' ||
+    personID !== '' ||
+    due !== 'any' ||
+    category !== '' ||
+    folderID !== '' ||
+    responsibility !== 'all'
   const statuses: Array<{ value: FollowUpStatusFilter; label: string }> = [
     { value: 'all', label: 'All' },
     { value: 'overdue', label: 'Overdue' },
@@ -164,13 +189,33 @@ export function FollowUpFilterBar({
     { value: 'none', label: 'No due date', leading: <Icon name="calendar" size={15} /> },
   ]
   const categoryOptions: FilterOption[] = [
-    { value: '', label: 'Any category', leading: <Icon name="tag" size={15} /> },
+    { value: '', label: 'Any tag', leading: <Icon name="tag" size={15} /> },
     ...categories.map((tag) => ({
       value: tag,
       label: tag,
       leading: <span className="category-option-dot" />,
       style: categoryTintStyle(tag),
     })),
+  ]
+  const folderOptions: FilterOption[] = [
+    { value: '', label: 'Any folder', leading: <Icon name="folder" size={15} /> },
+    ...flattenTree(buildTree(folders)).map(({ folder }) => ({
+      value: folder.id,
+      label: pathLabel(folders, folder.id),
+      leading: (
+        <span
+          className="folder-picker-glyph"
+          style={{ '--tint': folderTint(folder.colorName) } as React.CSSProperties}
+        >
+          <Icon name="folder" size={13} />
+        </span>
+      ),
+    })),
+  ]
+  const responsibilityOptions: FilterOption[] = [
+    { value: 'all', label: 'All follow-ups', leading: <Icon name="people" size={15} /> },
+    { value: 'mine', label: 'My next moves', leading: <Icon name="check-circle" size={15} /> },
+    { value: 'theirs', label: 'Waiting on people', leading: <Icon name="people" size={15} /> },
   ]
 
   return (
@@ -182,7 +227,10 @@ export function FollowUpFilterBar({
             type="button"
             aria-pressed={status === option.value}
             data-tone={option.value === 'overdue' ? 'overdue' : undefined}
-            onClick={() => onStatusChange(option.value)}
+            onClick={() => {
+              setOpenMenu(null)
+              onStatusChange(option.value)
+            }}
           >
             <span>{option.label}</span>
           </button>
@@ -191,28 +239,64 @@ export function FollowUpFilterBar({
       <span className="followup-filter-divider" aria-hidden="true" />
       <div className="followup-facet-filters">
         <FilterMenu
+          id="people"
           label="People"
           icon="people"
           value={personID}
           options={peopleOptions}
+          open={openMenu === 'people'}
+          onOpenChange={(open) => setOpenMenu(open ? 'people' : null)}
           onChange={onPersonChange}
         />
         <FilterMenu
+          id="due"
           label="Due date"
           icon="calendar"
           value={due}
           options={dueOptions}
+          open={openMenu === 'due'}
+          onOpenChange={(open) => setOpenMenu(open ? 'due' : null)}
           onChange={(value) => onDueChange(value as FollowUpDueFilter)}
         />
         <FilterMenu
-          label="Category"
+          id="category"
+          label="Tags"
           icon="tag"
           value={category}
           options={categoryOptions}
+          open={openMenu === 'category'}
+          onOpenChange={(open) => setOpenMenu(open ? 'category' : null)}
           onChange={onCategoryChange}
         />
+        <FilterMenu
+          id="folder"
+          label="Folder"
+          icon="folder"
+          value={folderID}
+          options={folderOptions}
+          open={openMenu === 'folder'}
+          onOpenChange={(open) => setOpenMenu(open ? 'folder' : null)}
+          onChange={onFolderChange}
+        />
+        <FilterMenu
+          id="responsibility"
+          label="Responsibility"
+          icon="people"
+          value={responsibility}
+          options={responsibilityOptions}
+          open={openMenu === 'responsibility'}
+          onOpenChange={(open) => setOpenMenu(open ? 'responsibility' : null)}
+          onChange={(value) => onResponsibilityChange(value as FollowUpResponsibilityFilter)}
+        />
         {hasFilters && (
-          <button type="button" className="followup-filter-clear" onClick={onClear}>
+          <button
+            type="button"
+            className="followup-filter-clear"
+            onClick={() => {
+              setOpenMenu(null)
+              onClear()
+            }}
+          >
             Clear
           </button>
         )}

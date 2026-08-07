@@ -45,7 +45,7 @@ import { Icon } from '../components/Icon'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { SkeletonRows } from '../components/Skeleton'
 import { TimelineRow } from '../components/TimelineRow'
-import { fromLocalInputValue, toLocalDateValue } from '../dateInput'
+import { fromLocalMonthValue, toLocalMonthValue } from '../dateInput'
 import { PageScaffold } from '../shell/PageScaffold'
 import { FactsSection } from './FactsSection'
 import { CommitmentBoard } from './CommitmentBoard'
@@ -128,7 +128,7 @@ function ConnectionContextDialog({
 }) {
   const existing = person.connectionOrigin
   const [status, setStatus] = useState<ConnectionOrigin['status']>(existing?.status ?? 'unknown')
-  const [firstMetOn, setFirstMetOn] = useState(() => existing?.firstMetOn ? toLocalDateValue(existing.firstMetOn) : '')
+  const [firstMetOn, setFirstMetOn] = useState(() => existing?.firstMetOn ? toLocalMonthValue(existing.firstMetOn) : '')
   const [context, setContext] = useState(existing?.context ?? '')
   const [introducedByPersonID, setIntroducedByPersonID] = useState(existing?.introducedByPersonID ?? '')
   const [saving, setSaving] = useState(false)
@@ -142,7 +142,7 @@ function ConnectionContextDialog({
         <option value="met">Already met</option>
       </select>
       <label className="field-label" htmlFor="connection-date">{status === 'introductionPlanned' ? 'First meeting' : 'First met'}</label>
-      <input id="connection-date" className="field" type="date" value={firstMetOn} onChange={(event) => setFirstMetOn(event.target.value)} />
+      <input id="connection-date" className="field" type="month" value={firstMetOn} onChange={(event) => setFirstMetOn(event.target.value)} />
       <label className="field-label" htmlFor="connection-introducer">Introduced by</label>
       <select id="connection-introducer" className="field" value={introducedByPersonID} onChange={(event) => setIntroducedByPersonID(event.target.value)}>
         <option value="">Nobody recorded</option>
@@ -156,11 +156,73 @@ function ConnectionContextDialog({
           setSaving(true)
           void onSave({
             status,
-            firstMetOn: firstMetOn ? fromLocalInputValue(`${firstMetOn}T12:00`) : null,
+            firstMetOn: firstMetOn ? fromLocalMonthValue(firstMetOn) : null,
             context: context.trim() || null,
             introducedByPersonID: introducedByPersonID || null,
           }).finally(() => setSaving(false))
         }}>Save context</Button>
+      </div>
+    </Dialog>
+  )
+}
+
+function WorkDetailsDialog({
+  person,
+  role,
+  organization,
+  onClose,
+  onSave,
+}: {
+  person: Person
+  role: string
+  organization: string
+  onClose: () => void
+  onSave: (details: { roleTitle: string | null; organizationName: string | null }) => Promise<void>
+}) {
+  const [nextRole, setNextRole] = useState(role)
+  const [nextOrganization, setNextOrganization] = useState(organization)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  return (
+    <Dialog title={`Role and company for ${person.displayName}`} onClose={onClose}>
+      <label className="field-label" htmlFor="person-role-title">Role</label>
+      <input
+        id="person-role-title"
+        className="field"
+        value={nextRole}
+        onChange={(event) => setNextRole(event.target.value)}
+        placeholder="Managing director"
+        autoFocus
+      />
+      <label className="field-label" htmlFor="person-organization-name">Company</label>
+      <input
+        id="person-organization-name"
+        className="field"
+        value={nextOrganization}
+        onChange={(event) => setNextOrganization(event.target.value)}
+        placeholder="BCG"
+      />
+      {error && <p className="field-error" role="alert">{error}</p>}
+      <div className="sheet-actions">
+        <Button variant="quiet" onClick={onClose}>Cancel</Button>
+        <Button
+          variant="primary"
+          loading={saving}
+          onClick={() => {
+            setSaving(true)
+            setError(null)
+            void onSave({
+              roleTitle: nextRole.trim() || null,
+              organizationName: nextOrganization.trim() || null,
+            }).catch((cause) => {
+              setError(cause instanceof Error ? cause.message : 'Could not save work details.')
+              setSaving(false)
+            })
+          }}
+        >
+          Save work details
+        </Button>
       </div>
     </Dialog>
   )
@@ -186,6 +248,7 @@ export function PersonPage() {
   const [addRelationshipSignal, setAddRelationshipSignal] = useState(0)
   const [loggingInteraction, setLoggingInteraction] = useState(false)
   const [editingConnection, setEditingConnection] = useState(false)
+  const [editingWork, setEditingWork] = useState(false)
   const [now] = useState(() => new Date())
 
   const entries = useMemo(() => {
@@ -294,8 +357,10 @@ export function PersonPage() {
   ].filter(Boolean)
 
   const firstMetLine = summary?.firstMetOn
-    ? `${summary.firstMeetingPlanned ? 'First meeting' : 'First met'} ${summary.firstMetOn.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: summary.firstMetOn.getFullYear() === now.getFullYear() ? undefined : 'numeric' })}${summary.firstMetContext ? ` · ${summary.firstMetContext}` : ''}`
-    : null
+    ? `${summary.firstMeetingPlanned ? 'First meeting' : 'First met'} ${summary.firstMetOn.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}${summary.firstMetContext ? ` · ${summary.firstMetContext}` : ''}`
+    : summary?.firstMetContext
+      ? `How you met · ${summary.firstMetContext}`
+      : null
 
   return (
     <PageScaffold width="wide" className="person-page">
@@ -303,7 +368,8 @@ export function PersonPage() {
         <Icon name="back" size={14} /> Back
       </button>
 
-      <div className="profile-overview">
+      <div className="person-cols">
+        <div className="person-history">
         <header className="profile-header">
           <Avatar name={person.displayName} colorName={person.colorName} size="lg" unnamed={!person.hasStatedName} />
           <div className="profile-id">
@@ -311,7 +377,14 @@ export function PersonPage() {
               {identityTitle}
               {!person.hasStatedName && <span className="profile-badge">Name unknown</span>}
             </h1>
-            {identitySubtitle && <p>{identitySubtitle}</p>}
+            {person.hasStatedName ? (
+              <p className="profile-connection-line">
+                {roleLine || 'No role or company recorded'}
+                <button type="button" className="profile-context-edit" onClick={() => setEditingWork(true)}>
+                  {roleLine ? 'Edit role and company' : 'Add role and company'}
+                </button>
+              </p>
+            ) : identitySubtitle ? <p>{identitySubtitle}</p> : null}
             <p className="profile-connection-line">
               {originParts.join(' · ')}
               <button type="button" className="profile-context-edit" onClick={() => setEditingConnection(true)}>
@@ -366,6 +439,17 @@ export function PersonPage() {
                   className="memory-menu-item"
                   onClick={() => {
                     setMenuOpen(false)
+                    setEditingWork(true)
+                  }}
+                >
+                  Edit role and company
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="memory-menu-item"
+                  onClick={() => {
+                    setMenuOpen(false)
                     setAddFactSignal((n) => n + 1)
                   }}
                 >
@@ -412,36 +496,18 @@ export function PersonPage() {
           </div>
         </header>
 
-        <aside className="profile-next" aria-label="Next time">
-          <h2 className="remember-eyebrow">Next up</h2>
-          {observations && relationships && reminders && interactions && people && (
-            <TalkingPointsPanel
-              person={person}
-              people={people}
-              observations={observations}
-              relationships={relationships}
-              reminders={reminders}
-              interactions={interactions}
-            />
-          )}
-        </aside>
-      </div>
+        {loggingInteraction && <PersonInteractionComposer person={person} onClose={() => setLoggingInteraction(false)} />}
 
-      {loggingInteraction && <PersonInteractionComposer person={person} onClose={() => setLoggingInteraction(false)} />}
-
-      <div className="person-cols">
-        <div className="person-history">
           <div className="person-primary-context">
-            {primaryAttributes.length > 0 && (
-              <FactsSection
-                person={person}
-                observations={observations ?? []}
-                title={focus === 'professional' ? 'Work context' : 'Personal context'}
-                includeAttributes={primaryAttributes}
-                addSignal={addFactSignal}
-                emphasis="primary"
-              />
-            )}
+            <FactsSection
+              person={person}
+              observations={observations ?? []}
+              title={focus === 'professional' ? 'Work context' : 'Personal context'}
+              includeAttributes={primaryAttributes}
+              addSignal={addFactSignal}
+              emphasis="primary"
+              hideWhenEmpty
+            />
 
             {openFollowUps.length > 0 && (
               <CommitmentBoard
@@ -514,6 +580,19 @@ export function PersonPage() {
         </div>
 
         <aside className="person-context remember-rail" aria-label="Person context">
+          <div className="profile-next" aria-label="Next time">
+            <h2 className="remember-eyebrow">Next up</h2>
+            {observations && relationships && reminders && interactions && people && (
+              <TalkingPointsPanel
+                person={person}
+                people={people}
+                observations={observations}
+                relationships={relationships}
+                reminders={reminders}
+                interactions={interactions}
+              />
+            )}
+          </div>
           {observations && secondaryAttributes.length > 0 && (
             <FactsSection
               person={person}
@@ -578,6 +657,24 @@ export function PersonPage() {
           onSave={async (origin) => {
             await applyPlan(uid, planUpdatePersonContext(person, { connectionOrigin: origin }).plan)
             setEditingConnection(false)
+          }}
+        />
+      )}
+      {editingWork && (
+        <WorkDetailsDialog
+          person={person}
+          role={summary?.role ?? ''}
+          organization={summary?.organization ?? ''}
+          onClose={() => setEditingWork(false)}
+          onSave={async (details) => {
+            await applyPlan(
+              uid,
+              planUpdatePersonContext(person, {
+                ...details,
+                ...(details.roleTitle || details.organizationName ? { profileFocus: 'professional' as const } : {}),
+              }).plan,
+            )
+            setEditingWork(false)
           }}
         />
       )}

@@ -1,14 +1,17 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { relativeDescription } from '../../domain/contact'
+import { useMemo, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { followUpSuggestions, relativeDescription } from '../../domain/contact'
 import { startOfDay, wholeDaysBetween } from '../../domain/dates'
 import { foldedForMatching, type Person } from '../../domain/person'
+import { professionalIdentityOf } from '../../domain/personSummary'
+import type { Observation } from '../../domain/facts'
 import { bucketFor, nextOpenReminderByPerson, type Reminder } from '../../domain/reminders'
 import { useAllObservations, useAllRelationships, usePeople, useReminders } from '../../data/hooks'
 import { useUID } from '../UserContext'
 import { Avatar } from '../components/Avatar'
-import { Button } from '../components/Button'
+import { Button, IconButton } from '../components/Button'
 import { EmptyState } from '../components/EmptyState'
+import { Icon } from '../components/Icon'
 import { SkeletonRows } from '../components/Skeleton'
 import { PageHeader } from '../shell/PageHeader'
 import { PageScaffold } from '../shell/PageScaffold'
@@ -16,9 +19,16 @@ import { CreatePersonSheet } from './CreatePersonSheet'
 
 type SortOrder = 'name' | 'recent' | 'quiet'
 
-function subtitle(person: Person): string | null {
-  if (person.roleTitle && person.organizationName) return `${person.roleTitle} · ${person.organizationName}`
-  return person.roleTitle ?? person.organizationName
+const SORT_OPTIONS: Array<{ value: SortOrder; label: string }> = [
+  { value: 'name', label: 'Name' },
+  { value: 'recent', label: 'Recently contacted' },
+  { value: 'quiet', label: 'Longest quiet' },
+]
+
+function subtitle(person: Person, observations: Observation[]): string | null {
+  const identity = professionalIdentityOf(person, observations)
+  if (identity.role && identity.organization) return `${identity.role} · ${identity.organization}`
+  return identity.role ?? identity.organization
 }
 
 const COMPARATORS: Record<SortOrder, (a: Person, b: Person) => number> = {
@@ -59,6 +69,7 @@ function NextFollowUp({ reminder, now }: { reminder: Reminder | undefined; now: 
 export function PeopleListPage() {
   const uid = useUID()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const people = usePeople(uid)
   const reminders = useReminders(uid)
   const observations = useAllObservations(uid)
@@ -80,7 +91,25 @@ export function PeopleListPage() {
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
   const [order, setOrder] = useState<SortOrder>('name')
-  const now = new Date()
+  const [sortOpen, setSortOpen] = useState(false)
+  const sortMenuRef = useRef<HTMLDivElement>(null)
+  const [now] = useState(() => new Date())
+  const quietOnly = searchParams.get('filter') === 'quiet'
+  const quietSuggestions = useMemo(
+    () =>
+      followUpSuggestions(
+        (people ?? [])
+          .filter((person) => !person.isPlaceholder)
+          .map((person) => ({
+            personID: person.id,
+            displayName: person.displayName,
+            lastContactAt: person.lastContactAt,
+          })),
+        now,
+      ),
+    [now, people],
+  )
+  const quietIDs = useMemo(() => new Set(quietSuggestions.map((suggestion) => suggestion.personID)), [quietSuggestions])
 
   // Placeholders stay off the list — they surface on the pages of the people
   // they belong to, and in the to-fill-in queue, same as the Mac app.
@@ -89,18 +118,35 @@ export function PeopleListPage() {
     const folded = foldedForMatching(query)
     const matches = people.filter(
       (person) =>
-        !person.isPlaceholder && (!folded || foldedForMatching(person.displayName).includes(folded)),
+        !person.isPlaceholder &&
+        (!quietOnly || quietIDs.has(person.id)) &&
+        (!folded || foldedForMatching(person.displayName).includes(folded)),
     )
     return [...matches].sort(COMPARATORS[order])
-  }, [people, query, order])
+  }, [people, query, quietIDs, quietOnly, order])
 
   const nextByPerson = useMemo(() => nextOpenReminderByPerson(reminders ?? []), [reminders])
+  const observationsByPerson = useMemo(() => {
+    const byPerson = new Map<string, Observation[]>()
+    for (const observation of observations ?? []) {
+      const rows = byPerson.get(observation.subjectID) ?? []
+      rows.push(observation)
+      byPerson.set(observation.subjectID, rows)
+    }
+    return byPerson
+  }, [observations])
 
   return (
     <PageScaffold width="wide">
       <PageHeader
         title="People"
-        subtitle={people ? `${people.filter((p) => !p.isPlaceholder).length} on record` : undefined}
+        subtitle={
+          people
+            ? quietOnly
+              ? `${quietSuggestions.length} going quiet`
+              : `${people.filter((p) => !p.isPlaceholder).length} on record`
+            : undefined
+        }
         actions={
           <>
             <input
@@ -111,26 +157,67 @@ export function PeopleListPage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
-            <select
-              className="field field-inline field-select"
-              aria-label="Sort order"
-              value={order}
-              onChange={(event) => setOrder(event.target.value as SortOrder)}
+            <div
+              ref={sortMenuRef}
+              className="people-sort-menu"
+              onBlur={(event) => {
+                if (event.relatedTarget instanceof Node && sortMenuRef.current?.contains(event.relatedTarget)) return
+                setSortOpen(false)
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Escape' || !sortOpen) return
+                event.stopPropagation()
+                setSortOpen(false)
+                sortMenuRef.current?.querySelector<HTMLButtonElement>('.people-sort-trigger')?.focus()
+              }}
             >
-              <option value="name">By name</option>
-              <option value="recent">Recently contacted</option>
-              <option value="quiet">Longest quiet</option>
-            </select>
-            <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
-              New person
-            </Button>
+              <IconButton
+                className="people-sort-trigger"
+                label={`Sort people: ${SORT_OPTIONS.find((option) => option.value === order)?.label}`}
+                icon="sort"
+                size={18}
+                aria-expanded={sortOpen}
+                aria-haspopup="menu"
+                onClick={() => setSortOpen((open) => !open)}
+              />
+              {sortOpen && (
+                <div className="people-sort-popover" role="menu" aria-label="Sort people">
+                  <p className="people-sort-title">Sort by</p>
+                  {SORT_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={order === option.value}
+                      onClick={() => {
+                        setOrder(option.value)
+                        setSortOpen(false)
+                        window.setTimeout(() => {
+                          sortMenuRef.current?.querySelector<HTMLButtonElement>('.people-sort-trigger')?.focus()
+                        }, 0)
+                      }}
+                    >
+                      <span>{option.label}</span>
+                      {order === option.value && <Icon name="check" size={14} />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <IconButton
+              className="page-header-add"
+              label="New person"
+              icon="plus"
+              size={19}
+              onClick={() => setCreating(true)}
+            />
           </>
         }
       />
 
       {listed === undefined && <SkeletonRows avatar count={8} />}
 
-      {listed && listed.length === 0 && !query && (
+      {listed && listed.length === 0 && !query && !quietOnly && (
         <EmptyState
           icon="people"
           headline="Nobody recorded yet"
@@ -141,6 +228,10 @@ export function PeopleListPage() {
             </Button>
           }
         />
+      )}
+
+      {listed && listed.length === 0 && quietOnly && !query && (
+        <p className="directory-empty">Nobody is going quiet.</p>
       )}
 
       {listed && listed.length === 0 && query && <p className="directory-empty">Nobody matches “{query}”.</p>}
@@ -158,7 +249,9 @@ export function PeopleListPage() {
               <Avatar name={person.displayName} colorName={person.colorName} unnamed={!person.hasStatedName} />
               <span className="person-main">
                 <span className="row-title">{person.displayName}</span>
-                {subtitle(person) && <span className="row-subtitle">{subtitle(person)}</span>}
+                {subtitle(person, observationsByPerson.get(person.id) ?? []) && (
+                  <span className="row-subtitle">{subtitle(person, observationsByPerson.get(person.id) ?? [])}</span>
+                )}
               </span>
               <span className="person-last">
                 {person.lastContactAt

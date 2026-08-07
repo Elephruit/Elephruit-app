@@ -9,7 +9,12 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { applyPlan } from '../../data/applyPlan'
 import { useFolder, useFolders, useNotes, usePeople, useRemindersIn } from '../../data/hooks'
-import { planCompleteReminder, planReopenReminder } from '../../domain/capture'
+import {
+  planCompleteReminder,
+  planQuickReschedule,
+  planReopenReminder,
+  planUpdateReminder,
+} from '../../domain/capture'
 import {
   descendantIDs,
   isArchived,
@@ -20,19 +25,22 @@ import {
   planUnarchiveFolder,
   progressOf,
   progressSentence,
+  folderTint,
   type Folder,
 } from '../../domain/folder'
 import { relativeDescription } from '../../domain/contact'
+import { startOfDay } from '../../domain/dates'
 import { displayTitle, excerptOf, planCreateNote } from '../../domain/note'
-import { BUCKET_TITLES, bucketFor, completedList, sections, type Reminder } from '../../domain/reminders'
-import { formatScheduleSummary } from '../../domain/temporal'
-import { Avatar } from '../components/Avatar'
+import { BUCKET_TITLES, completedList, sections, type Reminder } from '../../domain/reminders'
+import { uniqueCategoryTags } from '../../domain/categoryTags'
 import { Button } from '../components/Button'
 import { Dialog } from '../components/Dialog'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import { SkeletonRows } from '../components/Skeleton'
-import { FollowUpSheet } from '../followups/FollowUpSheet'
+import { DEFAULT_FOLLOWUP_CATEGORIES } from '../followups/categoryStyle'
+import { FollowUpRow } from '../followups/FollowUpRow'
+import { InlineFollowUpComposer } from '../followups/InlineFollowUpComposer'
 import { PageHeader } from '../shell/PageHeader'
 import { PageScaffold } from '../shell/PageScaffold'
 import { useUID } from '../UserContext'
@@ -62,7 +70,7 @@ export function FolderPage() {
 
   const [editing, setEditing] = useState(false)
   const [archiving, setArchiving] = useState(false)
-  const [creatingReminder, setCreatingReminder] = useState(false)
+  const [createRequest, setCreateRequest] = useState(0)
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null)
   const [now] = useState(() => new Date())
 
@@ -70,6 +78,15 @@ export function FolderPage() {
   const done = useMemo(() => (reminders ? completedList(reminders) : []), [reminders])
   const progress = useMemo(() => progressOf(reminders ?? []), [reminders])
   const peopleByID = useMemo(() => new Map((people ?? []).map((person) => [person.id, person])), [people])
+  const foldersByID = useMemo(() => new Map((folders ?? []).map((entry) => [entry.id, entry])), [folders])
+  const tagSuggestions = useMemo(
+    () =>
+      uniqueCategoryTags([
+        ...(reminders ?? []).flatMap((reminder) => reminder.categoryTags ?? []),
+        ...DEFAULT_FOLLOWUP_CATEGORIES,
+      ]),
+    [reminders],
+  )
 
   const notes = useMemo(
     () =>
@@ -139,6 +156,33 @@ export function FolderPage() {
     navigate(`/folders/${made.id}`)
   }
 
+  function requestCreateReminder() {
+    setEditingReminder(null)
+    setCreateRequest((request) => request + 1)
+  }
+
+  async function complete(reminder: Reminder) {
+    await applyPlan(uid, planCompleteReminder(reminder.id, new Date()).plan)
+  }
+
+  async function rescheduleTomorrow(reminder: Reminder) {
+    const tomorrow = new Date(startOfDay(new Date()))
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    if (!reminder.dueAt && reminder.startAt) {
+      await applyPlan(uid, planQuickReschedule(reminder.id, tomorrow).plan)
+      return
+    }
+    await applyPlan(
+      uid,
+      planUpdateReminder(reminder.id, {
+        dueAt: tomorrow,
+        isSomeday: false,
+        duePrecision: 'date',
+        scheduleTimeZone: null,
+      }).plan,
+    )
+  }
+
   return (
     <PageScaffold width="wide">
       <PageHeader
@@ -146,7 +190,7 @@ export function FolderPage() {
           <span className="container-title-row">
             <span
               className="folder-picker-glyph folder-glyph-large"
-              style={{ '--tint': `var(--palette-${subject.colorName})` } as React.CSSProperties}
+              style={{ '--tint': folderTint(subject.colorName) } as React.CSSProperties}
             >
               <Icon name="folder" size={18} />
             </span>
@@ -186,8 +230,8 @@ export function FolderPage() {
               <Button variant="quiet" icon="note" onClick={() => void addNote()}>
                 New note
               </Button>
-              <Button variant="primary" icon="plus" onClick={() => setCreatingReminder(true)}>
-                New reminder
+              <Button variant="primary" icon="plus" onClick={requestCreateReminder}>
+                New follow-up
               </Button>
             </>
           )
@@ -214,7 +258,7 @@ export function FolderPage() {
                 <button type="button" className="folder-row-main" onClick={() => navigate(`/folders/${child.id}`)}>
                   <span
                     className="folder-picker-glyph"
-                    style={{ '--tint': `var(--palette-${child.colorName})` } as React.CSSProperties}
+                    style={{ '--tint': folderTint(child.colorName) } as React.CSSProperties}
                   >
                     <Icon name="folder" size={15} />
                   </span>
@@ -262,8 +306,8 @@ export function FolderPage() {
           message="Reminders filed here show up in Follow-ups too, and notes filed here archive with the folder — this is the same work, seen from the trip rather than from the day."
           action={
             <>
-              <Button variant="primary" icon="plus" onClick={() => setCreatingReminder(true)}>
-                New reminder
+              <Button variant="primary" icon="plus" onClick={requestCreateReminder}>
+                New follow-up
               </Button>
               <Button variant="secondary" icon="note" onClick={() => void addNote()}>
                 New note
@@ -290,6 +334,18 @@ export function FolderPage() {
         </section>
       )}
 
+      {!archived && groups && people && (
+        <InlineFollowUpComposer
+          key={`folder-create-${subject.id}`}
+          people={people}
+          folders={folders ?? []}
+          tagSuggestions={tagSuggestions}
+          activationRequest={createRequest}
+          defaultFolderID={subject.id}
+          hideTrigger
+        />
+      )}
+
       {!archived &&
         groups?.map((group) => (
           <section key={group.bucket}>
@@ -297,45 +353,31 @@ export function FolderPage() {
               {BUCKET_TITLES[group.bucket]}
             </h2>
             {group.reminders.map((reminder) => {
-              const schedule = reminder.isSomeday ? null : formatScheduleSummary(reminder)
-              const bucket = bucketFor(reminder, now)
-              return (
-                <div key={reminder.id} className="task-row">
-                  <button
-                    type="button"
-                    className="complete-ring"
-                    aria-label={`Complete ${reminder.title}`}
-                    onClick={() => void applyPlan(uid, planCompleteReminder(reminder.id, new Date()).plan)}
+              if (editingReminder?.id === reminder.id && people) {
+                return (
+                  <InlineFollowUpComposer
+                    key={reminder.id}
+                    existing={reminder}
+                    people={people}
+                    folders={folders ?? []}
+                    tagSuggestions={tagSuggestions}
+                    onClose={() =>
+                      setEditingReminder((current) => (current?.id === reminder.id ? null : current))
+                    }
                   />
-                  <button type="button" className="task-main" onClick={() => setEditingReminder(reminder)}>
-                    <span className="row-title">{reminder.title}</span>
-                    <span className="task-meta">
-                      {schedule && (
-                        <span
-                          className={
-                            bucket === 'overdue'
-                              ? 'chip chip-status-overdue'
-                              : bucket === 'today'
-                                ? 'chip chip-status-today'
-                                : 'chip'
-                          }
-                        >
-                          {schedule}
-                        </span>
-                      )}
-                      {reminder.personIDs.map((id) => {
-                        const person = peopleByID.get(id)
-                        if (!person) return null
-                        return (
-                          <span key={id} className="task-person">
-                            <Avatar name={person.displayName} colorName={person.colorName} small />
-                            {person.displayName}
-                          </span>
-                        )
-                      })}
-                    </span>
-                  </button>
-                </div>
+                )
+              }
+              return (
+                <FollowUpRow
+                  key={reminder.id}
+                  reminder={reminder}
+                  now={now}
+                  peopleByID={peopleByID}
+                  foldersByID={foldersByID}
+                  onComplete={() => void complete(reminder)}
+                  onEdit={() => setEditingReminder(reminder)}
+                  onReschedule={() => void rescheduleTomorrow(reminder)}
+                />
               )
             })}
           </section>
@@ -388,18 +430,6 @@ export function FolderPage() {
         <FolderSheet existing={subject} folders={folders} onClose={() => setEditing(false)} />
       )}
 
-      {(creatingReminder || editingReminder) && people && (
-        <FollowUpSheet
-          existing={editingReminder}
-          people={people}
-          folders={folders ?? []}
-          defaultFolderID={subject.id}
-          onClose={() => {
-            setCreatingReminder(false)
-            setEditingReminder(null)
-          }}
-        />
-      )}
     </PageScaffold>
   )
 }

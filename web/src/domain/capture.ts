@@ -49,7 +49,12 @@ export function makePerson(draft: PersonDraft, now: Date): Person {
 
 export function planUpdatePersonContext(
   person: Person,
-  changes: { profileFocus?: ProfileFocus; connectionOrigin?: ConnectionOrigin | null },
+  changes: {
+    profileFocus?: ProfileFocus
+    connectionOrigin?: ConnectionOrigin | null
+    roleTitle?: string | null
+    organizationName?: string | null
+  },
 ): { plan: WritePlan } {
   return { plan: [{ op: 'update', collection: 'people', id: person.id, data: changes }] }
 }

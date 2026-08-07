@@ -205,6 +205,7 @@ export function FactsSection({
   title = 'Profile details',
   includeAttributes,
   emphasis = 'secondary',
+  hideWhenEmpty = false,
 }: {
   person: Person
   observations: Observation[]
@@ -213,6 +214,8 @@ export function FactsSection({
   title?: string
   includeAttributes?: FactAttribute[]
   emphasis?: 'primary' | 'secondary'
+  /// Keep the dialog host mounted without adding an empty section to the page.
+  hideWhenEmpty?: boolean
 }) {
   const uid = useUID()
   const now = new Date()
@@ -248,6 +251,8 @@ export function FactsSection({
       committing.current.delete(observation.id)
     }
   }
+
+  if (hideWhenEmpty && attributes.length === 0 && !adding) return null
 
   return (
     <section className="rail-section remember-facts context-facts" data-emphasis={emphasis}>

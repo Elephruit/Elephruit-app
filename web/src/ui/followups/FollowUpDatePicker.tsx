@@ -38,15 +38,21 @@ function calendarDays(month: Date): Date[] {
 
 export function FollowUpDatePicker({
   value,
+  timeValue,
   onSelect,
+  onTimeChange,
   onClear,
+  onDone,
   onExitBackward,
   onExitForward,
   autoFocus = false,
 }: {
   value: string
+  timeValue: string
   onSelect: (localDate: string) => void
+  onTimeChange: (localTime: string) => void
   onClear: () => void
+  onDone: () => void
   onExitBackward?: () => void
   onExitForward?: () => void
   autoFocus?: boolean
@@ -166,14 +172,8 @@ export function FollowUpDatePicker({
       choose(suggestions[index].localDate)
     } else if (event.key === 'Tab') {
       event.preventDefault()
-      if (event.shiftKey) {
-        if (index === 0) inputRef.current?.focus()
-        else focusSuggestion(index - 1)
-      } else if (index < suggestions.length - 1) {
-        focusSuggestion(index + 1)
-      } else {
-        onExitForward?.()
-      }
+      if (event.shiftKey) onExitBackward?.()
+      else onExitForward?.()
     }
   }
 
@@ -181,7 +181,7 @@ export function FollowUpDatePicker({
     let next: Date | null = null
     if (event.key === 'Tab') {
       event.preventDefault()
-      if (event.shiftKey) inputRef.current?.focus()
+      if (event.shiftKey) onExitBackward?.()
       else onExitForward?.()
       return
     }
@@ -308,9 +308,49 @@ export function FollowUpDatePicker({
       )}
 
       {value && (
-        <button type="button" className="followup-date-clear" onClick={onClear}>
-          Clear due date
-        </button>
+        <div className="followup-date-footer">
+          <label className="followup-time-field">
+            <span>Time</span>
+            <input
+              type="time"
+              value={timeValue}
+              aria-label="Due time"
+              onChange={(event) => onTimeChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Tab') return
+                event.preventDefault()
+                if (event.shiftKey) onExitBackward?.()
+                else onExitForward?.()
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            className="button button-quiet button-small"
+            onClick={onClear}
+            onKeyDown={(event) => {
+              if (event.key !== 'Tab') return
+              event.preventDefault()
+              if (event.shiftKey) onExitBackward?.()
+              else onExitForward?.()
+            }}
+          >
+            Clear date
+          </button>
+          <button
+            type="button"
+            className="button button-secondary button-small"
+            onClick={onDone}
+            onKeyDown={(event) => {
+              if (event.key !== 'Tab') return
+              event.preventDefault()
+              if (event.shiftKey) onExitBackward?.()
+              else onExitForward?.()
+            }}
+          >
+            Done
+          </button>
+        </div>
       )}
     </div>
   )

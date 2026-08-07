@@ -17,12 +17,21 @@ import { newID } from './ids'
 import type { PaletteColor } from './person'
 import type { WritePlan } from './writePlan'
 
+export type FolderColor = PaletteColor | `#${string}`
+
+export function folderTint(color: FolderColor): string {
+  return color.startsWith('#') ? color : `var(--palette-${color})`
+}
+
 export interface Folder {
   id: string
   title: string
   summary: string | null
-  colorName: PaletteColor
+  colorName: FolderColor
   parentID: string | null
+  /// User-defined order among siblings. Older folders omit this and keep their
+  /// alphabetical order until the first drag normalizes that branch.
+  sortOrder?: number
   /// Optional, and descriptive rather than enforcing — a trip that runs late is
   /// still the trip, and nothing here turns red on its own.
   startAt: Date | null
@@ -37,8 +46,9 @@ export interface Folder {
 export interface FolderDraft {
   title: string
   summary?: string | null
-  colorName?: PaletteColor
+  colorName?: FolderColor
   parentID?: string | null
+  sortOrder?: number
   startAt?: Date | null
   dueAt?: Date | null
 }
@@ -58,6 +68,7 @@ export function makeFolder(draft: FolderDraft, now: Date): Folder {
     summary: draft.summary?.trim() || null,
     colorName: draft.colorName ?? 'blue',
     parentID: draft.parentID ?? null,
+    ...(draft.sortOrder === undefined ? {} : { sortOrder: draft.sortOrder }),
     startAt: draft.startAt ?? null,
     dueAt: draft.dueAt ?? null,
     archivedAt: null,
@@ -72,7 +83,7 @@ export function planCreateFolder(draft: FolderDraft, now: Date): { plan: WritePl
 }
 
 export type FolderChanges = Partial<
-  Pick<Folder, 'title' | 'summary' | 'colorName' | 'parentID' | 'startAt' | 'dueAt'>
+  Pick<Folder, 'title' | 'summary' | 'colorName' | 'parentID' | 'sortOrder' | 'startAt' | 'dueAt'>
 >
 
 export function planUpdateFolder(id: string, changes: FolderChanges, now: Date): { plan: WritePlan } {
@@ -133,6 +144,64 @@ export function planMoveFolder(
   return planUpdateFolder(subject.id, { parentID: newParentID }, now)
 }
 
+function compareFolderOrder(a: Folder, b: Folder): number {
+  if (a.sortOrder !== undefined && b.sortOrder !== undefined && a.sortOrder !== b.sortOrder) {
+    return a.sortOrder - b.sortOrder
+  }
+  if (a.sortOrder !== undefined && b.sortOrder === undefined) return -1
+  if (a.sortOrder === undefined && b.sortOrder !== undefined) return 1
+  return a.title.localeCompare(b.title)
+}
+
+export function foldersInOrder(folders: Folder[], parentID: string | null): Folder[] {
+  return folders.filter((folder) => folder.parentID === parentID).sort(compareFolderOrder)
+}
+
+/// Reparents and orders one folder in a single write plan. `beforeID` names a
+/// sibling in the destination branch; `null` appends. Both the branch it left
+/// and the branch it joins are normalized so every later read has one stable
+/// order, including folders created before `sortOrder` existed.
+export function planReorderFolder(
+  folders: Folder[],
+  subject: Folder,
+  newParentID: string | null,
+  beforeID: string | null,
+  now: Date,
+): { plan: WritePlan } {
+  const refusal = moveRefusal(folders, subject, newParentID)
+  if (refusal) throw new Error(refusal)
+
+  const destination = foldersInOrder(folders, newParentID).filter((folder) => folder.id !== subject.id)
+  const insertionIndex = beforeID === null ? destination.length : destination.findIndex((folder) => folder.id === beforeID)
+  if (beforeID !== null && insertionIndex < 0) throw new Error('That drop position no longer exists.')
+  destination.splice(insertionIndex, 0, subject)
+
+  const source = subject.parentID === newParentID
+    ? []
+    : foldersInOrder(folders, subject.parentID).filter((folder) => folder.id !== subject.id)
+  const writes = new Map<string, WritePlan[number]>()
+
+  source.forEach((folder, sortOrder) => {
+    writes.set(folder.id, {
+      op: 'update', collection: 'folders', id: folder.id, data: { sortOrder, updatedAt: now },
+    })
+  })
+  destination.forEach((folder, sortOrder) => {
+    writes.set(folder.id, {
+      op: 'update',
+      collection: 'folders',
+      id: folder.id,
+      data: {
+        sortOrder,
+        ...(folder.id === subject.id ? { parentID: newParentID } : {}),
+        updatedAt: now,
+      },
+    })
+  })
+
+  return { plan: [...writes.values()] }
+}
+
 export interface FolderNode {
   folder: Folder
   depth: number
@@ -156,7 +225,7 @@ export function buildTree(folders: Folder[]): FolderNode[] {
 
   const build = (parentID: string | null, depth: number): FolderNode[] =>
     [...(childrenOf.get(parentID) ?? [])]
-      .sort((a, b) => a.title.localeCompare(b.title))
+      .sort(compareFolderOrder)
       .map((folder) => ({ folder, depth, children: build(folder.id, depth + 1) }))
 
   return build(null, 0)

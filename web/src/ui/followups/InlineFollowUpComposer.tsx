@@ -11,6 +11,7 @@ import {
 import { planPersistFollowUp } from '../../domain/followUpPlan'
 import { newID } from '../../domain/ids'
 import type { Person } from '../../domain/person'
+import type { Folder } from '../../domain/folder'
 import type { Reminder } from '../../domain/reminders'
 import { detectDeadlineFromText } from '../../domain/temporal'
 import { useUID } from '../UserContext'
@@ -19,6 +20,7 @@ import { ParticipantPicker } from '../log/ParticipantPicker'
 import { Avatar } from '../components/Avatar'
 import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
+import { FolderPicker } from '../folders/FolderPicker'
 import { CategoryTagPicker } from './CategoryTagPicker'
 import { categoryTintStyle } from './categoryStyle'
 import { FollowUpDatePicker } from './FollowUpDatePicker'
@@ -48,12 +50,26 @@ function formatDueDate(localDate: string): string {
   return calendarLabel(localDate)
 }
 
+function formatDueTime(localTime: string): string {
+  const [hour, minute] = localTime.split(':').map(Number)
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return ''
+  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(
+    new Date(2000, 0, 1, hour, minute),
+  )
+}
+
 function formatScheduleButton(draft: FollowUpDraft): string {
   if (draft.schedule.scheduleMode === 'someday') return 'Someday'
   if (draft.schedule.scheduleMode === 'start' && draft.schedule.localDate) {
-    return formatDueDate(draft.schedule.localDate)
+    const date = formatDueDate(draft.schedule.localDate)
+    const time = formatDueTime(draft.schedule.localTime)
+    return time ? `${date} · ${time}` : date
   }
-  if (draft.schedule.scheduleMode === 'deadline') return formatDueDate(draft.schedule.localDate)
+  if (draft.schedule.scheduleMode === 'deadline') {
+    const date = formatDueDate(draft.schedule.localDate)
+    const time = formatDueTime(draft.schedule.localTime)
+    return time ? `${date} · ${time}` : date
+  }
   return 'Due date'
 }
 
@@ -64,30 +80,35 @@ function hasDraftContent(draft: FollowUpDraft): boolean {
     draft.checklist.some((item) => item.title.trim().length > 0) ||
     draft.personIDs.size > 0 ||
     draft.categoryTags.size > 0 ||
+    draft.folderID !== null ||
     draft.schedule.scheduleMode !== 'none'
   )
 }
 
 export function InlineFollowUpComposer({
   people,
+  folders,
   tagSuggestions,
   existing = null,
   activationRequest = 0,
   hideTrigger = false,
+  defaultFolderID = null,
   onClose,
 }: {
   people: Person[]
+  folders: Folder[]
   tagSuggestions: string[]
   existing?: Reminder | null
   activationRequest?: number
   hideTrigger?: boolean
+  defaultFolderID?: string | null
   onClose?: () => void
 }) {
   const uid = useUID()
   const existingID = existing?.id ?? null
   const [active, setActive] = useState(Boolean(existing))
   const [draft, setDraft] = useState(() =>
-    existing ? draftFromReminder(existing, USER_ZONE) : emptyFollowUpDraft(USER_ZONE),
+    existing ? draftFromReminder(existing, USER_ZONE) : emptyFollowUpDraft(USER_ZONE, defaultFolderID),
   )
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null)
   const [saving, setSaving] = useState(false)
@@ -102,6 +123,7 @@ export function InlineFollowUpComposer({
   const peopleButtonRef = useRef<HTMLButtonElement>(null)
   const dateButtonRef = useRef<HTMLButtonElement>(null)
   const categoryButtonRef = useRef<HTMLButtonElement>(null)
+  const folderButtonRef = useRef<HTMLButtonElement>(null)
   const deleteButtonRef = useRef<HTMLButtonElement>(null)
   const cancelButtonRef = useRef<HTMLButtonElement>(null)
   const saveButtonRef = useRef<HTMLButtonElement>(null)
@@ -126,6 +148,7 @@ export function InlineFollowUpComposer({
   useLayoutEffect(() => {
     if (existing || activationRequest === 0) return
     suppressBlurRef.current = true
+    setDraft(emptyFollowUpDraft(USER_ZONE, defaultFolderID))
     setActive(true)
     setOpenPanel(null)
     window.setTimeout(() => {
@@ -135,7 +158,7 @@ export function InlineFollowUpComposer({
         suppressBlurRef.current = false
       }, 0)
     }, 0)
-  }, [activationRequest, existing])
+  }, [activationRequest, defaultFolderID, existing])
 
   useLayoutEffect(() => {
     const field = notesRef.current
@@ -168,12 +191,12 @@ export function InlineFollowUpComposer({
       onClose?.()
       return
     }
-    setDraft(emptyFollowUpDraft(USER_ZONE))
+    setDraft(emptyFollowUpDraft(USER_ZONE, defaultFolderID))
     setActive(false)
   }
 
   function resetForAnother() {
-    setDraft(emptyFollowUpDraft(USER_ZONE))
+    setDraft(emptyFollowUpDraft(USER_ZONE, defaultFolderID))
     setOpenPanel(null)
     setError(null)
     setGuardActive(false)
@@ -240,12 +263,22 @@ export function InlineFollowUpComposer({
     }
   }
 
-  function setDueDate(localDate: string) {
+  function setDueDate(localDate: string, localTime = draft.schedule.localTime) {
     set({
       schedule: {
         scheduleMode: localDate ? 'deadline' : 'none',
         localDate,
-        localTime: '',
+        localTime: localDate ? localTime : '',
+        timeZone: USER_ZONE,
+      },
+    })
+  }
+
+  function setDueTime(localTime: string) {
+    set({
+      schedule: {
+        ...draft.schedule,
+        localTime,
         timeZone: USER_ZONE,
       },
     })
@@ -573,19 +606,35 @@ export function InlineFollowUpComposer({
               if (event.key !== 'Tab') return
               event.preventDefault()
               if (event.shiftKey) openPanelFromTab('date')
-              else (existing ? deleteButtonRef : cancelButtonRef).current?.focus()
+              else folderButtonRef.current?.focus()
             }}
           >
             <Icon name="tag" size={16} />
-            Categories
+            Tags
           </button>
+          <FolderPicker
+            className="inline-folder-picker"
+            folders={folders}
+            value={draft.folderID}
+            onChange={(folderID) => set({ folderID })}
+            label="Folder"
+            emptyLabel="Unfiled"
+            buttonRef={folderButtonRef}
+            onButtonMouseDown={(event) => event.preventDefault()}
+            openOnFocus
+            onOpenChange={(open) => {
+              if (open) setOpenPanel(null)
+            }}
+            onTabBackward={() => openPanelFromTab('categories')}
+            onTabForward={() => (existing ? deleteButtonRef : cancelButtonRef).current?.focus()}
+          />
           {existing && !confirmingDelete && (
             <button
               ref={deleteButtonRef}
               type="button"
               className="inline-delete-button"
               onClick={() => setConfirmingDelete(true)}
-              onKeyDown={(event) => moveOnTab(event, categoryButtonRef, cancelButtonRef)}
+              onKeyDown={(event) => moveOnTab(event, folderButtonRef, cancelButtonRef)}
             >
               Delete
             </button>
@@ -609,7 +658,7 @@ export function InlineFollowUpComposer({
                 small
                 onClick={close}
                 onKeyDown={(event) =>
-                  moveOnTab(event, existing ? deleteButtonRef : categoryButtonRef, saveButtonRef)
+                  moveOnTab(event, existing ? deleteButtonRef : folderButtonRef, saveButtonRef)
                 }
               >
                 Cancel
@@ -674,15 +723,16 @@ export function InlineFollowUpComposer({
           <div className="inline-followup-panel inline-date-panel">
             <FollowUpDatePicker
               value={dueDate}
+              timeValue={draft.schedule.localTime}
               autoFocus
               onSelect={(localDate) => {
                 setDueDate(localDate)
-                closeDatePanelAndFocus(dateButtonRef)
               }}
+              onTimeChange={setDueTime}
               onClear={() => {
                 setDueDate('')
-                closeDatePanelAndFocus(dateButtonRef)
               }}
+              onDone={() => closeDatePanelAndFocus(dateButtonRef)}
               onExitBackward={() => openPanelFromTab('people')}
               onExitForward={() => openPanelFromTab('categories')}
             />
@@ -699,10 +749,7 @@ export function InlineFollowUpComposer({
               onTabBackward={() => openPanelFromTab('date')}
               onTabForward={() => {
                 setOpenPanel(null)
-                window.setTimeout(
-                  () => (existing ? deleteButtonRef : cancelButtonRef).current?.focus(),
-                  0,
-                )
+                window.setTimeout(() => folderButtonRef.current?.focus(), 0)
               }}
               onChange={(categoryTags) => set({ categoryTags })}
             />
@@ -722,7 +769,7 @@ export function InlineFollowUpComposer({
                   type="button"
                   className="button button-secondary button-small"
                   onClick={() => {
-                    setDueDate(detected.localDate)
+                    setDueDate(detected.localDate, detected.localTime ?? '')
                     setOpenPanel('date')
                   }}
                 >

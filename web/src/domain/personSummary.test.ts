@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { makeObservation, makePerson } from './capture'
 import { FactAttributes } from './facts'
-import { summarizePerson } from './personSummary'
+import { professionalIdentityOf, summarizePerson } from './personSummary'
 import { relationshipPair } from './relationships'
 
 const NOW = new Date('2026-08-06T18:00:00Z')
@@ -16,6 +16,17 @@ describe('summarizePerson', () => {
 
     expect(summary.role).toBe('Head of Vertical')
     expect(summary.organization).toBe('ZS')
+  })
+
+  it('resolves professional identity for list rows from observations', () => {
+    const kelly = { ...makePerson({ displayName: 'Kelly Tsaur' }, NOW), id: 'kelly' }
+    const role = makeObservation({ subjectID: kelly.id, attribute: FactAttributes.role, value: 'Head of Vertical' }, NOW)
+    const employer = makeObservation({ subjectID: kelly.id, attribute: FactAttributes.employer, value: 'ZS' }, NOW)
+
+    expect(professionalIdentityOf(kelly, [role, employer])).toEqual({
+      role: 'Head of Vertical',
+      organization: 'ZS',
+    })
   })
 
   it('surfaces an introducer from the existing reciprocal relationship model', () => {

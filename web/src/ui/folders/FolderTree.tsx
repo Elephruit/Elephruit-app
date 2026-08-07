@@ -9,7 +9,7 @@
 /// keyed by folder id and held by the caller, so it survives navigating away
 /// and back.
 
-import { buildTree, type Folder, type FolderNode } from '../../domain/folder'
+import { buildTree, folderTint, type Folder, type FolderNode } from '../../domain/folder'
 import { Icon } from '../components/Icon'
 
 export interface FolderTreeProps {
@@ -66,7 +66,7 @@ export function FolderTree({
           <button type="button" className="folder-tree-main" onClick={() => onSelect(node.folder.id)}>
             <span
               className="folder-picker-glyph"
-              style={{ '--tint': `var(--palette-${node.folder.colorName})` } as React.CSSProperties}
+              style={{ '--tint': folderTint(node.folder.colorName) } as React.CSSProperties}
             >
               <Icon name="folder" size={13} />
             </span>

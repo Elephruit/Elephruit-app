@@ -17,6 +17,7 @@ import {
   planCorrection,
   planObservation,
   planRelationshipPair,
+  planUpdatePersonContext,
   planUnrelate,
   planRelativeCapture,
 } from './capture'
@@ -38,6 +39,16 @@ import {
   type TemporalContext,
 } from './temporal'
 import type { WritePlan } from './writePlan'
+
+function monthValue(value: string | null | undefined): string {
+  const match = /^(\d{4})-(\d{2})/.exec(value ?? '')
+  return match ? `${match[1]}-${match[2]}` : ''
+}
+
+function dateFromMonthValue(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})$/.exec(value)
+  return match ? new Date(Number(match[1]), Number(match[2]) - 1, 1, 12) : null
+}
 
 // MARK: Person slots
 
@@ -118,6 +129,8 @@ export interface FollowUpDraftItem extends DraftItemBase {
   scheduleConfidence: 'stated' | 'inferred' | 'uncertain'
   responsibility: 'mine' | 'theirs'
   progress: ReminderProgress
+  categoryTags: string[]
+  folderID: string | null
   /// The explicit "Save without date" override for the temporal safeguard.
   /// Transient review state only — never persisted.
   allowUnscheduled: boolean
@@ -214,7 +227,7 @@ export function draftFromResolved(resolved: ResolvedCapture, now: Date): Resolve
           roleTitle: item.roleTitle ?? '',
           organizationName: item.organizationName ?? '',
           connectionStatus: item.connectionStatus,
-          firstMetOn: item.firstMetOn ?? '',
+          firstMetOn: monthValue(item.firstMetOn),
           context: item.context ?? '',
           introducedBySlotID: item.introducedBy ? ensureSlot(item.introducedBy) : null,
         })
@@ -264,6 +277,8 @@ export function draftFromResolved(resolved: ResolvedCapture, now: Date): Resolve
           scheduleConfidence: item.schedule.confidence,
           responsibility: item.responsibility,
           progress: item.progress,
+          categoryTags: item.categoryTags,
+          folderID: item.folderID,
           allowUnscheduled: false,
         })
         break
@@ -599,22 +614,19 @@ export function planFromReviewDraft(
       case 'personContext': {
         const person = ensureCreated(item.subjectSlotID)
         const introducedBy = item.introducedBySlotID ? ensureCreated(item.introducedBySlotID) : null
-        plan.push({
-          op: 'update',
-          collection: 'people',
-          id: person.id,
-          data: {
+        plan.push(
+          ...planUpdatePersonContext(person, {
             profileFocus: item.profileFocus,
             roleTitle: item.roleTitle.trim() || null,
             organizationName: item.organizationName.trim() || null,
             connectionOrigin: {
               status: item.connectionStatus,
-              firstMetOn: item.firstMetOn ? new Date(`${item.firstMetOn}T12:00:00`) : null,
+              firstMetOn: dateFromMonthValue(item.firstMetOn),
               context: item.context.trim() || null,
               introducedByPersonID: introducedBy?.id ?? null,
             },
-          },
-        })
+          }).plan,
+        )
         break
       }
       case 'relationship': {
@@ -682,6 +694,8 @@ export function planFromReviewDraft(
             startPrecision: schedule.startPrecision,
             responsibility: item.responsibility,
             progress: item.progress,
+            categoryTags: item.categoryTags,
+            folderID: item.folderID,
           },
           now,
         )

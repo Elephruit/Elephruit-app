@@ -50,6 +50,27 @@ function kellyDraft(existing: Person[] = []): ResolvedCaptureDraft {
 }
 
 describe('draftFromResolved', () => {
+  it('carries tags and one home folder through review into the reminder write', () => {
+    const proposal: CaptureProposal = {
+      ...KELLY_PROPOSAL,
+      followUps: [{ ...KELLY_PROPOSAL.followUps[0], tags: ['Work', 'Important'], folderPath: 'Outreach' }],
+    }
+    const outreach = {
+      id: 'outreach', title: 'Outreach', summary: null, colorName: 'blue' as const, parentID: null,
+      startAt: null, dueAt: null, archivedAt: null, createdAt: NOW, updatedAt: NOW,
+    }
+    const draft = draftFromResolved(resolveProposal(proposal, [], NOW, { folders: [outreach] }), NOW)
+    const followUp = draft.items.find((item) => item.type === 'followUp')
+    if (followUp?.type !== 'followUp') throw new Error('expected follow-up')
+    expect(followUp.categoryTags).toEqual(['Work', 'Important'])
+    expect(followUp.folderID).toBe('outreach')
+
+    const { plan } = planFromReviewDraft(draft, NOW, CHICAGO)
+    const write = plan.find((item) => item.collection === 'reminders' && item.op === 'set')
+    if (!write || write.op !== 'set') throw new Error('expected reminder write')
+    expect(write.data).toMatchObject({ categoryTags: ['Work', 'Important'], folderID: 'outreach' })
+  })
+
   it('shares one slot per person across every item that references them', () => {
     const draft = kellyDraft()
     expect(draft.slots).toHaveLength(2)

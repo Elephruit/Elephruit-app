@@ -3,7 +3,7 @@
 /// rail; from 1024 it carries labels. Below 720 it is absent — MobileTabBar
 /// takes over.
 
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 
 const DESTINATIONS = [
@@ -14,21 +14,14 @@ const DESTINATIONS = [
   { to: '/followups', label: 'Follow-ups', icon: 'bell', end: false },
 ] as const
 
-export function NavRail({ onSearch }: { onSearch: () => void }) {
-  const navigate = useNavigate()
+export function NavRail({ onSearch, onCapture }: { onSearch: () => void; onCapture: () => void }) {
   const isMac = navigator.platform.toUpperCase().includes('MAC')
 
   return (
     <nav className="nav-rail" aria-label="Primary">
       <div className="rail-brand">
-        <img src="/favicon.svg" alt="" width={26} height={26} />
         <span className="rail-brand-word">Elephruit</span>
       </div>
-
-      <button className="rail-capture" onClick={() => navigate('/?capture=1')} title="Quick capture">
-        <Icon name="plus" size={16} />
-        <span className="rail-label">Quick capture</span>
-      </button>
 
       {DESTINATIONS.map((destination) => (
         <NavLink
@@ -43,11 +36,22 @@ export function NavRail({ onSearch }: { onSearch: () => void }) {
         </NavLink>
       ))}
 
-      <button className="rail-search" onClick={onSearch} title="Search">
-        <Icon name="search" size={15} />
-        <span className="rail-label">Search</span>
-        <kbd className="rail-kbd">{isMac ? '⌘K' : 'Ctrl K'}</kbd>
-      </button>
+      <div className="rail-utilities">
+        <button className="rail-search" onClick={onSearch} title="Search">
+          <Icon name="search" size={15} />
+          <span className="rail-label">Search</span>
+          <kbd className="rail-kbd">{isMac ? '⌘K' : 'Ctrl K'}</kbd>
+        </button>
+        <button
+          className="rail-capture"
+          onClick={onCapture}
+          title="Quick capture"
+          aria-label={`Quick capture (${isMac ? 'Command J' : 'Control J'})`}
+        >
+          <Icon name="plus" size={16} />
+          <kbd className="rail-kbd rail-capture-kbd">{isMac ? '⌘J' : 'Ctrl J'}</kbd>
+        </button>
+      </div>
 
       <div className="rail-foot">
         <NavLink to="/settings" className="rail-item" title="Settings">

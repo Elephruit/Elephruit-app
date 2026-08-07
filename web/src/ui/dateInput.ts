@@ -13,6 +13,10 @@ export function toLocalDateValue(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+export function toLocalMonthValue(date: Date): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}`
+}
+
 export function fromLocalInputValue(value: string): Date {
   return new Date(value)
 }
@@ -25,4 +29,14 @@ export function fromLocalDateValue(value: string): Date | null {
   if (!match) return null
   const [, year, month, day] = match
   return new Date(Number(year), Number(month) - 1, Number(day))
+}
+
+/// `<input type="month">` records the precision the user actually supplied.
+/// The persisted model still uses a Date, so the first day at noon is the
+/// stable representative for that month without risking a UTC day shift.
+export function fromLocalMonthValue(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})$/.exec(value)
+  if (!match) return null
+  const [, year, month] = match
+  return new Date(Number(year), Number(month) - 1, 1, 12)
 }

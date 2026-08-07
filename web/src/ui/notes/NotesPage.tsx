@@ -11,13 +11,14 @@
 /// second, parallel filing system of their own.
 
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { applyPlan } from '../../data/applyPlan'
 import { useFolders, useNotes } from '../../data/hooks'
 import { archivedFolderIDs, descendantIDs, pathLabel } from '../../domain/folder'
+import { folderTint } from '../../domain/folder'
 import { relativeDescription } from '../../domain/contact'
 import { displayTitle, excerptOf, planCreateNote, planUpdateNote, type Note } from '../../domain/note'
-import { Button } from '../components/Button'
+import { Button, IconButton } from '../components/Button'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import { SegmentedControl } from '../components/SegmentedControl'
@@ -26,10 +27,12 @@ import { PageHeader } from '../shell/PageHeader'
 import { PageScaffold } from '../shell/PageScaffold'
 import { useUID } from '../UserContext'
 import { FolderTree } from '../folders/FolderTree'
+import { NotePage } from './NotePage'
 
 export function NotesPage() {
   const uid = useUID()
   const navigate = useNavigate()
+  const { noteID } = useParams()
   const notes = useNotes(uid)
   const folders = useFolders(uid)
 
@@ -37,6 +40,7 @@ export function NotesPage() {
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [now] = useState(() => new Date())
+  const [cleanScreen, setCleanScreen] = useState(false)
 
   const archivedIDs = useMemo(() => archivedFolderIDs(folders ?? []), [folders])
   const foldersByID = useMemo(
@@ -133,20 +137,35 @@ export function NotesPage() {
                 onChange={setScope}
               />
             )}
-            <Button variant="primary" icon="plus" onClick={() => void create()}>
-              New note
-            </Button>
+            {!noteID && scope === 'live' && (visible?.length ?? 0) > 0 && (
+              <IconButton
+                className="page-header-add"
+                label="New note"
+                icon="plus"
+                size={19}
+                onClick={() => void create()}
+              />
+            )}
           </>
         }
       />
 
-      <div className="notes-layout">
-        {folders && folders.length > 0 && (
+      <div
+        className="notes-layout"
+        data-has-sidebar={!cleanScreen && folders && folders.length > 0 || undefined}
+      >
+        {!cleanScreen && folders && folders.length > 0 && (
           <aside className="notes-sidebar">
             <FolderTree
               folders={folders.filter((folder) => (scope === 'archived') === archivedIDs.has(folder.id))}
               selected={selectedFolder}
-              onSelect={setSelectedFolder}
+              onSelect={(folderID) => {
+                if (noteID) {
+                  navigate(folderID ? `/folders/${folderID}` : '/notes')
+                  return
+                }
+                setSelectedFolder(folderID)
+              }}
               counts={counts}
               collapsed={collapsed}
               onToggleCollapsed={toggleCollapsed}
@@ -157,6 +176,20 @@ export function NotesPage() {
         )}
 
         <div className="notes-main">
+          {noteID ? (
+            <>
+              <NotePage
+                embedded
+                focusMode={cleanScreen}
+                onBack={() => {
+                  setCleanScreen(false)
+                  navigate('/notes')
+                }}
+                onToggleFocus={() => setCleanScreen((current) => !current)}
+              />
+            </>
+          ) : (
+            <>
           {visible === undefined && <SkeletonRows count={5} />}
 
           {visible?.length === 0 && (
@@ -205,7 +238,7 @@ export function NotesPage() {
                         {folder && !selectedFolder && (
                           <span
                             className="task-container"
-                            style={{ '--tint': `var(--palette-${folder.colorName})` } as React.CSSProperties}
+                            style={{ '--tint': folderTint(folder.colorName) } as React.CSSProperties}
                           >
                             <Icon name="folder" size={13} />
                             {folder.title}
@@ -228,6 +261,8 @@ export function NotesPage() {
                 )
               })}
             </div>
+          )}
+            </>
           )}
         </div>
       </div>

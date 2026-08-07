@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Avatar } from '../components/Avatar'
-import { Button, IconButton } from '../components/Button'
+import { useSearchParams } from 'react-router-dom'
+import { IconButton } from '../components/Button'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { SkeletonRows } from '../components/Skeleton'
 import { PageHeader } from '../shell/PageHeader'
@@ -9,42 +8,23 @@ import { PageScaffold } from '../shell/PageScaffold'
 import { planCompleteReminder, planQuickReschedule, planReopenReminder, planUpdateReminder } from '../../domain/capture'
 import { relativeDescription } from '../../domain/contact'
 import { isSameDay, startOfDay } from '../../domain/dates'
-import { BUCKET_TITLES, bucketFor, completedList, sections, type Reminder } from '../../domain/reminders'
-import { formatScheduleSummary } from '../../domain/temporal'
+import { BUCKET_TITLES, completedList, sections, type Reminder } from '../../domain/reminders'
 import { applyPlan } from '../../data/applyPlan'
 import { categoryKey, uniqueCategoryTags } from '../../domain/categoryTags'
 import { useFolders, useLiveReminders, usePeople } from '../../data/hooks'
+import { descendantIDs, isArchived } from '../../domain/folder'
 import { useUID } from '../UserContext'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
-import { DEFAULT_FOLLOWUP_CATEGORIES, categoryTintStyle } from './categoryStyle'
+import { DEFAULT_FOLLOWUP_CATEGORIES } from './categoryStyle'
 import { InlineFollowUpComposer } from './InlineFollowUpComposer'
+import { FollowUpRow } from './FollowUpRow'
 import {
   FollowUpFilterBar,
   type FollowUpDueFilter,
+  type FollowUpResponsibilityFilter,
   type FollowUpStatusFilter,
 } from './FollowUpFilterBar'
-
-/// The structured schedule chip — never the title's embedded phrase. Someday
-/// rows sit under their heading, so the chip is redundant there.
-function dateChip(reminder: Reminder, now: Date): { text: string; tone: 'overdue' | 'today' | null } | null {
-  if (reminder.isSomeday) return null
-  const summary = formatScheduleSummary(reminder)
-  if (!summary) return null
-  const text = summary.replace(/^(Due|Starts) /, '')
-  const bucket = bucketFor(reminder, now)
-  if (bucket === 'overdue') return { text, tone: 'overdue' }
-  if (bucket === 'today') return { text, tone: 'today' }
-  return { text, tone: null }
-}
-
-/// The quick action follows the schedule mode: a deadline moves, a start-only
-/// item starts, an unscheduled one gets scheduled — the copy says which.
-function quickAction(reminder: Reminder): { label: string; kind: 'deadline' | 'start' } {
-  if (reminder.dueAt) return { label: 'Move to tomorrow', kind: 'deadline' }
-  if (reminder.startAt) return { label: 'Move to tomorrow', kind: 'start' }
-  return { label: 'Schedule tomorrow', kind: 'deadline' }
-}
 
 function matchesDueFilter(reminder: Reminder, filter: FollowUpDueFilter, now: Date): boolean {
   if (filter === 'any') return true
@@ -60,29 +40,41 @@ function matchesDueFilter(reminder: Reminder, filter: FollowUpDueFilter, now: Da
   return reminder.dueAt.getTime() >= today.getTime() && reminder.dueAt.getTime() < end.getTime()
 }
 
+const FOLLOW_UP_STATUS_FILTERS: FollowUpStatusFilter[] = ['all', 'overdue', 'today', 'upcoming', 'unscheduled']
+
+function statusFilterFromSearch(value: string | null): FollowUpStatusFilter {
+  return FOLLOW_UP_STATUS_FILTERS.includes(value as FollowUpStatusFilter)
+    ? (value as FollowUpStatusFilter)
+    : 'all'
+}
+
 export function FollowUpsPage() {
   const uid = useUID()
-  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const live = useLiveReminders(uid)
   const people = usePeople(uid)
   const folders = useFolders(uid)
   const [view, setView] = useState<'open' | 'completed'>('open')
-  const [ownership, setOwnership] = useState<'mine' | 'theirs'>('mine')
+  const [ownership, setOwnership] = useState<FollowUpResponsibilityFilter>('all')
   const [editing, setEditing] = useState<Reminder | null>(null)
   const [createRequest, setCreateRequest] = useState(0)
-  const [statusFilter, setStatusFilter] = useState<FollowUpStatusFilter>('all')
+  const statusFilter = statusFilterFromSearch(searchParams.get('status'))
   const [personFilter, setPersonFilter] = useState('')
   const [dueFilter, setDueFilter] = useState<FollowUpDueFilter>('any')
   const [categoryFilter, setCategoryFilter] = useState('')
+  const [folderFilter, setFolderFilter] = useState('')
   // One clock per mount — a fresh Date each render silently drifted past the memo.
   const [now] = useState(() => new Date())
 
-  const ownedReminders = useMemo(
-    () => live?.filter((reminder) => (reminder.responsibility ?? 'mine') === ownership),
+  const scopedReminders = useMemo(
+    () =>
+      ownership === 'all'
+        ? live
+        : live?.filter((reminder) => (reminder.responsibility ?? 'mine') === ownership),
     [live, ownership],
   )
-  const groups = useMemo(() => (ownedReminders ? sections(ownedReminders, now) : undefined), [ownedReminders, now])
-  const done = useMemo(() => (ownedReminders ? completedList(ownedReminders) : []), [ownedReminders])
+  const groups = useMemo(() => (scopedReminders ? sections(scopedReminders, now) : undefined), [scopedReminders, now])
+  const done = useMemo(() => (live ? completedList(live) : []), [live])
   const peopleByID = useMemo(() => new Map((people ?? []).map((p) => [p.id, p])), [people])
   const foldersByID = useMemo(() => new Map((folders ?? []).map((folder) => [folder.id, folder])), [folders])
   const tagSuggestions = useMemo(
@@ -103,16 +95,25 @@ export function FollowUpsPage() {
     () => uniqueCategoryTags(openReminders.flatMap((reminder) => reminder.categoryTags ?? [])),
     [openReminders],
   )
+  const filterFolders = useMemo(() => (folders ?? []).filter((folder) => !isArchived(folder)), [folders])
+  const folderScope = useMemo(
+    () =>
+      folderFilter && folders
+        ? new Set([folderFilter, ...descendantIDs(folders, folderFilter)])
+        : null,
+    [folderFilter, folders],
+  )
   const facetedReminders = useMemo(
     () =>
       openReminders.filter(
         (reminder) =>
           (!personFilter || reminder.personIDs.includes(personFilter)) &&
           matchesDueFilter(reminder, dueFilter, now) &&
+          (!folderScope || (!!reminder.folderID && folderScope.has(reminder.folderID))) &&
           (!categoryFilter ||
             (reminder.categoryTags ?? []).some((tag) => categoryKey(tag) === categoryKey(categoryFilter))),
       ),
-    [categoryFilter, dueFilter, now, openReminders, personFilter],
+    [categoryFilter, dueFilter, folderScope, now, openReminders, personFilter],
   )
   const facetedGroups = useMemo(() => sections(facetedReminders, now), [facetedReminders, now])
   const visibleGroups = useMemo(
@@ -127,13 +128,27 @@ export function FollowUpsPage() {
     [facetedGroups, statusFilter],
   )
   const hasFilters =
-    statusFilter !== 'all' || personFilter !== '' || dueFilter !== 'any' || categoryFilter !== ''
+    statusFilter !== 'all' ||
+    personFilter !== '' ||
+    dueFilter !== 'any' ||
+    categoryFilter !== '' ||
+    folderFilter !== '' ||
+    ownership !== 'all'
 
   function clearFilters() {
-    setStatusFilter('all')
+    setSearchParams({}, { replace: true })
     setPersonFilter('')
     setDueFilter('any')
     setCategoryFilter('')
+    setFolderFilter('')
+    setOwnership('all')
+  }
+
+  function changeStatusFilter(next: FollowUpStatusFilter) {
+    const nextParams = new URLSearchParams(searchParams)
+    if (next === 'all') nextParams.delete('status')
+    else nextParams.set('status', next)
+    setSearchParams(nextParams, { replace: true })
   }
 
   function requestCreate() {
@@ -152,8 +167,7 @@ export function FollowUpsPage() {
   async function rescheduleTomorrow(reminder: Reminder) {
     const tomorrow = new Date(startOfDay(new Date()))
     tomorrow.setDate(tomorrow.getDate() + 1)
-    const action = quickAction(reminder)
-    if (action.kind === 'start') {
+    if (!reminder.dueAt && reminder.startAt) {
       await applyPlan(uid, planQuickReschedule(reminder.id, tomorrow).plan)
       return
     }
@@ -190,7 +204,7 @@ export function FollowUpsPage() {
             />
             {view === 'open' && (
               <IconButton
-                className="followup-header-add"
+                className="page-header-add"
                 label="Add a follow-up"
                 icon="plus"
                 size={19}
@@ -203,15 +217,6 @@ export function FollowUpsPage() {
       />
 
       <div className="task-inbox">
-        <SegmentedControl
-          label="Follow-up ownership"
-          options={[
-            { value: 'mine', label: 'My next moves' },
-            { value: 'theirs', label: 'Waiting on people' },
-          ]}
-          value={ownership}
-          onChange={setOwnership}
-        />
         {view === 'open' && groups && (
           <FollowUpFilterBar
             status={statusFilter}
@@ -220,10 +225,15 @@ export function FollowUpsPage() {
             due={dueFilter}
             category={categoryFilter}
             categories={filterCategories}
-            onStatusChange={setStatusFilter}
+            folderID={folderFilter}
+            folders={filterFolders}
+            responsibility={ownership}
+            onStatusChange={changeStatusFilter}
             onPersonChange={setPersonFilter}
             onDueChange={setDueFilter}
             onCategoryChange={setCategoryFilter}
+            onFolderChange={setFolderFilter}
+            onResponsibilityChange={setOwnership}
             onClear={clearFilters}
           />
         )}
@@ -231,6 +241,7 @@ export function FollowUpsPage() {
         {view === 'open' && groups && people && (
           <InlineFollowUpComposer
             people={people}
+            folders={folders ?? []}
             tagSuggestions={tagSuggestions}
             activationRequest={createRequest}
             hideTrigger
@@ -242,9 +253,23 @@ export function FollowUpsPage() {
         {view === 'open' && groups && groups.length === 0 && (
           <EmptyState
             icon="bell"
-            headline={ownership === 'mine' ? 'Nothing on your plate' : 'Not waiting on anyone'}
-            message={ownership === 'mine' ? 'Follow-ups from logged interactions gather here, bucketed by what their dates actually say.' : 'Delegated work and requested updates gather here until they are complete.'}
-            hint={ownership === 'mine' ? 'Try “I need to send her the list.”' : 'Try “I asked Alex to send the forecast by Friday.”'}
+            headline={
+              ownership === 'all'
+                ? 'No follow-ups yet'
+                : ownership === 'mine'
+                  ? 'Nothing on your plate'
+                  : 'Not waiting on anyone'
+            }
+            message={
+              ownership === 'theirs'
+                ? 'Delegated work and requested updates gather here until they are complete.'
+                : 'Follow-ups from logged interactions gather here, bucketed by what their dates actually say.'
+            }
+            hint={
+              ownership === 'theirs'
+                ? 'Try “I asked Alex to send the forecast by Friday.”'
+                : 'Try “I need to send her the list.”'
+            }
           />
         )}
 
@@ -267,13 +292,13 @@ export function FollowUpsPage() {
                 {BUCKET_TITLES[group.bucket]}
               </h2>
               {group.reminders.map((reminder) => {
-                const chip = dateChip(reminder, now)
                 if (editing?.id === reminder.id && people) {
                   return (
                     <InlineFollowUpComposer
                       key={reminder.id}
                       existing={reminder}
                       people={people}
+                      folders={folders ?? []}
                       tagSuggestions={tagSuggestions}
                       onClose={() =>
                         setEditing((current) => (current?.id === reminder.id ? null : current))
@@ -282,90 +307,16 @@ export function FollowUpsPage() {
                   )
                 }
                 return (
-                  <div key={reminder.id} className="task-row">
-                    <button
-                      type="button"
-                      className="complete-ring"
-                      aria-label={`Complete ${reminder.title}`}
-                      onClick={() => void complete(reminder)}
-                    />
-                    <button type="button" className="task-main" onClick={() => setEditing(reminder)}>
-                      <span className="row-title">{reminder.title}</span>
-                      <span className="task-meta">
-                        {(() => {
-                          // What it belongs to, when it belongs to something.
-                          // Without this the trip's work and the day's work are
-                          // indistinguishable here, and the page's whole claim
-                          // is that they are the same list seen differently.
-                          const folder = reminder.folderID ? foldersByID.get(reminder.folderID) : undefined
-                          if (!folder) return null
-                          return (
-                            <span
-                              role="link"
-                              tabIndex={0}
-                              className="task-container"
-                              style={{ '--tint': `var(--palette-${folder.colorName})` } as React.CSSProperties}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                navigate(`/folders/${folder.id}`)
-                              }}
-                              onKeyDown={(event) => event.key === 'Enter' && navigate(`/folders/${folder.id}`)}
-                            >
-                              <Icon name="folder" size={13} />
-                              {folder.title}
-                            </span>
-                          )
-                        })()}
-                        {chip && (
-                          <span
-                            className={
-                              chip.tone === 'overdue'
-                                ? 'chip chip-status-overdue'
-                                : chip.tone === 'today'
-                                  ? 'chip chip-status-today'
-                                  : 'chip'
-                            }
-                          >
-                            {chip.text}
-                          </span>
-                        )}
-                        {ownership === 'theirs' && reminder.progress && reminder.progress !== 'notStarted' && (
-                          <span className="chip">{reminder.progress === 'blocked' ? 'Blocked' : 'In progress'}</span>
-                        )}
-                        {reminder.personIDs.map((id) => {
-                          const person = peopleByID.get(id)
-                          if (!person) return null
-                          return (
-                            <span
-                              key={id}
-                              role="link"
-                              tabIndex={0}
-                              className="task-person"
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                navigate(`/people/${id}`)
-                              }}
-                              onKeyDown={(event) => event.key === 'Enter' && navigate(`/people/${id}`)}
-                            >
-                              <Avatar name={person.displayName} colorName={person.colorName} small />
-                              {person.displayName}
-                            </span>
-                          )
-                        })}
-                        {uniqueCategoryTags(reminder.categoryTags ?? []).map((tag) => (
-                          <span key={tag} className="task-category" style={categoryTintStyle(tag)}>
-                            <span className="category-option-dot" aria-hidden="true" />
-                            {tag}
-                          </span>
-                        ))}
-                      </span>
-                    </button>
-                    <span className="task-actions">
-                      <Button variant="ghost" small onClick={() => void rescheduleTomorrow(reminder)}>
-                        {quickAction(reminder).label}
-                      </Button>
-                    </span>
-                  </div>
+                  <FollowUpRow
+                    key={reminder.id}
+                    reminder={reminder}
+                    now={now}
+                    peopleByID={peopleByID}
+                    foldersByID={foldersByID}
+                    onComplete={() => void complete(reminder)}
+                    onEdit={() => setEditing(reminder)}
+                    onReschedule={() => void rescheduleTomorrow(reminder)}
+                  />
                 )
               })}
             </section>

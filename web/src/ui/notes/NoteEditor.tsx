@@ -49,6 +49,7 @@ import {
   type LexicalEditor,
 } from 'lexical'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { NoteDocument, NotePiece } from '../../domain/noteDocument'
 import { Icon } from '../components/Icon'
 import { applyDocumentToEditor, documentFromEditorState, unsupportedPieces } from './lexicalBridge'
@@ -169,14 +170,15 @@ function FormatMenu() {
     <div className="format-menu" ref={root}>
       <button
         type="button"
-        className="format-menu-button"
+        className="icon-button format-menu-button"
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label="Format note"
+        title="Format note"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => setOpen((current) => !current)}
       >
-        <Icon name="format" size={15} />
-        Format
+        <Icon name="format" size={18} />
       </button>
 
       {open && (
@@ -298,6 +300,7 @@ export interface NoteEditorProps {
   onDocumentChange: (document: NoteDocument) => void
   placeholder?: string
   readOnly?: boolean
+  formatMenuTarget?: HTMLElement | null
 }
 
 export function NoteEditor({
@@ -308,6 +311,7 @@ export function NoteEditor({
   onDocumentChange,
   placeholder = 'Start writing…',
   readOnly = false,
+  formatMenuTarget = null,
 }: NoteEditorProps) {
   // Held in a ref, not in state: the pieces the editor cannot represent must
   // ride through every save, and re-rendering when they change would reload the
@@ -366,11 +370,7 @@ export function NoteEditor({
           />
           {!readOnly && <SelectionToolbar />}
         </div>
-        {!readOnly && (
-          <div className="note-footer">
-            <FormatMenu />
-          </div>
-        )}
+        {!readOnly && formatMenuTarget && createPortal(<FormatMenu />, formatMenuTarget)}
         <HistoryPlugin />
         <ListPlugin />
         <CheckListPlugin />
