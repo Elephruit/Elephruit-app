@@ -7,16 +7,17 @@
 /// Privacy shape, stated plainly: the dictation and the people roster's
 /// names are sent to Anthropic under the user's stored key, via our
 /// backend. The key itself never enters this module — requests carry a
-/// credential id. The reply is re-validated here against the same zod
-/// schema the request asked for; nothing unvalidated reaches a write plan.
+/// credential id. The reply is normalized at the provider boundary and then
+/// validated against a strict zod schema; nothing unvalidated reaches a write
+/// plan.
 
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { z } from 'zod'
 import type { CaptureProposal } from '../domain/assist'
 import { CURATED_ATTRIBUTES, attributeLabel } from '../domain/facts'
-import { INTERACTION_KINDS } from '../domain/interaction'
-import { RELATIONSHIP_KINDS, kindLabel } from '../domain/relationships'
-import { GatewayError, runAiTask, wireOutputFormat, type GatewayRequest } from './gateway'
+import { INTERACTION_KINDS, type InteractionKind } from '../domain/interaction'
+import { RELATIONSHIP_KINDS, kindLabel, type RelationshipKind } from '../domain/relationships'
+import { GatewayError, runAiTask, type GatewayRequest } from './gateway'
+import { reportAiTaxonomyGaps } from './taxonomy'
 
 // Structured outputs want every property present and no extras; optionality is
 // expressed as null. Kept flat — recursive schemas are unsupported there.
@@ -49,6 +50,8 @@ const ScheduleSchema = z.object({
 })
 
 export const CaptureProposalSchema = z.object({
+  normalizationWarnings: z.array(z.string()).optional(),
+  taxonomyGaps: z.array(z.object({ field: z.literal('relationship.kind'), value: z.string() })).optional(),
   interaction: z
     .object({
       kind: z.enum([...INTERACTION_KINDS]),
@@ -115,6 +118,273 @@ export const CaptureProposalSchema = z.object({
     z.object({ relationshipID: z.string(), action: z.literal('remove') }),
   ),
 })
+
+type JsonObject = Record<string, unknown>
+type FactConfidence = 'stated' | 'inferred' | 'uncertain'
+type FactSensitivity = 'normal' | 'sensitive' | 'restricted'
+type FactContext = 'professional' | 'personal' | 'identity'
+
+const EMPTY_SCHEDULE = {
+  mode: 'none' as const,
+  localDate: null,
+  localTime: null,
+  timeZone: null,
+  sourceText: null,
+  confidence: 'stated' as const,
+}
+
+function object(value: unknown): JsonObject | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as JsonObject : null
+}
+
+function token(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase().replace(/[^a-z0-9]/g, '') : ''
+}
+
+function string(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function nullableString(value: unknown): string | null {
+  const result = string(value)
+  return result && token(result) !== 'none' && token(result) !== 'null' ? result : null
+}
+
+function values(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value
+  return value === null || value === undefined ? [] : [value]
+}
+
+function strings(value: unknown, field: string, warnings: string[]): string[] {
+  const raw = values(value)
+  const result = raw.map(string).filter(Boolean)
+  if (typeof value === 'string' && result.length) warnings.push(`AI returned ${field} as text; it was converted to a list for review.`)
+  if (raw.length !== result.length) warnings.push(`Some invalid ${field} values were omitted from the proposal.`)
+  return result
+}
+
+function interactionKind(value: unknown, warnings: string[]): InteractionKind {
+  const normalized = token(value)
+  const aliases: Record<string, InteractionKind> = {
+    inperson: 'in-person', coffee: 'in-person', lunch: 'in-person', dinner: 'in-person', drinks: 'in-person',
+    call: 'phone', phone: 'phone', telephone: 'phone',
+    meeting: 'video', video: 'video', zoom: 'video', meet: 'video',
+    message: 'message', text: 'message', slack: 'message', chat: 'message', im: 'message',
+    email: 'email', other: 'other', connection: 'other', introduction: 'other',
+  }
+  const result = aliases[normalized]
+  if (result) {
+    if (string(value) !== result) warnings.push(`Interaction type “${string(value)}” was normalized to “${result}”.`)
+    return result
+  }
+  warnings.push('An unknown interaction type was kept as “other” for review.')
+  return 'other'
+}
+
+function relationshipKind(value: unknown): { kind: RelationshipKind; label: string | null; unrecognized: boolean } {
+  const raw = string(value)
+  const normalized = token(value)
+  const exact = RELATIONSHIP_KINDS.find((kind) => token(kind) === normalized)
+  if (exact) return { kind: exact, label: null, unrecognized: exact === 'unknown' }
+  const aliases: Record<string, RelationshipKind> = {
+    husband: 'partner', wife: 'partner', spouse: 'partner', fiance: 'partner', fiancee: 'partner',
+    mother: 'parent', father: 'parent', mom: 'parent', dad: 'parent',
+    son: 'child', daughter: 'child', kid: 'child', niece: 'child', nephew: 'child', nieceandnephew: 'child',
+    sister: 'sibling', brother: 'sibling', twin: 'sibling', twinsister: 'sibling', twinbrother: 'sibling',
+    connection: 'friend', contact: 'friend',
+    coworker: 'colleague', colleague: 'colleague', peer: 'colleague', teammate: 'colleague', consultant: 'colleague',
+    boss: 'manager', supervisor: 'manager', lead: 'manager',
+    report: 'directReport', reportsto: 'directReport', employee: 'directReport',
+    introducer: 'introducedBy', intro: 'introducedBy', introducedby: 'introducedBy',
+    roommate: 'householdMember', household: 'householdMember', family: 'householdMember',
+    owner: 'petOwner', dog: 'pet', cat: 'pet',
+  }
+  return aliases[normalized]
+    ? { kind: aliases[normalized], label: raw || null, unrecognized: false }
+    : { kind: 'unknown', label: raw || null, unrecognized: true }
+}
+
+function confidence(value: unknown, warnings: string[], field = 'confidence'): FactConfidence {
+  const normalized = token(value)
+  if (!normalized || ['stated', 'high', 'certain', 'explicit'].includes(normalized)) return 'stated'
+  if (['inferred', 'medium', 'deduced', 'likely', 'probably'].includes(normalized)) return 'inferred'
+  if (['uncertain', 'low', 'hedged', 'maybe', 'unclear', 'unknown'].includes(normalized)) return 'uncertain'
+  warnings.push(`An unknown ${field} value was changed to “uncertain” for review.`)
+  return 'uncertain'
+}
+
+function sensitivity(value: unknown, warnings: string[]): FactSensitivity {
+  const normalized = token(value)
+  if (!normalized || normalized === 'normal') return 'normal'
+  if (['sensitive', 'delicate'].includes(normalized)) return 'sensitive'
+  if (['restricted', 'secret', 'private', 'confidential'].includes(normalized)) return 'restricted'
+  warnings.push('An unknown sensitivity value was changed to “sensitive” for review.')
+  return 'sensitive'
+}
+
+function factContext(value: unknown): FactContext {
+  const normalized = token(value)
+  if (['identity', 'bio', 'origin', 'background'].includes(normalized)) return 'identity'
+  if (['professional', 'work', 'career', 'job', 'business'].includes(normalized)) return 'professional'
+  return 'personal'
+}
+
+function schedule(value: unknown, warnings: string[]) {
+  const item = object(value)
+  if (!item) return { ...EMPTY_SCHEDULE }
+  const normalized = token(item.mode)
+  const modes = { deadline: 'deadline', due: 'deadline', by: 'deadline', at: 'deadline', on: 'deadline', start: 'start', begin: 'start', someday: 'someday', later: 'someday', none: 'none' } as const
+  let mode: 'deadline' | 'start' | 'someday' | 'none' = modes[normalized as keyof typeof modes] ?? 'none'
+  if (normalized && !(normalized in modes)) warnings.push('An unknown schedule type was changed to “none” for review.')
+  const localDate = nullableString(item.localDate)
+  const localTime = nullableString(item.localTime)
+  const timeZone = nullableString(item.timeZone)
+  const sourceText = nullableString(item.sourceText)
+  if (mode === 'none' && (localDate || localTime)) {
+    mode = 'deadline'
+    warnings.push('A dated item without a schedule type was treated as a deadline for review.')
+  }
+  return { mode, localDate, localTime, timeZone, sourceText, confidence: confidence(item.confidence, warnings, 'schedule confidence') }
+}
+
+function progress(value: unknown): 'notStarted' | 'inProgress' | 'blocked' {
+  const normalized = token(value)
+  if (['inprogress', 'progress', 'doing', 'active', 'started'].includes(normalized)) return 'inProgress'
+  if (['blocked', 'waiting', 'hold', 'paused'].includes(normalized)) return 'blocked'
+  return 'notStarted'
+}
+
+function responsibility(value: unknown): 'mine' | 'theirs' {
+  return ['theirs', 'them', 'her', 'him', 'other', 'they'].includes(token(value)) ? 'theirs' : 'mine'
+}
+
+/// Repairs provider-shaped JSON into the strict proposal consumed by the
+/// resolver. It never invents identity or destructive-change IDs: unsafe rows
+/// are omitted and explained in the review warnings.
+export function normalizeCaptureProposal(raw: unknown): CaptureProposal {
+  const root = object(raw)
+  if (!root) throw new Error('Capture proposal must be a JSON object.')
+  const warnings: string[] = []
+  const taxonomyGaps: Array<{ field: 'relationship.kind'; value: string }> = []
+
+  const interactionObject = object(root.interaction)
+  const interactionSummary = string(interactionObject?.summary)
+  const interaction = interactionObject && interactionSummary ? {
+    kind: interactionKind(interactionObject.kind, warnings),
+    summary: interactionSummary,
+    discussion: nullableString(interactionObject.discussion),
+    occurredAt: interactionObject.occurredAt == null ? null : schedule(interactionObject.occurredAt, warnings),
+  } : null
+  if (interactionObject && !interactionSummary) warnings.push('An interaction without a summary was omitted from the proposal.')
+
+  const personContexts = values(root.personContexts).flatMap((rawItem) => {
+    const item = object(rawItem)
+    const personName = string(item?.personName)
+    if (!item || !personName) {
+      warnings.push('A person detail without a name was omitted from the proposal.')
+      return []
+    }
+    return [{
+      personName,
+      profileFocus: ['professional', 'work', 'career'].includes(token(item.profileFocus)) ? 'professional' as const : 'personal' as const,
+      roleTitle: nullableString(item.roleTitle),
+      organizationName: nullableString(item.organizationName),
+      connectionStatus: token(item.connectionStatus) === 'met' ? 'met' as const : ['introductionplanned', 'planned', 'intro'].includes(token(item.connectionStatus)) ? 'introductionPlanned' as const : 'unknown' as const,
+      firstMetOn: nullableString(item.firstMetOn),
+      context: nullableString(item.context),
+      introducedByName: nullableString(item.introducedByName),
+    }]
+  })
+
+  const facts = values(root.facts).flatMap((rawItem) => {
+    const item = object(rawItem)
+    const personName = string(item?.personName)
+    const value = string(item?.value)
+    if (!item || !personName || !value) {
+      warnings.push('A fact without both a person and value was omitted from the proposal.')
+      return []
+    }
+    return [{ personName, attribute: string(item.attribute) || 'quick fact', value, confidence: confidence(item.confidence, warnings), sensitivity: sensitivity(item.sensitivity, warnings), context: factContext(item.context), observedOn: nullableString(item.observedOn), effectiveOn: nullableString(item.effectiveOn) }]
+  })
+
+  const relationships = values(root.relationships).flatMap((rawItem) => {
+    const item = object(rawItem)
+    const subjectName = string(item?.subjectName)
+    const normalizedKind = relationshipKind(item?.kind)
+    if (!item || !subjectName) {
+      warnings.push('A relationship without a subject was omitted from the proposal.')
+      return []
+    }
+    const relationshipFacts = values(item.facts).flatMap((rawFact) => {
+      if (typeof rawFact === 'string') return rawFact.trim() ? [{ attribute: 'detail', value: rawFact.trim() }] : []
+      const fact = object(rawFact)
+      const value = string(fact?.value)
+      return fact && value ? [{ attribute: string(fact.attribute) || 'detail', value }] : []
+    })
+    const suppliedLabel = nullableString(item.label)
+    if (normalizedKind.unrecognized) {
+      const preservedLabel = suppliedLabel ?? normalizedKind.label
+      const label = preservedLabel ? `“${preservedLabel}”` : 'A missing relationship type'
+      warnings.push(`${label} is not in the relationship taxonomy. It was kept as “unknown” for review and may need a new app category.`)
+      if (preservedLabel) taxonomyGaps.push({ field: 'relationship.kind', value: preservedLabel })
+    } else if (normalizedKind.label) {
+      warnings.push(`Relationship type “${normalizedKind.label}” was normalized to “${normalizedKind.kind}” and kept as its review label.`)
+    }
+    return [{ subjectName, kind: normalizedKind.kind, label: suppliedLabel ?? normalizedKind.label, otherName: nullableString(item.otherName), facts: relationshipFacts }]
+  })
+
+  const followUps = values(root.followUps).flatMap((rawItem) => {
+    const item = object(rawItem)
+    const title = string(item?.title)
+    if (!item || !title) {
+      warnings.push('A follow-up without a title was omitted from the proposal.')
+      return []
+    }
+    return [{ title, personNames: strings(item.personNames, 'follow-up names', warnings), notes: nullableString(item.notes), schedule: schedule(item.schedule, warnings), responsibility: responsibility(item.responsibility), progress: progress(item.progress), tags: strings(item.tags, 'tags', warnings), folderPath: nullableString(item.folderPath) }]
+  })
+
+  const reminderChanges = values(root.reminderChanges).flatMap((rawItem) => {
+    const item = object(rawItem)
+    const reminderID = string(item?.reminderID)
+    const action = string(item?.action)
+    if (!item || !reminderID || !['complete', 'reopen', 'delete', 'update'].includes(action)) {
+      warnings.push('An invalid follow-up change was omitted from the proposal.')
+      return []
+    }
+    return [{ reminderID, action: action as 'complete' | 'reopen' | 'delete' | 'update', progress: item.progress == null ? null : progress(item.progress), notes: nullableString(item.notes), responsibility: item.responsibility == null ? null : responsibility(item.responsibility) }]
+  })
+  const factChanges = values(root.factChanges).flatMap((rawItem) => {
+    const item = object(rawItem)
+    const observationID = string(item?.observationID)
+    const action = string(item?.action)
+    if (!item || !observationID || !['confirm', 'correct'].includes(action)) {
+      warnings.push('An invalid fact change was omitted from the proposal.')
+      return []
+    }
+    return [{ observationID, action: action as 'confirm' | 'correct', value: nullableString(item.value), correctionNote: nullableString(item.correctionNote), confidence: item.confidence == null ? null : confidence(item.confidence, warnings), sensitivity: item.sensitivity == null ? null : sensitivity(item.sensitivity, warnings) }]
+  })
+  const relationshipChanges = values(root.relationshipChanges).flatMap((rawItem) => {
+    const item = object(rawItem)
+    const relationshipID = string(item?.relationshipID)
+    if (item && relationshipID && item.action === 'remove') return [{ relationshipID, action: 'remove' as const }]
+    warnings.push('An invalid relationship change was omitted from the proposal.')
+    return []
+  })
+
+  return CaptureProposalSchema.parse({
+    normalizationWarnings: warnings,
+    taxonomyGaps,
+    interaction,
+    participantNames: strings(root.participantNames, 'participant names', warnings),
+    personContexts,
+    facts,
+    relationships,
+    followUps,
+    reminderChanges,
+    factChanges,
+    relationshipChanges,
+  })
+}
 
 export interface CaptureRecordContext {
   id: string
@@ -192,13 +462,28 @@ Rules, in order of importance:
   - timeZone is an IANA identifier, required whenever localTime is set. Resolve abbreviations from the user's context: "CT" means America/Chicago when the user's zone is America/Chicago or the context clearly indicates US Central. If an abbreviation stays ambiguous, keep your best reading, set confidence "uncertain", and preserve the phrase in sourceText for confirmation.
   - sourceText always preserves the exact temporal phrase when one exists.
   - Never leave temporal wording only in the title while returning mode "none", unless the phrase is quoted or clearly not an instruction.
-- Empty arrays are correct when the update contains nothing of that type.`
+- Empty arrays are correct when the update contains nothing of that type.
+- Return only one raw JSON object, without markdown or commentary. Always include these top-level keys: interaction, participantNames, personContexts, facts, relationships, followUps, reminderChanges, factChanges, relationshipChanges.
+- Use arrays for every plural field, including participantNames, facts, relationship facts, personNames, and tags. Use null for an unknown optional scalar.
+- Use only the exact interaction, relationship, confidence, sensitivity, context, connection, progress, responsibility, action, and schedule enum values listed above.
+- Match this JSON shape exactly (the bracketed words show allowed enum values, not literal output):
+{
+  "interaction": { "kind": "[in-person|phone|video|message|email|other]", "summary": "...", "discussion": null, "occurredAt": null } or null,
+  "participantNames": ["..."],
+  "personContexts": [{ "personName": "...", "profileFocus": "[professional|personal]", "roleTitle": null, "organizationName": null, "connectionStatus": "[met|introductionPlanned|unknown]", "firstMetOn": null, "context": null, "introducedByName": null }],
+  "facts": [{ "personName": "...", "attribute": "...", "value": "...", "confidence": "[stated|inferred|uncertain]", "sensitivity": "[normal|sensitive|restricted]", "context": "[professional|personal|identity]", "observedOn": null, "effectiveOn": null }],
+  "relationships": [{ "subjectName": "...", "kind": "[partner|parent|child|sibling|friend|colleague|manager|directReport|introducedBy|introduced|worksWith|householdMember|petOwner|pet|unknown]", "label": null, "otherName": null, "facts": [{ "attribute": "...", "value": "..." }] }],
+  "followUps": [{ "title": "...", "personNames": ["..."], "notes": null, "schedule": { "mode": "[deadline|start|someday|none]", "localDate": null, "localTime": null, "timeZone": null, "sourceText": null, "confidence": "[stated|inferred|uncertain]" }, "responsibility": "[mine|theirs]", "progress": "[notStarted|inProgress|blocked]", "tags": [], "folderPath": null }],
+  "reminderChanges": [{ "reminderID": "...", "action": "[complete|reopen|delete|update]", "progress": null, "notes": null, "responsibility": null }],
+  "factChanges": [{ "observationID": "...", "action": "[confirm|correct]", "value": null, "correctionNote": null, "confidence": null, "sensitivity": null }],
+  "relationshipChanges": [{ "relationshipID": "...", "action": "remove" }]
+}`
 }
 
 /// The request minus the credential — pure, so a test can pin the shape
-/// without a network. Low effort fits a scoped extraction task and keeps
-/// dictation snappy; the output format is the zod schema serialized, which
-/// the gateway forwards opaquely into the provider's output_config.
+/// without a network. Capture deliberately uses prompt-directed JSON plus a
+/// tolerant local normalizer: provider structured-output grammars have varied
+/// across models and must not turn a valid streamed reply into a total failure.
 export function buildRequestParams(model: string, system: string, text: string) {
   return {
     provider: 'anthropic' as const,
@@ -206,8 +491,6 @@ export function buildRequestParams(model: string, system: string, text: string) 
     maxTokens: 8192,
     system,
     messages: [{ role: 'user' as const, content: text }],
-    effort: 'low' as const,
-    outputFormat: wireOutputFormat(zodOutputFormat(CaptureProposalSchema)),
   }
 }
 
@@ -218,6 +501,22 @@ export class AICaptureError extends Error {
     super(message)
     this.recoverable = recoverable
   }
+}
+
+/// Providers occasionally wrap otherwise valid JSON in prose or a markdown
+/// fence. Extract only the outermost object; parsing and normalization remain
+/// separate so no unvalidated string reaches the domain planner.
+export function extractJsonPayload(raw: string): string {
+  const trimmed = raw.trim()
+  const fenceStart = trimmed.indexOf('```')
+  if (fenceStart >= 0) {
+    const contentStart = trimmed.indexOf('\n', fenceStart)
+    const fenceEnd = trimmed.lastIndexOf('```')
+    if (contentStart >= 0 && fenceEnd > contentStart) return trimmed.slice(contentStart + 1, fenceEnd).trim()
+  }
+  const firstBrace = trimmed.indexOf('{')
+  const lastBrace = trimmed.lastIndexOf('}')
+  return firstBrace >= 0 && lastBrace > firstBrace ? trimmed.slice(firstBrace, lastBrace + 1) : trimmed
 }
 
 export async function parseCapture(
@@ -235,7 +534,9 @@ export async function parseCapture(
       throw new AICaptureError('The model declined to process this update. Your text is kept — log it manually.')
     }
     try {
-      return CaptureProposalSchema.parse(JSON.parse(reply))
+      const proposal = normalizeCaptureProposal(JSON.parse(extractJsonPayload(reply)))
+      void reportAiTaxonomyGaps(proposal.taxonomyGaps ?? [])
+      return proposal
     } catch {
       throw new AICaptureError('The reply did not match the expected shape. Your text is kept — log it manually.')
     }

@@ -2144,6 +2144,52 @@ textarea.field {
   text-decoration: underline;
 }
 
+/* MARK: Developer taxonomy diagnostics */
+
+.developer-panel {
+  margin-bottom: var(--space-large);
+}
+
+.developer-loading {
+  display: grid;
+  gap: var(--space-small);
+  padding: var(--space-medium) 0;
+}
+
+.developer-empty {
+  color: var(--color-text-secondary);
+  padding: var(--space-medium) 0;
+}
+
+.developer-table-wrap {
+  overflow-x: auto;
+}
+
+.developer-table {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--text-sub);
+  text-align: left;
+}
+
+.developer-table th,
+.developer-table td {
+  padding: var(--space-small);
+  border-bottom: 1px solid var(--color-separator);
+  white-space: nowrap;
+}
+
+.developer-table th {
+  color: var(--color-text-tertiary);
+  font: var(--text-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.developer-table code {
+  color: var(--color-text-secondary);
+}
+
 /* MARK: Inline composer — the first node on the memory rail. The collapsed
    trigger and expanded composer share one bounded panel treatment, while the
    accent node and its branch stay fixed as the content grows in place. */

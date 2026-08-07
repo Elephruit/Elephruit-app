@@ -5,6 +5,7 @@
 
 import { NavLink } from 'react-router-dom'
 import { Icon } from '../components/Icon'
+import { useDeveloperAdmin } from '../developer/context'
 
 const DESTINATIONS = [
   { to: '/', label: 'Feed', icon: 'feed', end: true },
@@ -16,6 +17,7 @@ const DESTINATIONS = [
 
 export function NavRail({ onSearch, onCapture }: { onSearch: () => void; onCapture: () => void }) {
   const isMac = navigator.platform.toUpperCase().includes('MAC')
+  const developerAdmin = useDeveloperAdmin()
 
   return (
     <nav className="nav-rail" aria-label="Primary">
@@ -54,6 +56,12 @@ export function NavRail({ onSearch, onCapture }: { onSearch: () => void; onCaptu
       </div>
 
       <div className="rail-foot">
+        {developerAdmin && (
+          <NavLink to="/developer" className="rail-item" title="Developer">
+            <Icon name="filter" size={17} />
+            <span className="rail-label">Developer</span>
+          </NavLink>
+        )}
         <NavLink to="/settings" className="rail-item" title="Settings">
           <Icon name="gear" size={17} />
           <span className="rail-label">Settings</span>

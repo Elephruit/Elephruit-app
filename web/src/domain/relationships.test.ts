@@ -26,6 +26,7 @@ describe('the inverse map', () => {
     expect(INVERSE.introducedBy).toBe('introduced')
     expect(INVERSE.petOwner).toBe('pet')
     expect(isSymmetric('partner')).toBe(true)
+    expect(isSymmetric('unknown')).toBe(true)
     expect(isSymmetric('parent')).toBe(false)
   })
 })
@@ -79,6 +80,7 @@ describe('phrases and words', () => {
     expect(possessivePhrase('Maya', 'child', '   ')).toBe("Maya's child")
     expect(possessivePhrase('Dana', 'directReport')).toBe("Dana's direct report")
     expect(kindLabel('householdMember')).toBe('household')
+    expect(kindLabel('unknown')).toBe('unknown relationship')
   })
 
   it('maps only relationship words to kinds, never names', () => {
@@ -112,6 +114,7 @@ describe('suggestions and groups', () => {
     expect(groupOf('pet')).toBe('household')
     expect(groupOf('worksWith')).toBe('work')
     expect(groupOf('introducedBy')).toBe('other')
+    expect(groupOf('unknown')).toBe('other')
     for (const kind of RELATIONSHIP_KINDS) {
       expect(GROUP_TITLES[groupOf(kind)]).toBeTruthy()
     }

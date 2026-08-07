@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   addAiCredential,
   deleteAiCredential,
@@ -12,6 +13,7 @@ import { signOutUser } from '../../data/auth'
 import { usingEmulators } from '../../data/firebase'
 import { useAiCredentials } from '../../data/hooks'
 import { useUID } from '../UserContext'
+import { useDeveloperAdmin } from '../developer/context'
 import { Button } from '../components/Button'
 import { Dialog } from '../components/Dialog'
 import { FormField } from '../components/FormField'
@@ -30,6 +32,7 @@ const STATUS_CHIP: Record<AiCredential['status'], { className: string; label: st
 
 export function SettingsPage() {
   const uid = useUID()
+  const developerAdmin = useDeveloperAdmin()
   const credentials = useAiCredentials(uid)
   const credential = credentials?.[0] ?? null
 
@@ -127,6 +130,16 @@ export function SettingsPage() {
   return (
     <PageScaffold width="narrow">
       <PageHeader title="Settings" />
+
+      {developerAdmin && (
+        <section className="settings-panel aside-panel">
+          <div className="aside-panel-head">
+            <h2 className="aside-title">Developer</h2>
+          </div>
+          <p className="settings-help">Review unknown AI taxonomy values reported by capture normalization.</p>
+          <Link className="inline-link" to="/developer">Open developer view</Link>
+        </section>
+      )}
 
       <section className="settings-panel aside-panel">
         <div className="aside-panel-head">
