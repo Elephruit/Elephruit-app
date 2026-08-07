@@ -4,8 +4,9 @@
     {
       "name": "web-spike",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "web"],
-      "port": 5173
+      "runtimeArgs": ["--prefix", "web", "run", "dev"],
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }
