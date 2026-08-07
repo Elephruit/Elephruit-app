@@ -160,7 +160,13 @@ export function NotesPage() {
             <FolderTree
               folders={folders.filter((folder) => (scope === 'archived') === archivedIDs.has(folder.id))}
               selected={selectedFolder}
-              onSelect={setSelectedFolder}
+              onSelect={(folderID) => {
+                if (noteID) {
+                  navigate(folderID ? `/folders/${folderID}` : '/notes')
+                  return
+                }
+                setSelectedFolder(folderID)
+              }}
               counts={counts}
               collapsed={collapsed}
               onToggleCollapsed={toggleCollapsed}
