@@ -147,9 +147,9 @@ export function EditableReviewPanel({
   const uid = useUID()
   const people = usePeople(uid) ?? []
   const folders = useFolders(uid) ?? []
-  const reminders = useReminders(uid) ?? []
+  const reminders = useReminders(uid)
   const tagSuggestions = useMemo(
-    () => reminders.flatMap((reminder) => reminder.categoryTags ?? []),
+    () => (reminders ?? []).flatMap((reminder) => reminder.categoryTags ?? []),
     [reminders],
   )
   const viewport = useViewport()
