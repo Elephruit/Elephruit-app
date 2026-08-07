@@ -299,7 +299,7 @@ export function FactsSection({
         const values = currentValues(observations, attribute)
         const past = history(observations, attribute)
         return (
-          <div key={attribute} style={{ padding: 'var(--space-small) 0', borderBottom: '1px solid var(--color-separator)' }}>
+          <div key={attribute} className="fact-group">
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-small)' }}>
               <span className="row-subtitle" style={{ minWidth: 0 }}>
                 {attributeLabel(attribute)}

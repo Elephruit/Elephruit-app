@@ -273,39 +273,40 @@ export function PersonPage() {
         <Icon name="back" size={14} /> Back
       </button>
 
-      <header className="profile-header">
-        <Avatar name={person.displayName} colorName={person.colorName} size="lg" unnamed={!person.hasStatedName} />
-        <div className="profile-id">
-          <h1>
-            {identityTitle}
-            {!person.hasStatedName && <span className="profile-badge">Name unknown</span>}
-          </h1>
-          {identitySubtitle && <p>{identitySubtitle}</p>}
-          <p className="profile-connection-line">
-            {originParts.join(' · ')}
-            <button type="button" className="profile-context-edit" onClick={() => setEditingConnection(true)}>
-              {originParts.length > 1 || firstMetLine ? 'Edit' : 'Add how you met'}
-            </button>
-          </p>
-          <div className="profile-contact-meta">
-            {firstMetLine && <p className="profile-first-met">{firstMetLine}</p>}
-            <p className="profile-last">{lastContactLine(derivedLastContact, now, hasProfileData)}</p>
-          </div>
-          {chips.length > 0 && (
-            <div className="profile-chips">
-              {chips.map((chip) => (
-                <span key={chip.attribute} className="chip" style={{ cursor: 'default' }}>
-                  {chip.value}
-                </span>
-              ))}
+      <div className="profile-overview">
+        <header className="profile-header">
+          <Avatar name={person.displayName} colorName={person.colorName} size="lg" unnamed={!person.hasStatedName} />
+          <div className="profile-id">
+            <h1>
+              {identityTitle}
+              {!person.hasStatedName && <span className="profile-badge">Name unknown</span>}
+            </h1>
+            {identitySubtitle && <p>{identitySubtitle}</p>}
+            <p className="profile-connection-line">
+              {originParts.join(' · ')}
+              <button type="button" className="profile-context-edit" onClick={() => setEditingConnection(true)}>
+                {originParts.length > 1 || firstMetLine ? 'Edit' : 'Add how you met'}
+              </button>
+            </p>
+            <div className="profile-contact-meta">
+              {firstMetLine && <p className="profile-first-met">{firstMetLine}</p>}
+              <p className="profile-last">{lastContactLine(derivedLastContact, now, hasProfileData)}</p>
             </div>
-          )}
-        </div>
-        <div className="profile-actions">
-          <Button variant="primary" icon="plus" onClick={() => setLoggingInteraction((open) => !open)}>
-            Log interaction
-          </Button>
-          <span className="memory-actions">
+            {chips.length > 0 && (
+              <div className="profile-chips">
+                {chips.map((chip) => (
+                  <span key={chip.attribute} className="chip" style={{ cursor: 'default' }}>
+                    {chip.value}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="profile-actions">
+            <Button variant="primary" icon="plus" onClick={() => setLoggingInteraction((open) => !open)}>
+              Log interaction
+            </Button>
+            <span className="memory-actions">
             <button
               type="button"
               className="icon-button"
@@ -377,9 +378,24 @@ export function PersonPage() {
                 </button>
               </div>
             )}
-          </span>
-        </div>
-      </header>
+            </span>
+          </div>
+        </header>
+
+        <aside className="profile-next" aria-label="Next time">
+          <h2 className="remember-eyebrow">Next up</h2>
+          {observations && relationships && reminders && interactions && people && (
+            <TalkingPointsPanel
+              person={person}
+              people={people}
+              observations={observations}
+              relationships={relationships}
+              reminders={reminders}
+              interactions={interactions}
+            />
+          )}
+        </aside>
+      </div>
 
       {loggingInteraction && <PersonInteractionComposer person={person} onClose={() => setLoggingInteraction(false)} />}
 
@@ -398,7 +414,7 @@ export function PersonPage() {
             {focus === 'professional' && openFollowUps.length > 0 && (
               <section className="working-open-loops">
                 <div className="aside-panel-head">
-                  <h2>Open loops</h2>
+                  <h2>Follow-ups</h2>
                   <span>{openFollowUps.length}</span>
                 </div>
                 {openFollowUps.map((reminder) => (
@@ -473,19 +489,6 @@ export function PersonPage() {
         </div>
 
         <aside className="person-context remember-rail" aria-label="Person context">
-          <h2 className="remember-eyebrow">Next up</h2>
-
-          {observations && relationships && reminders && interactions && people && (
-            <TalkingPointsPanel
-              person={person}
-              people={people}
-              observations={observations}
-              relationships={relationships}
-              reminders={reminders}
-              interactions={interactions}
-            />
-          )}
-
           {observations && secondaryAttributes.length > 0 && (
             <FactsSection
               person={person}

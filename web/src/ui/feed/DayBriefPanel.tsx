@@ -1,7 +1,7 @@
 /// "Prepare me for my day" — the read direction of the AI street, on the feed.
 /// The user picks who the brief covers (preseeded with everyone attached to an
 /// overdue or today follow-up), sees plainly what will be sent, and gets back
-/// talking points, open loops, and questions per person. Read-only by
+/// talking points, follow-ups, and questions per person. Read-only by
 /// construction: this panel builds no WritePlan.
 
 import { useMemo, useState } from 'react'
@@ -169,7 +169,7 @@ export function DayBriefPanel({
                 )}
                 {entry.openLoops.length > 0 && (
                   <div className="brief-section">
-                    <h4>Open loops</h4>
+                    <h4>Follow-ups</h4>
                     <ul>
                       {entry.openLoops.map((loop) => (
                         <li key={loop}>{loop}</li>

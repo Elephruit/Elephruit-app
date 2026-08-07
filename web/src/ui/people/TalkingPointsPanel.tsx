@@ -87,7 +87,7 @@ export function TalkingPointsPanel({
 
       {ready && !entry && !error && (
         <p className="row-subtitle">
-          Facts, open loops, and recent conversations, turned into what's worth raising. Restricted facts never
+          Facts, follow-ups, and recent conversations, turned into what's worth raising. Restricted facts never
           leave this device.
         </p>
       )}
