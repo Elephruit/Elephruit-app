@@ -123,8 +123,8 @@ export function CategoryTagPicker({
           aria-expanded={open}
           aria-controls={listID}
           aria-activedescendant={open && optionCount > 0 ? `${listID}-option-${clampedActive}` : undefined}
-          aria-label="Add a category"
-          placeholder={selected.size === 0 || !showSelected ? 'Type or choose a category' : undefined}
+          aria-label="Add a tag"
+          placeholder={selected.size === 0 || !showSelected ? 'Type or choose a tag' : undefined}
           autoFocus={autoFocus}
           value={search}
           onChange={(event) => {
@@ -138,7 +138,7 @@ export function CategoryTagPicker({
         />
       </div>
       {open && optionCount > 0 && (
-        <div ref={listRef} className="combobox-list" id={listID} role="listbox" aria-label="Categories">
+        <div ref={listRef} className="combobox-list" id={listID} role="listbox" aria-label="Tags">
           {visible.map((tag, index) => (
             <button
               key={tag}

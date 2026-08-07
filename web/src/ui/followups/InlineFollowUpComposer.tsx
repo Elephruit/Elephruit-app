@@ -601,7 +601,7 @@ export function InlineFollowUpComposer({
             }}
           >
             <Icon name="tag" size={16} />
-            Categories
+            Tags
           </button>
           {existing && !confirmingDelete && (
             <button

@@ -221,7 +221,7 @@ export function FollowUpSheet({
 
       <ScheduleEditor value={draft.schedule} userZone={USER_ZONE} onChange={(schedule) => set({ schedule })} />
 
-      <FormField label="Categories">
+      <FormField label="Tags">
         <CategoryTagPicker
           selected={draft.categoryTags}
           suggestions={tagSuggestions}

@@ -177,7 +177,7 @@ export function FollowUpFilterBar({
     { value: 'none', label: 'No due date', leading: <Icon name="calendar" size={15} /> },
   ]
   const categoryOptions: FilterOption[] = [
-    { value: '', label: 'Any category', leading: <Icon name="tag" size={15} /> },
+    { value: '', label: 'Any tag', leading: <Icon name="tag" size={15} /> },
     ...categories.map((tag) => ({
       value: tag,
       label: tag,
@@ -233,7 +233,7 @@ export function FollowUpFilterBar({
         />
         <FilterMenu
           id="category"
-          label="Category"
+          label="Tags"
           icon="tag"
           value={category}
           options={categoryOptions}
