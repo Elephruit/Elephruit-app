@@ -133,9 +133,11 @@ export function NotesPage() {
                 onChange={setScope}
               />
             )}
-            <Button variant="primary" icon="plus" onClick={() => void create()}>
-              New note
-            </Button>
+            {scope === 'live' && (visible?.length ?? 0) > 0 && (
+              <Button variant="primary" icon="plus" onClick={() => void create()}>
+                New note
+              </Button>
+            )}
           </>
         }
       />

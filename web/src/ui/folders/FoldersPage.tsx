@@ -214,7 +214,6 @@ export function FoldersPage() {
               New folder
             </Button>
           }
-          hint="Travel is a folder. Chicago, October is a folder inside it, with dates."
         />
       )}
 
