@@ -18,6 +18,7 @@ import { useUID } from '../UserContext'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import { FollowUpSheet } from './FollowUpSheet'
+import { InlineFollowUpComposer } from './InlineFollowUpComposer'
 
 /// The structured schedule chip — never the title's embedded phrase. Someday
 /// rows sit under their heading, so the chip is redundant there.
@@ -46,13 +47,16 @@ export function FollowUpsPage() {
   const people = usePeople(uid)
   const [view, setView] = useState<'open' | 'completed'>('open')
   const [editing, setEditing] = useState<Reminder | null>(null)
-  const [creating, setCreating] = useState(false)
   // One clock per mount — a fresh Date each render silently drifted past the memo.
   const [now] = useState(() => new Date())
 
   const groups = useMemo(() => (reminders ? sections(reminders, now) : undefined), [reminders, now])
   const done = useMemo(() => (reminders ? completedList(reminders) : []), [reminders])
   const peopleByID = useMemo(() => new Map((people ?? []).map((p) => [p.id, p])), [people])
+  const tagSuggestions = useMemo(
+    () => [...new Set((reminders ?? []).flatMap((reminder) => reminder.categoryTags ?? []))].sort(),
+    [reminders],
+  )
 
   const counts = useMemo(() => {
     const byBucket = new Map((groups ?? []).map((group) => [group.bucket, group.reminders.length]))
@@ -98,20 +102,15 @@ export function FollowUpsPage() {
       <PageHeader
         title="Follow-ups"
         actions={
-          <>
-            <SegmentedControl
-              label="Open or completed"
-              options={[
-                { value: 'open', label: 'Open' },
-                { value: 'completed', label: 'Completed' },
-              ]}
-              value={view}
-              onChange={setView}
-            />
-            <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
-              New follow-up
-            </Button>
-          </>
+          <SegmentedControl
+            label="Open or completed"
+            options={[
+              { value: 'open', label: 'Open' },
+              { value: 'completed', label: 'Completed' },
+            ]}
+            value={view}
+            onChange={setView}
+          />
         }
       />
 
@@ -132,11 +131,6 @@ export function FollowUpsPage() {
             icon="bell"
             headline="Nothing owed"
             message="Follow-ups from logged interactions gather here, bucketed by what their dates actually say."
-            action={
-              <Button variant="primary" icon="plus" onClick={() => navigate('/?capture=1')}>
-                Record a memory
-              </Button>
-            }
             hint="End a capture with what you owe — “need to send her the list” becomes a follow-up."
           />
         )}
@@ -193,6 +187,11 @@ export function FollowUpsPage() {
                             </span>
                           )
                         })}
+                        {(reminder.categoryTags ?? []).map((tag) => (
+                          <span key={tag} className="chip task-category">
+                            {tag}
+                          </span>
+                        ))}
                       </span>
                     </button>
                     <span className="task-actions">
@@ -208,6 +207,10 @@ export function FollowUpsPage() {
               })}
             </section>
           ))}
+
+        {view === 'open' && groups && people && (
+          <InlineFollowUpComposer people={people} tagSuggestions={tagSuggestions} />
+        )}
 
         {view === 'completed' && (
           <section>
@@ -233,12 +236,12 @@ export function FollowUpsPage() {
         )}
       </div>
 
-      {(creating || editing) && people && (
+      {editing && people && (
         <FollowUpSheet
           existing={editing}
           people={people}
+          tagSuggestions={tagSuggestions}
           onClose={() => {
-            setCreating(false)
             setEditing(null)
           }}
         />

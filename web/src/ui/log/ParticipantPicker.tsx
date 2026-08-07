@@ -15,6 +15,8 @@ export function ParticipantPicker({
   onToggle,
   onCreate,
   allowCreate = true,
+  placeholder = 'Who was there?',
+  ariaLabel = 'Search people',
 }: {
   people: Person[]
   pendingNew: Person[]
@@ -22,6 +24,8 @@ export function ParticipantPicker({
   onToggle: (id: string) => void
   onCreate: (name: string) => void
   allowCreate?: boolean
+  placeholder?: string
+  ariaLabel?: string
 }) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
@@ -102,9 +106,9 @@ export function ParticipantPicker({
           aria-expanded={open}
           aria-controls={listID}
           aria-activedescendant={open && optionCount > 0 ? `${listID}-option-${clampedActive}` : undefined}
-          aria-label="Search people"
+          aria-label={ariaLabel}
           value={search}
-          placeholder={selected.length === 0 ? 'Who was there?' : undefined}
+          placeholder={selected.length === 0 ? placeholder : undefined}
           onChange={(event) => {
             setSearch(event.target.value)
             setOpen(true)

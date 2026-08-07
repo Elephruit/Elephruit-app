@@ -18,6 +18,7 @@ export interface FollowUpDraft {
   title: string
   notes: string
   personIDs: Set<string>
+  categoryTags: Set<string>
   schedule: ScheduleDraftFields
 }
 
@@ -26,6 +27,7 @@ export function emptyFollowUpDraft(userZone: string): FollowUpDraft {
     title: '',
     notes: '',
     personIDs: new Set(),
+    categoryTags: new Set(),
     schedule: { scheduleMode: 'none', localDate: '', localTime: '', timeZone: userZone },
   }
 }
@@ -68,6 +70,7 @@ export function draftFromReminder(reminder: Reminder, userZone: string): FollowU
     title: reminder.title,
     notes: reminder.notes ?? '',
     personIDs: new Set(reminder.personIDs),
+    categoryTags: new Set(reminder.categoryTags ?? []),
     schedule,
   }
 }
@@ -87,6 +90,7 @@ export interface ReminderFields {
   title: string
   notes: string | null
   personIDs: string[]
+  categoryTags: string[]
   startAt: Date | null
   dueAt: Date | null
   isSomeday: boolean
@@ -102,6 +106,7 @@ export function reminderFieldsFromDraft(draft: FollowUpDraft, context: TemporalC
     title: draft.title.trim(),
     notes: draft.notes.trim() || null,
     personIDs: [...draft.personIDs],
+    categoryTags: [...draft.categoryTags],
     startAt: resolved.startAt,
     dueAt: resolved.dueAt,
     isSomeday: resolved.isSomeday,

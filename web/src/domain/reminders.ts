@@ -14,6 +14,9 @@ export interface Reminder {
   notes: string | null
   /// The people this is owed to or about.
   personIDs: string[]
+  /// Lightweight, user-authored categories. Optional keeps reminders written
+  /// before categories were introduced readable without a migration.
+  categoryTags?: string[]
   /// The interaction it fell out of, when it fell out of one.
   sourceInteractionID: string | null
   /// The imported document it fell out of, for dossier-derived follow-ups.

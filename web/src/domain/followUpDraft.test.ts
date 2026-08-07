@@ -78,6 +78,14 @@ describe('draftFromReminder', () => {
     expect(fields.scheduleTimeZone).toBe('America/Chicago')
     expect(fields.duePrecision).toBe('dateTime')
   })
+
+  it('round-trips category tags and treats legacy reminders as untagged', () => {
+    expect(draftFromReminder(reminder({}), USER_ZONE).categoryTags).toEqual(new Set())
+
+    const draft = draftFromReminder(reminder({ categoryTags: ['work', 'waiting'] }), USER_ZONE)
+    expect(draft.categoryTags).toEqual(new Set(['work', 'waiting']))
+    expect(reminderFieldsFromDraft(draft, { timeZone: USER_ZONE }).categoryTags).toEqual(['work', 'waiting'])
+  })
 })
 
 describe('validation and the guard', () => {
