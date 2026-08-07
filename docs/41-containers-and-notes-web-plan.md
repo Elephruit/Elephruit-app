@@ -1,6 +1,7 @@
 # 41 — Containers and notes, on the web
 
-- **Status:** Plan.
+- **Status:** Phases 1–3 and 7 built (`containers`, the container page, archive, search). Phases
+  4–6 — the notes module — outstanding.
 - **Date:** 2026-08-06
 - **Branch:** `claude/trip-planning-reminders-notes-0b4b1d`
 - **Target:** `web/` only. Nothing here touches Swift, the Xcode targets, or the native apps.
@@ -216,16 +217,17 @@ metadata only, which is what the content split in decision 1 buys.
 Each is one commit, and each ends with `npm test`, `npm run lint`, `npm run build` green plus a
 browser walk against seeded emulators. Phases 1–3 deliver the trip; 4–6 the notes module; 7 search.
 
-1. **Containers.** The collection, the domain module (`container.ts`) with its write planners, the
-   `COLLECTIONS` entry, the rules test, and `reminders.containerID`. A minimal Containers page: create,
-   rename, nest, delete. *Smallest useful stopping point — reminders can be filed to a trip.*
-2. **The container page.** The trip as a place: its reminders in the five buckets, its dates, an
-   honest progress line (`3 of 11 done` — never a ring), and a filing control on the reminder editor.
-   Follow-ups gains an optional group-by-container.
-3. **Archive.** `archivedAt`, the cascade in one plan, the bucket exclusion above, **Left open** on the
-   container page, an Archive view, and Unarchive. Ships a narrow palette match over archived
-   container and reminder *titles* so the archive is not a black hole before phase 7.
-   *The trip request is complete here.*
+1. **Containers.** ✅ Built. The collection, `container.ts` with its write planners, the
+   `COLLECTIONS` entry, the rules test, and `reminders.containerID`.
+2. **The container page.** ✅ Built, and merged into phase 1's commit — a Projects list whose rows
+   navigate to a route that does not exist yet is not a coherent stopping point, so the phase
+   boundary was wrong. Reminders in the five buckets, dates, `2 of 4 done`, and a filing control on
+   the reminder editor. Follow-ups rows gained a tinted chip naming the container instead of the
+   planned group-by, which turned out to answer the same question in one line.
+3. **Archive.** ✅ Built. `archivedAt`, the cascade in one plan, the bucket exclusion,
+   **Left open**, an Active/Archived toggle, and Unarchive. *The trip request is complete here.*
+   Phase 7 landed with it rather than the planned stopgap, because a real search was cheaper than a
+   narrow title match plus its later replacement.
 4. **Notes: format and storage.** The bake-off and its round-trip test; ADR 0006 in TypeScript; the
    metadata/content split; the 1 MiB guard; the plain-text projection; a working editor with headings,
    lists, checklists, code, quote, links, and inline marks. Notes live in containers and stand alone.
@@ -236,7 +238,9 @@ browser walk against seeded emulators. Phases 1–3 deliver the trip; 4–6 the 
    ([timeline.ts:199](../web/src/domain/timeline.ts)) — that chip becomes **Facts**, and **Notes**
    becomes notes. Doing this in the same commit as real notes is what stops a week of the word meaning
    two things.
-7. **Search.** As above, archived included.
+7. **Search.** ✅ Built, out of order — see phase 3. `domain/search.ts`, archived results in their
+   own group, and `useLiveReminders` after building it found the Feed counting an archived trip's
+   work.
 
 ## Verification
 
