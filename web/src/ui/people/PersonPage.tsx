@@ -4,9 +4,15 @@
 /// just a possessive phrase. The board has one document scroll: active work
 /// stays in the main column while supporting context sits alongside it.
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { planCompleteReminder, planRenamePerson, planReopenReminder, planUpdatePersonContext } from '../../domain/capture'
+import {
+  planCompleteReminder,
+  planRenamePerson,
+  planReopenReminder,
+  planUpdatePersonContext,
+  planUpdateReminder,
+} from '../../domain/capture'
 import { deriveLastContact, lastContactLine } from '../../domain/contact'
 import { FactAttributes, currentValues, populatedAttributes, type FactAttribute } from '../../domain/facts'
 import { relationshipIdentitySummary } from '../../domain/personIdentity'
@@ -23,6 +29,7 @@ import {
 import { summarizePerson } from '../../domain/personSummary'
 import { profileFocusOf, type ConnectionOrigin, type Person } from '../../domain/person'
 import { formatScheduleSummary } from '../../domain/temporal'
+import { bucketFor } from '../../domain/reminders'
 import { applyPlan } from '../../data/applyPlan'
 import {
   useAllRelationships,
@@ -167,6 +174,8 @@ export function PersonPage() {
   const [addRelationshipSignal, setAddRelationshipSignal] = useState(0)
   const [loggingInteraction, setLoggingInteraction] = useState(false)
   const [editingConnection, setEditingConnection] = useState(false)
+  const [inlineReminder, setInlineReminder] = useState<{ id: string; title: string } | null>(null)
+  const committingReminder = useRef<Set<string>>(new Set())
   const [now] = useState(() => new Date())
 
   const entries = useMemo(() => {
@@ -244,6 +253,22 @@ export function PersonPage() {
     await applyPlan(uid, plan)
   }
 
+  async function commitReminderTitle(id: string, title: string) {
+    const next = title.trim()
+    const reminder = openFollowUps.find((candidate) => candidate.id === id)
+    if (!reminder || !next || next === reminder.title || committingReminder.current.has(id)) {
+      setInlineReminder(null)
+      return
+    }
+    committingReminder.current.add(id)
+    setInlineReminder(null)
+    try {
+      await applyPlan(uid, planUpdateReminder(id, { title: next }).plan)
+    } finally {
+      committingReminder.current.delete(id)
+    }
+  }
+
   const identityTitle = person.hasStatedName ? person.displayName : (reverseIdentity?.summary.primaryLabel ?? person.displayName)
   const identitySubtitle = person.hasStatedName
     ? roleLine
@@ -255,9 +280,12 @@ export function PersonPage() {
 
   const focus = summary?.focus ?? profileFocusOf(person)
   const populated = populatedAttributes(observations ?? [])
+  const detailAttributes = populated.filter(
+    (attribute) => attribute !== FactAttributes.employer && attribute !== FactAttributes.role,
+  )
   const preferredPrimary = focus === 'professional' ? PROFESSIONAL_ATTRIBUTES : PERSONAL_ATTRIBUTES
-  const primaryAttributes = populated.filter((attribute) => preferredPrimary.includes(attribute))
-  const secondaryAttributes = populated.filter((attribute) => !preferredPrimary.includes(attribute))
+  const primaryAttributes = detailAttributes.filter((attribute) => preferredPrimary.includes(attribute))
+  const secondaryAttributes = detailAttributes.filter((attribute) => !preferredPrimary.includes(attribute))
   const originParts = [
     `${focus === 'professional' ? 'Professional' : 'Personal'} connection`,
     summary?.introducedBy ? `Introduced by ${summary.introducedBy.displayName}` : null,
@@ -402,28 +430,69 @@ export function PersonPage() {
       <div className="person-cols">
         <div className="person-history">
           <div className="person-primary-context">
-            <FactsSection
-              person={person}
-              observations={observations ?? []}
-              title={focus === 'professional' ? 'Professional context' : 'Personal context'}
-              includeAttributes={primaryAttributes}
-              addSignal={addFactSignal}
-              emphasis="primary"
-            />
+            {primaryAttributes.length > 0 && (
+              <FactsSection
+                person={person}
+                observations={observations ?? []}
+                title={focus === 'professional' ? 'Work context' : 'Personal context'}
+                includeAttributes={primaryAttributes}
+                addSignal={addFactSignal}
+                emphasis="primary"
+              />
+            )}
 
             {focus === 'professional' && openFollowUps.length > 0 && (
-              <section className="working-open-loops">
+              <section className="person-followups">
                 <div className="aside-panel-head">
                   <h2>Follow-ups</h2>
                   <span>{openFollowUps.length}</span>
                 </div>
-                {openFollowUps.map((reminder) => (
-                  <button key={reminder.id} type="button" className="working-loop-row" onClick={() => void toggleReminder(reminder.id, true)}>
-                    <span className="complete-ring" aria-hidden="true" />
-                    <span>{reminder.title}</span>
-                    <span className="tabular">{formatScheduleSummary(reminder) ?? 'Anytime'}</span>
-                  </button>
-                ))}
+                <div className="person-followup-grid">
+                  {openFollowUps.map((reminder) => {
+                    const bucket = bucketFor(reminder, now)
+                    return (
+                      <article key={reminder.id} className="person-followup" data-tone={bucket}>
+                        <button
+                          type="button"
+                          className="complete-ring"
+                          aria-label={`Complete ${reminder.title}`}
+                          onClick={() => void toggleReminder(reminder.id, true)}
+                        />
+                        <div className="person-followup-body">
+                          {inlineReminder?.id === reminder.id ? (
+                            <input
+                              className="inline-text-editor person-followup-editor"
+                              aria-label="Edit follow-up title"
+                              value={inlineReminder.title}
+                              onChange={(event) => setInlineReminder({ id: reminder.id, title: event.target.value })}
+                              onBlur={(event) => void commitReminderTitle(reminder.id, event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                  event.preventDefault()
+                                  void commitReminderTitle(reminder.id, event.currentTarget.value)
+                                }
+                                if (event.key === 'Escape') setInlineReminder(null)
+                              }}
+                              autoFocus
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              className="person-followup-title"
+                              title="Edit follow-up"
+                              onClick={() => setInlineReminder({ id: reminder.id, title: reminder.title })}
+                            >
+                              {reminder.title}
+                            </button>
+                          )}
+                          <span className="person-followup-when tabular">
+                            {formatScheduleSummary(reminder) ?? 'Anytime'}
+                          </span>
+                        </div>
+                      </article>
+                    )
+                  })}
+                </div>
               </section>
             )}
           </div>

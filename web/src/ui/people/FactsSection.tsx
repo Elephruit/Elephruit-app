@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { planConfirmObservation, planCorrection, planObservation } from '../../domain/capture'
 import { planMemoryRecord } from '../../domain/memory'
 import {
@@ -167,57 +167,6 @@ function AddFactSheet({
   )
 }
 
-function CorrectFactSheet({ old, onClose }: { old: Observation; onClose: () => void }) {
-  const uid = useUID()
-  const [value, setValue] = useState('')
-  const [note, setNote] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  async function save() {
-    if (!value.trim() || saving) return
-    setSaving(true)
-    const { plan } = planCorrection(old, { value }, note, new Date())
-    await applyPlan(uid, plan)
-    onClose()
-  }
-
-  return (
-    <Dialog title={`Correct ${attributeLabel(old.attribute)}`} onClose={onClose}>
-      <p className="row-subtitle">
-        Was: “{old.value}”. Correcting appends — the old value stays in history.
-      </p>
-      <label className="field-label" htmlFor="correct-value">
-        Now
-      </label>
-      <input
-        id="correct-value"
-        className="field"
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-        autoFocus
-      />
-      <label className="field-label" htmlFor="correct-note">
-        Why the change? — optional
-      </label>
-      <input
-        id="correct-note"
-        className="field"
-        value={note}
-        onChange={(event) => setNote(event.target.value)}
-        placeholder="“I misheard this”"
-      />
-      <div className="sheet-actions">
-        <button type="button" className="button button-quiet" onClick={onClose}>
-          Cancel
-        </button>
-        <button type="button" className="button" disabled={!value.trim() || saving} onClick={() => void save()}>
-          Correct
-        </button>
-      </div>
-    </Dialog>
-  )
-}
-
 function HistorySheet({
   attribute,
   observations,
@@ -271,7 +220,8 @@ export function FactsSection({
   useEffect(() => {
     if (addSignal > 0) setAdding(true)
   }, [addSignal])
-  const [correcting, setCorrecting] = useState<Observation | null>(null)
+  const [inlineCorrection, setInlineCorrection] = useState<{ observation: Observation; value: string } | null>(null)
+  const committing = useRef<Set<string>>(new Set())
   const [historyFor, setHistoryFor] = useState<FactAttribute | null>(null)
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
 
@@ -282,6 +232,21 @@ export function FactsSection({
   async function confirm(observation: Observation) {
     const { plan } = planConfirmObservation(observation, new Date())
     await applyPlan(uid, plan)
+  }
+
+  async function commitInlineCorrection(observation: Observation, value: string) {
+    const next = value.trim()
+    if (!next || next === observation.value || committing.current.has(observation.id)) {
+      setInlineCorrection(null)
+      return
+    }
+    committing.current.add(observation.id)
+    setInlineCorrection(null)
+    try {
+      await applyPlan(uid, planCorrection(observation, { value: next }, '', new Date()).plan)
+    } finally {
+      committing.current.delete(observation.id)
+    }
   }
 
   return (
@@ -323,10 +288,31 @@ export function FactsSection({
                     >
                       <Icon name="circle" size={12} /> Private — tap to show
                     </button>
+                  ) : inlineCorrection?.observation.id === observation.id ? (
+                    <input
+                      className="inline-text-editor"
+                      aria-label={`Edit ${attributeLabel(attribute)}`}
+                      value={inlineCorrection.value}
+                      onChange={(event) => setInlineCorrection({ observation, value: event.target.value })}
+                      onBlur={(event) => void commitInlineCorrection(observation, event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          void commitInlineCorrection(observation, event.currentTarget.value)
+                        }
+                        if (event.key === 'Escape') setInlineCorrection(null)
+                      }}
+                      autoFocus
+                    />
                   ) : (
-                    <span className="row-title" style={{ minWidth: 0 }}>
+                    <button
+                      type="button"
+                      className="inline-fact-value"
+                      title={`Edit ${attributeLabel(attribute)}`}
+                      onClick={() => setInlineCorrection({ observation, value: observation.value })}
+                    >
                       {observation.value}
-                    </span>
+                    </button>
                   )}
                   {!hidden && confidenceNeedsLabel(displayed) && (
                     <span
@@ -342,15 +328,6 @@ export function FactsSection({
                         Still true
                       </button>
                     )}
-                    <button
-                      type="button"
-                      className="button button-plain"
-                      style={{ padding: '2px 6px' }}
-                      aria-label={`Correct ${attributeLabel(attribute)}`}
-                      onClick={() => setCorrecting(observation)}
-                    >
-                      <Icon name="pencil" size={14} />
-                    </button>
                   </span>
                 </div>
               )
@@ -360,7 +337,6 @@ export function FactsSection({
       })}
 
       {adding && <AddFactSheet person={person} onClose={() => setAdding(false)} />}
-      {correcting && <CorrectFactSheet old={correcting} onClose={() => setCorrecting(null)} />}
       {historyFor && (
         <HistorySheet attribute={historyFor} observations={observations} onClose={() => setHistoryFor(null)} />
       )}
