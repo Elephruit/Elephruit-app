@@ -10,8 +10,9 @@ import { newID } from './ids'
 import type { Interaction, InteractionKind } from './interaction'
 import { nameParts, paletteColorFor, type ConnectionOrigin, type Person, type ProfileFocus } from './person'
 import { possessivePhrase, relationshipPair, type Relationship, type RelationshipKind } from './relationships'
-import type { Reminder, ReminderProgress } from './reminders'
+import type { ChecklistItem, Reminder, ReminderProgress } from './reminders'
 import type { WritePlan } from './writePlan'
+import { uniqueCategoryTags } from './categoryTags'
 
 // MARK: People
 
@@ -370,9 +371,12 @@ export function planUnrelate(forward: Relationship): { plan: WritePlan } {
 export interface ReminderDraft {
   title: string
   notes?: string | null
+  checklist?: ChecklistItem[]
   personIDs?: string[]
   responsibility?: 'mine' | 'theirs'
   progress?: ReminderProgress
+  categoryTags?: string[]
+  folderID?: string | null
   sourceInteractionID?: string | null
   sourceDocumentID?: string | null
   startAt?: Date | null
@@ -388,9 +392,14 @@ export function planCreateReminder(draft: ReminderDraft, now: Date): { plan: Wri
     id: newID(),
     title: draft.title.trim(),
     notes: draft.notes?.trim() || null,
+    checklist: (draft.checklist ?? [])
+      .map((item) => ({ ...item, title: item.title.trim() }))
+      .filter((item) => item.title.length > 0),
     personIDs: [...new Set(draft.personIDs ?? [])],
     responsibility: draft.responsibility ?? 'mine',
     progress: draft.progress ?? 'notStarted',
+    categoryTags: uniqueCategoryTags(draft.categoryTags ?? []),
+    folderID: draft.folderID ?? null,
     sourceInteractionID: draft.sourceInteractionID ?? null,
     sourceDocumentID: draft.sourceDocumentID ?? null,
     startAt: draft.startAt ?? null,
@@ -413,12 +422,15 @@ export function planUpdateReminder(
       Reminder,
       | 'title'
       | 'notes'
+      | 'checklist'
       | 'startAt'
       | 'dueAt'
       | 'isSomeday'
       | 'personIDs'
       | 'responsibility'
       | 'progress'
+      | 'categoryTags'
+      | 'folderID'
       | 'scheduleTimeZone'
       | 'duePrecision'
       | 'startPrecision'

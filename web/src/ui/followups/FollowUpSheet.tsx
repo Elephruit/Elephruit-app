@@ -6,16 +6,16 @@
 
 import { useMemo, useRef, useState } from 'react'
 import { applyPlan } from '../../data/applyPlan'
-import { planCreateReminder, planDeleteReminder, planUpdateReminder } from '../../domain/capture'
+import { planDeleteReminder } from '../../domain/capture'
+import type { Folder } from '../../domain/folder'
 import {
   draftFromReminder,
   emptyFollowUpDraft,
   followUpNeedsTemporalGuard,
-  reminderFieldsFromDraft,
   validateFollowUpDraft,
   type FollowUpDraft,
 } from '../../domain/followUpDraft'
-import { planMemoryRecord } from '../../domain/memory'
+import { planPersistFollowUp } from '../../domain/followUpPlan'
 import type { Person } from '../../domain/person'
 import type { Reminder } from '../../domain/reminders'
 import { detectDeadlineFromText } from '../../domain/temporal'
@@ -26,21 +26,29 @@ import { Sheet } from '../components/Sheet'
 import { ParticipantPicker } from '../log/ParticipantPicker'
 import { ScheduleEditor } from '../capture/editors/ScheduleEditor'
 import { SegmentedControl } from '../components/SegmentedControl'
+import { FolderPicker } from '../folders/FolderPicker'
+import { CategoryTagPicker } from './CategoryTagPicker'
 
 const USER_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
 
 export function FollowUpSheet({
   existing,
   people,
+  folders = [],
+  defaultFolderID = null,
+  tagSuggestions = [],
   onClose,
 }: {
   existing: Reminder | null
   people: Person[]
+  folders?: Folder[]
+  defaultFolderID?: string | null
+  tagSuggestions?: string[]
   onClose: () => void
 }) {
   const uid = useUID()
   const [draft, setDraft] = useState<FollowUpDraft>(() =>
-    existing ? draftFromReminder(existing, USER_ZONE) : emptyFollowUpDraft(USER_ZONE),
+    existing ? draftFromReminder(existing, USER_ZONE) : emptyFollowUpDraft(USER_ZONE, defaultFolderID),
   )
   const [notesOpen, setNotesOpen] = useState(draft.notes.length > 0)
   const [saving, setSaving] = useState(false)
@@ -65,26 +73,10 @@ export function FollowUpSheet({
     setError(null)
     try {
       const now = new Date()
-      const fields = reminderFieldsFromDraft(current, { timeZone: USER_ZONE })
-      if (existing) {
-        await applyPlan(uid, planUpdateReminder(existing.id, fields).plan)
-      } else {
-        // A new manual follow-up is a memory like any other save.
-        const { plan, reminder } = planCreateReminder(fields, now)
-        const firstPerson = people.find((p) => fields.personIDs.includes(p.id))
-        const { plan: memoryPlan } = planMemoryRecord(
-          {
-            kind: 'manualUpdate',
-            title: firstPerson ? `Added a follow-up for ${firstPerson.displayName}` : `Added a follow-up`,
-            occurredAt: now,
-            personIDs: fields.personIDs,
-            reminderIDs: [reminder.id],
-            origin: 'manualReminder',
-          },
-          now,
-        )
-        await applyPlan(uid, [...plan, ...memoryPlan])
-      }
+      await applyPlan(
+        uid,
+        planPersistFollowUp({ draft: current, existingID: existing?.id ?? null, people, now, timeZone: USER_ZONE }),
+      )
       onClose()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not save.')
@@ -215,7 +207,27 @@ export function FollowUpSheet({
         </FormField>
       )}
 
+      {folders.length > 0 && (
+        <FormField label="In" help="A folder, when it belongs to one.">
+          <FolderPicker
+            folders={folders}
+            value={draft.folderID}
+            onChange={(folderID) => set({ folderID })}
+            label="Folder"
+            emptyLabel="Nothing — just a follow-up"
+          />
+        </FormField>
+      )}
+
       <ScheduleEditor value={draft.schedule} userZone={USER_ZONE} onChange={(schedule) => set({ schedule })} />
+
+      <FormField label="Categories">
+        <CategoryTagPicker
+          selected={draft.categoryTags}
+          suggestions={tagSuggestions}
+          onChange={(categoryTags) => set({ categoryTags })}
+        />
+      </FormField>
 
       {guardActive && (
         <div className="draft-problem" role="alert" tabIndex={-1} ref={guardRef}>

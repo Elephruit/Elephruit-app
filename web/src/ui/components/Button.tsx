@@ -3,7 +3,7 @@
 /// `loading` keeps the width and swaps the label for a spinner, so layouts
 /// never jump while work is in flight.
 
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react'
 import { Icon } from './Icon'
 
 type Variant = 'primary' | 'secondary' | 'quiet' | 'ghost' | 'destructive'
@@ -25,6 +25,7 @@ export function Button({
   disabled,
   type = 'button',
   className,
+  buttonRef,
   ...rest
 }: {
   variant?: Variant
@@ -32,10 +33,18 @@ export function Button({
   loading?: boolean
   icon?: string
   children: ReactNode
+  buttonRef?: Ref<HTMLButtonElement>
 } & ButtonHTMLAttributes<HTMLButtonElement>) {
   const classes = [VARIANT_CLASS[variant], small && 'button-small', className].filter(Boolean).join(' ')
   return (
-    <button type={type} className={classes} disabled={disabled || loading} data-loading={loading || undefined} {...rest}>
+    <button
+      ref={buttonRef}
+      type={type}
+      className={classes}
+      disabled={disabled || loading}
+      data-loading={loading || undefined}
+      {...rest}
+    >
       {loading && <span className="button-spinner" aria-hidden="true" />}
       <span className="button-content">
         {icon && <Icon name={icon} size={small ? 14 : 16} />}

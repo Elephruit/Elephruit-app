@@ -90,8 +90,46 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" />
     </>
   ),
+  tag: (
+    <>
+      <path d="M4.5 5.5v5.8L13.2 20l6.8-6.8-8.7-8.7H5.5a1 1 0 0 0-1 1z" />
+      <circle cx="8.5" cy="8.5" r="1.2" />
+    </>
+  ),
   filter: <path d="M4 6h16M7 12h10M10 18h4" />,
   'arrow-right': <path d="M5 12h14M13 6l6 6-6 6" />,
+  folder: <path d="M4 7.5A1.5 1.5 0 0 1 5.5 6h3.2a1.5 1.5 0 0 1 1.2.6l1 1.4h7.6A1.5 1.5 0 0 1 20 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" />,
+  project: (
+    <>
+      <path d="M4.5 6.5A1.5 1.5 0 0 1 6 5h12a1.5 1.5 0 0 1 1.5 1.5v11A1.5 1.5 0 0 1 18 19H6a1.5 1.5 0 0 1-1.5-1.5z" />
+      <path d="M8 9.5h8M8 13h8M8 16.5h4" />
+    </>
+  ),
+  format: (
+    <>
+      <path d="M4.5 18.5L9.5 5.5h1.2l5 13" />
+      <path d="M6.4 14.2h6.8M16.5 18.5h4" />
+    </>
+  ),
+  pin: (
+    <>
+      <path d="M9 4.5h6l-.8 5.2 3 3.3H6.8l3-3.3z" />
+      <path d="M12 13v6.5" />
+    </>
+  ),
+  note: (
+    <>
+      <path d="M6 3.5h8.5L19 8v12.5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1z" />
+      <path d="M14 3.5V8h5M8.5 12.5h7M8.5 16h4.5" />
+    </>
+  ),
+  archive: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="4.5" rx="1.5" />
+      <path d="M5.5 9v8.5A2 2 0 0 0 7.5 19.5h9a2 2 0 0 0 2-2V9M10 12.5h4" />
+    </>
+  ),
+  trash: <path d="M5 7h14M10 7V5.5A1.5 1.5 0 0 1 11.5 4h1A1.5 1.5 0 0 1 14 5.5V7m-7 0 .8 11.1A1.5 1.5 0 0 0 9.3 19.5h5.4a1.5 1.5 0 0 0 1.5-1.4L17 7" />,
 }
 
 export type IconName = keyof typeof PATHS extends string ? string : never

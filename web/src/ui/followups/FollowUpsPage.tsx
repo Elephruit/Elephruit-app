@@ -1,30 +1,37 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
-import { Button } from '../components/Button'
-import { MetricTile } from '../components/MetricTile'
+import { Button, IconButton } from '../components/Button'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { SkeletonRows } from '../components/Skeleton'
 import { PageHeader } from '../shell/PageHeader'
 import { PageScaffold } from '../shell/PageScaffold'
 import { planCompleteReminder, planQuickReschedule, planReopenReminder, planUpdateReminder } from '../../domain/capture'
 import { relativeDescription } from '../../domain/contact'
-import { startOfDay } from '../../domain/dates'
+import { isSameDay, startOfDay } from '../../domain/dates'
 import { BUCKET_TITLES, bucketFor, completedList, sections, type Reminder } from '../../domain/reminders'
 import { formatScheduleSummary } from '../../domain/temporal'
 import { applyPlan } from '../../data/applyPlan'
-import { usePeople, useReminders } from '../../data/hooks'
+import { categoryKey, uniqueCategoryTags } from '../../domain/categoryTags'
+import { useFolders, useLiveReminders, usePeople } from '../../data/hooks'
 import { useUID } from '../UserContext'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
-import { FollowUpSheet } from './FollowUpSheet'
+import { DEFAULT_FOLLOWUP_CATEGORIES, categoryTintStyle } from './categoryStyle'
+import { InlineFollowUpComposer } from './InlineFollowUpComposer'
+import {
+  FollowUpFilterBar,
+  type FollowUpDueFilter,
+  type FollowUpStatusFilter,
+} from './FollowUpFilterBar'
 
 /// The structured schedule chip — never the title's embedded phrase. Someday
 /// rows sit under their heading, so the chip is redundant there.
 function dateChip(reminder: Reminder, now: Date): { text: string; tone: 'overdue' | 'today' | null } | null {
   if (reminder.isSomeday) return null
-  const text = formatScheduleSummary(reminder)
-  if (!text) return null
+  const summary = formatScheduleSummary(reminder)
+  if (!summary) return null
+  const text = summary.replace(/^(Due|Starts) /, '')
   const bucket = bucketFor(reminder, now)
   if (bucket === 'overdue') return { text, tone: 'overdue' }
   if (bucket === 'today') return { text, tone: 'today' }
@@ -35,39 +42,104 @@ function dateChip(reminder: Reminder, now: Date): { text: string; tone: 'overdue
 /// item starts, an unscheduled one gets scheduled — the copy says which.
 function quickAction(reminder: Reminder): { label: string; kind: 'deadline' | 'start' } {
   if (reminder.dueAt) return { label: 'Move to tomorrow', kind: 'deadline' }
-  if (reminder.startAt) return { label: 'Start tomorrow', kind: 'start' }
+  if (reminder.startAt) return { label: 'Move to tomorrow', kind: 'start' }
   return { label: 'Schedule tomorrow', kind: 'deadline' }
+}
+
+function matchesDueFilter(reminder: Reminder, filter: FollowUpDueFilter, now: Date): boolean {
+  if (filter === 'any') return true
+  if (filter === 'none') return reminder.dueAt === null
+  if (!reminder.dueAt) return false
+  const today = startOfDay(now)
+  if (filter === 'today') return isSameDay(reminder.dueAt, today)
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  if (filter === 'tomorrow') return isSameDay(reminder.dueAt, tomorrow)
+  const end = new Date(today)
+  end.setDate(end.getDate() + 7)
+  return reminder.dueAt.getTime() >= today.getTime() && reminder.dueAt.getTime() < end.getTime()
 }
 
 export function FollowUpsPage() {
   const uid = useUID()
   const navigate = useNavigate()
-  const reminders = useReminders(uid)
+  const live = useLiveReminders(uid)
   const people = usePeople(uid)
+  const folders = useFolders(uid)
   const [view, setView] = useState<'open' | 'completed'>('open')
   const [ownership, setOwnership] = useState<'mine' | 'theirs'>('mine')
   const [editing, setEditing] = useState<Reminder | null>(null)
-  const [creating, setCreating] = useState(false)
+  const [createRequest, setCreateRequest] = useState(0)
+  const [statusFilter, setStatusFilter] = useState<FollowUpStatusFilter>('all')
+  const [personFilter, setPersonFilter] = useState('')
+  const [dueFilter, setDueFilter] = useState<FollowUpDueFilter>('any')
+  const [categoryFilter, setCategoryFilter] = useState('')
   // One clock per mount — a fresh Date each render silently drifted past the memo.
   const [now] = useState(() => new Date())
 
   const ownedReminders = useMemo(
-    () => reminders?.filter((reminder) => (reminder.responsibility ?? 'mine') === ownership),
-    [reminders, ownership],
+    () => live?.filter((reminder) => (reminder.responsibility ?? 'mine') === ownership),
+    [live, ownership],
   )
   const groups = useMemo(() => (ownedReminders ? sections(ownedReminders, now) : undefined), [ownedReminders, now])
   const done = useMemo(() => (ownedReminders ? completedList(ownedReminders) : []), [ownedReminders])
   const peopleByID = useMemo(() => new Map((people ?? []).map((p) => [p.id, p])), [people])
+  const foldersByID = useMemo(() => new Map((folders ?? []).map((folder) => [folder.id, folder])), [folders])
+  const tagSuggestions = useMemo(
+    () =>
+      uniqueCategoryTags([
+        ...(live ?? []).flatMap((reminder) => reminder.categoryTags ?? []),
+        ...DEFAULT_FOLLOWUP_CATEGORIES,
+      ]),
+    [live],
+  )
 
-  const counts = useMemo(() => {
-    const byBucket = new Map((groups ?? []).map((group) => [group.bucket, group.reminders.length]))
-    return {
-      overdue: byBucket.get('overdue') ?? 0,
-      today: byBucket.get('today') ?? 0,
-      upcoming: byBucket.get('upcoming') ?? 0,
-      unscheduled: (byBucket.get('anytime') ?? 0) + (byBucket.get('someday') ?? 0),
-    }
-  }, [groups])
+  const openReminders = useMemo(() => (groups ?? []).flatMap((group) => group.reminders), [groups])
+  const filterPeople = useMemo(() => {
+    const usedIDs = new Set(openReminders.flatMap((reminder) => reminder.personIDs))
+    return (people ?? []).filter((person) => usedIDs.has(person.id))
+  }, [openReminders, people])
+  const filterCategories = useMemo(
+    () => uniqueCategoryTags(openReminders.flatMap((reminder) => reminder.categoryTags ?? [])),
+    [openReminders],
+  )
+  const facetedReminders = useMemo(
+    () =>
+      openReminders.filter(
+        (reminder) =>
+          (!personFilter || reminder.personIDs.includes(personFilter)) &&
+          matchesDueFilter(reminder, dueFilter, now) &&
+          (!categoryFilter ||
+            (reminder.categoryTags ?? []).some((tag) => categoryKey(tag) === categoryKey(categoryFilter))),
+      ),
+    [categoryFilter, dueFilter, now, openReminders, personFilter],
+  )
+  const facetedGroups = useMemo(() => sections(facetedReminders, now), [facetedReminders, now])
+  const visibleGroups = useMemo(
+    () =>
+      statusFilter === 'all'
+        ? facetedGroups
+        : facetedGroups.filter((group) =>
+            statusFilter === 'unscheduled'
+              ? group.bucket === 'anytime' || group.bucket === 'someday'
+              : group.bucket === statusFilter,
+          ),
+    [facetedGroups, statusFilter],
+  )
+  const hasFilters =
+    statusFilter !== 'all' || personFilter !== '' || dueFilter !== 'any' || categoryFilter !== ''
+
+  function clearFilters() {
+    setStatusFilter('all')
+    setPersonFilter('')
+    setDueFilter('any')
+    setCategoryFilter('')
+  }
+
+  function requestCreate() {
+    setEditing(null)
+    setCreateRequest((request) => request + 1)
+  }
 
   async function complete(reminder: Reminder) {
     await applyPlan(uid, planCompleteReminder(reminder.id, new Date()).plan)
@@ -111,11 +183,21 @@ export function FollowUpsPage() {
                 { value: 'completed', label: 'Completed' },
               ]}
               value={view}
-              onChange={setView}
+              onChange={(next) => {
+                setView(next)
+                setEditing(null)
+              }}
             />
-            <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
-              New follow-up
-            </Button>
+            {view === 'open' && (
+              <IconButton
+                className="followup-header-add"
+                label="Add a follow-up"
+                icon="plus"
+                size={19}
+                data-followup-create
+                onClick={requestCreate}
+              />
+            )}
           </>
         }
       />
@@ -131,12 +213,28 @@ export function FollowUpsPage() {
           onChange={setOwnership}
         />
         {view === 'open' && groups && (
-          <div className="metric-tiles metric-tiles-four">
-            <MetricTile value={counts.overdue} label="Overdue" tone={counts.overdue > 0 ? 'overdue' : 'neutral'} />
-            <MetricTile value={counts.today} label="Today" tone={counts.today > 0 ? 'today' : 'neutral'} />
-            <MetricTile value={counts.upcoming} label="Upcoming" />
-            <MetricTile value={counts.unscheduled} label="Unscheduled" />
-          </div>
+          <FollowUpFilterBar
+            status={statusFilter}
+            personID={personFilter}
+            people={filterPeople}
+            due={dueFilter}
+            category={categoryFilter}
+            categories={filterCategories}
+            onStatusChange={setStatusFilter}
+            onPersonChange={setPersonFilter}
+            onDueChange={setDueFilter}
+            onCategoryChange={setCategoryFilter}
+            onClear={clearFilters}
+          />
+        )}
+
+        {view === 'open' && groups && people && (
+          <InlineFollowUpComposer
+            people={people}
+            tagSuggestions={tagSuggestions}
+            activationRequest={createRequest}
+            hideTrigger
+          />
         )}
 
         {groups === undefined && <SkeletonRows count={5} />}
@@ -145,24 +243,44 @@ export function FollowUpsPage() {
           <EmptyState
             icon="bell"
             headline={ownership === 'mine' ? 'Nothing on your plate' : 'Not waiting on anyone'}
-            message={ownership === 'mine' ? 'Your commitments from conversations gather here.' : 'Delegated work and requested updates gather here until they are complete.'}
-            action={
-              <Button variant="primary" icon="plus" onClick={() => navigate('/?capture=1')}>
-                Quick capture
-              </Button>
-            }
+            message={ownership === 'mine' ? 'Follow-ups from logged interactions gather here, bucketed by what their dates actually say.' : 'Delegated work and requested updates gather here until they are complete.'}
             hint={ownership === 'mine' ? 'Try “I need to send her the list.”' : 'Try “I asked Alex to send the forecast by Friday.”'}
           />
         )}
 
+        {view === 'open' && groups && groups.length > 0 && visibleGroups.length === 0 && (
+          <div className="followup-filter-empty">
+            <Icon name="filter" size={18} />
+            <span>No follow-ups match these filters.</span>
+            {hasFilters && (
+              <button type="button" onClick={clearFilters}>
+                Clear filters
+              </button>
+            )}
+          </div>
+        )}
+
         {view === 'open' &&
-          groups?.map((group) => (
+          visibleGroups.map((group) => (
             <section key={group.bucket}>
               <h2 className="section-header" data-tone={group.bucket === 'overdue' ? 'overdue' : undefined}>
                 {BUCKET_TITLES[group.bucket]}
               </h2>
               {group.reminders.map((reminder) => {
                 const chip = dateChip(reminder, now)
+                if (editing?.id === reminder.id && people) {
+                  return (
+                    <InlineFollowUpComposer
+                      key={reminder.id}
+                      existing={reminder}
+                      people={people}
+                      tagSuggestions={tagSuggestions}
+                      onClose={() =>
+                        setEditing((current) => (current?.id === reminder.id ? null : current))
+                      }
+                    />
+                  )
+                }
                 return (
                   <div key={reminder.id} className="task-row">
                     <button
@@ -174,6 +292,30 @@ export function FollowUpsPage() {
                     <button type="button" className="task-main" onClick={() => setEditing(reminder)}>
                       <span className="row-title">{reminder.title}</span>
                       <span className="task-meta">
+                        {(() => {
+                          // What it belongs to, when it belongs to something.
+                          // Without this the trip's work and the day's work are
+                          // indistinguishable here, and the page's whole claim
+                          // is that they are the same list seen differently.
+                          const folder = reminder.folderID ? foldersByID.get(reminder.folderID) : undefined
+                          if (!folder) return null
+                          return (
+                            <span
+                              role="link"
+                              tabIndex={0}
+                              className="task-container"
+                              style={{ '--tint': `var(--palette-${folder.colorName})` } as React.CSSProperties}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                navigate(`/folders/${folder.id}`)
+                              }}
+                              onKeyDown={(event) => event.key === 'Enter' && navigate(`/folders/${folder.id}`)}
+                            >
+                              <Icon name="folder" size={13} />
+                              {folder.title}
+                            </span>
+                          )
+                        })()}
                         {chip && (
                           <span
                             className={
@@ -210,14 +352,17 @@ export function FollowUpsPage() {
                             </span>
                           )
                         })}
+                        {uniqueCategoryTags(reminder.categoryTags ?? []).map((tag) => (
+                          <span key={tag} className="task-category" style={categoryTintStyle(tag)}>
+                            <span className="category-option-dot" aria-hidden="true" />
+                            {tag}
+                          </span>
+                        ))}
                       </span>
                     </button>
                     <span className="task-actions">
                       <Button variant="ghost" small onClick={() => void rescheduleTomorrow(reminder)}>
                         {quickAction(reminder).label}
-                      </Button>
-                      <Button variant="ghost" small onClick={() => setEditing(reminder)}>
-                        Edit
                       </Button>
                     </span>
                   </div>
@@ -225,6 +370,20 @@ export function FollowUpsPage() {
               })}
             </section>
           ))}
+
+        {view === 'open' && groups && people && (
+          <button
+            type="button"
+            className="inline-followup-trigger"
+            data-followup-create
+            onClick={requestCreate}
+          >
+            <span className="inline-followup-plus" aria-hidden="true">
+              <Icon name="plus" size={17} />
+            </span>
+            <span>Add a follow-up</span>
+          </button>
+        )}
 
         {view === 'completed' && (
           <section>
@@ -250,16 +409,6 @@ export function FollowUpsPage() {
         )}
       </div>
 
-      {(creating || editing) && people && (
-        <FollowUpSheet
-          existing={editing}
-          people={people}
-          onClose={() => {
-            setCreating(false)
-            setEditing(null)
-          }}
-        />
-      )}
     </PageScaffold>
   )
 }
