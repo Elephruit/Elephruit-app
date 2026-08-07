@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from 'react'
 import { Icon } from '../components/Icon'
+import { categoryTintStyle } from './categoryStyle'
 
 function folded(value: string): string {
   return value.trim().toLocaleLowerCase()
@@ -10,11 +11,13 @@ export function CategoryTagPicker({
   suggestions,
   onChange,
   autoFocus = false,
+  showSelected = true,
 }: {
   selected: Set<string>
   suggestions: string[]
   onChange: (next: Set<string>) => void
   autoFocus?: boolean
+  showSelected?: boolean
 }) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
@@ -76,8 +79,8 @@ export function CategoryTagPicker({
   return (
     <div className="combobox category-combobox">
       <div className="combobox-control" onClick={() => inputRef.current?.focus()}>
-        {[...selected].map((tag) => (
-          <span key={tag} className="combobox-token category-token">
+        {showSelected && [...selected].map((tag) => (
+          <span key={tag} className="combobox-token category-token" style={categoryTintStyle(tag)}>
             {tag}
             <button
               type="button"
@@ -100,7 +103,7 @@ export function CategoryTagPicker({
           aria-controls={listID}
           aria-activedescendant={open && optionCount > 0 ? `${listID}-option-${clampedActive}` : undefined}
           aria-label="Add a category"
-          placeholder={selected.size === 0 ? 'Add a category' : undefined}
+          placeholder={selected.size === 0 || !showSelected ? 'Type or choose a category' : undefined}
           autoFocus={autoFocus}
           value={search}
           onChange={(event) => {
@@ -123,12 +126,13 @@ export function CategoryTagPicker({
               role="option"
               aria-selected={false}
               className="combobox-option"
+              style={categoryTintStyle(tag)}
               data-active={index === clampedActive || undefined}
               onMouseDown={(event) => event.preventDefault()}
               onMouseEnter={() => setActiveIndex(index)}
               onClick={() => choose(index)}
             >
-              <Icon name="tag" size={15} />
+              <span className="category-option-dot" aria-hidden="true" />
               <span className="combobox-option-name">{tag}</span>
             </button>
           ))}

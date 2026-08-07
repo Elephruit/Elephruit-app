@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
-import { Button } from '../components/Button'
+import { Button, IconButton } from '../components/Button'
 import { MetricTile } from '../components/MetricTile'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { SkeletonRows } from '../components/Skeleton'
@@ -17,7 +17,7 @@ import { usePeople, useReminders } from '../../data/hooks'
 import { useUID } from '../UserContext'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
-import { FollowUpSheet } from './FollowUpSheet'
+import { DEFAULT_FOLLOWUP_CATEGORIES, categoryTintStyle } from './categoryStyle'
 import { InlineFollowUpComposer } from './InlineFollowUpComposer'
 
 /// The structured schedule chip — never the title's embedded phrase. Someday
@@ -47,6 +47,7 @@ export function FollowUpsPage() {
   const people = usePeople(uid)
   const [view, setView] = useState<'open' | 'completed'>('open')
   const [editing, setEditing] = useState<Reminder | null>(null)
+  const [createRequest, setCreateRequest] = useState(0)
   // One clock per mount — a fresh Date each render silently drifted past the memo.
   const [now] = useState(() => new Date())
 
@@ -54,7 +55,12 @@ export function FollowUpsPage() {
   const done = useMemo(() => (reminders ? completedList(reminders) : []), [reminders])
   const peopleByID = useMemo(() => new Map((people ?? []).map((p) => [p.id, p])), [people])
   const tagSuggestions = useMemo(
-    () => [...new Set((reminders ?? []).flatMap((reminder) => reminder.categoryTags ?? []))].sort(),
+    () => [
+      ...new Set([
+        ...DEFAULT_FOLLOWUP_CATEGORIES,
+        ...(reminders ?? []).flatMap((reminder) => reminder.categoryTags ?? []),
+      ]),
+    ],
     [reminders],
   )
 
@@ -102,15 +108,32 @@ export function FollowUpsPage() {
       <PageHeader
         title="Follow-ups"
         actions={
-          <SegmentedControl
-            label="Open or completed"
-            options={[
-              { value: 'open', label: 'Open' },
-              { value: 'completed', label: 'Completed' },
-            ]}
-            value={view}
-            onChange={setView}
-          />
+          <>
+            <SegmentedControl
+              label="Open or completed"
+              options={[
+                { value: 'open', label: 'Open' },
+                { value: 'completed', label: 'Completed' },
+              ]}
+              value={view}
+              onChange={(next) => {
+                setView(next)
+                setEditing(null)
+              }}
+            />
+            {view === 'open' && (
+              <IconButton
+                className="followup-header-add"
+                label="Add a follow-up"
+                icon="plus"
+                size={19}
+                onClick={() => {
+                  setEditing(null)
+                  setCreateRequest((request) => request + 1)
+                }}
+              />
+            )}
+          </>
         }
       />
 
@@ -143,6 +166,19 @@ export function FollowUpsPage() {
               </h2>
               {group.reminders.map((reminder) => {
                 const chip = dateChip(reminder, now)
+                if (editing?.id === reminder.id && people) {
+                  return (
+                    <InlineFollowUpComposer
+                      key={reminder.id}
+                      existing={reminder}
+                      people={people}
+                      tagSuggestions={tagSuggestions}
+                      onClose={() =>
+                        setEditing((current) => (current?.id === reminder.id ? null : current))
+                      }
+                    />
+                  )
+                }
                 return (
                   <div key={reminder.id} className="task-row">
                     <button
@@ -188,7 +224,8 @@ export function FollowUpsPage() {
                           )
                         })}
                         {(reminder.categoryTags ?? []).map((tag) => (
-                          <span key={tag} className="chip task-category">
+                          <span key={tag} className="task-category" style={categoryTintStyle(tag)}>
+                            <span className="category-option-dot" aria-hidden="true" />
                             {tag}
                           </span>
                         ))}
@@ -209,7 +246,11 @@ export function FollowUpsPage() {
           ))}
 
         {view === 'open' && groups && people && (
-          <InlineFollowUpComposer people={people} tagSuggestions={tagSuggestions} />
+          <InlineFollowUpComposer
+            people={people}
+            tagSuggestions={tagSuggestions}
+            activationRequest={createRequest}
+          />
         )}
 
         {view === 'completed' && (
@@ -236,16 +277,6 @@ export function FollowUpsPage() {
         )}
       </div>
 
-      {editing && people && (
-        <FollowUpSheet
-          existing={editing}
-          people={people}
-          tagSuggestions={tagSuggestions}
-          onClose={() => {
-            setEditing(null)
-          }}
-        />
-      )}
     </PageScaffold>
   )
 }

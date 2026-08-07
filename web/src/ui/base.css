@@ -560,8 +560,24 @@ dialog.palette::backdrop {
 }
 
 .task-category {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--category-tint) 22%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--category-tint) 9%, transparent);
+  font: var(--text-chip);
+  color: color-mix(in srgb, var(--category-tint) 72%, var(--color-text));
   cursor: default;
-  color: var(--color-text-tertiary);
+}
+
+.category-option-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--category-tint);
 }
 
 /* Inline follow-up entry — a continuation of the list, not a separate card. */
@@ -615,12 +631,26 @@ dialog.palette::backdrop {
   border-radius: var(--radius-medium);
   background: color-mix(in srgb, var(--color-accent) 4%, transparent);
   animation: inline-followup-open var(--duration-expand) var(--ease-emphasized);
+  transform-origin: top;
+}
+
+.inline-followup-composer[data-editing] {
+  margin-top: 0;
+  margin-bottom: var(--space-small);
+  background: color-mix(in srgb, var(--color-accent) 5%, var(--color-background));
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-accent) 48%, transparent);
 }
 
 @keyframes inline-followup-open {
   from {
     opacity: 0;
-    transform: translateY(-3px);
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-7px);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0);
+    transform: translateY(0);
   }
 }
 
@@ -651,6 +681,55 @@ dialog.palette::backdrop {
 
 .inline-followup-title::placeholder {
   color: var(--color-text-tertiary);
+}
+
+.inline-followup-selections {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-tight);
+  margin-bottom: var(--space-small);
+}
+
+.inline-person-token,
+.inline-category-token {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-tight);
+  min-height: 28px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.inline-person-token {
+  padding: 3px 7px 3px 3px;
+  border: 1px solid var(--color-separator);
+  background: var(--color-background-elevated);
+  color: var(--color-text-secondary);
+  font: var(--text-chip);
+}
+
+.inline-person-token .avatar-small {
+  width: 21px;
+  height: 21px;
+  font-size: 0.55rem;
+}
+
+.inline-person-token svg,
+.inline-category-token svg {
+  opacity: 0.52;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.inline-person-token:hover,
+.inline-category-token:hover {
+  border-color: color-mix(in srgb, var(--color-destructive) 32%, var(--color-separator));
+}
+
+.inline-person-token:hover svg,
+.inline-category-token:hover svg {
+  opacity: 1;
+  color: var(--color-destructive);
 }
 
 .inline-followup-toolbar {
@@ -694,27 +773,130 @@ dialog.palette::backdrop {
 }
 
 .inline-followup-panel {
-  max-width: 520px;
+  max-width: 560px;
   margin-top: var(--space-small);
-  padding: var(--space-medium);
+  padding: var(--space-large);
   border: 1px solid var(--color-separator);
-  border-radius: var(--radius-medium);
+  border-radius: var(--radius-large);
   background: var(--color-background-elevated);
-  box-shadow: var(--shadow-raised);
+  box-shadow: var(--shadow-interactive);
+  animation: inline-panel-reveal var(--duration-base) var(--ease-emphasized);
 }
 
-.inline-date-panel,
-.inline-date-quick {
+@keyframes inline-panel-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.inline-panel-heading {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  gap: var(--space-medium);
+  margin-bottom: var(--space-medium);
+}
+
+.inline-panel-heading > span:last-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.inline-panel-heading strong {
+  font: var(--text-label);
+  color: var(--color-text);
+}
+
+.inline-panel-heading small {
+  font: var(--text-metadata);
+  color: var(--color-text-tertiary);
+}
+
+.inline-panel-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-accent) 11%, transparent);
+  color: var(--color-accent);
+}
+
+.inline-date-choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-small);
 }
 
-.inline-date-input {
-  width: auto;
+.inline-date-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px var(--space-medium);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-medium);
+  background: var(--color-surface-subtle);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.inline-date-choice:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-separator));
+  background: color-mix(in srgb, var(--color-accent) 6%, var(--color-surface));
+  transform: translateY(-1px);
+}
+
+.inline-date-choice[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 11%, transparent);
+  color: var(--color-accent);
+}
+
+.inline-date-choice strong {
+  overflow: hidden;
+  max-width: 100%;
+  font: var(--text-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inline-date-choice span {
+  font: var(--text-metadata);
+  color: var(--color-text-tertiary);
+}
+
+.inline-custom-date {
+  display: flex;
+  align-items: center;
+  gap: var(--space-small);
+  margin-top: var(--space-small);
   min-height: var(--control-height);
-  padding-block: 6px;
+  padding: 6px 8px 6px var(--space-medium);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-medium);
+  color: var(--color-text-secondary);
+}
+
+.inline-custom-date label {
+  font: var(--text-label);
+}
+
+.inline-custom-date input[type='date'] {
+  min-width: 132px;
+  margin-left: auto;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: var(--text-sub);
 }
 
 .inline-followup-problem {
@@ -734,9 +916,84 @@ dialog.palette::backdrop {
 }
 
 .category-token {
-  padding-left: var(--space-small);
-  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
-  color: var(--color-accent);
+  border: 1px solid color-mix(in srgb, var(--category-tint) 25%, transparent);
+  background: color-mix(in srgb, var(--category-tint) 11%, transparent);
+  color: color-mix(in srgb, var(--category-tint) 72%, var(--color-text));
+}
+
+.inline-category-token {
+  padding: 4px 8px;
+  font: var(--text-chip);
+}
+
+.category-combobox .combobox-control {
+  border-radius: var(--radius-large);
+  background: var(--color-surface-subtle);
+}
+
+.category-combobox .combobox-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-tight);
+  padding: var(--space-tight);
+  box-shadow: none;
+}
+
+.category-combobox .combobox-option {
+  border-radius: var(--radius-medium);
+}
+
+.category-combobox .combobox-option[data-active] {
+  background: color-mix(in srgb, var(--category-tint, var(--color-accent)) 10%, transparent);
+}
+
+.inline-delete-button {
+  min-height: 28px;
+  padding: 4px var(--space-small);
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font: var(--text-metadata);
+  cursor: pointer;
+}
+
+.inline-delete-button:hover {
+  background: color-mix(in srgb, var(--color-destructive) 8%, transparent);
+  color: var(--color-destructive);
+}
+
+.inline-delete-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-tight);
+  font: var(--text-metadata);
+  color: var(--color-destructive);
+}
+
+.page-header-actions .icon-button.followup-header-add {
+  width: var(--control-height);
+  height: var(--control-height);
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  box-shadow: var(--shadow-raised);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.page-header-actions .icon-button.followup-header-add:hover {
+  background: var(--color-accent-hover);
+  color: var(--color-on-accent);
+  box-shadow: var(--shadow-interactive);
+  transform: translateY(-1px);
+}
+
+.page-header-actions .icon-button.followup-header-add:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-focus) 45%, transparent);
+  outline-offset: 3px;
 }
 
 @media (max-width: 719.98px) {
@@ -756,22 +1013,36 @@ dialog.palette::backdrop {
     max-width: none;
   }
 
-  .inline-date-panel {
-    align-items: stretch;
+  .inline-date-choices {
+    grid-template-columns: 1fr;
   }
 
-  .inline-date-quick {
-    flex-basis: 100%;
+  .inline-date-choice {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
   }
 
-  .inline-date-input {
-    flex: 1;
-    min-width: 0;
+  .inline-custom-date {
+    flex-wrap: wrap;
   }
+
+  .inline-custom-date input[type='date'] {
+    min-width: 120px;
+  }
+
+  .category-combobox .combobox-list {
+    grid-template-columns: 1fr;
+  }
+
 }
 
 @media (prefers-reduced-motion: reduce) {
   .inline-followup-composer {
+    animation: none;
+  }
+
+  .inline-followup-panel {
     animation: none;
   }
 }

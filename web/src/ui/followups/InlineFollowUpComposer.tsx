@@ -1,6 +1,8 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { applyPlan } from '../../data/applyPlan'
+import { planDeleteReminder } from '../../domain/capture'
 import {
+  draftFromReminder,
   emptyFollowUpDraft,
   followUpNeedsTemporalGuard,
   validateFollowUpDraft,
@@ -8,13 +10,16 @@ import {
 } from '../../domain/followUpDraft'
 import { planPersistFollowUp } from '../../domain/followUpPlan'
 import type { Person } from '../../domain/person'
+import type { Reminder } from '../../domain/reminders'
 import { detectDeadlineFromText } from '../../domain/temporal'
 import { useUID } from '../UserContext'
 import { toLocalDateValue } from '../dateInput'
 import { ParticipantPicker } from '../log/ParticipantPicker'
+import { Avatar } from '../components/Avatar'
 import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
 import { CategoryTagPicker } from './CategoryTagPicker'
+import { categoryTintStyle } from './categoryStyle'
 
 const USER_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
 
@@ -32,13 +37,28 @@ function nextMonday(): string {
   return toLocalDateValue(date)
 }
 
+function calendarLabel(localDate: string, includeWeekday = true): string {
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: includeWeekday ? 'short' : undefined,
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(`${localDate}T12:00:00`))
+}
+
 function formatDueDate(localDate: string): string {
   if (!localDate) return 'Due date'
   if (localDate === shiftedDate(0)) return 'Today'
   if (localDate === shiftedDate(1)) return 'Tomorrow'
-  return new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).format(
-    new Date(`${localDate}T12:00:00`),
-  )
+  return calendarLabel(localDate)
+}
+
+function formatScheduleButton(draft: FollowUpDraft): string {
+  if (draft.schedule.scheduleMode === 'someday') return 'Someday'
+  if (draft.schedule.scheduleMode === 'start' && draft.schedule.localDate) {
+    return `Starts ${formatDueDate(draft.schedule.localDate)}`
+  }
+  if (draft.schedule.scheduleMode === 'deadline') return formatDueDate(draft.schedule.localDate)
+  return 'Due date'
 }
 
 function hasDraftContent(draft: FollowUpDraft): boolean {
@@ -54,18 +74,28 @@ function hasDraftContent(draft: FollowUpDraft): boolean {
 export function InlineFollowUpComposer({
   people,
   tagSuggestions,
+  existing = null,
+  activationRequest = 0,
+  onClose,
 }: {
   people: Person[]
   tagSuggestions: string[]
+  existing?: Reminder | null
+  activationRequest?: number
+  onClose?: () => void
 }) {
   const uid = useUID()
-  const [active, setActive] = useState(false)
-  const [draft, setDraft] = useState(() => emptyFollowUpDraft(USER_ZONE))
+  const existingID = existing?.id ?? null
+  const [active, setActive] = useState(Boolean(existing))
+  const [draft, setDraft] = useState(() =>
+    existing ? draftFromReminder(existing, USER_ZONE) : emptyFollowUpDraft(USER_ZONE),
+  )
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [guardActive, setGuardActive] = useState(false)
   const [escapeArmed, setEscapeArmed] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const composerRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLInputElement>(null)
   const guardRef = useRef<HTMLDivElement>(null)
@@ -77,6 +107,21 @@ export function InlineFollowUpComposer({
         : null,
     [draft.notes, draft.title, guardActive],
   )
+  const peopleByID = useMemo(() => new Map(people.map((person) => [person.id, person])), [people])
+
+  useEffect(() => {
+    if (!existingID) return
+    window.setTimeout(() => titleRef.current?.focus(), 0)
+  }, [existingID])
+
+  useEffect(() => {
+    if (existing || activationRequest === 0) return
+    setActive(true)
+    window.setTimeout(() => {
+      composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      titleRef.current?.focus()
+    }, 0)
+  }, [activationRequest, existing])
 
   function set(changes: Partial<FollowUpDraft>) {
     setDraft((current) => ({ ...current, ...changes }))
@@ -90,14 +135,29 @@ export function InlineFollowUpComposer({
     window.setTimeout(() => titleRef.current?.focus(), 0)
   }
 
-  function reset(keepActive: boolean) {
+  function close() {
+    setOpenPanel(null)
+    setError(null)
+    setGuardActive(false)
+    setEscapeArmed(false)
+    setConfirmingDelete(false)
+    if (existing) {
+      onClose?.()
+      return
+    }
+    setDraft(emptyFollowUpDraft(USER_ZONE))
+    setActive(false)
+  }
+
+  function resetForAnother() {
     setDraft(emptyFollowUpDraft(USER_ZONE))
     setOpenPanel(null)
     setError(null)
     setGuardActive(false)
     setEscapeArmed(false)
-    setActive(keepActive)
-    if (keepActive) window.setTimeout(() => titleRef.current?.focus(), 0)
+    setConfirmingDelete(false)
+    setActive(true)
+    window.setTimeout(() => titleRef.current?.focus(), 0)
   }
 
   async function persist(current: FollowUpDraft, continueCreating: boolean) {
@@ -108,9 +168,17 @@ export function InlineFollowUpComposer({
       const now = new Date()
       await applyPlan(
         uid,
-        planPersistFollowUp({ draft: current, existingID: null, people, now, timeZone: USER_ZONE }),
+        planPersistFollowUp({
+          draft: current,
+          existingID,
+          people,
+          now,
+          timeZone: USER_ZONE,
+        }),
       )
-      reset(continueCreating)
+      if (existing) onClose?.()
+      else if (continueCreating) resetForAnother()
+      else close()
       return true
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not save this follow-up.')
@@ -136,9 +204,23 @@ export function InlineFollowUpComposer({
     return persist(draft, continueCreating)
   }
 
+  async function remove() {
+    if (!existing || saving) return
+    setSaving(true)
+    setError(null)
+    try {
+      await applyPlan(uid, planDeleteReminder(existing.id).plan)
+      onClose?.()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not delete this follow-up.')
+      setSaving(false)
+    }
+  }
+
   function togglePanel(panel: Exclude<OpenPanel, null>) {
     setOpenPanel((current) => (current === panel ? null : panel))
     setEscapeArmed(false)
+    setConfirmingDelete(false)
   }
 
   function setDueDate(localDate: string) {
@@ -152,6 +234,19 @@ export function InlineFollowUpComposer({
     })
   }
 
+  function togglePerson(id: string) {
+    const personIDs = new Set(draft.personIDs)
+    if (personIDs.has(id)) personIDs.delete(id)
+    else personIDs.add(id)
+    set({ personIDs })
+  }
+
+  function removeCategory(tag: string) {
+    const categoryTags = new Set(draft.categoryTags)
+    categoryTags.delete(tag)
+    set({ categoryTags })
+  }
+
   function handleEscape() {
     if (openPanel) {
       setOpenPanel(null)
@@ -159,11 +254,11 @@ export function InlineFollowUpComposer({
       return
     }
     if (!hasDraftContent(draft) || escapeArmed) {
-      reset(false)
+      close()
       return
     }
     setEscapeArmed(true)
-    setError('Press Escape again to discard this follow-up.')
+    setError(`Press Escape again to ${existing ? 'close without saving' : 'discard this follow-up'}.`)
   }
 
   function handleBlur(event: React.FocusEvent<HTMLDivElement>) {
@@ -171,13 +266,9 @@ export function InlineFollowUpComposer({
     if (next instanceof Node && event.currentTarget.contains(next)) return
     window.setTimeout(() => {
       if (composerRef.current?.contains(document.activeElement)) return
-      if (!hasDraftContent(draft)) {
-        reset(false)
-      } else if (draft.title.trim()) {
-        void save(false)
-      } else {
-        setError('Say what you need to do.')
-      }
+      if (!hasDraftContent(draft)) close()
+      else if (draft.title.trim()) void save(false)
+      else setError('Say what you need to do.')
     }, 0)
   }
 
@@ -193,11 +284,17 @@ export function InlineFollowUpComposer({
   }
 
   const dueDate = draft.schedule.scheduleMode === 'deadline' ? draft.schedule.localDate : ''
+  const quickDates = [
+    { label: 'Today', value: shiftedDate(0) },
+    { label: 'Tomorrow', value: shiftedDate(1) },
+    { label: 'Next Monday', value: nextMonday() },
+  ]
 
   return (
     <div
       ref={composerRef}
       className="inline-followup-composer"
+      data-editing={existing ? true : undefined}
       onBlurCapture={handleBlur}
       onKeyDown={(event) => {
         if (event.key === 'Escape') handleEscape()
@@ -216,9 +313,45 @@ export function InlineFollowUpComposer({
           onKeyDown={(event) => {
             if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
             event.preventDefault()
-            void save(!(event.metaKey || event.ctrlKey))
+            void save(existing ? false : !(event.metaKey || event.ctrlKey))
           }}
         />
+
+        {(draft.personIDs.size > 0 || draft.categoryTags.size > 0) && (
+          <div className="inline-followup-selections" aria-label="Selected details">
+            {[...draft.personIDs].map((id) => {
+              const person = peopleByID.get(id)
+              if (!person) return null
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className="inline-person-token"
+                  aria-label={`Remove ${person.displayName}`}
+                  onClick={() => togglePerson(id)}
+                >
+                  <Avatar name={person.displayName} colorName={person.colorName} small />
+                  <span>{person.displayName}</span>
+                  <Icon name="x" size={12} />
+                </button>
+              )
+            })}
+            {[...draft.categoryTags].map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                className="category-token inline-category-token"
+                style={categoryTintStyle(tag)}
+                aria-label={`Remove ${tag}`}
+                onClick={() => removeCategory(tag)}
+              >
+                <span className="category-option-dot" aria-hidden="true" />
+                {tag}
+                <Icon name="x" size={12} />
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="inline-followup-toolbar" aria-label="Follow-up details">
           <button
@@ -230,18 +363,18 @@ export function InlineFollowUpComposer({
             onClick={() => togglePanel('people')}
           >
             <Icon name="people" size={16} />
-            {draft.personIDs.size > 0 ? `${draft.personIDs.size} tagged` : 'People'}
+            People
           </button>
           <button
             type="button"
             className="inline-detail-button"
             aria-expanded={openPanel === 'date'}
-            data-selected={Boolean(dueDate) || undefined}
+            data-selected={draft.schedule.scheduleMode !== 'none' || undefined}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => togglePanel('date')}
           >
             <Icon name="calendar" size={16} />
-            {formatDueDate(dueDate)}
+            {formatScheduleButton(draft)}
           </button>
           <button
             type="button"
@@ -252,33 +385,58 @@ export function InlineFollowUpComposer({
             onClick={() => togglePanel('categories')}
           >
             <Icon name="tag" size={16} />
-            {draft.categoryTags.size > 0 ? `${draft.categoryTags.size} categories` : 'Categories'}
+            Categories
           </button>
+          {existing && !confirmingDelete && (
+            <button type="button" className="inline-delete-button" onClick={() => setConfirmingDelete(true)}>
+              Delete
+            </button>
+          )}
           <span className="inline-followup-spacer" />
-          <Button variant="quiet" small onClick={() => reset(false)}>
-            Cancel
-          </Button>
-          <Button variant="primary" small loading={saving} disabled={!draft.title.trim()} onClick={() => void save(false)}>
-            Add
-          </Button>
+          {confirmingDelete ? (
+            <span className="inline-delete-confirm" role="alert">
+              <span>Delete?</span>
+              <Button variant="quiet" small onClick={() => setConfirmingDelete(false)}>
+                Keep
+              </Button>
+              <Button variant="destructive" small loading={saving} onClick={() => void remove()}>
+                Delete
+              </Button>
+            </span>
+          ) : (
+            <>
+              <Button variant="quiet" small onClick={close}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                small
+                loading={saving}
+                disabled={!draft.title.trim()}
+                onClick={() => void save(false)}
+              >
+                {existing ? 'Save' : 'Add'}
+              </Button>
+            </>
+          )}
         </div>
 
         {openPanel === 'people' && (
-          <div className="inline-followup-panel">
+          <div className="inline-followup-panel inline-people-panel">
+            <div className="inline-panel-heading">
+              <span className="inline-panel-icon"><Icon name="people" size={17} /></span>
+              <span><strong>Tag people</strong><small>Who is this follow-up for?</small></span>
+            </div>
             <ParticipantPicker
               people={people}
               pendingNew={[]}
               selectedIDs={draft.personIDs}
               allowCreate={false}
-              placeholder="Tag people"
+              placeholder="Search people"
               ariaLabel="Tag people"
               autoFocus
-              onToggle={(id) => {
-                const personIDs = new Set(draft.personIDs)
-                if (personIDs.has(id)) personIDs.delete(id)
-                else personIDs.add(id)
-                set({ personIDs })
-              }}
+              showSelected={false}
+              onToggle={togglePerson}
               onCreate={() => {}}
             />
           </div>
@@ -286,38 +444,54 @@ export function InlineFollowUpComposer({
 
         {openPanel === 'date' && (
           <div className="inline-followup-panel inline-date-panel">
-            <div className="inline-date-quick">
-              <button type="button" className="chip" onClick={() => setDueDate(shiftedDate(0))}>
-                Today
-              </button>
-              <button type="button" className="chip" onClick={() => setDueDate(shiftedDate(1))}>
-                Tomorrow
-              </button>
-              <button type="button" className="chip" onClick={() => setDueDate(nextMonday())}>
-                Next Monday
-              </button>
+            <div className="inline-panel-heading">
+              <span className="inline-panel-icon"><Icon name="calendar" size={17} /></span>
+              <span><strong>{dueDate ? `Due ${formatDueDate(dueDate)}` : 'Choose a due date'}</strong><small>Only due dates can become overdue.</small></span>
             </div>
-            <input
-              type="date"
-              className="field inline-date-input"
-              aria-label="Due date"
-              value={dueDate}
-              onChange={(event) => setDueDate(event.target.value)}
-            />
-            {dueDate && (
-              <button type="button" className="button button-plain button-small" onClick={() => setDueDate('')}>
-                Clear
-              </button>
-            )}
+            <div className="inline-date-choices">
+              {quickDates.map((choice) => (
+                <button
+                  key={choice.label}
+                  type="button"
+                  className="inline-date-choice"
+                  aria-pressed={dueDate === choice.value}
+                  onClick={() => setDueDate(choice.value)}
+                >
+                  <strong>{choice.label}</strong>
+                  <span>{calendarLabel(choice.value)}</span>
+                </button>
+              ))}
+            </div>
+            <div className="inline-custom-date">
+              <Icon name="calendar" size={16} />
+              <label htmlFor={`followup-date-${existingID ?? 'new'}`}>Choose another date</label>
+              <input
+                id={`followup-date-${existingID ?? 'new'}`}
+                type="date"
+                aria-label="Due date"
+                value={dueDate}
+                onChange={(event) => setDueDate(event.target.value)}
+              />
+              {dueDate && (
+                <button type="button" className="button button-plain button-small" onClick={() => setDueDate('')}>
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
         )}
 
         {openPanel === 'categories' && (
-          <div className="inline-followup-panel">
+          <div className="inline-followup-panel inline-category-panel">
+            <div className="inline-panel-heading">
+              <span className="inline-panel-icon"><Icon name="tag" size={17} /></span>
+              <span><strong>Categories</strong><small>Group related follow-ups with color.</small></span>
+            </div>
             <CategoryTagPicker
               selected={draft.categoryTags}
               suggestions={tagSuggestions}
               autoFocus
+              showSelected={false}
               onChange={(categoryTags) => set({ categoryTags })}
             />
           </div>
@@ -344,7 +518,7 @@ export function InlineFollowUpComposer({
                 </button>
               )}
               <button type="button" className="button button-quiet button-small" onClick={() => void persist(draft, false)}>
-                Add without a date
+                {existing ? 'Save without a date' : 'Add without a date'}
               </button>
             </span>
           </div>
@@ -355,7 +529,9 @@ export function InlineFollowUpComposer({
             {error}
           </p>
         )}
-        <p className="inline-followup-hint">Enter adds another · ⌘Enter finishes · Escape cancels</p>
+        <p className="inline-followup-hint">
+          {existing ? 'Enter saves · Escape closes' : 'Enter adds another · ⌘Enter finishes · Escape cancels'}
+        </p>
       </div>
     </div>
   )

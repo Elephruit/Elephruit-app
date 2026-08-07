@@ -18,6 +18,7 @@ export function ParticipantPicker({
   placeholder = 'Who was there?',
   ariaLabel = 'Search people',
   autoFocus = false,
+  showSelected = true,
 }: {
   people: Person[]
   pendingNew: Person[]
@@ -28,6 +29,7 @@ export function ParticipantPicker({
   placeholder?: string
   ariaLabel?: string
   autoFocus?: boolean
+  showSelected?: boolean
 }) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
@@ -84,7 +86,7 @@ export function ParticipantPicker({
   return (
     <div className="combobox">
       <div className="combobox-control" onClick={() => inputRef.current?.focus()}>
-        {selected.map((person) => (
+        {showSelected && selected.map((person) => (
           <span key={person.id} className="combobox-token tinted" style={tintStyle(person)}>
             <Avatar name={person.displayName} colorName={person.colorName} small />
             {person.displayName}
