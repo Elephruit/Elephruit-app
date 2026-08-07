@@ -7,6 +7,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { applyPlan } from '../../data/applyPlan'
 import { planCreateReminder, planDeleteReminder, planUpdateReminder } from '../../domain/capture'
+import type { Folder } from '../../domain/folder'
 import {
   draftFromReminder,
   emptyFollowUpDraft,
@@ -25,21 +26,28 @@ import { FormField } from '../components/FormField'
 import { Sheet } from '../components/Sheet'
 import { ParticipantPicker } from '../log/ParticipantPicker'
 import { ScheduleEditor } from '../capture/editors/ScheduleEditor'
+import { FolderPicker } from '../folders/FolderPicker'
 
 const USER_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
 
 export function FollowUpSheet({
   existing,
   people,
+  folders = [],
+  defaultFolderID = null,
   onClose,
 }: {
   existing: Reminder | null
   people: Person[]
+  /// The filing choices. Empty when the caller has none to offer, which hides
+  /// the control rather than showing an empty picker.
+  folders?: Folder[]
+  defaultFolderID?: string | null
   onClose: () => void
 }) {
   const uid = useUID()
   const [draft, setDraft] = useState<FollowUpDraft>(() =>
-    existing ? draftFromReminder(existing, USER_ZONE) : emptyFollowUpDraft(USER_ZONE),
+    existing ? draftFromReminder(existing, USER_ZONE) : emptyFollowUpDraft(USER_ZONE, defaultFolderID),
   )
   const [notesOpen, setNotesOpen] = useState(draft.notes.length > 0)
   const [saving, setSaving] = useState(false)
@@ -191,6 +199,18 @@ export function FollowUpSheet({
           onCreate={() => {}}
         />
       </FormField>
+
+      {folders.length > 0 && (
+        <FormField label="In" help="A folder, when it belongs to one.">
+          <FolderPicker
+            folders={folders}
+            value={draft.folderID}
+            onChange={(folderID) => set({ folderID })}
+            label="Folder"
+            emptyLabel="Nothing — just a follow-up"
+          />
+        </FormField>
+      )}
 
       <ScheduleEditor value={draft.schedule} userZone={USER_ZONE} onChange={(schedule) => set({ schedule })} />
 

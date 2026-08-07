@@ -357,6 +357,7 @@ export interface ReminderDraft {
   title: string
   notes?: string | null
   personIDs?: string[]
+  folderID?: string | null
   sourceInteractionID?: string | null
   sourceDocumentID?: string | null
   startAt?: Date | null
@@ -373,6 +374,7 @@ export function planCreateReminder(draft: ReminderDraft, now: Date): { plan: Wri
     title: draft.title.trim(),
     notes: draft.notes?.trim() || null,
     personIDs: [...new Set(draft.personIDs ?? [])],
+    folderID: draft.folderID ?? null,
     sourceInteractionID: draft.sourceInteractionID ?? null,
     sourceDocumentID: draft.sourceDocumentID ?? null,
     startAt: draft.startAt ?? null,
@@ -399,6 +401,7 @@ export function planUpdateReminder(
       | 'dueAt'
       | 'isSomeday'
       | 'personIDs'
+      | 'folderID'
       | 'scheduleTimeZone'
       | 'duePrecision'
       | 'startPrecision'

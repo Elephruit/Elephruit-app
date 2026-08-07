@@ -13,7 +13,7 @@ import { startOfDay } from '../../domain/dates'
 import { BUCKET_TITLES, bucketFor, completedList, sections, type Reminder } from '../../domain/reminders'
 import { formatScheduleSummary } from '../../domain/temporal'
 import { applyPlan } from '../../data/applyPlan'
-import { usePeople, useReminders } from '../../data/hooks'
+import { useFolders, useLiveReminders, usePeople } from '../../data/hooks'
 import { useUID } from '../UserContext'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
@@ -42,17 +42,22 @@ function quickAction(reminder: Reminder): { label: string; kind: 'deadline' | 's
 export function FollowUpsPage() {
   const uid = useUID()
   const navigate = useNavigate()
-  const reminders = useReminders(uid)
+  const live = useLiveReminders(uid)
   const people = usePeople(uid)
+  const folders = useFolders(uid)
   const [view, setView] = useState<'open' | 'completed'>('open')
   const [editing, setEditing] = useState<Reminder | null>(null)
   const [creating, setCreating] = useState(false)
   // One clock per mount — a fresh Date each render silently drifted past the memo.
   const [now] = useState(() => new Date())
 
-  const groups = useMemo(() => (reminders ? sections(reminders, now) : undefined), [reminders, now])
-  const done = useMemo(() => (reminders ? completedList(reminders) : []), [reminders])
+  const groups = useMemo(() => (live ? sections(live, now) : undefined), [live, now])
+  const done = useMemo(() => (live ? completedList(live) : []), [live])
   const peopleByID = useMemo(() => new Map((people ?? []).map((p) => [p.id, p])), [people])
+  const foldersByID = useMemo(
+    () => new Map((folders ?? []).map((folder) => [folder.id, folder])),
+    [folders],
+  )
 
   const counts = useMemo(() => {
     const byBucket = new Map((groups ?? []).map((group) => [group.bucket, group.reminders.length]))
@@ -160,6 +165,30 @@ export function FollowUpsPage() {
                     <button type="button" className="task-main" onClick={() => setEditing(reminder)}>
                       <span className="row-title">{reminder.title}</span>
                       <span className="task-meta">
+                        {(() => {
+                          // What it belongs to, when it belongs to something.
+                          // Without this the trip's work and the day's work are
+                          // indistinguishable here, and the page's whole claim
+                          // is that they are the same list seen differently.
+                          const folder = reminder.folderID ? foldersByID.get(reminder.folderID) : undefined
+                          if (!folder) return null
+                          return (
+                            <span
+                              role="link"
+                              tabIndex={0}
+                              className="task-container"
+                              style={{ '--tint': `var(--palette-${folder.colorName})` } as React.CSSProperties}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                navigate(`/folders/${folder.id}`)
+                              }}
+                              onKeyDown={(event) => event.key === 'Enter' && navigate(`/folders/${folder.id}`)}
+                            >
+                              <Icon name="folder" size={13} />
+                              {folder.title}
+                            </span>
+                          )
+                        })()}
                         {chip && (
                           <span
                             className={
@@ -237,6 +266,7 @@ export function FollowUpsPage() {
         <FollowUpSheet
           existing={editing}
           people={people}
+          folders={folders ?? []}
           onClose={() => {
             setCreating(false)
             setEditing(null)

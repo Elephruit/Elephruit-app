@@ -14,6 +14,10 @@ export interface Reminder {
   notes: string | null
   /// The people this is owed to or about.
   personIDs: string[]
+  /// The folder it is filed in, when it is filed in one. Optional and
+  /// nullable: "book a hotel" is owed to nobody and belongs to a trip; "ask
+  /// Dana for the museum code" belongs to both.
+  folderID?: string | null
   /// The interaction it fell out of, when it fell out of one.
   sourceInteractionID: string | null
   /// The imported document it fell out of, for dossier-derived follow-ups.

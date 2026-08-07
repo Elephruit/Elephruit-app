@@ -1,17 +1,31 @@
 /// ⌘K: one box that goes anywhere — the destinations, the capture action, and
-/// every person by name. Same native-<dialog> machinery as Dialog, in a
-/// top-aligned dress. Deliberately not full-text search; it matches names and
-/// destinations, nothing inside interactions or facts.
+/// now a search across everything the graph holds.
+///
+/// It used to match names and destinations only, and said so. That was honest
+/// while there was nothing else to find; once a trip could be archived it
+/// stopped being enough, because archiving something with no way to search for
+/// it is just a slower kind of losing it. Archived matches therefore appear
+/// here **without any token being typed**, under their own heading — out of the
+/// way of today is not the same as out of reach.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useFolders, useNotes, usePeople, useReminders, useSearchableInteractions } from '../../data/hooks'
+import type { Folder } from '../../domain/folder'
+import type { Interaction } from '../../domain/interaction'
+import type { Note } from '../../domain/note'
 import { foldedForMatching, type Person } from '../../domain/person'
+import type { Reminder } from '../../domain/reminders'
+import { search, type HitKind, type SearchHit } from '../../domain/search'
+import { useUID } from '../UserContext'
 import { Avatar } from './Avatar'
 import { Icon } from './Icon'
 
+type Group = 'Actions' | 'Pages' | 'People' | 'Results' | 'Archived'
+
 interface Command {
   id: string
-  group: 'Actions' | 'Pages' | 'People'
+  group: Group
   label: string
   detail?: string | null
   icon?: string
@@ -19,16 +33,61 @@ interface Command {
   to: string
 }
 
+/// Stable identities for the not-yet-loaded case. A fresh `[]` on every render
+/// is a new dependency every render, which turns the memo below into a
+/// full re-search of every collection on every keystroke *and* on every
+/// unrelated re-render.
+const EMPTY_PEOPLE: Person[] = []
+const EMPTY_FOLDERS: Folder[] = []
+const EMPTY_REMINDERS: Reminder[] = []
+const EMPTY_INTERACTIONS: Interaction[] = []
+const EMPTY_NOTES: Note[] = []
+
+const HIT_ICONS: Record<HitKind, string> = {
+  person: 'people',
+  folder: 'folder',
+  reminder: 'bell',
+  interaction: 'feed',
+  note: 'note',
+}
+
+function routeFor(hit: SearchHit): string {
+  switch (hit.kind) {
+    case 'person':
+      return `/people/${hit.id}`
+    case 'folder':
+      return `/folders/${hit.id}`
+    // A reminder opens where it lives; an unfiled one has only the list.
+    case 'reminder':
+      return '/followups'
+    case 'note':
+      return `/notes/${hit.id}`
+    case 'interaction':
+      return '/'
+  }
+}
+
 const STATIC_COMMANDS: Command[] = [
   { id: 'action-capture', group: 'Actions', label: 'Log an interaction', icon: 'plus', to: '/capture' },
   { id: 'action-brief', group: 'Actions', label: 'Prepare my day', icon: 'sparkle', to: '/?brief=1' },
   { id: 'page-feed', group: 'Pages', label: 'Feed', icon: 'feed', to: '/' },
   { id: 'page-people', group: 'Pages', label: 'People', icon: 'people', to: '/people' },
+  { id: 'page-folders', group: 'Pages', label: 'Folders', icon: 'folder', to: '/folders' },
+  { id: 'page-notes', group: 'Pages', label: 'Notes', icon: 'note', to: '/notes' },
   { id: 'page-followups', group: 'Pages', label: 'Follow-ups', icon: 'bell', to: '/followups' },
   { id: 'page-settings', group: 'Pages', label: 'Settings', icon: 'gear', to: '/settings' },
 ]
 
-export function CommandPalette({ people, onClose }: { people: Person[]; onClose: () => void }) {
+export function CommandPalette({ onClose }: { onClose: () => void }) {
+  const uid = useUID()
+  // Subscribed here rather than in the shell so the cost is paid only while the
+  // palette is open, instead of on every page for a box nobody has opened.
+  const people = usePeople(uid) ?? EMPTY_PEOPLE
+  const folders = useFolders(uid) ?? EMPTY_FOLDERS
+  const notes = useNotes(uid) ?? EMPTY_NOTES
+  const reminders = useReminders(uid) ?? EMPTY_REMINDERS
+  const interactions = useSearchableInteractions(uid) ?? EMPTY_INTERACTIONS
+
   const ref = useRef<HTMLDialogElement>(null)
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
@@ -40,23 +99,33 @@ export function CommandPalette({ people, onClose }: { people: Person[]; onClose:
     return () => dialog?.close()
   }, [])
 
+  const peopleByID = useMemo(() => new Map(people.map((person) => [person.id, person])), [people])
+
   const commands = useMemo<Command[]>(() => {
     const folded = foldedForMatching(query)
-    const personCommands: Command[] = people
-      .filter((person) => !person.isPlaceholder)
-      .map((person) => ({
-        id: `person-${person.id}`,
-        group: 'People' as const,
-        label: person.displayName,
-        detail: [person.roleTitle, person.organizationName].filter(Boolean).join(' · ') || null,
-        person,
-        to: `/people/${person.id}`,
-      }))
     if (!folded) return STATIC_COMMANDS
-    return [...STATIC_COMMANDS, ...personCommands].filter((command) =>
+
+    const pages = STATIC_COMMANDS.filter((command) =>
       foldedForMatching(command.label).includes(folded),
     )
-  }, [people, query])
+
+    const { live, archived } = search(query, { people, folders, reminders, interactions, notes })
+    const toCommand = (hit: SearchHit, group: Group): Command => ({
+      id: `${hit.kind}-${hit.id}`,
+      group,
+      label: hit.title,
+      detail: hit.detail,
+      icon: HIT_ICONS[hit.kind],
+      person: hit.kind === 'person' ? peopleByID.get(hit.id) : undefined,
+      to: routeFor(hit),
+    })
+
+    return [
+      ...pages,
+      ...live.map((hit) => toCommand(hit, 'Results')),
+      ...archived.map((hit) => toCommand(hit, 'Archived')),
+    ]
+  }, [people, folders, reminders, interactions, notes, peopleByID, query])
 
   const clampedActive = Math.min(activeIndex, Math.max(0, commands.length - 1))
 
@@ -101,8 +170,8 @@ export function CommandPalette({ people, onClose }: { people: Person[]; onClose:
           className="palette-input"
           role="combobox"
           aria-expanded="true"
-          aria-label="Search people and pages"
-          placeholder="Search people, or jump anywhere…"
+          aria-label="Search everything"
+          placeholder="Search everything, or jump anywhere…"
           value={query}
           onChange={(event) => {
             setQuery(event.target.value)
@@ -119,13 +188,19 @@ export function CommandPalette({ people, onClose }: { people: Person[]; onClose:
           lastGroup = command.group
           return (
             <div key={command.id}>
-              {header && <p className="palette-group">{header}</p>}
+              {header && (
+                <p className="palette-group" data-archived={header === 'Archived' || undefined}>
+                  {header === 'Archived' && <Icon name="archive" size={12} />}
+                  {header}
+                </p>
+              )}
               <button
                 type="button"
                 role="option"
                 aria-selected={index === clampedActive}
                 className="palette-item"
                 data-active={index === clampedActive || undefined}
+                data-archived={command.group === 'Archived' || undefined}
                 onMouseDown={(event) => event.preventDefault()}
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => choose(command)}

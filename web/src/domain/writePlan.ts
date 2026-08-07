@@ -9,6 +9,14 @@ export const COLLECTIONS = [
   'relationships',
   'observations',
   'reminders',
+  /// Trips, house moves, Travel, Recipes — one shape, nesting. See
+  /// src/domain/folder.ts.
+  'folders',
+  /// A note's metadata and its capped plain-text projection.
+  'notes',
+  /// A note's rich content, under the same id. A sibling rather than a
+  /// subcollection — see src/domain/note.ts.
+  'noteContents',
   /// Provenance metadata for imported dossiers — never raw file content.
   'sources',
   /// The feed's durable grouping records — one per meaningful save.
