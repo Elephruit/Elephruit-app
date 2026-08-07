@@ -56,6 +56,7 @@ export function NotePage({
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [refusal, setRefusal] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [formatMenuTarget, setFormatMenuTarget] = useState<HTMLElement | null>(null)
 
   /// The unsaved edit. A ref rather than state because a flush must read the
   /// latest value from inside a `visibilitychange` handler, which closes over
@@ -198,6 +199,7 @@ export function NotePage({
             disabled={readOnly}
             compact
           />
+          <span className="note-format-menu-host" ref={setFormatMenuTarget} />
           <IconButton label="Delete note" icon="trash" size={18} onClick={() => setDeleting(true)} />
           {embedded && onToggleFocus && (
             <IconButton
@@ -231,6 +233,7 @@ export function NotePage({
         onTitleChange={onTitleChange}
         onDocumentChange={onDocumentChange}
         readOnly={readOnly}
+        formatMenuTarget={formatMenuTarget}
       />
 
       {deleting && (

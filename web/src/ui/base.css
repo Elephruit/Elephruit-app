@@ -6376,29 +6376,12 @@ button.timeline-badge {
   color: var(--color-text-primary);
 }
 
-.note-footer {
-  display: flex;
-  align-items: center;
-  gap: var(--space-small);
-  padding-top: var(--space-small);
-  border-top: 1px solid var(--color-separator);
-}
-
 .format-menu {
   position: relative;
 }
 
 .format-menu-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px var(--space-small);
-  border: 0;
-  border-radius: var(--radius-medium);
-  background: none;
-  color: var(--color-text-tertiary);
-  font: var(--text-metadata);
-  cursor: pointer;
+  padding: 0;
 }
 
 .format-menu-button:hover {
@@ -6406,13 +6389,11 @@ button.timeline-badge {
   color: var(--color-text-primary);
 }
 
-/* Opens upward: the menu lives at the foot of the page, and a list dropping
-   below it would fall off the bottom of a long note. */
 .format-menu-list {
   position: absolute;
   z-index: 40;
-  bottom: calc(100% + 4px);
-  left: 0;
+  top: calc(100% + 4px);
+  right: 0;
   min-width: 220px;
   padding: 4px;
   border: 1px solid var(--color-separator);
