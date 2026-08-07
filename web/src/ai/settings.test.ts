@@ -20,6 +20,7 @@ beforeEach(() => {
 describe('AI provider selection', () => {
   it('offers Luna and Nano under OpenAI and Gemini models under Google', () => {
     expect(modelsForProvider('openai').map((model) => model.id)).toEqual(['gpt-5.6-luna', 'gpt-5-nano'])
+    expect(modelsForProvider('openai').map((model) => model.shortLabel)).toEqual(['Luna', 'Nano'])
     expect(modelsForProvider('google').map((model) => model.id)).toEqual([
       'gemini-3.6-flash',
       'gemini-3.5-flash-lite',

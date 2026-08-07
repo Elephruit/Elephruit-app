@@ -16,16 +16,17 @@ export interface AIModelChoice {
   id: string
   provider: AIProvider
   label: string
+  shortLabel: string
 }
 
 export const AI_MODELS: AIModelChoice[] = [
-  { id: 'claude-opus-5', provider: 'anthropic', label: 'Claude Opus 5 — the default' },
-  { id: 'claude-sonnet-5', provider: 'anthropic', label: 'Claude Sonnet 5 — faster, cheaper' },
-  { id: 'claude-haiku-4-5', provider: 'anthropic', label: 'Claude Haiku 4.5 — fastest, cheapest' },
-  { id: 'gpt-5.6-luna', provider: 'openai', label: 'GPT-5.6 Luna — the default' },
-  { id: 'gpt-5-nano', provider: 'openai', label: 'GPT-5 Nano — compatibility' },
-  { id: 'gemini-3.6-flash', provider: 'google', label: 'Gemini 3.6 Flash — the default' },
-  { id: 'gemini-3.5-flash-lite', provider: 'google', label: 'Gemini 3.5 Flash-Lite — fastest, cheapest' },
+  { id: 'claude-opus-5', provider: 'anthropic', label: 'Claude Opus 5 — the default', shortLabel: 'Opus 5' },
+  { id: 'claude-sonnet-5', provider: 'anthropic', label: 'Claude Sonnet 5 — faster, cheaper', shortLabel: 'Sonnet 5' },
+  { id: 'claude-haiku-4-5', provider: 'anthropic', label: 'Claude Haiku 4.5 — fastest, cheapest', shortLabel: 'Haiku 4.5' },
+  { id: 'gpt-5.6-luna', provider: 'openai', label: 'GPT-5.6 Luna — the default', shortLabel: 'Luna' },
+  { id: 'gpt-5-nano', provider: 'openai', label: 'GPT-5 Nano — compatibility', shortLabel: 'Nano' },
+  { id: 'gemini-3.6-flash', provider: 'google', label: 'Gemini 3.6 Flash — the default', shortLabel: '3.6 Flash' },
+  { id: 'gemini-3.5-flash-lite', provider: 'google', label: 'Gemini 3.5 Flash-Lite — fastest, cheapest', shortLabel: '3.5 Flash-Lite' },
 ]
 
 export const DEFAULT_AI_MODEL = AI_MODELS[0].id

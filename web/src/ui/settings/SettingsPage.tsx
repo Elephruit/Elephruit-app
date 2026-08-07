@@ -43,6 +43,12 @@ const PROVIDERS: Record<AIProvider, { name: string; keyLabel: string; placeholde
   google: { name: 'Google Gemini', keyLabel: 'Google API key', placeholder: 'AIza…', consoleName: 'Google AI Studio' },
 }
 
+const PROVIDER_OPTIONS: ReadonlyArray<{ value: AIProvider; label: string }> = [
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'google', label: 'Gemini' },
+]
+
 export function SettingsPage() {
   const uid = useUID()
   const developerAdmin = useDeveloperAdmin()
@@ -143,6 +149,16 @@ export function SettingsPage() {
   const showAddForm = credentials !== undefined && !credential && !migratableLegacyKey
   const showKeyInput = showAddForm || (credential !== null && replacing)
 
+  function selectProvider(provider: AIProvider) {
+    const next = { provider, model: DEFAULT_MODEL_BY_PROVIDER[provider] }
+    setSelectionState(next)
+    setAISelection(next)
+    setReplacing(false)
+    setKeyDraft('')
+    setError(null)
+    setNotice(null)
+  }
+
   return (
     <PageScaffold width="narrow">
       <PageHeader title="Settings" />
@@ -170,26 +186,15 @@ export function SettingsPage() {
           browser. Restricted facts never enter any request.
         </p>
 
-        <FormField label="Provider" htmlFor="ai-provider">
-          <select
-            id="ai-provider"
-            className="field"
-            value={selection.provider}
-            onChange={(event) => {
-              const provider = event.target.value as AIProvider
-              const next = { provider, model: DEFAULT_MODEL_BY_PROVIDER[provider] }
-              setSelectionState(next)
-              setAISelection(next)
-              setReplacing(false)
-              setKeyDraft('')
-              setError(null)
-              setNotice(null)
-            }}
-          >
-            <option value="anthropic">Anthropic</option>
-            <option value="openai">OpenAI</option>
-            <option value="google">Google Gemini</option>
-          </select>
+        <FormField label="Provider">
+          <div className="settings-segmented">
+            <SegmentedControl
+              label="AI provider"
+              options={PROVIDER_OPTIONS}
+              value={selection.provider}
+              onChange={selectProvider}
+            />
+          </div>
         </FormField>
 
         {credentials === undefined && (
@@ -338,23 +343,22 @@ export function SettingsPage() {
         )}
         {notice && <p className="field-help">{notice}</p>}
 
-        <FormField label="Model — your key, your cost call" htmlFor="ai-model">
-          <select
-            id="ai-model"
-            className="field"
-            value={selection.model}
-            onChange={(event) => {
-              const next = { ...selection, model: event.target.value }
-              setSelectionState(next)
-              setAISelection(next)
-            }}
-          >
-            {modelsForProvider(selection.provider).map((choice) => (
-              <option key={choice.id} value={choice.id}>
-                {choice.label}
-              </option>
-            ))}
-          </select>
+        <FormField label="Model — your key, your cost call">
+          <div className="settings-segmented">
+            <SegmentedControl
+              label={`${providerInfo.name} model`}
+              options={modelsForProvider(selection.provider).map((choice) => ({
+                value: choice.id,
+                label: choice.shortLabel,
+              }))}
+              value={selection.model}
+              onChange={(model) => {
+                const next = { ...selection, model }
+                setSelectionState(next)
+                setAISelection(next)
+              }}
+            />
+          </div>
         </FormField>
       </section>
 

@@ -2146,6 +2146,16 @@ textarea.field {
   align-items: center;
 }
 
+.settings-segmented {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.settings-segmented::-webkit-scrollbar {
+  display: none;
+}
+
 .inline-link {
   color: var(--color-accent);
 }
