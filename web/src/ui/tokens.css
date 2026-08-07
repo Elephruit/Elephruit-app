@@ -67,10 +67,10 @@
   --shadow-floating: var(--shadow-interactive);
   --shadow-panel: 0 8px 24px rgba(50, 42, 28, 0.14);
 
-  /* ——— Type — Geist carries the interface; Newsreader appears only at
-         --text-display moments (greeting, sign-in, empty-state headlines) ——— */
-  --font-sans: 'Geist Variable', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    sans-serif;
+  /* ——— Type — Newsreader is the app's voice at every level. The historical
+         --font-sans token remains as the interface alias so older component
+         styles inherit the same family without a parallel typography path. ——— */
+  --font-sans: 'Newsreader Variable', Georgia, 'Times New Roman', serif;
   --font-serif: 'Newsreader Variable', Georgia, 'Times New Roman', serif;
 
   --text-display: italic 500 1.6rem/1.3 var(--font-serif);
