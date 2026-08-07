@@ -10,12 +10,24 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { applyPlan } from '../../data/applyPlan'
 import { useContainer, useContainers, usePeople, useRemindersIn } from '../../data/hooks'
 import { planCompleteReminder, planReopenReminder } from '../../domain/capture'
-import { buildTree, pathTo, progressOf, progressSentence, type Container } from '../../domain/container'
+import {
+  buildTree,
+  descendantIDs,
+  isArchived,
+  leftOpen,
+  pathTo,
+  planArchiveContainer,
+  planUnarchiveContainer,
+  progressOf,
+  progressSentence,
+  type Container,
+} from '../../domain/container'
 import { relativeDescription } from '../../domain/contact'
 import { BUCKET_TITLES, bucketFor, completedList, sections, type Reminder } from '../../domain/reminders'
 import { formatScheduleSummary } from '../../domain/temporal'
 import { Avatar } from '../components/Avatar'
 import { Button } from '../components/Button'
+import { Dialog } from '../components/Dialog'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import { SkeletonRows } from '../components/Skeleton'
@@ -47,6 +59,7 @@ export function ContainerPage() {
   const people = usePeople(uid)
 
   const [editing, setEditing] = useState(false)
+  const [archiving, setArchiving] = useState(false)
   const [creatingReminder, setCreatingReminder] = useState(false)
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null)
   const [now] = useState(() => new Date())
@@ -97,6 +110,21 @@ export function ContainerPage() {
   }
 
   const line = dateLine(container, now)
+  const archived = isArchived(container)
+  const descendantCount = containers ? descendantIDs(containers, container.id).size : 0
+
+  const subject = container
+  async function setArchived(next: boolean) {
+    // The whole tree is needed to find the subtree and the ancestors; falling
+    // back to the subject alone still archives it correctly when the tree has
+    // not arrived, just without its children.
+    const tree = containers ?? [subject]
+    const plan = next
+      ? planArchiveContainer(tree, subject, new Date()).plan
+      : planUnarchiveContainer(tree, subject, new Date()).plan
+    await applyPlan(uid, plan)
+    setArchiving(false)
+  }
 
   return (
     <PageScaffold width="wide">
@@ -130,16 +158,35 @@ export function ContainerPage() {
           </span>
         }
         actions={
-          <>
-            <Button variant="quiet" icon="pencil" onClick={() => setEditing(true)}>
-              Edit
+          archived ? (
+            <Button variant="primary" icon="archive" onClick={() => void setArchived(false)}>
+              Unarchive
             </Button>
-            <Button variant="primary" icon="plus" onClick={() => setCreatingReminder(true)}>
-              New reminder
-            </Button>
-          </>
+          ) : (
+            <>
+              <Button variant="quiet" icon="archive" onClick={() => setArchiving(true)}>
+                Archive
+              </Button>
+              <Button variant="quiet" icon="pencil" onClick={() => setEditing(true)}>
+                Edit
+              </Button>
+              <Button variant="primary" icon="plus" onClick={() => setCreatingReminder(true)}>
+                New reminder
+              </Button>
+            </>
+          )
         }
       />
+
+      {archived && (
+        <div className="archive-banner">
+          <Icon name="archive" size={16} />
+          <span>
+            Archived{container.archivedAt ? ` ${relativeDescription(container.archivedAt, now)}` : ''}. Its
+            reminders no longer appear in Follow-ups, and nothing here was marked done on its behalf.
+          </span>
+        </div>
+      )}
 
       {children.length > 0 && (
         <section>
@@ -171,7 +218,7 @@ export function ContainerPage() {
 
       {groups === undefined && <SkeletonRows count={3} />}
 
-      {groups?.length === 0 && done.length === 0 && (
+      {!archived && groups?.length === 0 && done.length === 0 && (
         <EmptyState
           icon="bell"
           headline="Nothing to do yet"
@@ -184,7 +231,22 @@ export function ContainerPage() {
         />
       )}
 
-      {groups?.map((group) => (
+      {archived && leftOpen(reminders ?? []).length > 0 && (
+        <section>
+          <h2 className="section-header">Left open</h2>
+          {leftOpen(reminders ?? []).map((reminder) => (
+            <div key={reminder.id} className="task-row">
+              <span className="complete-ring complete-ring-static" aria-hidden="true" />
+              <span className="task-main">
+                <span className="row-title">{reminder.title}</span>
+              </span>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {!archived &&
+        groups?.map((group) => (
         <section key={group.bucket}>
           <h2 className="section-header" data-tone={group.bucket === 'overdue' ? 'overdue' : undefined}>
             {BUCKET_TITLES[group.bucket]}
@@ -229,10 +291,10 @@ export function ContainerPage() {
                   </span>
                 </button>
               </div>
-            )
-          })}
-        </section>
-      ))}
+              )
+            })}
+          </section>
+        ))}
 
       {done.length > 0 && (
         <section>
@@ -255,6 +317,26 @@ export function ContainerPage() {
             </div>
           ))}
         </section>
+      )}
+
+      {archiving && (
+        <Dialog title={`Archive ${container.title}?`} onClose={() => setArchiving(false)}>
+          <p className="row-subtitle">
+            {descendantCount > 0
+              ? `${container.title} and the ${descendantCount} thing${descendantCount === 1 ? '' : 's'} inside it move to the archive. `
+              : ''}
+            Its reminders leave Follow-ups. Nothing is completed and nothing is deleted — anything still open
+            stays open, and you can search for all of it or bring it back.
+          </p>
+          <div className="sheet-actions">
+            <Button variant="quiet" onClick={() => setArchiving(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={() => void setArchived(true)}>
+              Archive
+            </Button>
+          </div>
+        </Dialog>
       )}
 
       {editing && containers && (

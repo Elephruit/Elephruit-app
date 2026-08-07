@@ -99,6 +99,12 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M8 9.5h8M8 13h8M8 16.5h4" />
     </>
   ),
+  archive: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="4.5" rx="1.5" />
+      <path d="M5.5 9v8.5A2 2 0 0 0 7.5 19.5h9a2 2 0 0 0 2-2V9M10 12.5h4" />
+    </>
+  ),
   trash: <path d="M5 7h14M10 7V5.5A1.5 1.5 0 0 1 11.5 4h1A1.5 1.5 0 0 1 14 5.5V7m-7 0 .8 11.1A1.5 1.5 0 0 0 9.3 19.5h5.4a1.5 1.5 0 0 0 1.5-1.4L17 7" />,
 }
 

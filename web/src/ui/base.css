@@ -4120,3 +4120,33 @@ button.timeline-badge {
 .task-container:hover {
   background: color-mix(in srgb, var(--tint, var(--color-accent)) 20%, transparent);
 }
+
+/* An archived container still opens as itself — the banner says what changed
+   rather than the page becoming a different, lesser page. */
+.archive-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-small);
+  margin-bottom: var(--space-medium);
+  padding: var(--space-small) var(--space-medium);
+  border-radius: var(--radius-medium);
+  background: var(--color-subtle-fill);
+  color: var(--color-text-secondary);
+  font: var(--text-metadata);
+}
+
+.archive-banner svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+/* A ring that is not a button: work left open in a finished trip is a fact
+   about the past, and offering to complete it now would invite writing a
+   completion that never happened. */
+.complete-ring-static {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--color-separator);
+}

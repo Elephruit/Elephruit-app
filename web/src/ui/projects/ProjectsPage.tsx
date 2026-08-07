@@ -12,15 +12,20 @@ import { useContainers, useReminders } from '../../data/hooks'
 import {
   buildTree,
   flattenTree,
+  isArchived,
   planDeleteContainer,
+  planUnarchiveContainer,
   progressOf,
+  pathLabel,
   progressSentence,
   type Container,
 } from '../../domain/container'
+import { relativeDescription } from '../../domain/contact'
 import { Button } from '../components/Button'
 import { Dialog } from '../components/Dialog'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
+import { SegmentedControl } from '../components/SegmentedControl'
 import { SkeletonRows } from '../components/Skeleton'
 import { PageHeader } from '../shell/PageHeader'
 import { PageScaffold } from '../shell/PageScaffold'
@@ -33,11 +38,31 @@ export function ProjectsPage() {
   const containers = useContainers(uid)
   const reminders = useReminders(uid)
 
+  const [view, setView] = useState<'live' | 'archived'>('live')
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Container | null>(null)
   const [deleting, setDeleting] = useState<Container | null>(null)
 
-  const rows = useMemo(() => (containers ? flattenTree(buildTree(containers)) : undefined), [containers])
+  /// The tree is built from the live containers only. Building it from all of
+  /// them and hiding the archived rows would leave a live project indented
+  /// under a parent that is not drawn — the indent would point at nothing.
+  const rows = useMemo(
+    () => (containers ? flattenTree(buildTree(containers.filter((c) => !isArchived(c)))) : undefined),
+    [containers],
+  )
+
+  /// The archive is a flat list, deliberately. Its rows are finished things
+  /// being looked up, not a structure being worked in, and each carries its own
+  /// path so nothing is lost by flattening.
+  const archivedRows = useMemo(
+    () =>
+      containers
+        ? containers
+            .filter(isArchived)
+            .sort((a, b) => (b.archivedAt?.getTime() ?? 0) - (a.archivedAt?.getTime() ?? 0))
+        : undefined,
+    [containers],
+  )
 
   /// One pass over the reminders rather than a filter per row — the page draws
   /// a dozen containers and would otherwise walk the whole collection a dozen
@@ -68,15 +93,73 @@ export function ProjectsPage() {
         title="Projects"
         subtitle="Things that end, and the folders they sit in."
         actions={
-          <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
-            New
-          </Button>
+          <>
+            {(archivedRows?.length ?? 0) > 0 && (
+              <SegmentedControl
+                label="Live or archived"
+                options={[
+                  { value: 'live', label: 'Active' },
+                  { value: 'archived', label: `Archived (${archivedRows?.length ?? 0})` },
+                ]}
+                value={view}
+                onChange={setView}
+              />
+            )}
+            <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
+              New
+            </Button>
+          </>
         }
       />
 
       {rows === undefined && <SkeletonRows count={4} />}
 
-      {rows?.length === 0 && (
+      {view === 'archived' && archivedRows && (
+        <div className="container-tree">
+          {archivedRows.map((container) => (
+            <div key={container.id} className="container-row" data-kind={container.kind}>
+              <button
+                type="button"
+                className="container-main"
+                onClick={() => navigate(`/projects/${container.id}`)}
+              >
+                <span
+                  className="container-glyph"
+                  style={{ '--tint': `var(--palette-${container.colorName})` } as React.CSSProperties}
+                >
+                  <Icon name={container.kind === 'folder' ? 'folder' : 'project'} size={17} />
+                </span>
+                <span className="container-text">
+                  <span className="row-title">{container.title}</span>
+                  <span className="row-subtitle">{pathLabel(containers ?? [], container.id)}</span>
+                </span>
+                {container.archivedAt && (
+                  <span className="row-trailing">
+                    Archived {relativeDescription(container.archivedAt, new Date())}
+                  </span>
+                )}
+              </button>
+              <span className="container-actions">
+                <Button
+                  variant="ghost"
+                  small
+                  icon="archive"
+                  onClick={() =>
+                    void applyPlan(
+                      uid,
+                      planUnarchiveContainer(containers ?? [], container, new Date()).plan,
+                    )
+                  }
+                >
+                  Unarchive
+                </Button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {view === 'live' && rows?.length === 0 && (
         <EmptyState
           icon="project"
           headline="Nothing filed yet"
@@ -90,7 +173,7 @@ export function ProjectsPage() {
         />
       )}
 
-      {rows && rows.length > 0 && (
+      {view === 'live' && rows && rows.length > 0 && (
         <div className="container-tree">
           {rows.map(({ container, depth }) => {
             const progress = progressByContainer.get(container.id)

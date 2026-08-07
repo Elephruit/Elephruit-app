@@ -1,16 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import {
+  archivedContainerIDs,
   buildTree,
   canContain,
   descendantIDs,
   flattenTree,
+  isArchived,
+  isSuppressedByArchive,
+  leftOpen,
   makeContainer,
   moveRefusal,
   pathLabel,
   pathTo,
+  planArchiveContainer,
   planCreateContainer,
   planDeleteContainer,
   planMoveContainer,
+  planUnarchiveContainer,
   progressOf,
   progressSentence,
   validateContainerDraft,
@@ -250,5 +256,71 @@ describe('progress', () => {
 
   it('says so when everything is done', () => {
     expect(progressSentence(progressOf([{ status: 'completed' }]))).toBe('All 1 done')
+  })
+})
+
+describe('archiving', () => {
+  const deep = container({ id: 'deep', kind: 'project', title: 'Deep', parentID: 'travel' })
+  const all = [travel, chicago, deep]
+
+  it('takes everything beneath it in one plan', () => {
+    const { plan } = planArchiveContainer(all, travel, now)
+    expect(plan.map((write) => write.id).sort()).toEqual(['chicago', 'deep', 'travel'])
+    expect(plan.every((write) => write.op === 'update')).toBe(true)
+  })
+
+  it('archives a single project without touching its folder', () => {
+    const { plan } = planArchiveContainer(all, chicago, now)
+    expect(plan.map((write) => write.id)).toEqual(['chicago'])
+  })
+
+  /// Unarchiving a child alone would leave it live inside an archived parent,
+  /// reachable only from the archive — which is not what the word means.
+  it('brings the ancestors back too, or the trip is unreachable', () => {
+    const { plan } = planUnarchiveContainer(all, chicago, now)
+    expect(plan.map((write) => write.id).sort()).toEqual(['chicago', 'travel'])
+    expect(plan.every((write) => write.op === 'update' && write.data.archivedAt === null)).toBe(true)
+  })
+
+  it('is its own inverse over a whole subtree', () => {
+    const archived = planArchiveContainer(all, travel, now).plan.map((write) => write.id).sort()
+    const restored = planUnarchiveContainer(all, travel, now).plan.map((write) => write.id).sort()
+    expect(restored).toEqual(archived)
+  })
+
+  it('names the archived ones', () => {
+    const gone = container({ id: 'gone', kind: 'project', title: 'Gone', archivedAt: now })
+    expect(archivedContainerIDs([travel, gone])).toEqual(new Set(['gone']))
+    expect(isArchived(gone)).toBe(true)
+    expect(isArchived(travel)).toBe(false)
+  })
+})
+
+/// The rule the request turns on: an open reminder in a finished trip must stop
+/// asking without being marked done, because nobody bought those tickets.
+describe('what an archived container does to its reminders', () => {
+  const archivedIDs = new Set(['chicago'])
+
+  it('takes them out of the day’s buckets', () => {
+    expect(isSuppressedByArchive({ containerID: 'chicago' }, archivedIDs)).toBe(true)
+  })
+
+  it('leaves reminders in live containers alone', () => {
+    expect(isSuppressedByArchive({ containerID: 'travel' }, archivedIDs)).toBe(false)
+  })
+
+  it('leaves unfiled reminders alone', () => {
+    expect(isSuppressedByArchive({ containerID: null }, archivedIDs)).toBe(false)
+    expect(isSuppressedByArchive({}, archivedIDs)).toBe(false)
+  })
+
+  it('never writes a status — the plan touches containers only', () => {
+    const { plan } = planArchiveContainer([chicago], chicago, now)
+    expect(plan.every((write) => write.collection === 'containers')).toBe(true)
+  })
+
+  it('reports what was left open rather than pretending it was done', () => {
+    const reminders = [{ status: 'open' as const }, { status: 'completed' as const }]
+    expect(leftOpen(reminders)).toEqual([{ status: 'open' }])
   })
 })

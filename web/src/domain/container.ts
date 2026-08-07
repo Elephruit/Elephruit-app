@@ -285,6 +285,101 @@ export function planDeleteContainer(
   return { plan }
 }
 
+// MARK: - Archiving
+
+/// Archiving a container, and everything beneath it, in one plan.
+///
+/// The cascade is real here, unlike deletion, because archiving loses nothing:
+/// it is a statement that this is finished, and it is undone by the exact
+/// inverse below. A trip whose folder was archived while the trip stayed live
+/// would be a trip you could not navigate to.
+///
+/// Reminders are **not** touched. See ``isSuppressedByArchive`` for why their
+/// status must survive intact.
+export function planArchiveContainer(
+  containers: Container[],
+  subject: Container,
+  now: Date,
+): { plan: WritePlan } {
+  const affected = [subject.id, ...descendantIDs(containers, subject.id)]
+  return {
+    plan: affected.map((id) => ({
+      op: 'update' as const,
+      collection: 'containers' as const,
+      id,
+      data: { archivedAt: now, updatedAt: now },
+    })),
+  }
+}
+
+/// Bringing one back, with everything that went with it.
+///
+/// Unarchiving a *child* alone would leave it live inside an archived parent —
+/// reachable only from the archive, which is not what "unarchive" means to
+/// anybody. So this restores the whole subtree, and additionally clears the
+/// ancestors: you cannot have the trip back without having Travel back.
+export function planUnarchiveContainer(
+  containers: Container[],
+  subject: Container,
+  now: Date,
+): { plan: WritePlan } {
+  const affected = new Set<string>([
+    subject.id,
+    ...descendantIDs(containers, subject.id),
+    ...pathTo(containers, subject.id).map((container) => container.id),
+  ])
+  return {
+    plan: [...affected].map((id) => ({
+      op: 'update' as const,
+      collection: 'containers' as const,
+      id,
+      data: { archivedAt: null, updatedAt: now },
+    })),
+  }
+}
+
+export function isArchived(container: Container): boolean {
+  return container.archivedAt !== null && container.archivedAt !== undefined
+}
+
+/// The ids of every archived container, for the one question the buckets ask.
+export function archivedContainerIDs(containers: Container[]): Set<string> {
+  return new Set(containers.filter(isArchived).map((container) => container.id))
+}
+
+/// Whether a reminder should be left out of the day's buckets because the thing
+/// it belongs to is over.
+///
+/// This is the rule the whole archive turns on, and it is deliberately not the
+/// obvious one. When a trip ends with "buy Pokémon tickets" still open, there
+/// are three things the app could do and two of them are wrong:
+///
+/// - **Leave it in Overdue.** It reproaches you every morning for a museum you
+///   are no longer going to. Archiving did nothing.
+/// - **Mark it completed.** Nobody bought those tickets. Writing `completed`
+///   would put a claim in the record that is simply false, and completion is
+///   the one thing this app's counts are trusted for.
+/// - **Take it out of the buckets and leave its status alone.** It stops
+///   asking, it stays open, and the project page still lists it under "Left
+///   open" — which is the truth, and occasionally the interesting part of a
+///   finished trip.
+///
+/// So `bucketFor` is untouched: it is pure, correct, and about dates. This is
+/// applied by the *caller* before grouping.
+export function isSuppressedByArchive(
+  reminder: { containerID?: string | null },
+  archivedIDs: Set<string>,
+): boolean {
+  return reminder.containerID !== null && reminder.containerID !== undefined
+    ? archivedIDs.has(reminder.containerID)
+    : false
+}
+
+/// The open reminders of an archived container — the ones that never happened.
+export function leftOpen<T extends { status: 'open' | 'completed' }>(reminders: T[]): T[] {
+  return reminders.filter((reminder) => reminder.status === 'open')
+}
+
 // MARK: - Reading
 
 export interface ContainerProgress {

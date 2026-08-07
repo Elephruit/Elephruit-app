@@ -10,6 +10,7 @@ import { PageScaffold } from '../shell/PageScaffold'
 import { planCompleteReminder, planQuickReschedule, planReopenReminder, planUpdateReminder } from '../../domain/capture'
 import { relativeDescription } from '../../domain/contact'
 import { startOfDay } from '../../domain/dates'
+import { archivedContainerIDs, isSuppressedByArchive } from '../../domain/container'
 import { BUCKET_TITLES, bucketFor, completedList, sections, type Reminder } from '../../domain/reminders'
 import { formatScheduleSummary } from '../../domain/temporal'
 import { applyPlan } from '../../data/applyPlan'
@@ -51,8 +52,23 @@ export function FollowUpsPage() {
   // One clock per mount — a fresh Date each render silently drifted past the memo.
   const [now] = useState(() => new Date())
 
-  const groups = useMemo(() => (reminders ? sections(reminders, now) : undefined), [reminders, now])
-  const done = useMemo(() => (reminders ? completedList(reminders) : []), [reminders])
+  /// Reminders in a finished trip leave the day's buckets without their status
+  /// being touched — see isSuppressedByArchive. Applied here rather than inside
+  /// sections(), which is about dates and should stay that way.
+  /// Both collections must have arrived before anything is drawn. The two
+  /// subscriptions settle independently, and reminders usually win — so
+  /// tolerating `containers === undefined` here means an archived trip's work
+  /// flashes into Overdue for a frame before vanishing, which is exactly the
+  /// reproach archiving was meant to stop.
+  const live = useMemo(() => {
+    if (!reminders || !containers) return undefined
+    const archived = archivedContainerIDs(containers)
+    if (archived.size === 0) return reminders
+    return reminders.filter((reminder) => !isSuppressedByArchive(reminder, archived))
+  }, [reminders, containers])
+
+  const groups = useMemo(() => (live ? sections(live, now) : undefined), [live, now])
+  const done = useMemo(() => (live ? completedList(live) : []), [live])
   const peopleByID = useMemo(() => new Map((people ?? []).map((p) => [p.id, p])), [people])
   const containersByID = useMemo(
     () => new Map((containers ?? []).map((container) => [container.id, container])),
