@@ -618,6 +618,7 @@ export function InlineFollowUpComposer({
             emptyLabel="Folder"
             buttonRef={folderButtonRef}
             onButtonMouseDown={(event) => event.preventDefault()}
+            openOnFocus
             onOpenChange={(open) => {
               if (open) setOpenPanel(null)
             }}

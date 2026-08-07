@@ -35,6 +35,7 @@ export function FolderPicker({
   className,
   buttonRef,
   onButtonMouseDown,
+  openOnFocus = false,
   onOpenChange,
   onTabBackward,
   onTabForward,
@@ -49,6 +50,7 @@ export function FolderPicker({
   className?: string
   buttonRef?: Ref<HTMLButtonElement>
   onButtonMouseDown?: MouseEventHandler<HTMLButtonElement>
+  openOnFocus?: boolean
   onOpenChange?: (open: boolean) => void
   onTabBackward?: () => void
   onTabForward?: () => void
@@ -112,6 +114,11 @@ export function FolderPicker({
         title={compact ? `${label}: ${selected?.title ?? emptyLabel}` : undefined}
         disabled={disabled}
         onMouseDown={onButtonMouseDown}
+        onFocus={() => {
+          if (!openOnFocus || open) return
+          setOpen(true)
+          onOpenChange?.(true)
+        }}
         onClick={() => {
           setOpen((current) => {
             onOpenChange?.(!current)
@@ -122,9 +129,13 @@ export function FolderPicker({
           if (event.key !== 'Tab') return
           if (event.shiftKey && onTabBackward) {
             event.preventDefault()
+            setOpen(false)
+            onOpenChange?.(false)
             onTabBackward()
           } else if (!event.shiftKey && onTabForward) {
             event.preventDefault()
+            setOpen(false)
+            onOpenChange?.(false)
             onTabForward()
           }
         }}
