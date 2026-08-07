@@ -6,6 +6,7 @@ import { categoryTintStyle } from './categoryStyle'
 
 export type FollowUpStatusFilter = 'all' | 'overdue' | 'today' | 'upcoming' | 'unscheduled'
 export type FollowUpDueFilter = 'any' | 'today' | 'tomorrow' | 'next7' | 'none'
+export type FollowUpResponsibilityFilter = 'all' | 'mine' | 'theirs'
 
 interface FilterOption {
   value: string
@@ -128,10 +129,12 @@ export function FollowUpFilterBar({
   due,
   category,
   categories,
+  responsibility,
   onStatusChange,
   onPersonChange,
   onDueChange,
   onCategoryChange,
+  onResponsibilityChange,
   onClear,
 }: {
   status: FollowUpStatusFilter
@@ -140,14 +143,17 @@ export function FollowUpFilterBar({
   due: FollowUpDueFilter
   category: string
   categories: string[]
+  responsibility: FollowUpResponsibilityFilter
   onStatusChange: (value: FollowUpStatusFilter) => void
   onPersonChange: (value: string) => void
   onDueChange: (value: FollowUpDueFilter) => void
   onCategoryChange: (value: string) => void
+  onResponsibilityChange: (value: FollowUpResponsibilityFilter) => void
   onClear: () => void
 }) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
-  const hasFilters = status !== 'all' || personID !== '' || due !== 'any' || category !== ''
+  const hasFilters =
+    status !== 'all' || personID !== '' || due !== 'any' || category !== '' || responsibility !== 'all'
   const statuses: Array<{ value: FollowUpStatusFilter; label: string }> = [
     { value: 'all', label: 'All' },
     { value: 'overdue', label: 'Overdue' },
@@ -178,6 +184,11 @@ export function FollowUpFilterBar({
       leading: <span className="category-option-dot" />,
       style: categoryTintStyle(tag),
     })),
+  ]
+  const responsibilityOptions: FilterOption[] = [
+    { value: 'all', label: 'All follow-ups', leading: <Icon name="people" size={15} /> },
+    { value: 'mine', label: 'My next moves', leading: <Icon name="check-circle" size={15} /> },
+    { value: 'theirs', label: 'Waiting on people', leading: <Icon name="people" size={15} /> },
   ]
 
   return (
@@ -229,6 +240,16 @@ export function FollowUpFilterBar({
           open={openMenu === 'category'}
           onOpenChange={(open) => setOpenMenu(open ? 'category' : null)}
           onChange={onCategoryChange}
+        />
+        <FilterMenu
+          id="responsibility"
+          label="Responsibility"
+          icon="people"
+          value={responsibility}
+          options={responsibilityOptions}
+          open={openMenu === 'responsibility'}
+          onOpenChange={(open) => setOpenMenu(open ? 'responsibility' : null)}
+          onChange={(value) => onResponsibilityChange(value as FollowUpResponsibilityFilter)}
         />
         {hasFilters && (
           <button
