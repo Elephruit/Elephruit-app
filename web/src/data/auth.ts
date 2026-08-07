@@ -35,6 +35,13 @@ export async function signOutUser(): Promise<void> {
   await signOut(auth)
 }
 
+export const DEVELOPER_ADMIN_EMAIL = 'mike@moocowgames.com'
+
+export function isDeveloperAdmin(user: User): boolean {
+  if (usingEmulators && user.email?.toLowerCase() === 'dev@local.test') return true
+  return user.emailVerified && user.email?.toLowerCase() === DEVELOPER_ADMIN_EMAIL
+}
+
 export interface AuthState {
   user: User | null
   /// False until Firebase has restored (or denied) the session — the gate shows

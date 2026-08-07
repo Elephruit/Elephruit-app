@@ -17,6 +17,7 @@ import { CURATED_ATTRIBUTES, attributeLabel } from '../domain/facts'
 import { INTERACTION_KINDS, type InteractionKind } from '../domain/interaction'
 import { RELATIONSHIP_KINDS, kindLabel, type RelationshipKind } from '../domain/relationships'
 import { GatewayError, runAiTask, type GatewayRequest } from './gateway'
+import { reportAiTaxonomyGaps } from './taxonomy'
 
 // Structured outputs want every property present and no extras; optionality is
 // expressed as null. Kept flat — recursive schemas are unsupported there.
@@ -50,6 +51,7 @@ const ScheduleSchema = z.object({
 
 export const CaptureProposalSchema = z.object({
   normalizationWarnings: z.array(z.string()).optional(),
+  taxonomyGaps: z.array(z.object({ field: z.literal('relationship.kind'), value: z.string() })).optional(),
   interaction: z
     .object({
       kind: z.enum([...INTERACTION_KINDS]),
@@ -263,6 +265,7 @@ export function normalizeCaptureProposal(raw: unknown): CaptureProposal {
   const root = object(raw)
   if (!root) throw new Error('Capture proposal must be a JSON object.')
   const warnings: string[] = []
+  const taxonomyGaps: Array<{ field: 'relationship.kind'; value: string }> = []
 
   const interactionObject = object(root.interaction)
   const interactionSummary = string(interactionObject?.summary)
@@ -323,6 +326,7 @@ export function normalizeCaptureProposal(raw: unknown): CaptureProposal {
       const preservedLabel = suppliedLabel ?? normalizedKind.label
       const label = preservedLabel ? `“${preservedLabel}”` : 'A missing relationship type'
       warnings.push(`${label} is not in the relationship taxonomy. It was kept as “unknown” for review and may need a new app category.`)
+      if (preservedLabel) taxonomyGaps.push({ field: 'relationship.kind', value: preservedLabel })
     } else if (normalizedKind.label) {
       warnings.push(`Relationship type “${normalizedKind.label}” was normalized to “${normalizedKind.kind}” and kept as its review label.`)
     }
@@ -369,6 +373,7 @@ export function normalizeCaptureProposal(raw: unknown): CaptureProposal {
 
   return CaptureProposalSchema.parse({
     normalizationWarnings: warnings,
+    taxonomyGaps,
     interaction,
     participantNames: strings(root.participantNames, 'participant names', warnings),
     personContexts,
@@ -511,7 +516,9 @@ export async function parseCapture(
       throw new AICaptureError('The model declined to process this update. Your text is kept — log it manually.')
     }
     try {
-      return normalizeCaptureProposal(JSON.parse(extractJsonPayload(reply)))
+      const proposal = normalizeCaptureProposal(JSON.parse(extractJsonPayload(reply)))
+      void reportAiTaxonomyGaps(proposal.taxonomyGaps ?? [])
+      return proposal
     } catch {
       throw new AICaptureError('The reply did not match the expected shape. Your text is kept — log it manually.')
     }

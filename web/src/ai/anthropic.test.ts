@@ -127,6 +127,7 @@ describe('CaptureProposalSchema', () => {
     expect(proposal.relationships).toEqual([
       expect.objectContaining({ kind: 'unknown', label: 'godparent', facts: [{ attribute: 'detail', value: 'Lives nearby' }] }),
     ])
+    expect(proposal.taxonomyGaps).toEqual([{ field: 'relationship.kind', value: 'godparent' }])
     expect(proposal.reminderChanges).toEqual([])
     expect(resolved.items).toHaveLength(1)
     expect(resolved.warnings).toEqual(expect.arrayContaining([

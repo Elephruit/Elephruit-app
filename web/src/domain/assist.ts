@@ -86,6 +86,7 @@ export interface CaptureProposal {
   /// the editable review instead of failing the whole capture or writing
   /// silently through a lossy coercion.
   normalizationWarnings?: string[]
+  taxonomyGaps?: Array<{ field: 'relationship.kind'; value: string }>
   interaction: ProposedInteraction | null
   /// Who took part in the interaction, by name.
   participantNames: string[]

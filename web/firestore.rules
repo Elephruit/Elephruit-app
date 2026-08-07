@@ -37,5 +37,11 @@ service cloud.firestore {
     match /aiRateLimits/{docId} {
       allow read, write: if false;
     }
+
+    // Aggregated taxonomy diagnostics are callable-only. Even the developer
+    // admin reads through a server-side email check, never a client rule.
+    match /aiTaxonomyGaps/{docId} {
+      allow read, write: if false;
+    }
   }
 }

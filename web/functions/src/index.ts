@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto'
 import { initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { onInit, setGlobalOptions } from 'firebase-functions/v2'
-import { onCall, type CallableRequest } from 'firebase-functions/v2/https'
+import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https'
 import { firestoreAuditWriter } from './audit/audit.js'
 import { assertStartupInvariants, readConfig } from './config.js'
 import {
@@ -29,6 +29,9 @@ import { PublicError, toHttpsError } from './log/errors.js'
 import { createLogger } from './log/logger.js'
 import { buildAdapterRegistry } from './providers/registry.js'
 import { buildKeyVerifier } from './providers/verify.js'
+import { handleListTaxonomyGaps, handleReportTaxonomyGaps } from './taxonomy/handlers.js'
+import { FirestoreTaxonomyGapStore } from './taxonomy/store.js'
+import { isDeveloperAdminClaims } from './taxonomy/admin.js'
 
 setGlobalOptions({ region: 'us-central1' })
 
@@ -76,6 +79,12 @@ function requireUid(request: CallableRequest<unknown>): string {
   return uid
 }
 
+function requireDeveloperAdmin(request: CallableRequest<unknown>): void {
+  if (!isDeveloperAdminClaims(request.auth?.token, isEmulatorManifest)) {
+    throw new HttpsError('permission-denied', 'Developer access is required.')
+  }
+}
+
 function credentialCallable<Result>(
   operation: string,
   handler: (deps: CredentialDeps, uid: string, input: unknown) => Promise<Result>,
@@ -107,6 +116,18 @@ export const addAiCredential = credentialCallable('credential_add', handleAddCre
 export const verifyAiCredential = credentialCallable('credential_verify', handleVerifyCredential)
 export const replaceAiCredential = credentialCallable('credential_replace', handleReplaceCredential)
 export const deleteAiCredential = credentialCallable('credential_delete', handleDeleteCredential)
+
+export const reportAiTaxonomyGaps = onCall(credentialCallableOptions, async (request) => {
+  requireUid(request)
+  getDeps()
+  return handleReportTaxonomyGaps(new FirestoreTaxonomyGapStore(getFirestore()), request.data)
+})
+
+export const listAiTaxonomyGaps = onCall(credentialCallableOptions, async (request) => {
+  requireDeveloperAdmin(request)
+  getDeps()
+  return handleListTaxonomyGaps(new FirestoreTaxonomyGapStore(getFirestore()))
+})
 
 let cachedGatewayDeps: GatewayDeps | null = null
 function getGatewayDeps(): GatewayDeps {

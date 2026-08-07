@@ -51,6 +51,7 @@ beforeAll(async () => {
       kmsKeyName: 'local-dev',
     })
     await setDoc(doc(admin, 'aiRateLimits/c_alice_stream_0'), { count: 1 })
+    await setDoc(doc(admin, 'aiTaxonomyGaps/gap-1'), { field: 'relationship.kind', value: 'godparent' })
   })
 })
 
@@ -133,6 +134,17 @@ describe('rate-limit records', () => {
     const alice = db(env.authenticatedContext('alice'))
     await assertFails(getDoc(doc(alice, 'aiRateLimits/c_alice_stream_0')))
     await assertFails(setDoc(doc(alice, 'aiRateLimits/c_alice_stream_0'), { count: 0 }))
+  })
+})
+
+describe('taxonomy diagnostics', () => {
+  it('refuses direct reads and writes even for the developer admin identity', async () => {
+    const mike = db(env.authenticatedContext('mike', {
+      email: 'mike@moocowgames.com',
+      email_verified: true,
+    }))
+    await assertFails(getDoc(doc(mike, 'aiTaxonomyGaps/gap-1')))
+    await assertFails(setDoc(doc(mike, 'aiTaxonomyGaps/forged'), { field: 'relationship.kind', value: 'friend' }))
   })
 })
 

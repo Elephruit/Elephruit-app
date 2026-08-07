@@ -1,7 +1,9 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
-import { useAuthUser } from './data/auth'
+import { isDeveloperAdmin, useAuthUser } from './data/auth'
 import { SignInPage } from './ui/SignInPage'
 import { UIDProvider } from './ui/UserContext'
+import { DeveloperPage } from './ui/developer/DeveloperPage'
+import { DeveloperAdminContext } from './ui/developer/context'
 import { AppShell } from './ui/shell/AppShell'
 import { NotFound } from './ui/shell/NotFound'
 import { FeedPage } from './ui/feed/FeedPage'
@@ -26,30 +28,34 @@ function App() {
 
   if (!ready) return null
   if (!user) return <SignInPage />
+  const developerAdmin = isDeveloperAdmin(user)
 
   return (
     <UIDProvider uid={user.uid}>
-      <Routes>
-        <Route element={<AppShell />}>
-          <Route index element={<FeedPage />} />
-          <Route path="/people" element={<PeopleListPage />} />
-          <Route path="/people/:personID" element={<PersonPage />} />
-          <Route path="/notes" element={<NotesPage />} />
-          <Route path="/notes/:noteID" element={<NotesPage />} />
-          <Route path="/folders" element={<FoldersPage />} />
-          <Route path="/folders/:folderID" element={<FolderPage />} />
-          {/* Projects became Folders. The old paths still land rather than
-              404ing, because a link may be sitting in somebody's history. */}
-          <Route path="/projects" element={<Navigate to="/folders" replace />} />
-          <Route path="/projects/:folderID" element={<LegacyProjectRoute />} />
-          <Route path="/followups" element={<FollowUpsPage />} />
-          <Route path="/log" element={<LogPage />} />
-          {/* Capture lives inline on the feed now; the old page redirects. */}
-          <Route path="/capture" element={<Navigate to="/?capture=1" replace />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<NotFound />} />
-        </Route>
-      </Routes>
+      <DeveloperAdminContext.Provider value={developerAdmin}>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route index element={<FeedPage />} />
+            <Route path="/people" element={<PeopleListPage />} />
+            <Route path="/people/:personID" element={<PersonPage />} />
+            <Route path="/notes" element={<NotesPage />} />
+            <Route path="/notes/:noteID" element={<NotesPage />} />
+            <Route path="/folders" element={<FoldersPage />} />
+            <Route path="/folders/:folderID" element={<FolderPage />} />
+            {/* Projects became Folders. The old paths still land rather than
+                404ing, because a link may be sitting in somebody's history. */}
+            <Route path="/projects" element={<Navigate to="/folders" replace />} />
+            <Route path="/projects/:folderID" element={<LegacyProjectRoute />} />
+            <Route path="/followups" element={<FollowUpsPage />} />
+            <Route path="/log" element={<LogPage />} />
+            {/* Capture lives inline on the feed now; the old page redirects. */}
+            <Route path="/capture" element={<Navigate to="/?capture=1" replace />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/developer" element={developerAdmin ? <DeveloperPage /> : <NotFound />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Routes>
+      </DeveloperAdminContext.Provider>
     </UIDProvider>
   )
 }
