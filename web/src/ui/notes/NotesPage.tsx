@@ -153,7 +153,6 @@ export function NotesPage() {
       <div
         className="notes-layout"
         data-has-sidebar={!cleanScreen && folders && folders.length > 0 || undefined}
-        data-clean-screen={cleanScreen || undefined}
       >
         {!cleanScreen && folders && folders.length > 0 && (
           <aside className="notes-sidebar">
