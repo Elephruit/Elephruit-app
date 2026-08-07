@@ -295,7 +295,9 @@ export function PersonPage() {
 
   const firstMetLine = summary?.firstMetOn
     ? `${summary.firstMeetingPlanned ? 'First meeting' : 'First met'} ${summary.firstMetOn.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: summary.firstMetOn.getFullYear() === now.getFullYear() ? undefined : 'numeric' })}${summary.firstMetContext ? ` · ${summary.firstMetContext}` : ''}`
-    : null
+    : summary?.firstMetContext
+      ? `How you met · ${summary.firstMetContext}`
+      : null
 
   return (
     <PageScaffold width="wide" className="person-page">
