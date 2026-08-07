@@ -21,7 +21,6 @@ export function NavRail({ onSearch }: { onSearch: () => void }) {
   return (
     <nav className="nav-rail" aria-label="Primary">
       <div className="rail-brand">
-        <img src="/favicon.svg" alt="" width={26} height={26} />
         <span className="rail-brand-word">Elephruit</span>
       </div>
 
