@@ -5809,6 +5809,26 @@ button.timeline-badge {
   min-width: 0;
 }
 
+.notes-layout[data-clean-screen] .notes-main {
+  width: 100%;
+  max-width: 820px;
+  margin-inline: auto;
+}
+
+.note-inline-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-small);
+  margin-bottom: var(--space-medium);
+  padding-bottom: var(--space-small);
+  border-bottom: 1px solid var(--color-separator);
+}
+
+.note-inline-pane {
+  min-width: 0;
+}
+
 .field-row {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -11,7 +11,7 @@
 /// second, parallel filing system of their own.
 
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { applyPlan } from '../../data/applyPlan'
 import { useFolders, useNotes } from '../../data/hooks'
 import { archivedFolderIDs, descendantIDs, pathLabel } from '../../domain/folder'
@@ -26,10 +26,12 @@ import { PageHeader } from '../shell/PageHeader'
 import { PageScaffold } from '../shell/PageScaffold'
 import { useUID } from '../UserContext'
 import { FolderTree } from '../folders/FolderTree'
+import { NotePage } from './NotePage'
 
 export function NotesPage() {
   const uid = useUID()
   const navigate = useNavigate()
+  const { noteID } = useParams()
   const notes = useNotes(uid)
   const folders = useFolders(uid)
 
@@ -37,6 +39,7 @@ export function NotesPage() {
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [now] = useState(() => new Date())
+  const [cleanScreen, setCleanScreen] = useState(false)
 
   const archivedIDs = useMemo(() => archivedFolderIDs(folders ?? []), [folders])
   const foldersByID = useMemo(
@@ -133,7 +136,7 @@ export function NotesPage() {
                 onChange={setScope}
               />
             )}
-            {scope === 'live' && (visible?.length ?? 0) > 0 && (
+            {!noteID && scope === 'live' && (visible?.length ?? 0) > 0 && (
               <Button variant="primary" icon="plus" onClick={() => void create()}>
                 New note
               </Button>
@@ -142,8 +145,12 @@ export function NotesPage() {
         }
       />
 
-      <div className="notes-layout" data-has-sidebar={folders && folders.length > 0 || undefined}>
-        {folders && folders.length > 0 && (
+      <div
+        className="notes-layout"
+        data-has-sidebar={!cleanScreen && folders && folders.length > 0 || undefined}
+        data-clean-screen={cleanScreen || undefined}
+      >
+        {!cleanScreen && folders && folders.length > 0 && (
           <aside className="notes-sidebar">
             <FolderTree
               folders={folders.filter((folder) => (scope === 'archived') === archivedIDs.has(folder.id))}
@@ -159,6 +166,27 @@ export function NotesPage() {
         )}
 
         <div className="notes-main">
+          {noteID ? (
+            <>
+              <div className="note-inline-navigation">
+                <Button
+                  variant="quiet"
+                  icon="back"
+                  onClick={() => {
+                    setCleanScreen(false)
+                    navigate('/notes')
+                  }}
+                >
+                  Back
+                </Button>
+                <Button variant="quiet" onClick={() => setCleanScreen((current) => !current)}>
+                  {cleanScreen ? 'Show folders' : 'Clean screen'}
+                </Button>
+              </div>
+              <NotePage embedded />
+            </>
+          ) : (
+            <>
           {visible === undefined && <SkeletonRows count={5} />}
 
           {visible?.length === 0 && (
@@ -230,6 +258,8 @@ export function NotesPage() {
                 )
               })}
             </div>
+          )}
+            </>
           )}
         </div>
       </div>

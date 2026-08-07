@@ -33,7 +33,7 @@ import { NoteEditor } from './NoteEditor'
 
 const SAVE_DEBOUNCE_MS = 700
 
-export function NotePage() {
+export function NotePage({ embedded = false }: { embedded?: boolean }) {
   const uid = useUID()
   const navigate = useNavigate()
   const { noteID = '' } = useParams()
@@ -142,35 +142,31 @@ export function NotePage() {
   }
 
   if (note === undefined || content === undefined) {
-    return (
-      <PageScaffold width="reading">
-        <SkeletonRows count={5} />
-      </PageScaffold>
-    )
+    const loading = <SkeletonRows count={5} />
+    return embedded ? loading : <PageScaffold width="reading">{loading}</PageScaffold>
   }
 
   if (note === null) {
-    return (
-      <PageScaffold width="reading">
-        <EmptyState
-          icon="note"
-          headline="Not here"
-          message="This note has been deleted."
-          action={
-            <Button variant="primary" onClick={() => navigate('/notes')}>
-              Back to Notes
-            </Button>
-          }
-        />
-      </PageScaffold>
+    const missing = (
+      <EmptyState
+        icon="note"
+        headline="Not here"
+        message="This note has been deleted."
+        action={
+          <Button variant="primary" onClick={() => navigate('/notes')}>
+            Back to Notes
+          </Button>
+        }
+      />
     )
+    return embedded ? missing : <PageScaffold width="reading">{missing}</PageScaffold>
   }
 
   const folder = folders?.find((entry) => entry.id === note.folderID)
   const readOnly = folder ? isArchived(folder) : false
 
-  return (
-    <PageScaffold width="reading">
+  const editor = (
+    <section className={embedded ? 'note-inline-pane' : undefined}>
       {/* No PageHeader here. A note already has a title — the big field the
           editor owns — and a page header carrying the same words above it reads
           as the title having been said twice. This row is the metadata and the
@@ -240,6 +236,8 @@ export function NotePage() {
           About {note.personIDs.map((id) => people.find((p) => p.id === id)?.displayName).filter(Boolean).join(', ')}
         </p>
       )}
-    </PageScaffold>
+    </section>
   )
+
+  return embedded ? editor : <PageScaffold width="reading">{editor}</PageScaffold>
 }

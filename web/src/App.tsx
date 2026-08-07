@@ -9,7 +9,6 @@ import { FollowUpsPage } from './ui/followups/FollowUpsPage'
 import { LogPage } from './ui/log/LogPage'
 import { PeopleListPage } from './ui/people/PeopleListPage'
 import { PersonPage } from './ui/people/PersonPage'
-import { NotePage } from './ui/notes/NotePage'
 import { NotesPage } from './ui/notes/NotesPage'
 import { FolderPage } from './ui/folders/FolderPage'
 import { FoldersPage } from './ui/folders/FoldersPage'
@@ -36,7 +35,7 @@ function App() {
           <Route path="/people" element={<PeopleListPage />} />
           <Route path="/people/:personID" element={<PersonPage />} />
           <Route path="/notes" element={<NotesPage />} />
-          <Route path="/notes/:noteID" element={<NotePage />} />
+          <Route path="/notes/:noteID" element={<NotesPage />} />
           <Route path="/folders" element={<FoldersPage />} />
           <Route path="/folders/:folderID" element={<FolderPage />} />
           {/* Projects became Folders. The old paths still land rather than
