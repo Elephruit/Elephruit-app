@@ -103,6 +103,24 @@ export function entryFromObservation(observation: Observation): TimelineEntry {
   }
 }
 
+/// The useful history of a relationship, rather than a storage audit. Facts
+/// extracted from a conversation belong inside that conversation and therefore
+/// do not become duplicate full-height rows. Unsourced profile edits remain
+/// available as compact updates.
+export function projectPersonTimeline(args: {
+  interactions: Interaction[]
+  observations: Observation[]
+  reminders: Reminder[]
+  peopleByID: Map<string, { displayName: string }>
+  viewpointPersonID: string
+}): TimelineEntry[] {
+  return [
+    ...args.interactions.map((interaction) => entryFromInteraction(interaction, args.peopleByID, args.viewpointPersonID)),
+    ...args.observations.filter((observation) => observation.sourceInteractionID === null).map(entryFromObservation),
+    ...args.reminders.map(entryFromReminder),
+  ]
+}
+
 /// The line beneath a row's title: what kind of thing this is and who else.
 /// Ported from PersonTimelineEntry.provenanceLine.
 export function provenanceLine(entry: TimelineEntry): string {

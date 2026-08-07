@@ -24,6 +24,20 @@ export const PALETTE_COLORS = [
 
 export type PaletteColor = (typeof PALETTE_COLORS)[number]
 
+export type ProfileFocus = 'professional' | 'personal'
+
+export type ConnectionOriginStatus = 'met' | 'introductionPlanned' | 'unknown'
+
+/// How this person entered the user's life. This is deliberately separate from
+/// relationships between people: “introduced by Harbinder” is both a network
+/// edge and part of the user's own history with Kelly.
+export interface ConnectionOrigin {
+  status: ConnectionOriginStatus
+  firstMetOn: Date | null
+  context: string | null
+  introducedByPersonID: string | null
+}
+
 export interface Person {
   id: string
   displayName: string
@@ -31,6 +45,10 @@ export interface Person {
   familyName: string | null
   roleTitle: string | null
   organizationName: string | null
+  /// Controls presentation emphasis, never which facts a person may have.
+  /// Optional so records created before the working-board redesign load cleanly.
+  profileFocus?: ProfileFocus
+  connectionOrigin?: ConnectionOrigin | null
   colorName: PaletteColor
   isPlaceholder: boolean
   hasStatedName: boolean
@@ -42,6 +60,10 @@ export interface Person {
   /// Optional, backward compatible: unnamed-duplicate comparisons the user
   /// marked "They are different", keyed order-independently by the pair.
   dismissedComparisonKeys?: string[]
+}
+
+export function profileFocusOf(person: Person): ProfileFocus {
+  return person.profileFocus ?? (person.roleTitle || person.organizationName ? 'professional' : 'personal')
 }
 
 /// The monogram for an avatar: first letters of the first two words.

@@ -8,7 +8,7 @@
 import type { FactAttribute, FactConfidence, FactSensitivity, Observation } from './facts'
 import { newID } from './ids'
 import type { Interaction, InteractionKind } from './interaction'
-import { nameParts, paletteColorFor, type Person } from './person'
+import { nameParts, paletteColorFor, type ConnectionOrigin, type Person, type ProfileFocus } from './person'
 import { possessivePhrase, relationshipPair, type Relationship, type RelationshipKind } from './relationships'
 import type { Reminder } from './reminders'
 import type { WritePlan } from './writePlan'
@@ -21,6 +21,8 @@ export interface PersonDraft {
   organizationName?: string | null
   isPlaceholder?: boolean
   hasStatedName?: boolean
+  profileFocus?: ProfileFocus
+  connectionOrigin?: ConnectionOrigin | null
 }
 
 export function makePerson(draft: PersonDraft, now: Date): Person {
@@ -34,12 +36,21 @@ export function makePerson(draft: PersonDraft, now: Date): Person {
     familyName: parts.familyName,
     roleTitle: draft.roleTitle?.trim() || null,
     organizationName: draft.organizationName?.trim() || null,
+    profileFocus: draft.profileFocus ?? (draft.roleTitle?.trim() || draft.organizationName?.trim() ? 'professional' : 'personal'),
+    connectionOrigin: draft.connectionOrigin ?? null,
     colorName: paletteColorFor(displayName),
     isPlaceholder: draft.isPlaceholder ?? false,
     hasStatedName: stated,
     createdAt: now,
     lastContactAt: null,
   }
+}
+
+export function planUpdatePersonContext(
+  person: Person,
+  changes: { profileFocus?: ProfileFocus; connectionOrigin?: ConnectionOrigin | null },
+): { plan: WritePlan } {
+  return { plan: [{ op: 'update', collection: 'people', id: person.id, data: changes }] }
 }
 
 export function planCreatePerson(draft: PersonDraft, now: Date): { plan: WritePlan; person: Person } {

@@ -9,6 +9,7 @@ import {
   groupByDay,
   groupByMonth,
   matchesFilter,
+  projectPersonTimeline,
   provenanceLine,
   type TimelineEntry,
 } from './timeline'
@@ -90,6 +91,19 @@ describe('entries', () => {
     const long = 'a'.repeat(200)
     expect(excerptOf(long)!.length).toBe(140)
     expect(excerptOf(long)!.endsWith('…')).toBe(true)
+  })
+
+  it('keeps facts extracted from an interaction inside that interaction', () => {
+    const sourced = { ...observation, id: 'obs-sourced', sourceInteractionID: interaction.id }
+    const rows = projectPersonTimeline({
+      interactions: [interaction],
+      observations: [observation, sourced],
+      reminders: [],
+      peopleByID: people,
+      viewpointPersonID: 'ana',
+    })
+
+    expect(rows.map((row) => row.id)).toEqual(['int-1', 'obs-1'])
   })
 })
 
