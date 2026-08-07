@@ -30,7 +30,7 @@ export function MemoryTopLine({ moment }: { moment: MemoryMomentViewModel }) {
             {unnamed[0].displayName}
           </Link>
         )}
-        {moment.people.length === 0 && <span className="memory-person-link">Memory</span>}
+        {moment.people.length === 0 && <span className="memory-person-link">Update</span>}
       </span>
       <time className="memory-time tabular" dateTime={moment.occurredAt.toISOString()}>
         {timeLabel(moment.occurredAt)}

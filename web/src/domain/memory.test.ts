@@ -87,7 +87,7 @@ describe('feed contract (Kelly/Harbinder regression)', () => {
     }
 
     // Nobody's last contact moved — no conversation happened.
-    expect(plan.some((w) => w.collection === 'people' && w.op === 'update')).toBe(false)
+    expect(plan.some((w) => w.collection === 'people' && w.op === 'update' && 'lastContactAt' in w.data)).toBe(false)
   })
 
   it('a dossier-style save (facts only, no event at all) is feedable', () => {
@@ -121,7 +121,7 @@ describe('feed contract (Kelly/Harbinder regression)', () => {
     expect(memory!.title).toBe('Harbinder introduced me to Kelly Tsaur')
     expect(plan.filter((w) => w.collection === 'memories')).toHaveLength(1)
     // Both participants receive last-contact state through the bundle.
-    expect(plan.filter((w) => w.collection === 'people' && w.op === 'update')).toHaveLength(2)
+    expect(plan.filter((w) => w.collection === 'people' && w.op === 'update' && 'lastContactAt' in w.data)).toHaveLength(2)
   })
 
   it('an empty review saves nothing and creates no memory', () => {

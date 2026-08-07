@@ -113,7 +113,7 @@ export function MemoryRail({
             <span className="memory-date-node" />
           </span>
           <button type="button" className="memory-show-earlier" onClick={() => setShowAll(true)}>
-            Show earlier memories ({hiddenCount})
+            Show earlier updates ({hiddenCount})
           </button>
         </div>
       )}

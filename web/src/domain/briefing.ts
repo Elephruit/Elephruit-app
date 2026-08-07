@@ -38,7 +38,8 @@ export interface BriefingPerson {
   lastContact: string
   facts: BriefingFact[]
   relationships: string[]
-  openFollowUps: string[]
+  myNextMoves: string[]
+  waitingOnThem: string[]
   recentInteractions: Array<{ when: string; kind: string; summary: string; notes: string | null }>
 }
 
@@ -114,8 +115,14 @@ export function briefingInputFor(
         return other.hasStatedName ? `${label}: ${other.displayName}` : `${label}: unnamed ("${other.displayName}")`
       })
 
-    const openFollowUps = reminders
-      .filter((reminder) => reminder.status === 'open' && reminder.personIDs.includes(person.id))
+    const relevantFollowUps = reminders.filter(
+      (reminder) => reminder.status === 'open' && reminder.personIDs.includes(person.id),
+    )
+    const myNextMoves = relevantFollowUps
+      .filter((reminder) => (reminder.responsibility ?? 'mine') === 'mine')
+      .map((reminder) => followUpPhrase(reminder, now))
+    const waitingOnThem = relevantFollowUps
+      .filter((reminder) => reminder.responsibility === 'theirs')
       .map((reminder) => followUpPhrase(reminder, now))
 
     const recentInteractions = interactions
@@ -135,7 +142,8 @@ export function briefingInputFor(
       lastContact: lastContactLine(person.lastContactAt, now),
       facts,
       relationships: related,
-      openFollowUps,
+      myNextMoves,
+      waitingOnThem,
       recentInteractions,
     }
   })

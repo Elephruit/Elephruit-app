@@ -25,7 +25,10 @@ import {
 } from '../../domain/attachments'
 import { dossierTargetOptions, type DossierTarget, type DossierTargetOption } from '../../domain/dossier'
 import { newID } from '../../domain/ids'
-import { useAiCredentials, usePeople } from '../../data/hooks'
+import { attributeLabel } from '../../domain/facts'
+import { profileFocusOf } from '../../domain/person'
+import { kindLabel } from '../../domain/relationships'
+import { useAiCredentials, useAllObservations, useAllRelationships, usePeople, useReminders } from '../../data/hooks'
 import { useUID } from '../UserContext'
 
 export type CaptureMode =
@@ -135,6 +138,9 @@ export interface CaptureController {
 export function useCaptureController(): CaptureController {
   const uid = useUID()
   const people = usePeople(uid)
+  const observations = useAllObservations(uid)
+  const reminders = useReminders(uid)
+  const relationships = useAllRelationships(uid)
   const credentials = useAiCredentials(uid)
 
   const [mode, setMode] = useState<CaptureMode>('collapsed')
@@ -332,14 +338,43 @@ export function useCaptureController(): CaptureController {
   }, [])
 
   const captureContext = useCallback(
-    () => ({
-      today: new Date(),
-      peopleNames: (people ?? []).filter((p) => p.hasStatedName).map((p) => p.displayName),
-      locale: navigator.language,
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      utcOffsetMinutes: -new Date().getTimezoneOffset(),
-    }),
-    [people],
+    () => {
+      const namedPeople = (people ?? []).filter((person) => person.hasStatedName)
+      return {
+        today: new Date(),
+        peopleNames: namedPeople.map((person) => person.displayName),
+        records: namedPeople.map((person) => ({
+          id: person.id,
+          name: person.displayName,
+          profile: [profileFocusOf(person), person.roleTitle, person.organizationName].filter(Boolean).join(' · '),
+          // Only normal facts may leave the app. Sensitive and restricted
+          // observations remain local even when they would help matching.
+          facts: (observations ?? [])
+            .filter((fact) => fact.subjectID === person.id && fact.sensitivity === 'normal' && fact.supersededOn === null)
+            .map((fact) => ({ id: fact.id, label: attributeLabel(fact.attribute), value: fact.value })),
+          reminders: (reminders ?? [])
+            .filter((reminder) => reminder.personIDs.includes(person.id))
+            .map((reminder) => ({
+              id: reminder.id,
+              title: reminder.title,
+              status: reminder.status,
+              responsibility: reminder.responsibility ?? 'mine' as const,
+              progress: reminder.progress ?? 'notStarted' as const,
+              notes: reminder.notes,
+            })),
+          relationships: (relationships ?? [])
+            .filter((relationship) => relationship.subjectID === person.id)
+            .map((relationship) => ({
+              id: relationship.id,
+              description: `${kindLabel(relationship.kind)} → ${(people ?? []).find((candidate) => candidate.id === relationship.otherID)?.displayName ?? 'unnamed person'}`,
+            })),
+        })),
+        locale: navigator.language,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        utcOffsetMinutes: -new Date().getTimezoneOffset(),
+      }
+    },
+    [people, observations, reminders, relationships],
   )
 
   /// Attachments → provider inputs. Vision PDFs travel as their original
@@ -417,7 +452,7 @@ export function useCaptureController(): CaptureController {
         model: storedModel(),
         context: captureContext(),
       })
-      setReview(resolveProposal(proposal, people ?? [], new Date()))
+      setReview(resolveProposal(proposal, people ?? [], new Date(), { reminders: reminders ?? [], observations: observations ?? [], relationships: relationships ?? [] }))
       setMode('reviewing')
     } catch (cause) {
       if (cause instanceof DossierMultipleSubjectsError) {
@@ -429,7 +464,7 @@ export function useCaptureController(): CaptureController {
       }
       setMode('error')
     }
-  }, [credential, canParse, text, people, captureContext, dossierInputs, initialPersonID])
+  }, [credential, canParse, text, people, reminders, observations, relationships, captureContext, dossierInputs, initialPersonID])
 
   const chooseDossierTarget = useCallback((target: DossierTarget) => {
     setDossier((current) => (current ? { phase: 'review', proposal: current.proposal, target } : current))

@@ -8,6 +8,7 @@ import {
   SENSITIVITY_LABELS,
   attributeLabel,
   type FactConfidence,
+  type FactContext,
   type FactSensitivity,
 } from '../../../domain/facts'
 import type { Person } from '../../../domain/person'
@@ -76,6 +77,13 @@ export function FactDraftEditor({
       </FormField>
 
       <div className="draft-editor-pair">
+        <FormField label="Board section" htmlFor={`${id}-context`}>
+          <select id={`${id}-context`} className="field field-select" value={item.context} onChange={(event) => update({ context: event.target.value as FactContext })}>
+            <option value="identity">Identity</option>
+            <option value="professional">Professional</option>
+            <option value="personal">Personal</option>
+          </select>
+        </FormField>
         <FormField label="Confidence" htmlFor={`${id}-confidence`}>
           <select
             id={`${id}-confidence`}
@@ -105,6 +113,10 @@ export function FactDraftEditor({
             ))}
           </select>
         </FormField>
+      </div>
+      <div className="draft-editor-pair">
+        <FormField label="Learned on" htmlFor={`${id}-observed`}><input id={`${id}-observed`} type="date" className="field" value={item.observedOn} onChange={(event) => update({ observedOn: event.target.value })} /></FormField>
+        <FormField label="Effective on" htmlFor={`${id}-effective`} help="Only when it becomes true later."><input id={`${id}-effective`} type="date" className="field" value={item.effectiveOn} onChange={(event) => update({ effectiveOn: event.target.value })} /></FormField>
       </div>
     </div>
   )

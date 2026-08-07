@@ -25,6 +25,7 @@ import { FormField } from '../components/FormField'
 import { Sheet } from '../components/Sheet'
 import { ParticipantPicker } from '../log/ParticipantPicker'
 import { ScheduleEditor } from '../capture/editors/ScheduleEditor'
+import { SegmentedControl } from '../components/SegmentedControl'
 import { FolderPicker } from '../folders/FolderPicker'
 import { CategoryTagPicker } from './CategoryTagPicker'
 
@@ -152,7 +153,7 @@ export function FollowUpSheet({
         )
       }
     >
-      <FormField label="What do you need to do?" htmlFor="followup-title">
+      <FormField label={draft.responsibility === 'mine' ? 'What is your next move?' : 'What are you waiting on?'} htmlFor="followup-title">
         <textarea
           id="followup-title"
           ref={titleRef}
@@ -161,6 +162,18 @@ export function FollowUpSheet({
           value={draft.title}
           onChange={(event) => set({ title: event.target.value })}
           autoFocus={!existing}
+        />
+      </FormField>
+
+      <FormField label="Ownership" help="Keep your commitments separate from work you delegated or requested.">
+        <SegmentedControl
+          label="Follow-up ownership"
+          options={[
+            { value: 'mine', label: 'My next move' },
+            { value: 'theirs', label: 'Waiting on them' },
+          ]}
+          value={draft.responsibility}
+          onChange={(responsibility) => set({ responsibility })}
         />
       </FormField>
 
@@ -183,6 +196,16 @@ export function FollowUpSheet({
           onCreate={() => {}}
         />
       </FormField>
+
+      {draft.responsibility === 'theirs' && (
+        <FormField label="Current status" htmlFor="followup-progress">
+          <select id="followup-progress" className="field field-select" value={draft.progress} onChange={(event) => set({ progress: event.target.value as FollowUpDraft['progress'] })}>
+            <option value="notStarted">Not started</option>
+            <option value="inProgress">In progress</option>
+            <option value="blocked">Blocked</option>
+          </select>
+        </FormField>
+      )}
 
       {folders.length > 0 && (
         <FormField label="In" help="A folder, when it belongs to one.">

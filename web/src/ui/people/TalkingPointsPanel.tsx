@@ -9,12 +9,15 @@ import { generateDayBrief, type DayBrief } from '../../ai/briefing'
 import { activeCredential } from '../../ai/credentials'
 import { storedModel } from '../../ai/settings'
 import { useAiCredentials } from '../../data/hooks'
+import { applyPlan } from '../../data/applyPlan'
 import { briefingInputFor } from '../../domain/briefing'
 import type { Observation } from '../../domain/facts'
 import type { Interaction } from '../../domain/interaction'
 import type { Person } from '../../domain/person'
 import type { Relationship } from '../../domain/relationships'
 import type { Reminder } from '../../domain/reminders'
+import { planCompleteReminder } from '../../domain/capture'
+import { formatScheduleSummary } from '../../domain/temporal'
 import { useUID } from '../UserContext'
 import { Button } from '../components/Button'
 
@@ -40,6 +43,9 @@ export function TalkingPointsPanel({
   const credentials = useAiCredentials(uid)
   const credential = activeCredential(credentials)
   const ready = credential !== null
+  const waitingOnThem = reminders.filter(
+    (reminder) => reminder.status === 'open' && reminder.responsibility === 'theirs' && reminder.personIDs.includes(person.id),
+  )
 
   async function generate() {
     if (!credential || busy) return
@@ -76,6 +82,27 @@ export function TalkingPointsPanel({
         )}
       </div>
 
+      {waitingOnThem.length > 0 && (
+        <div className="meeting-checklist">
+          <p className="brief-inline-label">Check in on</p>
+          {waitingOnThem.map((reminder) => (
+            <div key={reminder.id} className="meeting-checklist-row">
+              <button
+                type="button"
+                className="complete-ring"
+                aria-label={`Complete ${reminder.title}`}
+                onClick={() => void applyPlan(uid, planCompleteReminder(reminder.id, new Date()).plan)}
+              />
+              <span>{reminder.title}</span>
+              <span className="tabular">
+                {reminder.progress === 'blocked' ? 'Blocked · ' : reminder.progress === 'inProgress' ? 'In progress · ' : ''}
+                {formatScheduleSummary(reminder) ?? 'No date'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {credentials !== undefined && !ready && (
         <p className="row-subtitle">
           <Link to="/settings" className="inline-link">
@@ -85,9 +112,9 @@ export function TalkingPointsPanel({
         </p>
       )}
 
-      {ready && !entry && !error && (
+      {ready && !entry && !error && waitingOnThem.length === 0 && (
         <p className="row-subtitle">
-          Facts, open loops, and recent conversations, turned into what's worth raising. Restricted facts never
+          Facts, follow-ups, and recent conversations, turned into what's worth raising. Restricted facts never
           leave this device.
         </p>
       )}
@@ -107,6 +134,18 @@ export function TalkingPointsPanel({
                 <li key={point}>{point}</li>
               ))}
             </ul>
+          )}
+          {entry.myNextMoves.length > 0 && (
+            <>
+              <p className="brief-inline-label">Your next moves</p>
+              <ul>{entry.myNextMoves.map((move) => <li key={move}>{move}</li>)}</ul>
+            </>
+          )}
+          {entry.statusQuestions.length > 0 && (
+            <>
+              <p className="brief-inline-label">Status questions</p>
+              <ul>{entry.statusQuestions.map((question) => <li key={question}>{question}</li>)}</ul>
+            </>
           )}
           {entry.suggestedQuestions.length > 0 && (
             <>

@@ -25,9 +25,9 @@ export function NavRail({ onSearch }: { onSearch: () => void }) {
         <span className="rail-brand-word">Elephruit</span>
       </div>
 
-      <button className="rail-capture" onClick={() => navigate('/?capture=1')} title="Record a memory">
+      <button className="rail-capture" onClick={() => navigate('/?capture=1')} title="Quick capture">
         <Icon name="plus" size={16} />
-        <span className="rail-label">Record a memory</span>
+        <span className="rail-label">Quick capture</span>
       </button>
 
       {DESTINATIONS.map((destination) => (

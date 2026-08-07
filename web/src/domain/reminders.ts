@@ -7,6 +7,7 @@
 import { isSameDay, startOfDay } from './dates'
 
 export type ReminderStatus = 'open' | 'completed'
+export type ReminderProgress = 'notStarted' | 'inProgress' | 'blocked'
 
 export interface ChecklistItem {
   id: string
@@ -20,6 +21,13 @@ export interface Reminder {
   notes: string | null
   /// The people this is owed to or about.
   personIDs: string[]
+  /// Who is expected to act. Missing on older records means the user.
+  responsibility?: 'mine' | 'theirs'
+  /// Lightweight meeting status for delegated work. Missing means not started.
+  progress?: ReminderProgress
+  /// Stable ordering on each person's workspace. A reminder may concern
+  /// several people, so the order is keyed by person rather than global.
+  personOrder?: Record<string, number>
   /// Lightweight, user-authored categories. Optional keeps reminders written
   /// before categories were introduced readable without a migration.
   categoryTags?: string[]

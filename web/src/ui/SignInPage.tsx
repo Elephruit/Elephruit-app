@@ -48,7 +48,7 @@ export function SignInPage() {
     <div className="signin-split">
       <aside className="signin-brand">
         <img src="/brand/elephruit-logo.png" alt="Elephruit" className="signin-logo" />
-        <h1>A private memory for the people you keep up with.</h1>
+        <h1>A private working history for the people you keep up with.</h1>
         <ul>
           {REASSURANCES.map((line) => (
             <li key={line}>

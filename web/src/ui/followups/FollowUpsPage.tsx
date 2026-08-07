@@ -67,6 +67,7 @@ export function FollowUpsPage() {
   const people = usePeople(uid)
   const folders = useFolders(uid)
   const [view, setView] = useState<'open' | 'completed'>('open')
+  const [ownership, setOwnership] = useState<'mine' | 'theirs'>('mine')
   const [editing, setEditing] = useState<Reminder | null>(null)
   const [createRequest, setCreateRequest] = useState(0)
   const [statusFilter, setStatusFilter] = useState<FollowUpStatusFilter>('all')
@@ -76,8 +77,12 @@ export function FollowUpsPage() {
   // One clock per mount — a fresh Date each render silently drifted past the memo.
   const [now] = useState(() => new Date())
 
-  const groups = useMemo(() => (live ? sections(live, now) : undefined), [live, now])
-  const done = useMemo(() => (live ? completedList(live) : []), [live])
+  const ownedReminders = useMemo(
+    () => live?.filter((reminder) => (reminder.responsibility ?? 'mine') === ownership),
+    [live, ownership],
+  )
+  const groups = useMemo(() => (ownedReminders ? sections(ownedReminders, now) : undefined), [ownedReminders, now])
+  const done = useMemo(() => (ownedReminders ? completedList(ownedReminders) : []), [ownedReminders])
   const peopleByID = useMemo(() => new Map((people ?? []).map((p) => [p.id, p])), [people])
   const foldersByID = useMemo(() => new Map((folders ?? []).map((folder) => [folder.id, folder])), [folders])
   const tagSuggestions = useMemo(
@@ -198,6 +203,15 @@ export function FollowUpsPage() {
       />
 
       <div className="task-inbox">
+        <SegmentedControl
+          label="Follow-up ownership"
+          options={[
+            { value: 'mine', label: 'My next moves' },
+            { value: 'theirs', label: 'Waiting on people' },
+          ]}
+          value={ownership}
+          onChange={setOwnership}
+        />
         {view === 'open' && groups && (
           <FollowUpFilterBar
             status={statusFilter}
@@ -228,9 +242,9 @@ export function FollowUpsPage() {
         {view === 'open' && groups && groups.length === 0 && (
           <EmptyState
             icon="bell"
-            headline="Nothing owed"
-            message="Follow-ups from logged interactions gather here, bucketed by what their dates actually say."
-            hint="End a capture with what you owe — “need to send her the list” becomes a follow-up."
+            headline={ownership === 'mine' ? 'Nothing on your plate' : 'Not waiting on anyone'}
+            message={ownership === 'mine' ? 'Follow-ups from logged interactions gather here, bucketed by what their dates actually say.' : 'Delegated work and requested updates gather here until they are complete.'}
+            hint={ownership === 'mine' ? 'Try “I need to send her the list.”' : 'Try “I asked Alex to send the forecast by Friday.”'}
           />
         )}
 
@@ -314,6 +328,9 @@ export function FollowUpsPage() {
                           >
                             {chip.text}
                           </span>
+                        )}
+                        {ownership === 'theirs' && reminder.progress && reminder.progress !== 'notStarted' && (
+                          <span className="chip">{reminder.progress === 'blocked' ? 'Blocked' : 'In progress'}</span>
                         )}
                         {reminder.personIDs.map((id) => {
                           const person = peopleByID.get(id)

@@ -75,6 +75,23 @@ export function FollowUpDraftEditor({
         />
       </FormField>
 
+      <FormField label="Who is responsible?" htmlFor={`${id}-responsibility`}>
+        <select id={`${id}-responsibility`} className="field field-select" value={item.responsibility} onChange={(event) => update({ responsibility: event.target.value as 'mine' | 'theirs' })}>
+          <option value="mine">I am</option>
+          <option value="theirs">They are — I’m waiting</option>
+        </select>
+      </FormField>
+
+      {item.responsibility === 'theirs' && (
+        <FormField label="Current status" htmlFor={`${id}-progress`}>
+          <select id={`${id}-progress`} className="field field-select" value={item.progress} onChange={(event) => update({ progress: event.target.value as FollowUpDraftItem['progress'] })}>
+            <option value="notStarted">Not started</option>
+            <option value="inProgress">In progress</option>
+            <option value="blocked">Blocked</option>
+          </select>
+        </FormField>
+      )}
+
       <FormField label="For">
         <ParticipantPicker
           people={people}

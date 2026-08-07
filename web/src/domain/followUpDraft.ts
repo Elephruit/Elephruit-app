@@ -3,7 +3,7 @@
 /// model and its conversions, so there is exactly one place that knows how a
 /// reminder's dates become editable fields and back.
 
-import type { ChecklistItem, Reminder } from './reminders'
+import type { ChecklistItem, Reminder, ReminderProgress } from './reminders'
 import { uniqueCategoryTags } from './categoryTags'
 import {
   hasTemporalCue,
@@ -20,6 +20,8 @@ export interface FollowUpDraft {
   notes: string
   checklist: ChecklistItem[]
   personIDs: Set<string>
+  responsibility: 'mine' | 'theirs'
+  progress: ReminderProgress
   categoryTags: Set<string>
   /// The folder this is filed in, independently of the people it concerns.
   folderID: string | null
@@ -32,6 +34,8 @@ export function emptyFollowUpDraft(userZone: string, folderID: string | null = n
     notes: '',
     checklist: [],
     personIDs: new Set(),
+    responsibility: 'mine',
+    progress: 'notStarted',
     categoryTags: new Set(),
     folderID,
     schedule: { scheduleMode: 'none', localDate: '', localTime: '', timeZone: userZone },
@@ -77,6 +81,8 @@ export function draftFromReminder(reminder: Reminder, userZone: string): FollowU
     notes: reminder.notes ?? '',
     checklist: (reminder.checklist ?? []).map((item) => ({ ...item })),
     personIDs: new Set(reminder.personIDs),
+    responsibility: reminder.responsibility ?? 'mine',
+    progress: reminder.progress ?? 'notStarted',
     categoryTags: new Set(uniqueCategoryTags(reminder.categoryTags ?? [])),
     folderID: reminder.folderID ?? null,
     schedule,
@@ -99,6 +105,8 @@ export interface ReminderFields {
   notes: string | null
   checklist: ChecklistItem[]
   personIDs: string[]
+  responsibility: 'mine' | 'theirs'
+  progress: ReminderProgress
   categoryTags: string[]
   folderID: string | null
   startAt: Date | null
@@ -119,6 +127,8 @@ export function reminderFieldsFromDraft(draft: FollowUpDraft, context: TemporalC
       .map((item) => ({ ...item, title: item.title.trim() }))
       .filter((item) => item.title.length > 0),
     personIDs: [...draft.personIDs],
+    responsibility: draft.responsibility,
+    progress: draft.progress,
     categoryTags: uniqueCategoryTags(draft.categoryTags),
     folderID: draft.folderID,
     startAt: resolved.startAt,

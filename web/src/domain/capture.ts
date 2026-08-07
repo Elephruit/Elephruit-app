@@ -5,12 +5,12 @@
 /// analogue of the Mac app's decision D5: one capture value type, one atomic
 /// apply, and a platform-specific write path is a review failure.
 
-import type { FactAttribute, FactConfidence, FactSensitivity, Observation } from './facts'
+import type { FactAttribute, FactConfidence, FactContext, FactSensitivity, Observation } from './facts'
 import { newID } from './ids'
 import type { Interaction, InteractionKind } from './interaction'
-import { nameParts, paletteColorFor, type Person } from './person'
+import { nameParts, paletteColorFor, type ConnectionOrigin, type Person, type ProfileFocus } from './person'
 import { possessivePhrase, relationshipPair, type Relationship, type RelationshipKind } from './relationships'
-import type { ChecklistItem, Reminder } from './reminders'
+import type { ChecklistItem, Reminder, ReminderProgress } from './reminders'
 import type { WritePlan } from './writePlan'
 import { uniqueCategoryTags } from './categoryTags'
 
@@ -22,6 +22,8 @@ export interface PersonDraft {
   organizationName?: string | null
   isPlaceholder?: boolean
   hasStatedName?: boolean
+  profileFocus?: ProfileFocus
+  connectionOrigin?: ConnectionOrigin | null
 }
 
 export function makePerson(draft: PersonDraft, now: Date): Person {
@@ -35,12 +37,21 @@ export function makePerson(draft: PersonDraft, now: Date): Person {
     familyName: parts.familyName,
     roleTitle: draft.roleTitle?.trim() || null,
     organizationName: draft.organizationName?.trim() || null,
+    profileFocus: draft.profileFocus ?? (draft.roleTitle?.trim() || draft.organizationName?.trim() ? 'professional' : 'personal'),
+    connectionOrigin: draft.connectionOrigin ?? null,
     colorName: paletteColorFor(displayName),
     isPlaceholder: draft.isPlaceholder ?? false,
     hasStatedName: stated,
     createdAt: now,
     lastContactAt: null,
   }
+}
+
+export function planUpdatePersonContext(
+  person: Person,
+  changes: { profileFocus?: ProfileFocus; connectionOrigin?: ConnectionOrigin | null },
+): { plan: WritePlan } {
+  return { plan: [{ op: 'update', collection: 'people', id: person.id, data: changes }] }
 }
 
 export function planCreatePerson(draft: PersonDraft, now: Date): { plan: WritePlan; person: Person } {
@@ -194,7 +205,9 @@ export interface ObservationDraft {
   value: string
   confidence?: FactConfidence
   sensitivity?: FactSensitivity
+  context?: FactContext
   observedOn?: Date
+  effectiveOn?: Date | null
   sourceInteractionID?: string | null
   sourceDocumentID?: string | null
 }
@@ -207,10 +220,11 @@ export function makeObservation(draft: ObservationDraft, now: Date): Observation
     attribute: draft.attribute,
     value: draft.value.trim(),
     observedOn,
-    effectiveOn: null,
+    effectiveOn: draft.effectiveOn ?? null,
     lastConfirmedOn: observedOn,
     confidence: draft.confidence ?? 'stated',
     sensitivity: draft.sensitivity ?? 'normal',
+    context: draft.context,
     sourceInteractionID: draft.sourceInteractionID ?? null,
     sourceDocumentID: draft.sourceDocumentID ?? null,
     supersedesID: null,
@@ -359,6 +373,8 @@ export interface ReminderDraft {
   notes?: string | null
   checklist?: ChecklistItem[]
   personIDs?: string[]
+  responsibility?: 'mine' | 'theirs'
+  progress?: ReminderProgress
   categoryTags?: string[]
   folderID?: string | null
   sourceInteractionID?: string | null
@@ -380,6 +396,8 @@ export function planCreateReminder(draft: ReminderDraft, now: Date): { plan: Wri
       .map((item) => ({ ...item, title: item.title.trim() }))
       .filter((item) => item.title.length > 0),
     personIDs: [...new Set(draft.personIDs ?? [])],
+    responsibility: draft.responsibility ?? 'mine',
+    progress: draft.progress ?? 'notStarted',
     categoryTags: uniqueCategoryTags(draft.categoryTags ?? []),
     folderID: draft.folderID ?? null,
     sourceInteractionID: draft.sourceInteractionID ?? null,
@@ -409,6 +427,8 @@ export function planUpdateReminder(
       | 'dueAt'
       | 'isSomeday'
       | 'personIDs'
+      | 'responsibility'
+      | 'progress'
       | 'categoryTags'
       | 'folderID'
       | 'scheduleTimeZone'

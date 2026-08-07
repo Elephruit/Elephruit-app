@@ -103,6 +103,44 @@ export function entryFromObservation(observation: Observation): TimelineEntry {
   }
 }
 
+/// The useful history of a relationship, rather than a storage audit. Facts
+/// extracted from a conversation belong inside that conversation and therefore
+/// do not become duplicate full-height rows. Unsourced profile edits remain
+/// available as compact updates.
+export function projectPersonTimeline(args: {
+  interactions: Interaction[]
+  observations: Observation[]
+  reminders: Reminder[]
+  peopleByID: Map<string, { displayName: string }>
+  viewpointPersonID: string
+}): TimelineEntry[] {
+  const manualByDay = new Map<string, Observation[]>()
+  for (const observation of args.observations.filter((value) => value.sourceInteractionID === null)) {
+    const key = startOfDay(observation.createdAt).toISOString()
+    manualByDay.set(key, [...(manualByDay.get(key) ?? []), observation])
+  }
+  const profileUpdates = [...manualByDay.entries()].map(([key, values]): TimelineEntry => {
+    const sorted = [...values].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    return {
+      id: `profile-update-${key}`,
+      kind: 'observation',
+      title: 'Profile updated',
+      excerpt: sorted.map((value) => `${attributeLabel(value.attribute)}: ${value.value}`).join(' · '),
+      date: sorted[0].createdAt,
+      interactionKind: null,
+      provenance: null,
+      otherPeople: [],
+      isOpen: false,
+      sourceInteractionID: null,
+    }
+  })
+  return [
+    ...args.interactions.map((interaction) => entryFromInteraction(interaction, args.peopleByID, args.viewpointPersonID)),
+    ...profileUpdates,
+    ...args.reminders.map(entryFromReminder),
+  ]
+}
+
 /// The line beneath a row's title: what kind of thing this is and who else.
 /// Ported from PersonTimelineEntry.provenanceLine.
 export function provenanceLine(entry: TimelineEntry): string {
@@ -113,7 +151,7 @@ export function provenanceLine(entry: TimelineEntry): string {
   } else if (entry.kind === 'reminder') {
     parts.push(entry.isOpen ? 'follow-up' : 'follow-up · done')
   } else if (entry.kind === 'observation') {
-    parts.push('fact noted')
+    parts.push(entry.title === 'Profile updated' ? 'profile update' : 'fact noted')
   }
 
   if (entry.otherPeople.length > 0) {

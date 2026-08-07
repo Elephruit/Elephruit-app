@@ -144,7 +144,7 @@ export function SlotSelect({
         }
       }}
     >
-      <optgroup label="In this memory">
+      <optgroup label="In this update">
         {slots.map((slot) => (
           <option key={slot.slotID} value={`slot:${slot.slotID}`}>
             {slot.resolution.person.displayName}

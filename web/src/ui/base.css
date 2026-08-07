@@ -2077,10 +2077,11 @@ textarea.field {
   display: flex;
   flex-direction: column;
   min-height: 232px;
-  padding: var(--space-medium) var(--space-tight) var(--space-medium);
-  border-top: 1px solid var(--color-separator);
-  border-bottom: 1px solid var(--color-separator);
-  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  padding: var(--space-medium) var(--space-large);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--color-text) 4%, var(--color-background-elevated));
+  box-shadow: var(--shadow-raised);
   transition: min-height var(--duration-expand) var(--ease-emphasized);
 }
 
@@ -3922,6 +3923,10 @@ a.memory-person-link:hover {
 
 /* MARK: Person workspace — profile header over two columns */
 
+.page-scaffold.person-page {
+  padding-top: var(--space-large);
+}
+
 .backlink {
   display: inline-flex;
   align-items: center;
@@ -3944,14 +3949,31 @@ a.memory-person-link:hover {
 .profile-header {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-large);
-  margin: var(--space-medium) 0 var(--space-section);
+  gap: var(--space-medium);
+  margin: var(--space-small) 0 var(--space-large);
+}
+
+.profile-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: var(--space-generous);
+  align-items: start;
+}
+
+.profile-next {
+  min-width: 0;
+  padding-top: var(--space-small);
+}
+
+.profile-next .rail-section {
+  border: 0;
+  padding: var(--space-small) 0 var(--space-large);
 }
 
 .profile-header .avatar-large {
-  width: 64px;
-  height: 64px;
-  font-size: 1.3rem;
+  width: 56px;
+  height: 56px;
+  font-size: 1.15rem;
 }
 
 @media (max-width: 719.98px) {
@@ -3959,6 +3981,17 @@ a.memory-person-link:hover {
     width: 52px;
     height: 52px;
     font-size: 1.05rem;
+  }
+}
+
+@media (max-width: 1023.98px) {
+  .profile-overview {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .profile-next {
+    margin-bottom: var(--space-large);
   }
 }
 
@@ -3976,7 +4009,7 @@ a.memory-person-link:hover {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-tight);
-  margin-top: var(--space-small);
+  margin-top: var(--space-tight);
 }
 
 .profile-id {
@@ -4000,10 +4033,120 @@ a.memory-person-link:hover {
   color: var(--color-text-tertiary);
 }
 
+.profile-contact-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  column-gap: var(--space-medium);
+  row-gap: 2px;
+  margin-top: var(--space-tight);
+}
+
+.profile-contact-meta p + p::before {
+  content: '\00b7';
+  margin-right: var(--space-medium);
+  color: var(--color-text-tertiary);
+}
+
+.profile-connection-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-small);
+  color: var(--color-text-secondary) !important;
+  margin-top: 2px;
+}
+
+.profile-context-edit {
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: var(--text-metadata);
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: var(--radius-small);
+}
+
+.profile-context-edit:hover {
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+.profile-first-met {
+  color: var(--color-text) !important;
+  font: var(--text-label) !important;
+}
+
 .profile-actions {
   flex: none;
   display: flex;
+  align-items: center;
   gap: var(--space-small);
+}
+
+/* A person-scoped interaction stays on the working board. The surface is
+   deliberately quieter and more compact than the old feed-sized composer. */
+.person-interaction-composer {
+  margin: calc(-1 * var(--space-small)) 0 var(--space-section);
+  padding: var(--space-large);
+  background: var(--color-background-elevated);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-raised);
+}
+
+.interaction-composer-head,
+.interaction-composer-actions,
+.interaction-summary-grid {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-medium);
+}
+
+.interaction-composer-head h2 {
+  font: var(--text-heading);
+}
+
+.interaction-composer-head p {
+  font: var(--text-sub);
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+.interaction-kind-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-tight);
+  margin: var(--space-large) 0 var(--space-small);
+}
+
+.interaction-summary-grid > label:first-child {
+  flex: 1;
+}
+
+.interaction-summary-grid > label:last-child {
+  width: 220px;
+}
+
+.person-interaction-composer > label {
+  display: block;
+  margin-top: var(--space-medium);
+}
+
+.interaction-notes {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.interaction-followups {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.interaction-composer-actions {
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: var(--space-large);
 }
 
 @media (max-width: 719.98px) {
@@ -4026,10 +4169,286 @@ a.memory-person-link:hover {
   min-width: 0;
 }
 
-/* Below the desktop rail the Remember container dissolves (display:contents)
-   and its sections interleave with history in the reading order the plan
-   requires: follow-ups, facts, relationships, history, talking points. */
+.person-primary-context {
+  margin-bottom: var(--space-section);
+}
+
+.context-facts[data-emphasis='primary'] {
+  padding: var(--space-medium);
+  border: 0;
+  border-radius: var(--radius-panel);
+  background: var(--color-subtle-fill);
+}
+
+.context-facts[data-emphasis='primary'] .rail-section-title {
+  font: var(--text-label);
+  color: var(--color-text);
+}
+
+.context-facts[data-emphasis='primary'] > div:not(.aside-panel-head) {
+  padding: var(--space-small) 0 0 !important;
+}
+
+.fact-group {
+  padding: var(--space-small) 0;
+}
+
+.inline-fact-value {
+  min-width: 0;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--color-text);
+  font: var(--text-label);
+  text-align: left;
+  cursor: text;
+}
+
+.inline-fact-value:hover {
+  color: var(--color-accent);
+}
+
+.inline-text-editor {
+  min-width: 0;
+  width: min(100%, 420px);
+  border: 0;
+  border-bottom: 1px solid var(--color-accent);
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: var(--text-label);
+  padding: 0 0 2px;
+}
+
+.person-followups {
+  margin-top: var(--space-medium);
+}
+
+.person-followups h2 {
+  font: var(--text-label);
+}
+
+.person-followups .aside-panel-head > span {
+  font: var(--text-metadata);
+  color: var(--color-text-tertiary);
+}
+
+.person-followup-board {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-medium);
+  margin-top: var(--space-small);
+}
+
+.person-followup-lane {
+  min-width: 0;
+  border-radius: var(--radius-large);
+  background: color-mix(in srgb, var(--color-background-elevated) 72%, transparent);
+  padding: var(--space-medium);
+  outline: 1px solid transparent;
+  transition: background var(--duration-fast) var(--ease-out), outline-color var(--duration-fast) var(--ease-out);
+}
+
+.person-followup-lane[data-owner='theirs'] {
+  background: color-mix(in srgb, var(--color-personal) 5%, var(--color-background-elevated));
+}
+
+.person-followup-lane[data-drag-target='true'] {
+  background: color-mix(in srgb, var(--color-accent) 7%, var(--color-background-elevated));
+  outline-color: color-mix(in srgb, var(--color-accent) 32%, transparent);
+}
+
+.person-followup-lane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-small);
+  margin-bottom: var(--space-small);
+}
+
+.person-followup-lane-head h3 {
+  margin: 0;
+  font: var(--text-label);
+}
+
+.person-followup-empty {
+  margin: 2px 0 0;
+  color: var(--color-text-tertiary);
+  font: var(--text-metadata);
+}
+
+.person-followup-lane-head > span {
+  color: var(--color-text-tertiary);
+  font: var(--text-metadata);
+}
+
+.person-followup-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-small);
+}
+
+.person-followup {
+  display: grid;
+  grid-template-columns: 18px 18px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-small);
+  padding: var(--space-medium);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-medium);
+  background: var(--color-background-elevated);
+  color: var(--color-text);
+  cursor: grab;
+  transition: opacity var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.person-followup[data-drag-source='true'] {
+  opacity: 0.18;
+  border-style: dashed;
+}
+
+.person-followup-board[data-dragging='true'] {
+  user-select: none;
+  cursor: grabbing;
+}
+
+.person-followup-board[data-dragging='true'] .person-followup,
+.person-followup-board[data-dragging='true'] .person-followup-title {
+  cursor: grabbing;
+}
+
+.commitment-drag-handle {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: grab;
+  padding: 0;
+  font: 600 18px/18px var(--font-sans);
+  touch-action: none;
+}
+
+.commitment-drag-handle:hover,
+.commitment-drag-handle:focus-visible {
+  color: var(--color-accent);
+}
+
+.commitment-drag-handle:active {
+  cursor: grabbing;
+}
+
+.commitment-drag-ghost {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-small);
+  padding: var(--space-medium);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-separator));
+  border-radius: var(--radius-medium);
+  background: var(--color-background-elevated);
+  box-shadow: var(--shadow-popover);
+  color: var(--color-text);
+  font: var(--text-label);
+  transform: rotate(0.35deg) scale(1.012);
+  will-change: left, top;
+}
+
+.commitment-drag-ghost-handle {
+  color: var(--color-accent);
+  font: 600 18px/18px var(--font-sans);
+}
+
+.person-followup[data-tone='overdue'] {
+  border-color: color-mix(in srgb, var(--color-overdue) 28%, var(--color-separator));
+}
+
+.person-followup-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-tight);
+}
+
+.person-followup-title {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--color-text);
+  font: var(--text-label);
+  text-align: left;
+  cursor: grab;
+}
+
+.person-followup-title:hover {
+  color: var(--color-accent);
+}
+
+.person-followup-when {
+  font: var(--text-metadata);
+  color: var(--color-text-secondary);
+}
+
+.person-followup-progress {
+  align-self: flex-start;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  color: var(--color-accent);
+  font: var(--text-metadata);
+  padding: 3px 7px;
+}
+
+.person-followup-progress[data-progress='blocked'] {
+  background: color-mix(in srgb, var(--color-overdue) 9%, transparent);
+  color: var(--color-overdue);
+}
+
+.person-followup[data-tone='overdue'] .person-followup-when {
+  color: var(--color-overdue);
+}
+
+.person-followup[data-tone='today'] .person-followup-when {
+  color: var(--color-due-today);
+}
+
+.person-followup-editor {
+  width: 100%;
+}
+
+.meeting-checklist {
+  display: grid;
+  gap: var(--space-tight);
+  margin-top: var(--space-small);
+}
+
+.meeting-checklist-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-small);
+  padding: 7px 0;
+  border-bottom: 1px solid var(--color-separator);
+  font: var(--text-metadata);
+}
+
+.meeting-checklist-row:last-child {
+  border-bottom: 0;
+}
+
+.meeting-checklist-row > span:last-child {
+  color: var(--color-text-tertiary);
+}
+
+/* Below the desktop rail the context container dissolves and its sections
+   interleave with history in one reading order. */
 @media (max-width: 1023.98px) {
+  .person-followup-board {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .person-context.remember-rail {
     display: contents;
   }
@@ -4039,39 +4458,35 @@ a.memory-person-link:hover {
   }
 
   .remember-followups {
-    order: 1;
-  }
-
-  .remember-facts {
-    order: 2;
-  }
-
-  .remember-people {
     order: 3;
   }
 
-  .person-history {
+  .remember-facts {
     order: 4;
   }
 
-  .remember-next {
+  .remember-people {
     order: 5;
+  }
+
+  .person-history {
+    order: 1;
+  }
+
+  .remember-next {
+    order: 2;
   }
 }
 
 @media (min-width: 1024px) {
   .person-cols {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-columns: minmax(0, 1fr) 340px;
     gap: var(--space-generous);
     align-items: start;
   }
 
   .person-context.remember-rail {
-    position: sticky;
-    top: 24px;
-    max-height: calc(100dvh - 48px);
-    overflow-y: auto;
     min-width: 0;
   }
 }
@@ -4125,6 +4540,36 @@ a.memory-person-link:hover {
 
 .history-head h2 {
   font: var(--text-heading);
+}
+
+.history-head p {
+  font: var(--text-sub);
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+@media (max-width: 719.98px) {
+  .person-interaction-composer {
+    padding: var(--space-medium);
+    border-radius: var(--radius-medium);
+  }
+
+  .interaction-summary-grid {
+    flex-direction: column;
+  }
+
+  .interaction-summary-grid > label,
+  .interaction-summary-grid > label:last-child {
+    width: 100%;
+  }
+
+  .context-facts[data-emphasis='primary'] {
+    padding: var(--space-medium);
+  }
+
+  .person-followup-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .timeline-month-title {

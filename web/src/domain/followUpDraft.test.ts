@@ -79,6 +79,13 @@ describe('draftFromReminder', () => {
     expect(fields.duePrecision).toBe('dateTime')
   })
 
+  it('round-trips who owns the next move', () => {
+    const draft = draftFromReminder(reminder({ responsibility: 'theirs' }), USER_ZONE)
+    expect(draft.responsibility).toBe('theirs')
+    expect(reminderFieldsFromDraft(draft, { timeZone: USER_ZONE }).responsibility).toBe('theirs')
+    expect(emptyFollowUpDraft(USER_ZONE).responsibility).toBe('mine')
+  })
+
   it('round-trips category tags and treats legacy reminders as untagged', () => {
     expect(draftFromReminder(reminder({}), USER_ZONE).categoryTags).toEqual(new Set())
 

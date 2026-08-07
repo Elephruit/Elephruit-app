@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { resolveProposal, type CaptureProposal } from './assist'
 import { makePerson } from './capture'
 import type { Person } from './person'
+import type { Reminder } from './reminders'
 import {
   activeItems,
   draftFromResolved,
@@ -190,6 +191,57 @@ describe('validateDraft', () => {
 })
 
 describe('planFromReviewDraft', () => {
+  it('synchronizes professional identity so a dictated role is visible in People immediately', () => {
+    const { plan } = planFromReviewDraft(kellyDraft(), NOW, CHICAGO)
+    const identityWrite = plan.find(
+      (write) => write.collection === 'people' && write.op === 'update' && 'roleTitle' in write.data,
+    )
+    expect(identityWrite).toMatchObject({
+      data: {
+        profileFocus: 'professional',
+        roleTitle: 'Head of Payer/Provider Industry Vertical',
+        organizationName: 'ZS',
+      },
+    })
+  })
+
+  it('reviews and completes an existing follow-up by ID without creating a duplicate', () => {
+    const reminder: Reminder = {
+      id: 'reminder-denver', title: 'Book flights for Denver', notes: null, personIDs: ['ana'],
+      responsibility: 'mine', sourceInteractionID: null, startAt: null, dueAt: null, isSomeday: false,
+      status: 'open', completedAt: null, createdAt: NOW,
+    }
+    const proposal: CaptureProposal = {
+      interaction: null, participantNames: [], facts: [], personContexts: [], relationships: [], followUps: [],
+      reminderChanges: [{ reminderID: reminder.id, action: 'complete' }],
+    }
+    const draft = draftFromResolved(resolveProposal(proposal, [], NOW, { reminders: [reminder] }), NOW)
+    expect(draft.items[0]).toMatchObject({ type: 'reminderChange', action: 'complete' })
+    const { plan } = planFromReviewDraft(draft, NOW, CHICAGO)
+    expect(plan.filter((write) => write.collection === 'reminders')).toEqual([
+      { op: 'update', collection: 'reminders', id: reminder.id, data: { status: 'completed', completedAt: NOW } },
+    ])
+  })
+
+  it('routes a dictated ownership transfer through the same commitment field as drag and drop', () => {
+    const reminder: Reminder = {
+      id: 'reminder-forecast', title: 'Finish the forecast', notes: null, personIDs: ['ana'],
+      responsibility: 'mine', progress: 'notStarted', sourceInteractionID: null, startAt: null, dueAt: null,
+      isSomeday: false, status: 'open', completedAt: null, createdAt: NOW,
+    }
+    const proposal: CaptureProposal = {
+      interaction: null, participantNames: [], facts: [], personContexts: [], relationships: [], followUps: [],
+      reminderChanges: [{ reminderID: reminder.id, action: 'update', responsibility: 'theirs' }],
+    }
+    const draft = draftFromResolved(resolveProposal(proposal, [], NOW, { reminders: [reminder] }), NOW)
+    expect(draft.items[0]).toMatchObject({ type: 'reminderChange', responsibility: 'theirs' })
+    const { plan } = planFromReviewDraft(draft, NOW, CHICAGO)
+    expect(plan).toContainEqual({
+      op: 'update', collection: 'reminders', id: reminder.id,
+      data: { progress: 'notStarted', notes: null, responsibility: 'theirs' },
+    })
+  })
+
   it('writes the edited values, never the original proposal', () => {
     let draft = kellyDraft()
     const fact = draft.items.find((i) => i.type === 'fact')!

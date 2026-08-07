@@ -9,6 +9,7 @@ import {
   groupByDay,
   groupByMonth,
   matchesFilter,
+  projectPersonTimeline,
   provenanceLine,
   type TimelineEntry,
 } from './timeline'
@@ -90,6 +91,38 @@ describe('entries', () => {
     const long = 'a'.repeat(200)
     expect(excerptOf(long)!.length).toBe(140)
     expect(excerptOf(long)!.endsWith('…')).toBe(true)
+  })
+
+  it('keeps facts extracted from an interaction inside that interaction', () => {
+    const sourced = { ...observation, id: 'obs-sourced', sourceInteractionID: interaction.id }
+    const rows = projectPersonTimeline({
+      interactions: [interaction],
+      observations: [observation, sourced],
+      reminders: [],
+      peopleByID: people,
+      viewpointPersonID: 'ana',
+    })
+
+    expect(rows).toHaveLength(2)
+    expect(rows[0].id).toBe('int-1')
+    expect(rows[1].title).toBe('Profile updated')
+    expect(rows[1].excerpt).toBe('Lives in: Portland')
+  })
+
+  it('collapses same-day manual fact edits into one profile update', () => {
+    const role = { ...observation, id: 'obs-role', attribute: 'role', value: 'Design lead' }
+    const rows = projectPersonTimeline({
+      interactions: [],
+      observations: [observation, role],
+      reminders: [],
+      peopleByID: people,
+      viewpointPersonID: 'ana',
+    })
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0].excerpt).toContain('Lives in: Portland')
+    expect(rows[0].excerpt).toContain('Role: Design lead')
+    expect(provenanceLine(rows[0])).toBe('profile update')
   })
 })
 

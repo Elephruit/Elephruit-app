@@ -8,19 +8,31 @@
 import { foldAttribute, type PersonSlot, type ResolvedCapture } from './assist'
 import {
   planCreateReminder,
+  planCompleteReminder,
+  planDeleteReminder,
+  planReopenReminder,
+  planUpdateReminder,
   planInteractionBundle,
+  planConfirmObservation,
+  planCorrection,
   planObservation,
   planRelationshipPair,
+  planUnrelate,
   planRelativeCapture,
 } from './capture'
-import type { FactConfidence, FactSensitivity } from './facts'
+import type { FactConfidence, FactSensitivity, Observation } from './facts'
+import type { FactContext } from './facts'
 import type { InteractionKind } from './interaction'
 import { defaultMemoryTitle, planMemoryRecord, type MemoryRecord } from './memory'
 import type { Person } from './person'
+import type { Reminder } from './reminders'
+import type { ReminderProgress } from './reminders'
 import { kindLabel, type RelationshipKind } from './relationships'
+import type { Relationship } from './relationships'
 import {
   hasTemporalCue,
   resolveScheduleDraft,
+  resolveProposedSchedule,
   validateScheduleDraft,
   type ScheduleDraftFields,
   type TemporalContext,
@@ -67,6 +79,21 @@ export interface FactDraftItem extends DraftItemBase {
   value: string
   confidence: FactConfidence
   sensitivity: FactSensitivity
+  context: FactContext
+  observedOn: string
+  effectiveOn: string
+}
+
+export interface PersonContextDraftItem extends DraftItemBase {
+  type: 'personContext'
+  subjectSlotID: string
+  profileFocus: 'professional' | 'personal'
+  roleTitle: string
+  organizationName: string
+  connectionStatus: 'met' | 'introductionPlanned' | 'unknown'
+  firstMetOn: string
+  context: string
+  introducedBySlotID: string | null
 }
 
 export interface RelationshipDraftItem extends DraftItemBase {
@@ -89,12 +116,39 @@ export interface FollowUpDraftItem extends DraftItemBase {
   schedule: ScheduleDraftFields
   scheduleSource: string | null
   scheduleConfidence: 'stated' | 'inferred' | 'uncertain'
+  responsibility: 'mine' | 'theirs'
+  progress: ReminderProgress
   /// The explicit "Save without date" override for the temporal safeguard.
   /// Transient review state only — never persisted.
   allowUnscheduled: boolean
 }
 
-export type ReviewDraftItem = InteractionDraftItem | FactDraftItem | RelationshipDraftItem | FollowUpDraftItem
+export interface ReminderChangeDraftItem extends DraftItemBase {
+  type: 'reminderChange'
+  reminder: Reminder
+  action: 'complete' | 'reopen' | 'delete' | 'update'
+  progress: ReminderProgress
+  notes: string
+  responsibility: 'mine' | 'theirs'
+}
+
+export interface FactChangeDraftItem extends DraftItemBase {
+  type: 'factChange'
+  observation: Observation
+  action: 'confirm' | 'correct'
+  value: string
+  correctionNote: string
+  confidence: FactConfidence
+  sensitivity: FactSensitivity
+}
+
+export interface RelationshipChangeDraftItem extends DraftItemBase {
+  type: 'relationshipChange'
+  relationship: Relationship
+  action: 'remove'
+}
+
+export type ReviewDraftItem = InteractionDraftItem | PersonContextDraftItem | FactDraftItem | RelationshipDraftItem | FollowUpDraftItem | ReminderChangeDraftItem | FactChangeDraftItem | RelationshipChangeDraftItem
 
 export interface ResolvedCaptureDraft {
   slots: PersonSlotEntry[]
@@ -134,6 +188,10 @@ export function draftFromResolved(resolved: ResolvedCapture, now: Date): Resolve
   for (const item of resolved.items) {
     switch (item.type) {
       case 'interaction':
+        {
+        const parsed = item.occurredAt
+          ? resolveProposedSchedule(item.occurredAt, { timeZone: item.occurredAt.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone }).dueAt
+          : null
         items.push({
           id: item.id,
           removed: false,
@@ -142,7 +200,23 @@ export function draftFromResolved(resolved: ResolvedCapture, now: Date): Resolve
           summary: item.summary,
           discussion: item.discussion ?? '',
           participantSlotIDs: item.participants.map(ensureSlot),
-          occurredAt: now,
+          occurredAt: parsed ?? now,
+        })
+        break
+        }
+      case 'personContext':
+        items.push({
+          id: item.id,
+          removed: false,
+          type: 'personContext',
+          subjectSlotID: ensureSlot(item.person),
+          profileFocus: item.profileFocus,
+          roleTitle: item.roleTitle ?? '',
+          organizationName: item.organizationName ?? '',
+          connectionStatus: item.connectionStatus,
+          firstMetOn: item.firstMetOn ?? '',
+          context: item.context ?? '',
+          introducedBySlotID: item.introducedBy ? ensureSlot(item.introducedBy) : null,
         })
         break
       case 'fact':
@@ -154,7 +228,10 @@ export function draftFromResolved(resolved: ResolvedCapture, now: Date): Resolve
           attribute: item.attribute,
           value: item.value,
           confidence: item.confidence,
-          sensitivity: 'normal',
+          sensitivity: item.sensitivity,
+          context: item.context,
+          observedOn: item.observedOn ?? '',
+          effectiveOn: item.effectiveOn ?? '',
         })
         break
       case 'relationship':
@@ -185,8 +262,29 @@ export function draftFromResolved(resolved: ResolvedCapture, now: Date): Resolve
           },
           scheduleSource: item.schedule.sourceText,
           scheduleConfidence: item.schedule.confidence,
+          responsibility: item.responsibility,
+          progress: item.progress,
           allowUnscheduled: false,
         })
+        break
+      case 'reminderChange':
+        items.push({
+          id: item.id, removed: false, type: 'reminderChange', reminder: item.reminder, action: item.action,
+          progress: item.progress ?? item.reminder.progress ?? 'notStarted',
+          notes: item.notes ?? item.reminder.notes ?? '',
+          responsibility: item.responsibility ?? item.reminder.responsibility ?? 'mine',
+        })
+        break
+      case 'factChange':
+        items.push({
+          id: item.id, removed: false, type: 'factChange', observation: item.observation, action: item.action,
+          value: item.value ?? item.observation.value, correctionNote: item.correctionNote ?? '',
+          confidence: item.confidence ?? item.observation.confidence,
+          sensitivity: item.sensitivity ?? item.observation.sensitivity,
+        })
+        break
+      case 'relationshipChange':
+        items.push({ id: item.id, removed: false, type: 'relationshipChange', relationship: item.relationship, action: 'remove' })
         break
     }
   }
@@ -208,6 +306,7 @@ export function computeDefaultTitle(draft: ResolvedCaptureDraft): string {
   const active = draft.items.filter((item) => !item.removed)
   const interaction = active.find((item) => item.type === 'interaction')
   const facts = active.filter((item) => item.type === 'fact')
+  const personContexts = active.filter((item) => item.type === 'personContext')
   const relationships = active.filter((item) => item.type === 'relationship')
   const followUps = active.filter((item) => item.type === 'followUp')
 
@@ -216,11 +315,15 @@ export function computeDefaultTitle(draft: ResolvedCaptureDraft): string {
     const refs =
       item.type === 'interaction'
         ? item.participantSlotIDs
+        : item.type === 'personContext'
+          ? [item.subjectSlotID, ...(item.introducedBySlotID ? [item.introducedBySlotID] : [])]
         : item.type === 'fact'
           ? [item.subjectSlotID]
           : item.type === 'relationship'
             ? [item.subjectSlotID, ...(item.otherSlotID ? [item.otherSlotID] : [])]
-            : item.personSlotIDs
+            : item.type === 'followUp'
+              ? item.personSlotIDs
+              : []
     for (const slotID of refs) {
       const person = slotPerson(draft, slotID)
       if (person && !referenced.some((p) => p.id === person.id)) referenced.push(person)
@@ -243,7 +346,7 @@ export function computeDefaultTitle(draft: ResolvedCaptureDraft): string {
     primaryPerson: referenced[0] ?? null,
     createdPeople: created,
     connectedPair: relationships.length > 0 && facts.length === 0 && followUps.length === 0 ? connectedPair : null,
-    hasFacts: facts.length > 0,
+    hasFacts: facts.length > 0 || personContexts.length > 0,
     hasRelationships: relationships.length > 0,
     followUpOnly: followUps.length > 0 && facts.length === 0 && relationships.length === 0 && !interaction,
   })
@@ -254,8 +357,11 @@ export function computeDefaultTitle(draft: ResolvedCaptureDraft): string {
 export type ReviewDraftAction =
   | { type: 'update-interaction'; id: string; changes: Partial<Omit<InteractionDraftItem, 'id' | 'type' | 'removed'>> }
   | { type: 'update-fact'; id: string; changes: Partial<Omit<FactDraftItem, 'id' | 'type' | 'removed'>> }
+  | { type: 'update-person-context'; id: string; changes: Partial<Omit<PersonContextDraftItem, 'id' | 'type' | 'removed'>> }
   | { type: 'update-relationship'; id: string; changes: Partial<Omit<RelationshipDraftItem, 'id' | 'type' | 'removed'>> }
   | { type: 'update-follow-up'; id: string; changes: Partial<Omit<FollowUpDraftItem, 'id' | 'type' | 'removed'>> }
+  | { type: 'update-reminder-change'; id: string; changes: Partial<Pick<ReminderChangeDraftItem, 'action' | 'progress' | 'notes' | 'responsibility'>> }
+  | { type: 'update-fact-change'; id: string; changes: Partial<Pick<FactChangeDraftItem, 'action' | 'value' | 'correctionNote' | 'confidence' | 'sensitivity'>> }
   | { type: 'update-title'; title: string }
   | { type: 'resolve-person'; slotID: string; resolution: PersonSlotResolution }
   | { type: 'add-person-slot'; slot: PersonSlotEntry }
@@ -275,17 +381,26 @@ export function reviewDraftReducer(draft: ResolvedCaptureDraft, action: ReviewDr
 
   switch (action.type) {
     case 'update-interaction':
+    case 'update-person-context':
     case 'update-fact':
     case 'update-relationship':
-    case 'update-follow-up': {
+    case 'update-follow-up':
+    case 'update-reminder-change':
+    case 'update-fact-change': {
       const expected =
         action.type === 'update-interaction'
           ? 'interaction'
+          : action.type === 'update-person-context'
+            ? 'personContext'
           : action.type === 'update-fact'
             ? 'fact'
             : action.type === 'update-relationship'
               ? 'relationship'
-              : 'followUp'
+              : action.type === 'update-follow-up'
+                ? 'followUp'
+                : action.type === 'update-reminder-change'
+                  ? 'reminderChange'
+                  : 'factChange'
       return bump({
         items: draft.items.map((item) =>
           item.id === action.id && item.type === expected ? ({ ...item, ...action.changes } as ReviewDraftItem) : item,
@@ -352,6 +467,8 @@ export function validateDraft(draft: ResolvedCaptureDraft): DraftProblem[] {
       case 'fact':
         if (!item.value.trim()) problems.push({ itemID: item.id, message: 'The fact needs a value.', kind: 'field' })
         break
+      case 'personContext':
+        break
       case 'relationship': {
         if (item.otherSlotID !== null) {
           const subject = slotPerson(draft, item.subjectSlotID)
@@ -382,6 +499,13 @@ export function validateDraft(draft: ResolvedCaptureDraft): DraftProblem[] {
         }
         break
       }
+      case 'reminderChange':
+        break
+      case 'factChange':
+        if (item.action === 'correct' && !item.value.trim()) problems.push({ itemID: item.id, message: 'The corrected fact needs a value.', kind: 'field' })
+        break
+      case 'relationshipChange':
+        break
     }
   }
 
@@ -461,12 +585,36 @@ export function planFromReviewDraft(
             value: item.value,
             confidence: item.confidence,
             sensitivity: item.sensitivity,
+            context: item.context,
+            observedOn: item.observedOn ? new Date(`${item.observedOn}T12:00:00`) : undefined,
+            effectiveOn: item.effectiveOn ? new Date(`${item.effectiveOn}T12:00:00`) : null,
             sourceInteractionID: interactionID,
           },
           now,
         )
         observationIDs.push(observation.id)
         plan.push(...factPlan)
+        break
+      }
+      case 'personContext': {
+        const person = ensureCreated(item.subjectSlotID)
+        const introducedBy = item.introducedBySlotID ? ensureCreated(item.introducedBySlotID) : null
+        plan.push({
+          op: 'update',
+          collection: 'people',
+          id: person.id,
+          data: {
+            profileFocus: item.profileFocus,
+            roleTitle: item.roleTitle.trim() || null,
+            organizationName: item.organizationName.trim() || null,
+            connectionOrigin: {
+              status: item.connectionStatus,
+              firstMetOn: item.firstMetOn ? new Date(`${item.firstMetOn}T12:00:00`) : null,
+              context: item.context.trim() || null,
+              introducedByPersonID: introducedBy?.id ?? null,
+            },
+          },
+        })
         break
       }
       case 'relationship': {
@@ -532,6 +680,8 @@ export function planFromReviewDraft(
             scheduleTimeZone: schedule.scheduleTimeZone,
             duePrecision: schedule.duePrecision,
             startPrecision: schedule.startPrecision,
+            responsibility: item.responsibility,
+            progress: item.progress,
           },
           now,
         )
@@ -539,6 +689,36 @@ export function planFromReviewDraft(
         plan.push(...reminderPlan)
         break
       }
+      case 'reminderChange': {
+        const changePlan = item.action === 'complete'
+          ? planCompleteReminder(item.reminder.id, now)
+          : item.action === 'delete'
+            ? planDeleteReminder(item.reminder.id)
+            : item.action === 'update'
+              ? planUpdateReminder(item.reminder.id, { progress: item.progress, notes: item.notes.trim() || null, responsibility: item.responsibility })
+            : planReopenReminder(item.reminder.id)
+        reminderIDs.push(item.reminder.id)
+        for (const personID of item.reminder.personIDs) personIDs.add(personID)
+        plan.push(...changePlan.plan)
+        break
+      }
+      case 'factChange': {
+        personIDs.add(item.observation.subjectID)
+        if (item.action === 'confirm') {
+          plan.push(...planConfirmObservation(item.observation, now).plan)
+        } else {
+          const correction = planCorrection(item.observation, { value: item.value, confidence: item.confidence, sensitivity: item.sensitivity }, item.correctionNote || null, now)
+          observationIDs.push(correction.observation.id)
+          plan.push(...correction.plan)
+        }
+        break
+      }
+      case 'relationshipChange':
+        personIDs.add(item.relationship.subjectID)
+        personIDs.add(item.relationship.otherID)
+        relationshipIDs.push(item.relationship.id, item.relationship.reciprocalID)
+        plan.push(...planUnrelate(item.relationship).plan)
+        break
     }
   }
 
@@ -572,6 +752,10 @@ export function draftItemSummary(draft: ResolvedCaptureDraft, item: ReviewDraftI
       const person = slotPerson(draft, item.subjectSlotID)
       return `${item.attribute}: ${item.value}${person ? ` — ${person.displayName}` : ''}`
     }
+    case 'personContext': {
+      const person = slotPerson(draft, item.subjectSlotID)
+      return `${person?.displayName ?? 'Somebody'} · ${item.profileFocus === 'professional' ? 'Professional' : 'Personal'} profile`
+    }
     case 'relationship': {
       const subject = slotPerson(draft, item.subjectSlotID)
       const other = item.otherSlotID ? slotPerson(draft, item.otherSlotID) : null
@@ -579,6 +763,12 @@ export function draftItemSummary(draft: ResolvedCaptureDraft, item: ReviewDraftI
       return `${subject?.displayName ?? 'Somebody'} → ${word} → ${other?.displayName ?? 'unnamed'}`
     }
     case 'followUp':
-      return item.title || 'Follow-up'
+      return item.title || (item.responsibility === 'theirs' ? 'Waiting on' : 'Follow-up')
+    case 'reminderChange':
+      return `${item.action === 'complete' ? 'Complete' : item.action === 'delete' ? 'Delete' : item.action === 'update' ? 'Update' : 'Reopen'} “${item.reminder.title}”`
+    case 'factChange':
+      return `${item.action === 'confirm' ? 'Confirm' : 'Correct'} ${item.observation.attribute}: ${item.value}`
+    case 'relationshipChange':
+      return `Remove ${kindLabel(item.relationship.kind)} relationship`
   }
 }
