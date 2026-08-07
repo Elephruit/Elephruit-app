@@ -6,22 +6,27 @@
 /// replaces. So: branches collapse, a row carries what is in it rather than a
 /// pair of buttons, and the actions moved into a menu on the row.
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type DragEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { applyPlan } from '../../data/applyPlan'
 import { useFolders, useNotes, useReminders } from '../../data/hooks'
 import {
   buildTree,
+  foldersInOrder,
   isArchived,
+  moveRefusal,
   planCreateFolder,
   planDeleteFolder,
+  planReorderFolder,
   planUnarchiveFolder,
+  planUpdateFolder,
   progressOf,
   progressSentence,
   type Folder,
   type FolderNode,
 } from '../../domain/folder'
 import { relativeDescription } from '../../domain/contact'
+import { PALETTE_COLORS, type PaletteColor } from '../../domain/person'
 import { Button } from '../components/Button'
 import { Dialog } from '../components/Dialog'
 import { EmptyState } from '../components/EmptyState'
@@ -44,6 +49,9 @@ export function FoldersPage() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<Folder | null>(null)
   const [deleting, setDeleting] = useState<Folder | null>(null)
+  const [coloring, setColoring] = useState<Folder | null>(null)
+  const [draggingID, setDraggingID] = useState<string | null>(null)
+  const [dragOver, setDragOver] = useState<{ id: string; position: 'before' | 'inside' | 'after' } | null>(null)
 
   /// The tree is built from live folders only. Building it whole and hiding the
   /// archived rows would leave a live folder indented under a parent that is
@@ -118,6 +126,53 @@ export function FoldersPage() {
     await applyPlan(uid, plan)
   }
 
+  async function changeColor(colorName: PaletteColor) {
+    if (!coloring) return
+    await applyPlan(uid, planUpdateFolder(coloring.id, { colorName }, new Date()).plan)
+    setColoring(null)
+  }
+
+  function positionFor(event: DragEvent<HTMLDivElement>): 'before' | 'inside' | 'after' {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const ratio = (event.clientY - bounds.top) / bounds.height
+    if (ratio < 0.28) return 'before'
+    if (ratio > 0.72) return 'after'
+    return 'inside'
+  }
+
+  function canDrop(subject: Folder, target: Folder, position: 'before' | 'inside' | 'after'): boolean {
+    const newParentID = position === 'inside' ? target.id : target.parentID
+    if (subject.id === target.id) return false
+    return moveRefusal(folders ?? [], subject, newParentID) === null
+  }
+
+  async function dropOn(target: Folder, position: 'before' | 'inside' | 'after') {
+    const subject = (folders ?? []).find((folder) => folder.id === draggingID)
+    if (!subject || !canDrop(subject, target, position)) return
+
+    const newParentID = position === 'inside' ? target.id : target.parentID
+    let beforeID: string | null = null
+    if (position === 'before') {
+      beforeID = target.id
+    } else if (position === 'after') {
+      const siblings = foldersInOrder(folders ?? [], newParentID).filter((folder) => folder.id !== subject.id)
+      const targetIndex = siblings.findIndex((folder) => folder.id === target.id)
+      beforeID = siblings[targetIndex + 1]?.id ?? null
+    }
+
+    await applyPlan(uid, planReorderFolder(folders ?? [], subject, newParentID, beforeID, new Date()).plan)
+    setDraggingID(null)
+    setDragOver(null)
+  }
+
+  async function dropAtRoot() {
+    const subject = (folders ?? []).find((folder) => folder.id === draggingID)
+    if (!subject) return
+    await applyPlan(uid, planReorderFolder(folders ?? [], subject, null, null, new Date()).plan)
+    setDraggingID(null)
+    setDragOver(null)
+  }
+
   /// What a folder holds, in words. A trip says how far along it is; a plain
   /// folder says what is in it; an empty one says nothing at all rather than
   /// "0 notes, 0 reminders" on every row.
@@ -137,7 +192,50 @@ export function FoldersPage() {
     const summary = summaryOf(node.folder)
     return (
       <div key={node.folder.id}>
-        <div className="folder-row" style={{ '--depth': node.depth } as React.CSSProperties}>
+        <div
+          className="folder-row"
+          style={{ '--depth': node.depth } as React.CSSProperties}
+          data-reorderable
+          data-drop-position={dragOver?.id === node.folder.id ? dragOver.position : undefined}
+          data-drag-source={draggingID === node.folder.id || undefined}
+          onDragOver={(event) => {
+            const subject = (folders ?? []).find((folder) => folder.id === draggingID)
+            if (!subject) return
+            const position = positionFor(event)
+            if (!canDrop(subject, node.folder, position)) return
+            event.preventDefault()
+            event.stopPropagation()
+            event.dataTransfer.dropEffect = 'move'
+            setDragOver({ id: node.folder.id, position })
+          }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOver(null)
+          }}
+          onDrop={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            const position = positionFor(event)
+            void dropOn(node.folder, position)
+          }}
+        >
+          <button
+            type="button"
+            className="folder-drag-handle"
+            draggable
+            aria-label={`Move ${node.folder.title}`}
+            aria-describedby="folder-drag-help"
+            onDragStart={(event) => {
+              event.dataTransfer.effectAllowed = 'move'
+              event.dataTransfer.setData('text/plain', node.folder.id)
+              setDraggingID(node.folder.id)
+            }}
+            onDragEnd={() => {
+              setDraggingID(null)
+              setDragOver(null)
+            }}
+          >
+            <span aria-hidden="true">⠿</span>
+          </button>
           {node.children.length > 0 ? (
             <button
               type="button"
@@ -152,13 +250,17 @@ export function FoldersPage() {
             <span className="folder-tree-twisty" aria-hidden="true" />
           )}
 
+          <button
+            type="button"
+            className="folder-picker-glyph folder-color-button"
+            style={{ '--tint': `var(--palette-${node.folder.colorName})` } as React.CSSProperties}
+            aria-label={`Change color for ${node.folder.title}`}
+            onClick={() => setColoring(node.folder)}
+          >
+            <Icon name="folder" size={15} />
+          </button>
+
           <button type="button" className="folder-row-main" onClick={() => navigate(`/folders/${node.folder.id}`)}>
-            <span
-              className="folder-picker-glyph"
-              style={{ '--tint': `var(--palette-${node.folder.colorName})` } as React.CSSProperties}
-            >
-              <Icon name="folder" size={15} />
-            </span>
             <span className="folder-row-text">
               <span className="row-title">{node.folder.title}</span>
               {node.folder.summary && <span className="row-subtitle">{node.folder.summary}</span>}
@@ -231,7 +333,45 @@ export function FoldersPage() {
         />
       )}
 
-      {view === 'live' && tree && tree.length > 0 && <div className="folder-list">{tree.map(renderNode)}</div>}
+      {view === 'live' && tree && tree.length > 0 && (
+        <>
+          <p id="folder-drag-help" className="visually-hidden">
+            Drag above or below another folder to sort it. Drop on the middle to put it inside that folder.
+          </p>
+          <div
+            className="folder-list"
+            data-dragging={draggingID || undefined}
+            onDragOver={(event) => {
+              if (!draggingID || event.target !== event.currentTarget) return
+              event.preventDefault()
+              event.dataTransfer.dropEffect = 'move'
+            }}
+            onDrop={(event) => {
+              if (event.target !== event.currentTarget) return
+              event.preventDefault()
+              void dropAtRoot()
+            }}
+          >
+            {tree.map(renderNode)}
+            {draggingID && (
+              <div
+                className="folder-root-drop"
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  void dropAtRoot()
+                }}
+              >
+                Move to top level
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {view === 'archived' && archivedRows && (
         <div className="folder-list">
@@ -278,6 +418,25 @@ export function FoldersPage() {
             setEditing(null)
           }}
         />
+      )}
+
+      {coloring && (
+        <Dialog title={`Color for ${coloring.title}`} onClose={() => setColoring(null)}>
+          <div className="color-choices folder-color-choices">
+            {PALETTE_COLORS.map((color) => (
+              <button
+                key={color}
+                type="button"
+                className="color-choice"
+                style={{ '--tint': `var(--palette-${color})` } as React.CSSProperties}
+                data-selected={color === coloring.colorName || undefined}
+                aria-label={`Set ${color} color`}
+                aria-pressed={color === coloring.colorName}
+                onClick={() => void changeColor(color)}
+              />
+            ))}
+          </div>
+        </Dialog>
       )}
 
       {deleting && (
