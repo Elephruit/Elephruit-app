@@ -8,6 +8,12 @@ import { isSameDay, startOfDay } from './dates'
 
 export type ReminderStatus = 'open' | 'completed'
 
+export interface ChecklistItem {
+  id: string
+  title: string
+  isCompleted: boolean
+}
+
 export interface Reminder {
   id: string
   title: string
@@ -17,6 +23,9 @@ export interface Reminder {
   /// Lightweight, user-authored categories. Optional keeps reminders written
   /// before categories were introduced readable without a migration.
   categoryTags?: string[]
+  /// Small, independently completable steps. Optional keeps reminders written
+  /// before checklists were introduced readable without a migration.
+  checklist?: ChecklistItem[]
   /// The interaction it fell out of, when it fell out of one.
   sourceInteractionID: string | null
   /// The imported document it fell out of, for dossier-derived follow-ups.

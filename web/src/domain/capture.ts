@@ -10,7 +10,7 @@ import { newID } from './ids'
 import type { Interaction, InteractionKind } from './interaction'
 import { nameParts, paletteColorFor, type Person } from './person'
 import { possessivePhrase, relationshipPair, type Relationship, type RelationshipKind } from './relationships'
-import type { Reminder } from './reminders'
+import type { ChecklistItem, Reminder } from './reminders'
 import type { WritePlan } from './writePlan'
 import { uniqueCategoryTags } from './categoryTags'
 
@@ -357,6 +357,7 @@ export function planUnrelate(forward: Relationship): { plan: WritePlan } {
 export interface ReminderDraft {
   title: string
   notes?: string | null
+  checklist?: ChecklistItem[]
   personIDs?: string[]
   categoryTags?: string[]
   sourceInteractionID?: string | null
@@ -374,6 +375,9 @@ export function planCreateReminder(draft: ReminderDraft, now: Date): { plan: Wri
     id: newID(),
     title: draft.title.trim(),
     notes: draft.notes?.trim() || null,
+    checklist: (draft.checklist ?? [])
+      .map((item) => ({ ...item, title: item.title.trim() }))
+      .filter((item) => item.title.length > 0),
     personIDs: [...new Set(draft.personIDs ?? [])],
     categoryTags: uniqueCategoryTags(draft.categoryTags ?? []),
     sourceInteractionID: draft.sourceInteractionID ?? null,
@@ -398,6 +402,7 @@ export function planUpdateReminder(
       Reminder,
       | 'title'
       | 'notes'
+      | 'checklist'
       | 'startAt'
       | 'dueAt'
       | 'isSomeday'

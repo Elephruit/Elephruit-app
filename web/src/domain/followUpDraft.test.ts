@@ -86,6 +86,22 @@ describe('draftFromReminder', () => {
     expect(draft.categoryTags).toEqual(new Set(['work', 'waiting']))
     expect(reminderFieldsFromDraft(draft, { timeZone: USER_ZONE }).categoryTags).toEqual(['work', 'waiting'])
   })
+
+  it('round-trips checklist items and drops empty draft rows', () => {
+    expect(draftFromReminder(reminder({}), USER_ZONE).checklist).toEqual([])
+
+    const draft = draftFromReminder(
+      reminder({ checklist: [{ id: 'step-1', title: 'Draft the note', isCompleted: true }] }),
+      USER_ZONE,
+    )
+    draft.checklist.push({ id: 'step-2', title: '  Send it  ', isCompleted: false })
+    draft.checklist.push({ id: 'step-3', title: '   ', isCompleted: false })
+
+    expect(reminderFieldsFromDraft(draft, { timeZone: USER_ZONE }).checklist).toEqual([
+      { id: 'step-1', title: 'Draft the note', isCompleted: true },
+      { id: 'step-2', title: 'Send it', isCompleted: false },
+    ])
+  })
 })
 
 describe('validation and the guard', () => {

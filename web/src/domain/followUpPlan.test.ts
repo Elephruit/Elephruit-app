@@ -13,6 +13,8 @@ describe('planPersistFollowUp', () => {
     draft.title = 'Send the notes'
     draft.personIDs.add(person.id)
     draft.categoryTags.add('work')
+    draft.notes = 'Include the updated deck.'
+    draft.checklist.push({ id: 'step-1', title: 'Attach the deck', isCompleted: false })
 
     const plan = planPersistFollowUp({ draft, existingID: null, people: [person], now: NOW, timeZone: ZONE })
 
@@ -20,7 +22,13 @@ describe('planPersistFollowUp', () => {
     expect(plan[0]).toMatchObject({
       op: 'set',
       collection: 'reminders',
-      data: { title: 'Send the notes', personIDs: ['kelly'], categoryTags: ['work'] },
+      data: {
+        title: 'Send the notes',
+        notes: 'Include the updated deck.',
+        checklist: [{ id: 'step-1', title: 'Attach the deck', isCompleted: false }],
+        personIDs: ['kelly'],
+        categoryTags: ['work'],
+      },
     })
     expect(plan[1]).toMatchObject({
       op: 'set',

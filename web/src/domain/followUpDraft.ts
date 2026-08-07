@@ -3,7 +3,7 @@
 /// model and its conversions, so there is exactly one place that knows how a
 /// reminder's dates become editable fields and back.
 
-import type { Reminder } from './reminders'
+import type { ChecklistItem, Reminder } from './reminders'
 import { uniqueCategoryTags } from './categoryTags'
 import {
   hasTemporalCue,
@@ -18,6 +18,7 @@ import {
 export interface FollowUpDraft {
   title: string
   notes: string
+  checklist: ChecklistItem[]
   personIDs: Set<string>
   categoryTags: Set<string>
   schedule: ScheduleDraftFields
@@ -27,6 +28,7 @@ export function emptyFollowUpDraft(userZone: string): FollowUpDraft {
   return {
     title: '',
     notes: '',
+    checklist: [],
     personIDs: new Set(),
     categoryTags: new Set(),
     schedule: { scheduleMode: 'none', localDate: '', localTime: '', timeZone: userZone },
@@ -70,6 +72,7 @@ export function draftFromReminder(reminder: Reminder, userZone: string): FollowU
   return {
     title: reminder.title,
     notes: reminder.notes ?? '',
+    checklist: (reminder.checklist ?? []).map((item) => ({ ...item })),
     personIDs: new Set(reminder.personIDs),
     categoryTags: new Set(uniqueCategoryTags(reminder.categoryTags ?? [])),
     schedule,
@@ -90,6 +93,7 @@ export function followUpNeedsTemporalGuard(draft: FollowUpDraft): boolean {
 export interface ReminderFields {
   title: string
   notes: string | null
+  checklist: ChecklistItem[]
   personIDs: string[]
   categoryTags: string[]
   startAt: Date | null
@@ -106,6 +110,9 @@ export function reminderFieldsFromDraft(draft: FollowUpDraft, context: TemporalC
   return {
     title: draft.title.trim(),
     notes: draft.notes.trim() || null,
+    checklist: draft.checklist
+      .map((item) => ({ ...item, title: item.title.trim() }))
+      .filter((item) => item.title.length > 0),
     personIDs: [...draft.personIDs],
     categoryTags: uniqueCategoryTags(draft.categoryTags),
     startAt: resolved.startAt,
