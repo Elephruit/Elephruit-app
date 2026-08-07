@@ -196,8 +196,19 @@ export function FoldersPage() {
           className="folder-row"
           style={{ '--depth': node.depth } as React.CSSProperties}
           data-reorderable
+          draggable
+          aria-describedby="folder-drag-help"
           data-drop-position={dragOver?.id === node.folder.id ? dragOver.position : undefined}
           data-drag-source={draggingID === node.folder.id || undefined}
+          onDragStart={(event) => {
+            event.dataTransfer.effectAllowed = 'move'
+            event.dataTransfer.setData('text/plain', node.folder.id)
+            setDraggingID(node.folder.id)
+          }}
+          onDragEnd={() => {
+            setDraggingID(null)
+            setDragOver(null)
+          }}
           onDragOver={(event) => {
             const subject = (folders ?? []).find((folder) => folder.id === draggingID)
             if (!subject) return
@@ -221,18 +232,7 @@ export function FoldersPage() {
           <button
             type="button"
             className="folder-drag-handle"
-            draggable
             aria-label={`Move ${node.folder.title}`}
-            aria-describedby="folder-drag-help"
-            onDragStart={(event) => {
-              event.dataTransfer.effectAllowed = 'move'
-              event.dataTransfer.setData('text/plain', node.folder.id)
-              setDraggingID(node.folder.id)
-            }}
-            onDragEnd={() => {
-              setDraggingID(null)
-              setDragOver(null)
-            }}
           >
             <span aria-hidden="true">⠿</span>
           </button>

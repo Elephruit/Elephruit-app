@@ -5424,6 +5424,11 @@ button.timeline-badge {
 
 .folder-row[data-reorderable] {
   grid-template-columns: auto auto auto minmax(0, 1fr) auto;
+  cursor: grab;
+}
+
+.folder-row[data-reorderable]:active {
+  cursor: grabbing;
 }
 
 .folder-row[data-reorderable] .folder-row-main {
