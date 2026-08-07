@@ -168,7 +168,7 @@ export function CommitmentBoard({
     try {
       await applyPlan(uid, plan)
       if (moved) {
-        setAnnouncement(`Moved ${moved.title} to ${placement.owner === 'mine' ? 'My next moves' : 'Waiting on them'}, position ${placement.index + 1}.`)
+        setAnnouncement(`Moved ${moved.title} to ${placement.owner === 'mine' ? 'My next moves' : `Waiting on ${firstName}`}, position ${placement.index + 1}.`)
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not move that commitment.')
@@ -212,9 +212,10 @@ export function CommitmentBoard({
   }
 
   const draggedReminder = drag ? open.find((reminder) => reminder.id === drag.reminderID) : null
-  const laneDetails: Array<{ owner: CommitmentOwner; title: string; description: string }> = [
-    { owner: 'mine', title: 'My next moves', description: `What you committed to do for ${person.displayName.split(' ')[0]}.` },
-    { owner: 'theirs', title: 'Waiting on them', description: 'Delegated work and updates to revisit next time.' },
+  const firstName = person.displayName.trim().split(/\s+/)[0] || 'them'
+  const laneDetails: Array<{ owner: CommitmentOwner; title: string }> = [
+    { owner: 'mine', title: 'My next moves' },
+    { owner: 'theirs', title: `Waiting on ${firstName}` },
   ]
 
   return (
@@ -232,7 +233,7 @@ export function CommitmentBoard({
             data-owner={lane.owner}
             data-drag-target={drag?.started && drag.owner === lane.owner || undefined}
           >
-            <div className="person-followup-lane-head"><div><h3>{lane.title}</h3><p>{lane.description}</p></div><span>{lanes[lane.owner].length}</span></div>
+            <div className="person-followup-lane-head"><h3>{lane.title}</h3><span>{lanes[lane.owner].length}</span></div>
             {lanes[lane.owner].length === 0 ? <p className="person-followup-empty">Drop here.</p> : (
               <div className="person-followup-grid">
                 {lanes[lane.owner].map((reminder, index) => {

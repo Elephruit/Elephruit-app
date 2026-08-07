@@ -3278,7 +3278,7 @@ a.memory-person-link:hover {
 
 .person-followup-lane-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-small);
   margin-bottom: var(--space-small);
@@ -3289,7 +3289,6 @@ a.memory-person-link:hover {
   font: var(--text-label);
 }
 
-.person-followup-lane-head p,
 .person-followup-empty {
   margin: 2px 0 0;
   color: var(--color-text-tertiary);
