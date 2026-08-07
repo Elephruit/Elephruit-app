@@ -2,9 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { resolveProposal, type CaptureProposal } from './assist'
 import { makePerson } from './capture'
 import { FactAttributes } from './facts'
+import type { Folder } from './folder'
 import type { Person } from './person'
 
 const NOW = new Date('2026-08-06T15:00:00')
+
+function folder(id: string, title: string, parentID: string | null = null): Folder {
+  return { id, title, parentID, summary: null, colorName: 'blue', startAt: null, dueAt: null, archivedAt: null, createdAt: NOW, updatedAt: NOW }
+}
 
 function person(name: string, overrides: Partial<Person> = {}): Person {
   return { ...makePerson({ displayName: name }, NOW), id: `p-${name.toLowerCase().replace(/\s+/g, '-')}`, ...overrides }
@@ -19,6 +24,38 @@ const emptyProposal: CaptureProposal = {
 }
 
 describe('resolveProposal', () => {
+  it('keeps multiple tags while resolving exactly one deepest home folder locally', () => {
+    const folders = [folder('work', 'Work'), folder('outreach', 'Outreach', 'work')]
+    const { items, warnings } = resolveProposal(
+      {
+        ...emptyProposal,
+        followUps: [{
+          title: 'Send the introduction', personNames: [], tags: ['Work', 'Important', 'work'], folderPath: 'Work / Outreach',
+        }],
+      },
+      [],
+      NOW,
+      { folders },
+    )
+    const followUp = items[0]
+    if (followUp.type !== 'followUp') throw new Error('expected follow-up')
+    expect(followUp.categoryTags).toEqual(['Work', 'Important'])
+    expect(followUp.folderID).toBe('outreach')
+    expect(warnings).toEqual([])
+  })
+
+  it('leaves an ambiguous bare folder name unfiled', () => {
+    const folders = [folder('work', 'Work'), folder('home', 'Home'), folder('personal-work', 'Personal', 'work'), folder('personal-home', 'Personal', 'home')]
+    const { items, warnings } = resolveProposal(
+      { ...emptyProposal, followUps: [{ title: 'File this', personNames: [], folderPath: 'Personal' }] },
+      [], NOW, { folders },
+    )
+    const followUp = items[0]
+    if (followUp.type !== 'followUp') throw new Error('expected follow-up')
+    expect(followUp.folderID).toBeNull()
+    expect(warnings[0]).toContain('could not be matched uniquely')
+  })
+
   it('matches names case- and diacritic-insensitively', () => {
     const jose = person('José García')
     const { items, warnings } = resolveProposal(

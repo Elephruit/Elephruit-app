@@ -17,6 +17,8 @@ import {
 } from './facts'
 import type { InteractionKind } from './interaction'
 import { makePerson } from './capture'
+import { pathLabel, type Folder } from './folder'
+import { uniqueCategoryTags } from './categoryTags'
 import { foldedForMatching, type Person } from './person'
 import type { Relationship, RelationshipKind } from './relationships'
 import type { Reminder, ReminderProgress } from './reminders'
@@ -73,6 +75,10 @@ export interface ProposedFollowUp {
   schedule?: ProposedSchedule
   responsibility?: 'mine' | 'theirs'
   progress?: ReminderProgress
+  /// Multiple lightweight labels. These do not determine where the item lives.
+  tags?: string[]
+  /// Folder wording preserved from the capture and resolved locally.
+  folderPath?: string | null
 }
 
 export interface CaptureProposal {
@@ -164,6 +170,8 @@ export type ResolvedItem =
       schedule: ProposedSchedule
       responsibility: 'mine' | 'theirs'
       progress: ReminderProgress
+      categoryTags: string[]
+      folderID: string | null
     }
   | {
       id: string
@@ -205,7 +213,7 @@ export function resolveProposal(
   proposal: CaptureProposal,
   existingPeople: Person[],
   now: Date,
-  existing: { reminders?: Reminder[]; observations?: Observation[]; relationships?: Relationship[] } = {},
+  existing: { reminders?: Reminder[]; observations?: Observation[]; relationships?: Relationship[]; folders?: Folder[] } = {},
 ): ResolvedCapture {
   const warnings: string[] = []
   const pendingByName = new Map<string, Person>()
@@ -235,6 +243,23 @@ export function resolveProposal(
   const items: ResolvedItem[] = []
   let index = 0
   const nextID = () => `item-${index++}`
+
+  function resolveFolderPath(rawPath: string | null | undefined): string | null {
+    const requested = rawPath?.trim()
+    if (!requested) return null
+    const folders = existing.folders ?? []
+    const pathMatches = folders.filter(
+      (folder) => foldedForMatching(pathLabel(folders, folder.id)) === foldedForMatching(requested),
+    )
+    if (pathMatches.length === 1) return pathMatches[0].id
+
+    const titleMatches = folders.filter(
+      (folder) => foldedForMatching(folder.title) === foldedForMatching(requested),
+    )
+    if (titleMatches.length === 1) return titleMatches[0].id
+    warnings.push(`The folder “${requested}” could not be matched uniquely. The follow-up was left unfiled.`)
+    return null
+  }
 
   if (proposal.interaction && proposal.interaction.summary.trim()) {
     items.push({
@@ -345,6 +370,8 @@ export function resolveProposal(
       },
       responsibility: followUp.responsibility ?? 'mine',
       progress: followUp.progress ?? 'notStarted',
+      categoryTags: uniqueCategoryTags(followUp.tags ?? []),
+      folderID: resolveFolderPath(followUp.folderPath),
     })
   }
 

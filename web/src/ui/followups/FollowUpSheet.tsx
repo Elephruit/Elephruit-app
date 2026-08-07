@@ -208,13 +208,13 @@ export function FollowUpSheet({
       )}
 
       {folders.length > 0 && (
-        <FormField label="In" help="A folder, when it belongs to one.">
+        <FormField label="Folder" help="One home in your folder hierarchy.">
           <FolderPicker
             folders={folders}
             value={draft.folderID}
             onChange={(folderID) => set({ folderID })}
             label="Folder"
-            emptyLabel="Nothing — just a follow-up"
+            emptyLabel="No folder"
           />
         </FormField>
       )}

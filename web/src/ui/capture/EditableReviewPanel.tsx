@@ -6,7 +6,7 @@
 
 import { useMemo, useReducer, useRef, useState } from 'react'
 import { applyPlan } from '../../data/applyPlan'
-import { usePeople } from '../../data/hooks'
+import { useFolders, usePeople, useReminders } from '../../data/hooks'
 import type { ResolvedCapture } from '../../domain/assist'
 import { CONFIDENCE_LABELS, SENSITIVITY_LABELS, type FactConfidence, type FactSensitivity } from '../../domain/facts'
 import { INTERACTION_KIND_LABELS } from '../../domain/interaction'
@@ -146,6 +146,12 @@ export function EditableReviewPanel({
 }) {
   const uid = useUID()
   const people = usePeople(uid) ?? []
+  const folders = useFolders(uid) ?? []
+  const reminders = useReminders(uid) ?? []
+  const tagSuggestions = useMemo(
+    () => reminders.flatMap((reminder) => reminder.categoryTags ?? []),
+    [reminders],
+  )
   const viewport = useViewport()
   const [draft, dispatch] = useReducer(reviewDraftReducer, resolved, (r) => draftFromResolved(r, new Date()))
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -380,6 +386,8 @@ export function EditableReviewPanel({
                           item={item}
                           draft={draft}
                           people={people}
+                          folders={folders}
+                          tagSuggestions={tagSuggestions}
                           userZone={USER_ZONE}
                           dispatch={dispatch}
                         />

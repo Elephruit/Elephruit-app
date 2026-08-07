@@ -4,21 +4,28 @@
 import { useId } from 'react'
 import { makePerson } from '../../../domain/capture'
 import type { Person } from '../../../domain/person'
+import type { Folder } from '../../../domain/folder'
 import type { FollowUpDraftItem, ResolvedCaptureDraft, ReviewDraftAction } from '../../../domain/reviewDraft'
 import { FormField } from '../../components/FormField'
 import { ParticipantPicker } from '../../log/ParticipantPicker'
 import { ScheduleEditor } from './ScheduleEditor'
+import { FolderPicker } from '../../folders/FolderPicker'
+import { CategoryTagPicker } from '../../followups/CategoryTagPicker'
 
 export function FollowUpDraftEditor({
   item,
   draft,
   people,
+  folders,
+  tagSuggestions,
   userZone,
   dispatch,
 }: {
   item: FollowUpDraftItem
   draft: ResolvedCaptureDraft
   people: Person[]
+  folders: Folder[]
+  tagSuggestions: string[]
   userZone: string
   dispatch: (action: ReviewDraftAction) => void
 }) {
@@ -111,6 +118,23 @@ export function FollowUpDraftEditor({
       {item.scheduleConfidence === 'uncertain' && (
         <p className="field-help">The time zone in “{item.scheduleSource}” was ambiguous — confirm it above.</p>
       )}
+
+      <FormField label="Folder" help="One home in your folder hierarchy.">
+        <FolderPicker
+          folders={folders}
+          value={item.folderID}
+          onChange={(folderID) => update({ folderID })}
+          emptyLabel="No folder"
+        />
+      </FormField>
+
+      <FormField label="Tags" help="Add as many labels as you need.">
+        <CategoryTagPicker
+          selected={new Set(item.categoryTags)}
+          suggestions={tagSuggestions}
+          onChange={(categoryTags) => update({ categoryTags: [...categoryTags] })}
+        />
+      </FormField>
 
       <FormField label="Notes" htmlFor={`${id}-notes`}>
         <textarea

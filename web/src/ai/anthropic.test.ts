@@ -35,7 +35,7 @@ const FIXTURE = {
       facts: [{ attribute: 'school', value: 'South High' }],
     },
   ],
-  followUps: [{ title: 'Send the neighborhood list', personNames: ['Ana Torres'], notes: null, schedule: NO_SCHEDULE, responsibility: 'mine', progress: 'notStarted' }],
+  followUps: [{ title: 'Send the neighborhood list', personNames: ['Ana Torres'], notes: null, schedule: NO_SCHEDULE, responsibility: 'mine', progress: 'notStarted', tags: ['Work', 'Important'], folderPath: null }],
   reminderChanges: [],
   factChanges: [],
   relationshipChanges: [],
@@ -92,6 +92,8 @@ describe('the request', () => {
     expect(prompt).toContain('Ana Torres; Sam Ruiz')
     expect(prompt).toContain('Never invent a name')
     expect(prompt).toContain('quickFact')
+    expect(prompt).toContain('folderPath preserves one folder name or slash-separated path')
+    expect(prompt).toContain('Tags never substitute for a folder')
   })
 
   it('grounds temporal resolution in the user absolute date, zone, and offset', () => {
@@ -153,6 +155,8 @@ describe('the Harbinder/Kelly regression', () => {
         },
         responsibility: 'mine',
         progress: 'notStarted',
+        tags: [],
+        folderPath: null,
       },
     ],
     reminderChanges: [],

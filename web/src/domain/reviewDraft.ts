@@ -129,6 +129,8 @@ export interface FollowUpDraftItem extends DraftItemBase {
   scheduleConfidence: 'stated' | 'inferred' | 'uncertain'
   responsibility: 'mine' | 'theirs'
   progress: ReminderProgress
+  categoryTags: string[]
+  folderID: string | null
   /// The explicit "Save without date" override for the temporal safeguard.
   /// Transient review state only — never persisted.
   allowUnscheduled: boolean
@@ -275,6 +277,8 @@ export function draftFromResolved(resolved: ResolvedCapture, now: Date): Resolve
           scheduleConfidence: item.schedule.confidence,
           responsibility: item.responsibility,
           progress: item.progress,
+          categoryTags: item.categoryTags,
+          folderID: item.folderID,
           allowUnscheduled: false,
         })
         break
@@ -690,6 +694,8 @@ export function planFromReviewDraft(
             startPrecision: schedule.startPrecision,
             responsibility: item.responsibility,
             progress: item.progress,
+            categoryTags: item.categoryTags,
+            folderID: item.folderID,
           },
           now,
         )

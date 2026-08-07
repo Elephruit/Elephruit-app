@@ -88,6 +88,8 @@ export const CaptureProposalSchema = z.object({
       schedule: ScheduleSchema,
       responsibility: z.enum(['mine', 'theirs']),
       progress: z.enum(['notStarted', 'inProgress', 'blocked']),
+      tags: z.array(z.string()),
+      folderPath: z.string().nullable(),
     }),
   ),
   reminderChanges: z.array(
@@ -175,7 +177,7 @@ Rules, in order of importance:
 - facts: things now known about a person, attributed to the right person. attribute should be one of the curated attributes when one fits: ${attributes}. Otherwise use a short lowercase phrase of your own. confidence is "stated" when the speaker asserted it, "inferred" when you are deducing it, "uncertain" when they hedged.
 - Every fact also has sensitivity, context, observedOn, and effectiveOn. sensitivity is "restricted" for secrets or deeply private material, "sensitive" for delicate personal information, otherwise "normal". context controls where custom facts appear: identity, professional, or personal. Dates are YYYY-MM-DD or null; observedOn is when the speaker learned it and effectiveOn is when it becomes true if different.
 - relationships: family, work, and social ties the update reveals (${kinds}). label carries the speaker's own word ("son", "boss"). Facts about a person who was only described relative to somebody else ("her son is a senior") belong in that relationship's facts, not in the top-level facts.
-- followUps: commitments and expected actions, one entry each, titled as a short imperative ("Send the neighborhood list"). responsibility is "mine" when the SPEAKER owes or intends the action and "theirs" when the other person owes it or the speaker is waiting on them. personNames lists who each one concerns. notes carries any extra detail worth keeping; null otherwise.
+- followUps: commitments and expected actions, one entry each, titled as a short imperative ("Send the neighborhood list"). responsibility is "mine" when the SPEAKER owes or intends the action and "theirs" when the other person owes it or the speaker is waiting on them. personNames lists who each one concerns. notes carries any extra detail worth keeping; null otherwise. tags is a list of zero or more labels. folderPath preserves one folder name or slash-separated path only when the speaker explicitly says where the item lives; use the deepest named folder and otherwise null. Never invent a folder. Tags never substitute for a folder.
 - progress is "notStarted", "inProgress", or "blocked". Use a non-default state only when the speaker explicitly describes it.
 - reminderChanges: when the speaker clearly says an existing follow-up was completed, reopened, deleted, reassigned, or has a progress update, reference its exact supplied ID. Use action "update" with progress, responsibility, and/or a concise notes update. "I will take that" means responsibility "mine"; "she owns that" means "theirs". Never guess an ID or create a duplicate. Deletion stays an explicit review item.
 - factChanges: use "confirm" when the speaker says an existing supplied fact still holds. Use "correct" with the replacement value and an optional correction note when it changed or was wrong. Reference the exact supplied observation ID; never guess one or emit the same correction as a new fact.

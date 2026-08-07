@@ -28,7 +28,7 @@ import { newID } from '../../domain/ids'
 import { attributeLabel } from '../../domain/facts'
 import { profileFocusOf } from '../../domain/person'
 import { kindLabel } from '../../domain/relationships'
-import { useAiCredentials, useAllObservations, useAllRelationships, usePeople, useReminders } from '../../data/hooks'
+import { useAiCredentials, useAllObservations, useAllRelationships, useFolders, usePeople, useReminders } from '../../data/hooks'
 import { useUID } from '../UserContext'
 
 export type CaptureMode =
@@ -141,6 +141,7 @@ export function useCaptureController(): CaptureController {
   const observations = useAllObservations(uid)
   const reminders = useReminders(uid)
   const relationships = useAllRelationships(uid)
+  const folders = useFolders(uid)
   const credentials = useAiCredentials(uid)
 
   const [mode, setMode] = useState<CaptureMode>('collapsed')
@@ -452,7 +453,7 @@ export function useCaptureController(): CaptureController {
         model: storedModel(),
         context: captureContext(),
       })
-      setReview(resolveProposal(proposal, people ?? [], new Date(), { reminders: reminders ?? [], observations: observations ?? [], relationships: relationships ?? [] }))
+      setReview(resolveProposal(proposal, people ?? [], new Date(), { reminders: reminders ?? [], observations: observations ?? [], relationships: relationships ?? [], folders: folders ?? [] }))
       setMode('reviewing')
     } catch (cause) {
       if (cause instanceof DossierMultipleSubjectsError) {
@@ -464,7 +465,7 @@ export function useCaptureController(): CaptureController {
       }
       setMode('error')
     }
-  }, [credential, canParse, text, people, reminders, observations, relationships, captureContext, dossierInputs, initialPersonID])
+  }, [credential, canParse, text, people, reminders, observations, relationships, folders, captureContext, dossierInputs, initialPersonID])
 
   const chooseDossierTarget = useCallback((target: DossierTarget) => {
     setDossier((current) => (current ? { phase: 'review', proposal: current.proposal, target } : current))
