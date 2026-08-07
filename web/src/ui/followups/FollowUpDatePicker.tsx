@@ -67,7 +67,6 @@ export function FollowUpDatePicker({
   const [activeDate, setActiveDate] = useState(() => localDateValue(initial))
   const calendarRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const timeRef = useRef<HTMLInputElement>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
   const suggestions = useMemo(() => dateSuggestions(query, now), [now, query])
   const days = useMemo(() => calendarDays(month), [month])
@@ -136,16 +135,11 @@ export function FollowUpDatePicker({
     focusDate(new Date(nextMonth.getFullYear(), nextMonth.getMonth(), Math.min(active.getDate(), maxDay), 12))
   }
 
-  function focusTimeOrExit() {
-    if (value) timeRef.current?.focus()
-    else onExitForward?.()
-  }
-
   function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Tab') {
       event.preventDefault()
       if (event.shiftKey) onExitBackward?.()
-      else focusTimeOrExit()
+      else onExitForward?.()
     } else if (event.key === 'ArrowDown') {
       event.preventDefault()
       if (suggestions.length > 0) {
@@ -178,14 +172,8 @@ export function FollowUpDatePicker({
       choose(suggestions[index].localDate)
     } else if (event.key === 'Tab') {
       event.preventDefault()
-      if (event.shiftKey) {
-        if (index === 0) inputRef.current?.focus()
-        else focusSuggestion(index - 1)
-      } else if (index < suggestions.length - 1) {
-        focusSuggestion(index + 1)
-      } else {
-        focusTimeOrExit()
-      }
+      if (event.shiftKey) onExitBackward?.()
+      else onExitForward?.()
     }
   }
 
@@ -193,8 +181,8 @@ export function FollowUpDatePicker({
     let next: Date | null = null
     if (event.key === 'Tab') {
       event.preventDefault()
-      if (event.shiftKey) inputRef.current?.focus()
-      else focusTimeOrExit()
+      if (event.shiftKey) onExitBackward?.()
+      else onExitForward?.()
       return
     }
     if (event.key === 'Enter' || event.key === ' ') {
@@ -324,20 +312,29 @@ export function FollowUpDatePicker({
           <label className="followup-time-field">
             <span>Time</span>
             <input
-              ref={timeRef}
               type="time"
               value={timeValue}
               aria-label="Due time"
               onChange={(event) => onTimeChange(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Tab' && event.shiftKey) {
-                  event.preventDefault()
-                  inputRef.current?.focus()
-                }
+                if (event.key !== 'Tab') return
+                event.preventDefault()
+                if (event.shiftKey) onExitBackward?.()
+                else onExitForward?.()
               }}
             />
           </label>
-          <button type="button" className="button button-quiet button-small" onClick={onClear}>
+          <button
+            type="button"
+            className="button button-quiet button-small"
+            onClick={onClear}
+            onKeyDown={(event) => {
+              if (event.key !== 'Tab') return
+              event.preventDefault()
+              if (event.shiftKey) onExitBackward?.()
+              else onExitForward?.()
+            }}
+          >
             Clear date
           </button>
           <button
@@ -345,9 +342,10 @@ export function FollowUpDatePicker({
             className="button button-secondary button-small"
             onClick={onDone}
             onKeyDown={(event) => {
-              if (event.key !== 'Tab' || event.shiftKey) return
+              if (event.key !== 'Tab') return
               event.preventDefault()
-              onExitForward?.()
+              if (event.shiftKey) onExitBackward?.()
+              else onExitForward?.()
             }}
           >
             Done
