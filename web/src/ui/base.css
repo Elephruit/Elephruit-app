@@ -1397,8 +1397,8 @@ dialog.palette::backdrop {
 
 .category-combobox .combobox-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-tight);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
   padding: var(--space-tight);
   box-shadow: none;
 }
@@ -1433,6 +1433,11 @@ dialog.palette::backdrop {
 
 .inline-followup-panel .combobox-list {
   max-height: 160px;
+}
+
+.inline-followup-panel .category-combobox .combobox-list {
+  max-height: 168px;
+  overflow-y: auto;
 }
 
 .inline-followup-panel .combobox-option {
