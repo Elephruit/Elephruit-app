@@ -17,7 +17,7 @@ import { useFolders, useNotes } from '../../data/hooks'
 import { archivedFolderIDs, descendantIDs, pathLabel } from '../../domain/folder'
 import { relativeDescription } from '../../domain/contact'
 import { displayTitle, excerptOf, planCreateNote, planUpdateNote, type Note } from '../../domain/note'
-import { Button } from '../components/Button'
+import { Button, IconButton } from '../components/Button'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import { SegmentedControl } from '../components/SegmentedControl'
@@ -179,9 +179,12 @@ export function NotesPage() {
                 >
                   Back
                 </Button>
-                <Button variant="quiet" onClick={() => setCleanScreen((current) => !current)}>
-                  {cleanScreen ? 'Show folders' : 'Clean screen'}
-                </Button>
+                <IconButton
+                  label={cleanScreen ? 'Show folders' : 'Hide folders'}
+                  icon={cleanScreen ? 'collapse' : 'expand'}
+                  size={18}
+                  onClick={() => setCleanScreen((current) => !current)}
+                />
               </div>
               <NotePage embedded />
             </>
