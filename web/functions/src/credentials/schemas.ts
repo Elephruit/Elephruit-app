@@ -7,7 +7,7 @@ import { z } from 'zod'
 
 export const CREDENTIAL_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
 
-const ProviderSchema = z.enum(['anthropic'])
+const ProviderSchema = z.enum(['anthropic', 'openai', 'google'])
 
 const CredentialIdSchema = z.string().regex(CREDENTIAL_ID_PATTERN)
 

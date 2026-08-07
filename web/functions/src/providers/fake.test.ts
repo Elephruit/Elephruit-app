@@ -35,7 +35,13 @@ describe('fakeAdapter', () => {
 
   it('serves parseable capture-proposal JSON when the format asks for one', async () => {
     const { text } = await collect(
-      request({ outputFormat: { type: 'json_schema', schema: { properties: { participantNames: {} } } } }),
+      request({
+        outputFormat: {
+          type: 'json_schema',
+          name: 'capture_proposal',
+          schema: { properties: { participantNames: {} } },
+        },
+      }),
     )
     const proposal = JSON.parse(text)
     expect(proposal.participantNames).toEqual(['Ana Torres'])
@@ -47,7 +53,11 @@ describe('fakeAdapter', () => {
     const { text } = await collect(
       request({
         messages: [{ role: 'user', content: input }],
-        outputFormat: { type: 'json_schema', schema: { properties: { talkingPoints: {} } } },
+        outputFormat: {
+          type: 'json_schema',
+          name: 'day_brief',
+          schema: { properties: { talkingPoints: {} } },
+        },
       }),
     )
     const brief = JSON.parse(text)

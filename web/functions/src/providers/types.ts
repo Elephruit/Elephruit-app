@@ -2,7 +2,7 @@
 /// streaming (the gateway). One provider today; the types already speak in
 /// the plural so OpenAI/Google slot in without reshaping callers.
 
-export const PROVIDERS = ['anthropic'] as const
+export const PROVIDERS = ['anthropic', 'openai', 'google'] as const
 export type ProviderId = (typeof PROVIDERS)[number]
 
 /// Verification is deliberately tri-state. Only a definite authentication or

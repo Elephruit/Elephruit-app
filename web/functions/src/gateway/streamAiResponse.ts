@@ -63,10 +63,10 @@ export async function handleStreamAiResponse(
 
   // The media gate: attachment blocks only travel to models the catalog
   // vouches for. Checked before rate spend so a wrong model costs nothing.
-  const hasAttachments = request.messages.some(
-    (message) => typeof message.content !== 'string' && message.content.some((block) => block.type !== 'text'),
-  )
-  if (hasAttachments && !model.supportsAttachments) {
+  const contentBlocks = request.messages.flatMap((message) => typeof message.content === 'string' ? [] : message.content)
+  const hasImages = contentBlocks.some((block) => block.type === 'image')
+  const hasDocuments = contentBlocks.some((block) => block.type === 'document')
+  if ((hasImages && !model.supportsImages) || (hasDocuments && !model.supportsDocuments)) {
     throw new PublicError(
       'UNSUPPORTED_ATTACHMENT',
       'The selected model cannot read attached files. Choose a vision-capable model.',
@@ -107,9 +107,9 @@ export async function handleStreamAiResponse(
       // zodOutputFormat carries a client-side parse helper that some
       // serialization paths turn into a literal key the API then rejects
       // ("format.parse: Extra inputs are not permitted") — and whatever
-      // else a client ever sends, only type and schema go upstream.
+      // else a client ever sends, only type, name, and schema go upstream.
       outputFormat: request.outputFormat
-        ? { type: request.outputFormat.type, schema: request.outputFormat.schema }
+        ? { type: 'json_schema', name: request.outputFormat.name, schema: request.outputFormat.schema as Record<string, unknown> }
         : null,
     }
 

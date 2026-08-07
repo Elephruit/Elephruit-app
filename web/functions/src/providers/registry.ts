@@ -6,8 +6,10 @@ import type { RuntimeConfig } from '../config.js'
 import { PublicError } from '../log/errors.js'
 import type { ProviderAdapter } from './adapter.js'
 import { anthropicAdapter } from './anthropic.js'
-import { fakeAdapter } from './fake.js'
+import { fakeAdapterFor } from './fake.js'
+import { googleAdapter } from './google.js'
 import { MODEL_CATALOG, type ModelDefinition } from './model-catalog.js'
+import { openAIAdapter } from './openai.js'
 import type { ProviderId } from './types.js'
 
 export type AdapterRegistry = Record<ProviderId, ProviderAdapter>
@@ -15,7 +17,9 @@ export type AdapterRegistry = Record<ProviderId, ProviderAdapter>
 export function buildAdapterRegistry(config: RuntimeConfig): AdapterRegistry {
   const useFake = config.useFakeAdapter && config.isEmulator
   return {
-    anthropic: useFake ? fakeAdapter : anthropicAdapter,
+    anthropic: useFake ? fakeAdapterFor('anthropic') : anthropicAdapter,
+    openai: useFake ? fakeAdapterFor('openai') : openAIAdapter,
+    google: useFake ? fakeAdapterFor('google') : googleAdapter,
   }
 }
 

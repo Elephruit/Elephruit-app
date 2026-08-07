@@ -11,6 +11,7 @@
 
 import { PublicError } from '../log/errors.js'
 import { StreamCancelled, type NormalizedRequest, type ProviderAdapter, type StreamOutcome } from './adapter.js'
+import type { ProviderId } from './types.js'
 import { fakeVerifyKey } from './verify.js'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -66,7 +67,8 @@ function cannedDayBrief(request: NormalizedRequest): unknown {
       name,
       headline: `Things are steady with ${name} — one open loop.`,
       talkingPoints: ['The move went well', 'Ask about the new routine'],
-      openLoops: ['You still owe the neighborhood list'],
+      myNextMoves: ['You still owe the neighborhood list'],
+      statusQuestions: ['Did the school enrollment go through?'],
       suggestedQuestions: [`What is ${name.split(' ')[0]} enjoying about the new place?`],
     })),
     dayNote: names.length > 1 ? 'A light day — two conversations, both warm.' : null,
@@ -182,29 +184,33 @@ function cannedText(request: NormalizedRequest): string {
   return 'A canned reply from the emulator fake adapter.'
 }
 
-export const fakeAdapter: ProviderAdapter = {
-  provider: 'anthropic',
-  verifyKey: fakeVerifyKey,
+export function fakeAdapterFor(provider: ProviderId): ProviderAdapter {
+  return {
+    provider,
+    verifyKey: fakeVerifyKey,
 
-  async streamMessage(apiKey, request, signal, onText): Promise<StreamOutcome> {
-    if (apiKey.includes('-invalid')) {
-      throw new PublicError('PROVIDER_AUTH_FAILED', 'The provider rejected this key. Verify or replace it in Settings.')
-    }
-    if (apiKey.includes('-flaky')) {
-      throw new PublicError('PROVIDER_UNAVAILABLE', 'The provider could not be reached. Nothing was lost.')
-    }
+    async streamMessage(apiKey, request, signal, onText): Promise<StreamOutcome> {
+      if (apiKey.includes('-invalid')) {
+        throw new PublicError('PROVIDER_AUTH_FAILED', 'The provider rejected this key. Verify or replace it in Settings.')
+      }
+      if (apiKey.includes('-flaky')) {
+        throw new PublicError('PROVIDER_UNAVAILABLE', 'The provider could not be reached. Nothing was lost.')
+      }
 
-    const text = cannedText(request)
-    const third = Math.ceil(text.length / 3)
-    for (let index = 0; index < text.length; index += third) {
-      if (signal.aborted) throw new StreamCancelled()
-      await onText(text.slice(index, index + third))
-      await sleep(80)
-    }
-    return {
-      stopReason: 'end_turn',
-      usage: { inputTokens: 128, outputTokens: Math.ceil(text.length / 4) },
-      adapter: 'fake',
-    }
-  },
+      const text = cannedText(request)
+      const third = Math.ceil(text.length / 3)
+      for (let index = 0; index < text.length; index += third) {
+        if (signal.aborted) throw new StreamCancelled()
+        await onText(text.slice(index, index + third))
+        await sleep(80)
+      }
+      return {
+        stopReason: 'end_turn',
+        usage: { inputTokens: 128, outputTokens: Math.ceil(text.length / 4) },
+        adapter: 'fake',
+      }
+    },
+  }
 }
+
+export const fakeAdapter = fakeAdapterFor('anthropic')
