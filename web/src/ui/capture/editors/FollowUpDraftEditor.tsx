@@ -75,6 +75,13 @@ export function FollowUpDraftEditor({
         />
       </FormField>
 
+      <FormField label="Who is responsible?" htmlFor={`${id}-responsibility`}>
+        <select id={`${id}-responsibility`} className="field field-select" value={item.responsibility} onChange={(event) => update({ responsibility: event.target.value as 'mine' | 'theirs' })}>
+          <option value="mine">I am</option>
+          <option value="theirs">They are — I’m waiting</option>
+        </select>
+      </FormField>
+
       <FormField label="For">
         <ParticipantPicker
           people={people}

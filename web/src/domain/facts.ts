@@ -14,6 +14,7 @@ export type FactAttribute = string
 
 export type FactConfidence = 'stated' | 'inferred' | 'uncertain'
 export type FactSensitivity = 'normal' | 'sensitive' | 'restricted'
+export type FactContext = 'professional' | 'personal' | 'identity'
 
 export interface Observation {
   id: string
@@ -29,6 +30,9 @@ export interface Observation {
   lastConfirmedOn: Date
   confidence: FactConfidence
   sensitivity: FactSensitivity
+  /// Where a custom fact belongs on the working board. Older observations
+  /// omit this and continue to use the curated attribute grouping.
+  context?: FactContext
   /// The interaction this came out of. A fact that has a source must never lose it.
   sourceInteractionID: string | null
   /// The imported document this came out of, when it came out of one.
@@ -45,6 +49,16 @@ export interface Observation {
 // MARK: Attributes
 
 export const FactAttributes = {
+  // Identity and contact
+  preferredName: 'preferredName',
+  pronouns: 'pronouns',
+  email: 'email',
+  phone: 'phone',
+  timeZone: 'timeZone',
+  language: 'language',
+  birthday: 'birthday',
+  anniversary: 'anniversary',
+  contactCadence: 'contactCadence',
   // Life context
   location: 'location',
   employer: 'employer',
@@ -69,12 +83,26 @@ export const FactAttributes = {
   significance: 'significance',
   reflection: 'reflection',
   promise: 'promise',
+  currentProject: 'currentProject',
+  professionalGoal: 'professionalGoal',
+  painPoint: 'painPoint',
+  decisionRole: 'decisionRole',
+  stakeholder: 'stakeholder',
 } as const
 
 /// Every attribute the interface offers a dedicated card for, in display order.
 /// `health` is a known attribute but deliberately not curated — same as the Mac app.
 export const CURATED_ATTRIBUTES: FactAttribute[] = [
   FactAttributes.significance,
+  FactAttributes.preferredName,
+  FactAttributes.pronouns,
+  FactAttributes.email,
+  FactAttributes.phone,
+  FactAttributes.timeZone,
+  FactAttributes.language,
+  FactAttributes.birthday,
+  FactAttributes.anniversary,
+  FactAttributes.contactCadence,
   FactAttributes.conversationTopic,
   FactAttributes.family,
   FactAttributes.observedAge,
@@ -88,6 +116,11 @@ export const CURATED_ATTRIBUTES: FactAttribute[] = [
   FactAttributes.location,
   FactAttributes.employer,
   FactAttributes.role,
+  FactAttributes.currentProject,
+  FactAttributes.professionalGoal,
+  FactAttributes.painPoint,
+  FactAttributes.decisionRole,
+  FactAttributes.stakeholder,
   FactAttributes.giftIdea,
   FactAttributes.communicationPreference,
   FactAttributes.lookingFor,
@@ -97,6 +130,15 @@ export const CURATED_ATTRIBUTES: FactAttribute[] = [
 ]
 
 const ATTRIBUTE_LABELS: Record<string, string> = {
+  preferredName: 'Goes by',
+  pronouns: 'Pronouns',
+  email: 'Email',
+  phone: 'Phone',
+  timeZone: 'Time zone',
+  language: 'Languages',
+  birthday: 'Birthday',
+  anniversary: 'Anniversary',
+  contactCadence: 'Keep in touch',
   location: 'Lives in',
   employer: 'Works at',
   role: 'Role',
@@ -118,6 +160,11 @@ const ATTRIBUTE_LABELS: Record<string, string> = {
   significance: 'Why they matter',
   reflection: 'Private notes',
   promise: 'Reminders',
+  currentProject: 'Current projects',
+  professionalGoal: 'Professional goals',
+  painPoint: 'Challenges',
+  decisionRole: 'Decision role',
+  stakeholder: 'Key stakeholders',
 }
 
 export function attributeLabel(attribute: FactAttribute): string {
@@ -130,6 +177,14 @@ export function attributeLabel(attribute: FactAttribute): string {
 /// Whether more than one value can be true at once. Someone lives in exactly one
 /// place and likes many things — the difference between superseding and joining.
 const SINGLE_VALUED = new Set<FactAttribute>([
+  FactAttributes.preferredName,
+  FactAttributes.pronouns,
+  FactAttributes.email,
+  FactAttributes.phone,
+  FactAttributes.timeZone,
+  FactAttributes.birthday,
+  FactAttributes.anniversary,
+  FactAttributes.contactCadence,
   FactAttributes.location,
   FactAttributes.employer,
   FactAttributes.role,
@@ -137,6 +192,7 @@ const SINGLE_VALUED = new Set<FactAttribute>([
   FactAttributes.schoolGrade,
   FactAttributes.school,
   FactAttributes.significance,
+  FactAttributes.decisionRole,
 ])
 
 export function isMultiValued(attribute: FactAttribute): boolean {
@@ -163,6 +219,15 @@ export function captureKind(attribute: FactAttribute): CaptureKind {
 }
 
 const CAPTURE_PROMPTS: Record<string, string> = {
+  preferredName: 'What they prefer to be called',
+  pronouns: 'Their pronouns',
+  email: 'Email address',
+  phone: 'Phone number',
+  timeZone: 'Their time zone',
+  language: 'Languages they speak',
+  birthday: 'Birthday — month and day is enough',
+  anniversary: 'Anniversary or meaningful date',
+  contactCadence: 'How often you want to stay in touch',
   observedAge: 'Age now',
   schoolGrade: 'Grade — “8th”, “senior”',
   school: 'Which school',
@@ -173,6 +238,11 @@ const CAPTURE_PROMPTS: Record<string, string> = {
   foodAndDrink: 'Diet, allergies, what they drink',
   interest: 'What they are into',
   conversationTopic: 'Worth asking about',
+  currentProject: 'What they are working on',
+  professionalGoal: 'What they are trying to achieve',
+  painPoint: 'What is getting in their way',
+  decisionRole: 'How they influence the decision',
+  stakeholder: 'Who else matters to their work',
 }
 
 export function capturePrompt(attribute: FactAttribute): string {

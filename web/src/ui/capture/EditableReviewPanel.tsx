@@ -8,7 +8,7 @@ import { useMemo, useReducer, useRef, useState } from 'react'
 import { applyPlan } from '../../data/applyPlan'
 import { usePeople } from '../../data/hooks'
 import type { ResolvedCapture } from '../../domain/assist'
-import { CONFIDENCE_LABELS } from '../../domain/facts'
+import { CONFIDENCE_LABELS, SENSITIVITY_LABELS, type FactConfidence, type FactSensitivity } from '../../domain/facts'
 import { INTERACTION_KIND_LABELS } from '../../domain/interaction'
 import { kindLabel, possessivePhrase } from '../../domain/relationships'
 import {
@@ -29,9 +29,11 @@ import { useUID } from '../UserContext'
 import { useViewport } from '../breakpoints'
 import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
+import { FormField } from '../components/FormField'
 import { FactDraftEditor } from './editors/FactDraftEditor'
 import { FollowUpDraftEditor } from './editors/FollowUpDraftEditor'
 import { InteractionDraftEditor } from './editors/InteractionDraftEditor'
+import { PersonContextDraftEditor } from './editors/PersonContextDraftEditor'
 import { PersonSlotPicker } from './editors/PersonSlotPicker'
 import { RelationshipDraftEditor } from './editors/RelationshipDraftEditor'
 
@@ -67,6 +69,11 @@ function RowSummary({ draft, item }: { draft: ResolvedCaptureDraft; item: Review
         </>
       )
     }
+    case 'personContext': {
+      const person = slotPerson(draft, item.subjectSlotID)
+      const work = [item.roleTitle, item.organizationName].filter(Boolean).join(' at ')
+      return <><span className="draft-row-title">{person?.displayName ?? 'Somebody'} · {item.profileFocus === 'professional' ? 'Professional' : 'Personal'} profile</span>{work && <span className="draft-row-sub">{work}</span>}</>
+    }
     case 'relationship': {
       const subject = slotPerson(draft, item.subjectSlotID)
       const other = item.otherSlotID ? slotPerson(draft, item.otherSlotID) : null
@@ -97,7 +104,7 @@ function RowSummary({ draft, item }: { draft: ResolvedCaptureDraft; item: Review
         .join(', ')
       return (
         <>
-          <span className="draft-row-title">{item.title || 'Untitled follow-up'}</span>
+          <span className="draft-row-title">{item.responsibility === 'theirs' ? 'Waiting on: ' : ''}{item.title || 'Untitled follow-up'}</span>
           {(names || schedule) && (
             <span className="draft-row-sub">
               {names && `for ${names}`}
@@ -108,14 +115,24 @@ function RowSummary({ draft, item }: { draft: ResolvedCaptureDraft; item: Review
         </>
       )
     }
+    case 'reminderChange':
+      return <><span className="draft-row-title">{item.action === 'complete' ? 'Mark complete' : item.action === 'delete' ? 'Delete' : 'Reopen'} · {item.reminder.title}</span><span className="draft-row-sub">Existing follow-up{item.action === 'delete' ? ' · Cannot be undone after confirmation' : ''}</span></>
+    case 'factChange':
+      return <><span className="draft-row-title">{item.action === 'confirm' ? 'Confirm' : 'Correct'} · {item.observation.attribute}</span><span className="draft-row-sub">{item.observation.value}{item.action === 'correct' && item.value !== item.observation.value ? ` → ${item.value}` : ''}</span></>
+    case 'relationshipChange':
+      return <><span className="draft-row-title">Remove · {kindLabel(item.relationship.kind)}</span><span className="draft-row-sub">Existing relationship · Both sides will be removed after confirmation</span></>
   }
 }
 
 const SECTIONS: Array<{ title: string; types: Array<ReviewDraftItem['type']> }> = [
   { title: 'Interaction', types: ['interaction'] },
+  { title: 'Person profile', types: ['personContext'] },
   { title: 'People and facts', types: ['fact'] },
   { title: 'Relationships', types: ['relationship'] },
   { title: 'Follow-ups', types: ['followUp'] },
+  { title: 'Changes to existing follow-ups', types: ['reminderChange'] },
+  { title: 'Changes to existing facts', types: ['factChange'] },
+  { title: 'Changes to relationships', types: ['relationshipChange'] },
 ]
 
 export function EditableReviewPanel({
@@ -158,11 +175,15 @@ export function EditableReviewPanel({
       const refs =
         item.type === 'interaction'
           ? item.participantSlotIDs
+          : item.type === 'personContext'
+            ? [item.subjectSlotID, ...(item.introducedBySlotID ? [item.introducedBySlotID] : [])]
           : item.type === 'fact'
             ? [item.subjectSlotID]
-            : item.type === 'relationship'
-              ? [item.subjectSlotID, ...(item.otherSlotID ? [item.otherSlotID] : [])]
-              : item.personSlotIDs
+              : item.type === 'relationship'
+                ? [item.subjectSlotID, ...(item.otherSlotID ? [item.otherSlotID] : [])]
+              : item.type === 'followUp'
+                ? item.personSlotIDs
+                : []
       for (const slotID of refs) if (!ids.includes(slotID)) ids.push(slotID)
     }
     return ids.map((slotID) => slotByID(draft, slotID)).filter((slot): slot is PersonSlotEntry => Boolean(slot))
@@ -348,6 +369,9 @@ export function EditableReviewPanel({
                       {item.type === 'fact' && (
                         <FactDraftEditor item={item} draft={draft} people={people} dispatch={dispatch} />
                       )}
+                      {item.type === 'personContext' && (
+                        <PersonContextDraftEditor item={item} draft={draft} people={people} dispatch={dispatch} />
+                      )}
                       {item.type === 'relationship' && (
                         <RelationshipDraftEditor item={item} draft={draft} people={people} dispatch={dispatch} />
                       )}
@@ -359,6 +383,29 @@ export function EditableReviewPanel({
                           userZone={USER_ZONE}
                           dispatch={dispatch}
                         />
+                      )}
+                      {item.type === 'reminderChange' && (
+                        <div className="draft-editor">
+                          <FormField label="Change">
+                            <select className="field field-select" value={item.action} onChange={(event) => dispatch({ type: 'update-reminder-change', id: item.id, changes: { action: event.target.value as 'complete' | 'reopen' | 'delete' } })}>
+                              <option value="complete">Mark complete</option>
+                              <option value="reopen">Reopen</option>
+                              <option value="delete">Delete permanently</option>
+                            </select>
+                          </FormField>
+                        </div>
+                      )}
+                      {item.type === 'factChange' && (
+                        <div className="draft-editor">
+                          <div className="draft-editor-pair">
+                            <FormField label="Change"><select className="field field-select" value={item.action} onChange={(event) => dispatch({ type: 'update-fact-change', id: item.id, changes: { action: event.target.value as 'confirm' | 'correct' } })}><option value="confirm">Confirm it still holds</option><option value="correct">Correct it</option></select></FormField>
+                            <FormField label="Confidence"><select className="field field-select" value={item.confidence} onChange={(event) => dispatch({ type: 'update-fact-change', id: item.id, changes: { confidence: event.target.value as FactConfidence } })}>{(Object.keys(CONFIDENCE_LABELS) as FactConfidence[]).map((value) => <option key={value} value={value}>{CONFIDENCE_LABELS[value]}</option>)}</select></FormField>
+                          </div>
+                          {item.action === 'correct' && <><FormField label="Correct value"><input className="field" value={item.value} onChange={(event) => dispatch({ type: 'update-fact-change', id: item.id, changes: { value: event.target.value } })} /></FormField><div className="draft-editor-pair"><FormField label="Why it changed"><input className="field" value={item.correctionNote} onChange={(event) => dispatch({ type: 'update-fact-change', id: item.id, changes: { correctionNote: event.target.value } })} /></FormField><FormField label="Sensitivity"><select className="field field-select" value={item.sensitivity} onChange={(event) => dispatch({ type: 'update-fact-change', id: item.id, changes: { sensitivity: event.target.value as FactSensitivity } })}>{(Object.keys(SENSITIVITY_LABELS) as FactSensitivity[]).map((value) => <option key={value} value={value}>{SENSITIVITY_LABELS[value]}</option>)}</select></FormField></div></>}
+                        </div>
+                      )}
+                      {item.type === 'relationshipChange' && (
+                        <p className="field-help">This removes both reciprocal relationship records. Remove this review item if that is not what you intended.</p>
                       )}
                     </div>
                   )}

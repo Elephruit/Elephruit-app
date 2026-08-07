@@ -81,11 +81,25 @@ const PROFESSIONAL_ATTRIBUTES: FactAttribute[] = [
   FactAttributes.employer,
   FactAttributes.role,
   FactAttributes.lookingFor,
+  FactAttributes.currentProject,
+  FactAttributes.professionalGoal,
+  FactAttributes.painPoint,
+  FactAttributes.decisionRole,
+  FactAttributes.stakeholder,
   FactAttributes.promise,
   FactAttributes.significance,
 ]
 
 const PERSONAL_ATTRIBUTES: FactAttribute[] = [
+  FactAttributes.preferredName,
+  FactAttributes.pronouns,
+  FactAttributes.email,
+  FactAttributes.phone,
+  FactAttributes.timeZone,
+  FactAttributes.language,
+  FactAttributes.birthday,
+  FactAttributes.anniversary,
+  FactAttributes.contactCadence,
   FactAttributes.family,
   FactAttributes.observedAge,
   FactAttributes.schoolGrade,
@@ -284,8 +298,16 @@ export function PersonPage() {
     (attribute) => attribute !== FactAttributes.employer && attribute !== FactAttributes.role,
   )
   const preferredPrimary = focus === 'professional' ? PROFESSIONAL_ATTRIBUTES : PERSONAL_ATTRIBUTES
-  const primaryAttributes = detailAttributes.filter((attribute) => preferredPrimary.includes(attribute))
-  const secondaryAttributes = detailAttributes.filter((attribute) => !preferredPrimary.includes(attribute))
+  const explicitContext = (attribute: FactAttribute) =>
+    currentValues(observations ?? [], attribute).find((observation) => observation.context)?.context
+  const isPrimaryAttribute = (attribute: FactAttribute) => {
+    const context = explicitContext(attribute)
+    if (context === 'identity') return true
+    if (context) return context === focus
+    return preferredPrimary.includes(attribute)
+  }
+  const primaryAttributes = detailAttributes.filter(isPrimaryAttribute)
+  const secondaryAttributes = detailAttributes.filter((attribute) => !isPrimaryAttribute(attribute))
   const originParts = [
     `${focus === 'professional' ? 'Professional' : 'Personal'} connection`,
     summary?.introducedBy ? `Introduced by ${summary.introducedBy.displayName}` : null,
@@ -444,7 +466,7 @@ export function PersonPage() {
             {focus === 'professional' && openFollowUps.length > 0 && (
               <section className="person-followups">
                 <div className="aside-panel-head">
-                  <h2>Follow-ups</h2>
+                  <h2>Follow-ups & commitments</h2>
                   <span>{openFollowUps.length}</span>
                 </div>
                 <div className="person-followup-grid">
@@ -487,6 +509,9 @@ export function PersonPage() {
                           )}
                           <span className="person-followup-when tabular">
                             {formatScheduleSummary(reminder) ?? 'Anytime'}
+                          </span>
+                          <span className="person-followup-owner" data-owner={reminder.responsibility ?? 'mine'}>
+                            {reminder.responsibility === 'theirs' ? 'Waiting on them' : 'Mine'}
                           </span>
                         </div>
                       </article>

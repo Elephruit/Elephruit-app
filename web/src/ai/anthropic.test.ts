@@ -21,8 +21,10 @@ const FIXTURE = {
     kind: 'in-person',
     summary: 'Coffee with Ana',
     discussion: 'Her son starts at South High this fall.',
+    occurredAt: null,
   },
   participantNames: ['Ana Torres'],
+  personContexts: [],
   facts: [],
   relationships: [
     {
@@ -33,7 +35,10 @@ const FIXTURE = {
       facts: [{ attribute: 'school', value: 'South High' }],
     },
   ],
-  followUps: [{ title: 'Send the neighborhood list', personNames: ['Ana Torres'], notes: null, schedule: NO_SCHEDULE }],
+  followUps: [{ title: 'Send the neighborhood list', personNames: ['Ana Torres'], notes: null, schedule: NO_SCHEDULE, responsibility: 'mine' }],
+  reminderChanges: [],
+  factChanges: [],
+  relationshipChanges: [],
 }
 
 const CONTEXT = {
@@ -122,11 +127,13 @@ describe('the Harbinder/Kelly regression', () => {
       kind: 'other',
       summary: 'Harbinder introduced me to Kelly Tsaur',
       discussion: null,
+      occurredAt: null,
     },
     participantNames: ['Kelly Tsaur', 'Harbinder Raina'],
+    personContexts: [],
     facts: [
-      { personName: 'Kelly Tsaur', attribute: 'role', value: 'Head of Payer/Provider Industry Vertical', confidence: 'stated' },
-      { personName: 'Kelly Tsaur', attribute: 'employer', value: 'ZS', confidence: 'stated' },
+      { personName: 'Kelly Tsaur', attribute: 'role', value: 'Head of Payer/Provider Industry Vertical', confidence: 'stated', sensitivity: 'normal', context: 'professional', observedOn: null, effectiveOn: null },
+      { personName: 'Kelly Tsaur', attribute: 'employer', value: 'ZS', confidence: 'stated', sensitivity: 'normal', context: 'professional', observedOn: null, effectiveOn: null },
     ],
     relationships: [
       { subjectName: 'Kelly Tsaur', kind: 'introducedBy', label: null, otherName: 'Harbinder Raina', facts: [] },
@@ -144,8 +151,12 @@ describe('the Harbinder/Kelly regression', () => {
           sourceText: 'Monday 10am CT',
           confidence: 'stated',
         },
+        responsibility: 'mine',
       },
     ],
+    reminderChanges: [],
+    factChanges: [],
+    relationshipChanges: [],
   }
 
   const NOW = new Date('2026-08-06T15:00:00')
@@ -173,7 +184,7 @@ describe('the Harbinder/Kelly regression', () => {
   it('keeps the introduction as a removable interaction alongside the other items', () => {
     const proposal = CaptureProposalSchema.parse(KELLY_PROPOSAL)
     const { items } = resolveProposal(proposal, [], NOW)
-    expect(items.map((i) => i.type)).toEqual(['interaction', 'fact', 'fact', 'relationship', 'followUp'])
+    expect(items.map((i) => i.type)).toEqual(['interaction', 'personContext', 'fact', 'fact', 'relationship', 'followUp'])
 
     const interaction = items[0]
     if (interaction.type !== 'interaction') throw new Error('expected interaction')

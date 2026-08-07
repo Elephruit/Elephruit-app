@@ -6,11 +6,20 @@
 /// into the same WritePlan every other capture path uses. No SDK imports; the
 /// hygiene test watches this file too.
 
-import { FactAttributes, customAttribute, type FactAttribute, type FactConfidence } from './facts'
+import {
+  FactAttributes,
+  customAttribute,
+  type FactAttribute,
+  type FactConfidence,
+  type FactContext,
+  type FactSensitivity,
+  type Observation,
+} from './facts'
 import type { InteractionKind } from './interaction'
 import { makePerson } from './capture'
 import { foldedForMatching, type Person } from './person'
-import type { RelationshipKind } from './relationships'
+import type { Relationship, RelationshipKind } from './relationships'
+import type { Reminder } from './reminders'
 import type { ProposedSchedule } from './temporal'
 
 // MARK: What the parser proposes
@@ -19,6 +28,7 @@ export interface ProposedInteraction {
   kind: InteractionKind
   summary: string
   discussion: string | null
+  occurredAt?: ProposedSchedule | null
 }
 
 export interface ProposedFact {
@@ -27,6 +37,21 @@ export interface ProposedFact {
   attribute: string
   value: string
   confidence: FactConfidence
+  sensitivity?: FactSensitivity
+  context?: FactContext
+  observedOn?: string | null
+  effectiveOn?: string | null
+}
+
+export interface ProposedPersonContext {
+  personName: string
+  profileFocus: 'professional' | 'personal'
+  roleTitle: string | null
+  organizationName: string | null
+  connectionStatus: 'met' | 'introductionPlanned' | 'unknown'
+  firstMetOn: string | null
+  context: string | null
+  introducedByName: string | null
 }
 
 export interface ProposedRelationship {
@@ -46,15 +71,27 @@ export interface ProposedFollowUp {
   /// wire schema always supplies both.
   notes?: string | null
   schedule?: ProposedSchedule
+  responsibility?: 'mine' | 'theirs'
 }
 
 export interface CaptureProposal {
   interaction: ProposedInteraction | null
   /// Who took part in the interaction, by name.
   participantNames: string[]
+  personContexts?: ProposedPersonContext[]
   facts: ProposedFact[]
   relationships: ProposedRelationship[]
   followUps: ProposedFollowUp[]
+  reminderChanges?: Array<{ reminderID: string; action: 'complete' | 'reopen' | 'delete' }>
+  factChanges?: Array<{
+    observationID: string
+    action: 'confirm' | 'correct'
+    value: string | null
+    correctionNote: string | null
+    confidence: FactConfidence | null
+    sensitivity: FactSensitivity | null
+  }>
+  relationshipChanges?: Array<{ relationshipID: string; action: 'remove' }>
 }
 
 // MARK: Resolution
@@ -74,8 +111,33 @@ export type ResolvedItem =
       summary: string
       discussion: string | null
       participants: PersonSlot[]
+      occurredAt: ProposedSchedule | null
     }
-  | { id: string; type: 'fact'; person: PersonSlot; attribute: FactAttribute; value: string; confidence: FactConfidence }
+  | { id: string; type: 'relationshipChange'; relationship: Relationship; action: 'remove' }
+  | {
+      id: string
+      type: 'personContext'
+      person: PersonSlot
+      profileFocus: 'professional' | 'personal'
+      roleTitle: string | null
+      organizationName: string | null
+      connectionStatus: 'met' | 'introductionPlanned' | 'unknown'
+      firstMetOn: string | null
+      context: string | null
+      introducedBy: PersonSlot | null
+    }
+  | {
+      id: string
+      type: 'fact'
+      person: PersonSlot
+      attribute: FactAttribute
+      value: string
+      confidence: FactConfidence
+      sensitivity: FactSensitivity
+      context: FactContext
+      observedOn: string | null
+      effectiveOn: string | null
+    }
   | {
       id: string
       type: 'relationship'
@@ -93,6 +155,18 @@ export type ResolvedItem =
       people: PersonSlot[]
       notes: string | null
       schedule: ProposedSchedule
+      responsibility: 'mine' | 'theirs'
+    }
+  | { id: string; type: 'reminderChange'; reminder: Reminder; action: 'complete' | 'reopen' | 'delete' }
+  | {
+      id: string
+      type: 'factChange'
+      observation: Observation
+      action: 'confirm' | 'correct'
+      value: string | null
+      correctionNote: string | null
+      confidence: FactConfidence | null
+      sensitivity: FactSensitivity | null
     }
 
 export interface ResolvedCapture {
@@ -111,7 +185,12 @@ export function foldAttribute(text: string): FactAttribute {
   return customAttribute(text) ?? FactAttributes.quickFact
 }
 
-export function resolveProposal(proposal: CaptureProposal, existingPeople: Person[], now: Date): ResolvedCapture {
+export function resolveProposal(
+  proposal: CaptureProposal,
+  existingPeople: Person[],
+  now: Date,
+  existing: { reminders?: Reminder[]; observations?: Observation[]; relationships?: Relationship[] } = {},
+): ResolvedCapture {
   const warnings: string[] = []
   const pendingByName = new Map<string, Person>()
 
@@ -149,6 +228,55 @@ export function resolveProposal(proposal: CaptureProposal, existingPeople: Perso
       summary: proposal.interaction.summary.trim(),
       discussion: proposal.interaction.discussion?.trim() || null,
       participants: proposal.participantNames.filter((n) => n.trim()).map(resolveName),
+      occurredAt: proposal.interaction.occurredAt ?? null,
+    })
+  }
+
+  const explicitContextNames = new Set<string>()
+  for (const context of proposal.personContexts ?? []) {
+    if (!context.personName.trim()) continue
+    explicitContextNames.add(foldedForMatching(context.personName))
+    items.push({
+      id: nextID(),
+      type: 'personContext',
+      person: resolveName(context.personName),
+      profileFocus: context.profileFocus,
+      roleTitle: context.roleTitle?.trim() || null,
+      organizationName: context.organizationName?.trim() || null,
+      connectionStatus: context.connectionStatus,
+      firstMetOn: context.firstMetOn,
+      context: context.context?.trim() || null,
+      introducedBy: context.introducedByName?.trim() ? resolveName(context.introducedByName) : null,
+    })
+  }
+
+  // Work identity is both dated history and list-level identity. If an older
+  // client/model returns role/employer facts without the newer personContexts
+  // row, synthesize the editable profile proposal so those facts do not leave
+  // a newly-created professional person looking blank in People.
+  const professionalByName = new Map<string, { name: string; roleTitle: string | null; organizationName: string | null }>()
+  for (const fact of proposal.facts) {
+    const attribute = foldAttribute(fact.attribute)
+    if (attribute !== FactAttributes.role && attribute !== FactAttributes.employer) continue
+    const key = foldedForMatching(fact.personName)
+    const current = professionalByName.get(key) ?? { name: fact.personName, roleTitle: null, organizationName: null }
+    if (attribute === FactAttributes.role) current.roleTitle = fact.value.trim() || null
+    if (attribute === FactAttributes.employer) current.organizationName = fact.value.trim() || null
+    professionalByName.set(key, current)
+  }
+  for (const [key, identity] of professionalByName) {
+    if (explicitContextNames.has(key)) continue
+    items.push({
+      id: nextID(),
+      type: 'personContext',
+      person: resolveName(identity.name),
+      profileFocus: 'professional',
+      roleTitle: identity.roleTitle,
+      organizationName: identity.organizationName,
+      connectionStatus: 'unknown',
+      firstMetOn: null,
+      context: null,
+      introducedBy: null,
     })
   }
 
@@ -161,6 +289,10 @@ export function resolveProposal(proposal: CaptureProposal, existingPeople: Perso
       attribute: foldAttribute(fact.attribute),
       value: fact.value.trim(),
       confidence: fact.confidence,
+      sensitivity: fact.sensitivity ?? 'normal',
+      context: fact.context ?? 'personal',
+      observedOn: fact.observedOn ?? null,
+      effectiveOn: fact.effectiveOn ?? null,
     })
   }
 
@@ -195,7 +327,35 @@ export function resolveProposal(proposal: CaptureProposal, existingPeople: Perso
         sourceText: null,
         confidence: 'stated',
       },
+      responsibility: followUp.responsibility ?? 'mine',
     })
+  }
+
+  for (const change of proposal.reminderChanges ?? []) {
+    const reminder = existing.reminders?.find((candidate) => candidate.id === change.reminderID)
+    if (!reminder) {
+      warnings.push('A requested follow-up change could not be matched. It was not saved.')
+      continue
+    }
+    items.push({ id: nextID(), type: 'reminderChange', reminder, action: change.action })
+  }
+
+  for (const change of proposal.factChanges ?? []) {
+    const observation = existing.observations?.find((candidate) => candidate.id === change.observationID)
+    if (!observation) {
+      warnings.push('A requested fact change could not be matched. It was not saved.')
+      continue
+    }
+    items.push({ id: nextID(), type: 'factChange', observation, ...change })
+  }
+
+  for (const change of proposal.relationshipChanges ?? []) {
+    const relationship = existing.relationships?.find((candidate) => candidate.id === change.relationshipID)
+    if (!relationship) {
+      warnings.push('A requested relationship change could not be matched. It was not saved.')
+      continue
+    }
+    items.push({ id: nextID(), type: 'relationshipChange', relationship, action: change.action })
   }
 
   return { items, warnings }

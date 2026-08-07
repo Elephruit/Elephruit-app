@@ -5,7 +5,7 @@
 /// analogue of the Mac app's decision D5: one capture value type, one atomic
 /// apply, and a platform-specific write path is a review failure.
 
-import type { FactAttribute, FactConfidence, FactSensitivity, Observation } from './facts'
+import type { FactAttribute, FactConfidence, FactContext, FactSensitivity, Observation } from './facts'
 import { newID } from './ids'
 import type { Interaction, InteractionKind } from './interaction'
 import { nameParts, paletteColorFor, type ConnectionOrigin, type Person, type ProfileFocus } from './person'
@@ -204,7 +204,9 @@ export interface ObservationDraft {
   value: string
   confidence?: FactConfidence
   sensitivity?: FactSensitivity
+  context?: FactContext
   observedOn?: Date
+  effectiveOn?: Date | null
   sourceInteractionID?: string | null
   sourceDocumentID?: string | null
 }
@@ -217,10 +219,11 @@ export function makeObservation(draft: ObservationDraft, now: Date): Observation
     attribute: draft.attribute,
     value: draft.value.trim(),
     observedOn,
-    effectiveOn: null,
+    effectiveOn: draft.effectiveOn ?? null,
     lastConfirmedOn: observedOn,
     confidence: draft.confidence ?? 'stated',
     sensitivity: draft.sensitivity ?? 'normal',
+    context: draft.context,
     sourceInteractionID: draft.sourceInteractionID ?? null,
     sourceDocumentID: draft.sourceDocumentID ?? null,
     supersedesID: null,
@@ -368,6 +371,7 @@ export interface ReminderDraft {
   title: string
   notes?: string | null
   personIDs?: string[]
+  responsibility?: 'mine' | 'theirs'
   sourceInteractionID?: string | null
   sourceDocumentID?: string | null
   startAt?: Date | null
@@ -384,6 +388,7 @@ export function planCreateReminder(draft: ReminderDraft, now: Date): { plan: Wri
     title: draft.title.trim(),
     notes: draft.notes?.trim() || null,
     personIDs: [...new Set(draft.personIDs ?? [])],
+    responsibility: draft.responsibility ?? 'mine',
     sourceInteractionID: draft.sourceInteractionID ?? null,
     sourceDocumentID: draft.sourceDocumentID ?? null,
     startAt: draft.startAt ?? null,
@@ -410,6 +415,7 @@ export function planUpdateReminder(
       | 'dueAt'
       | 'isSomeday'
       | 'personIDs'
+      | 'responsibility'
       | 'scheduleTimeZone'
       | 'duePrecision'
       | 'startPrecision'

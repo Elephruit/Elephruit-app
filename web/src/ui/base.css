@@ -3300,6 +3300,22 @@ a.memory-person-link:hover {
   color: var(--color-text-secondary);
 }
 
+.person-followup-owner {
+  align-self: flex-start;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  color: var(--color-accent);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.32rem 0.5rem;
+}
+
+.person-followup-owner[data-owner='theirs'] {
+  background: color-mix(in srgb, var(--color-personal) 12%, transparent);
+  color: var(--color-text-secondary);
+}
+
 .person-followup[data-tone='overdue'] .person-followup-when {
   color: var(--color-overdue);
 }

@@ -2,6 +2,14 @@
 
 These rules apply to every task in this repository.
 
+## AI reachability is a product invariant
+
+- Everything a user can create, edit, complete, classify, schedule, connect, or remove in the app must also be reachable through the AI capture endpoints.
+- AI reachability is not a second write path. AI produces an editable proposal, the review UI exposes every proposed field, and confirmation uses the same domain planner and atomic write executor as the manual interface.
+- A feature is incomplete until its AI proposal schema, review state, write planning, and focused tests ship with its manual UI.
+- Existing records needed for corrections or state changes may be supplied to the model as bounded context, but facts marked sensitive or restricted must never leave the app. Restricted data must never be sent to an AI provider under any circumstances.
+- AI never writes silently. Destructive changes, identity changes, relationship changes, and completions must remain explicit in review before confirmation.
+
 ## Worktrees are required
 
 - Do not make implementation, test, documentation, or configuration changes in the primary checkout.

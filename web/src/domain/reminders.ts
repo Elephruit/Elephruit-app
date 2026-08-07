@@ -14,6 +14,8 @@ export interface Reminder {
   notes: string | null
   /// The people this is owed to or about.
   personIDs: string[]
+  /// Who is expected to act. Missing on older records means the user.
+  responsibility?: 'mine' | 'theirs'
   /// The interaction it fell out of, when it fell out of one.
   sourceInteractionID: string | null
   /// The imported document it fell out of, for dossier-derived follow-ups.
