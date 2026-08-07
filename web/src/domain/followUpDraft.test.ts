@@ -78,6 +78,38 @@ describe('draftFromReminder', () => {
     expect(fields.scheduleTimeZone).toBe('America/Chicago')
     expect(fields.duePrecision).toBe('dateTime')
   })
+
+  it('round-trips category tags and treats legacy reminders as untagged', () => {
+    expect(draftFromReminder(reminder({}), USER_ZONE).categoryTags).toEqual(new Set())
+
+    const draft = draftFromReminder(reminder({ categoryTags: ['work', 'waiting'] }), USER_ZONE)
+    expect(draft.categoryTags).toEqual(new Set(['work', 'waiting']))
+    expect(reminderFieldsFromDraft(draft, { timeZone: USER_ZONE }).categoryTags).toEqual(['work', 'waiting'])
+  })
+
+  it('round-trips a folder and defaults legacy reminders to unfiled', () => {
+    expect(draftFromReminder(reminder({}), USER_ZONE).folderID).toBeNull()
+
+    const draft = draftFromReminder(reminder({ folderID: 'folder-trip' }), USER_ZONE)
+    expect(draft.folderID).toBe('folder-trip')
+    expect(reminderFieldsFromDraft(draft, { timeZone: USER_ZONE }).folderID).toBe('folder-trip')
+  })
+
+  it('round-trips checklist items and drops empty draft rows', () => {
+    expect(draftFromReminder(reminder({}), USER_ZONE).checklist).toEqual([])
+
+    const draft = draftFromReminder(
+      reminder({ checklist: [{ id: 'step-1', title: 'Draft the note', isCompleted: true }] }),
+      USER_ZONE,
+    )
+    draft.checklist.push({ id: 'step-2', title: '  Send it  ', isCompleted: false })
+    draft.checklist.push({ id: 'step-3', title: '   ', isCompleted: false })
+
+    expect(reminderFieldsFromDraft(draft, { timeZone: USER_ZONE }).checklist).toEqual([
+      { id: 'step-1', title: 'Draft the note', isCompleted: true },
+      { id: 'step-2', title: 'Send it', isCompleted: false },
+    ])
+  })
 })
 
 describe('validation and the guard', () => {

@@ -90,6 +90,12 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" />
     </>
   ),
+  tag: (
+    <>
+      <path d="M4.5 5.5v5.8L13.2 20l6.8-6.8-8.7-8.7H5.5a1 1 0 0 0-1 1z" />
+      <circle cx="8.5" cy="8.5" r="1.2" />
+    </>
+  ),
   filter: <path d="M4 6h16M7 12h10M10 18h4" />,
   'arrow-right': <path d="M5 12h14M13 6l6 6-6 6" />,
   folder: <path d="M4 7.5A1.5 1.5 0 0 1 5.5 6h3.2a1.5 1.5 0 0 1 1.2.6l1 1.4h7.6A1.5 1.5 0 0 1 20 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" />,
