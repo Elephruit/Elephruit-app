@@ -121,7 +121,7 @@ export function ParticipantPicker({
           aria-activedescendant={open && optionCount > 0 ? `${listID}-option-${clampedActive}` : undefined}
           aria-label={ariaLabel}
           value={search}
-          placeholder={selected.length === 0 ? placeholder : undefined}
+          placeholder={selected.length === 0 || !showSelected ? placeholder : undefined}
           autoFocus={autoFocus}
           onChange={(event) => {
             setSearch(event.target.value)
