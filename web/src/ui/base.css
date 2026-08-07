@@ -3316,6 +3316,7 @@ a.memory-person-link:hover {
   border-radius: var(--radius-medium);
   background: var(--color-background-elevated);
   color: var(--color-text);
+  cursor: grab;
   transition: opacity var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
 }
 
@@ -3326,6 +3327,12 @@ a.memory-person-link:hover {
 
 .person-followup-board[data-dragging='true'] {
   user-select: none;
+  cursor: grabbing;
+}
+
+.person-followup-board[data-dragging='true'] .person-followup,
+.person-followup-board[data-dragging='true'] .person-followup-title {
+  cursor: grabbing;
 }
 
 .commitment-drag-handle {
@@ -3391,7 +3398,7 @@ a.memory-person-link:hover {
   color: var(--color-text);
   font: var(--text-label);
   text-align: left;
-  cursor: text;
+  cursor: grab;
 }
 
 .person-followup-title:hover {

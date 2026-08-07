@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { applyPlan } from '../../data/applyPlan'
 import { planUpdateReminder } from '../../domain/capture'
 import {
@@ -45,6 +45,7 @@ export function CommitmentBoard({
   const laneRefs = useRef<Record<CommitmentOwner, HTMLElement | null>>({ mine: null, theirs: null })
   const dragRef = useRef<DragState | null>(null)
   const beforeRects = useRef<Map<string, DOMRect> | null>(null)
+  const suppressClickRef = useRef(false)
   const [drag, setDrag] = useState<DragState | null>(null)
   const [optimisticPlacement, setOptimisticPlacement] = useState<CommitmentPlacement | null>(null)
   const [inlineEdit, setInlineEdit] = useState<{ id: string; title: string } | null>(null)
@@ -141,6 +142,8 @@ export function CommitmentBoard({
       const current = dragRef.current
       if (!current) return
       event.preventDefault()
+      suppressClickRef.current = current.started
+      window.setTimeout(() => { suppressClickRef.current = false }, 0)
       publishDrag(null)
       if (current.started) void commitPlacement(current)
     }
@@ -177,8 +180,10 @@ export function CommitmentBoard({
     }
   }
 
-  function startDrag(event: ReactPointerEvent<HTMLButtonElement>, reminder: Reminder, owner: CommitmentOwner, index: number) {
+  function startDrag(event: ReactPointerEvent<HTMLElement>, reminder: Reminder, owner: CommitmentOwner, index: number) {
     if (event.button !== 0) return
+    const target = event.target as HTMLElement
+    if (target.closest('.complete-ring, input, textarea, select, a')) return
     const card = event.currentTarget.closest<HTMLElement>('[data-commitment-id]')
     if (!card) return
     const rect = card.getBoundingClientRect()
@@ -190,6 +195,13 @@ export function CommitmentBoard({
       offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top,
       width: rect.width, height: rect.height,
     })
+  }
+
+  function suppressClickAfterDrag(event: ReactMouseEvent<HTMLElement>) {
+    if (!suppressClickRef.current) return
+    event.preventDefault()
+    event.stopPropagation()
+    suppressClickRef.current = false
   }
 
   function keyboardMove(event: KeyboardEvent<HTMLButtonElement>, reminder: Reminder, owner: CommitmentOwner, index: number) {
@@ -239,8 +251,8 @@ export function CommitmentBoard({
                 {lanes[lane.owner].map((reminder, index) => {
                   const isDragged = drag?.started && reminder.id === drag.reminderID
                   return (
-                    <article key={reminder.id} className="person-followup" data-tone={bucketFor(reminder, now)} data-commitment-id={reminder.id} data-drag-source={isDragged || undefined}>
-                      <button type="button" className="commitment-drag-handle" aria-label={`Move ${reminder.title}`} aria-describedby="commitment-drag-help" onPointerDown={(event) => startDrag(event, reminder, lane.owner, index)} onKeyDown={(event) => keyboardMove(event, reminder, lane.owner, index)}><span aria-hidden="true">⠿</span></button>
+                    <article key={reminder.id} className="person-followup" data-tone={bucketFor(reminder, now)} data-commitment-id={reminder.id} data-drag-source={isDragged || undefined} onPointerDown={(event) => startDrag(event, reminder, lane.owner, index)} onClickCapture={suppressClickAfterDrag}>
+                      <button type="button" className="commitment-drag-handle" aria-label={`Move ${reminder.title}`} aria-describedby="commitment-drag-help" onKeyDown={(event) => keyboardMove(event, reminder, lane.owner, index)}><span aria-hidden="true">⠿</span></button>
                       <button type="button" className="complete-ring" aria-label={`Complete ${reminder.title}`} onClick={() => onComplete(reminder.id)} />
                       <div className="person-followup-body">
                         {inlineEdit?.id === reminder.id ? (
