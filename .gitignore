@@ -26,3 +26,5 @@ web/.env.*
 web/.emulator-data/
 web/*-debug.log
 web/.firebase/
+.worktrees/notes-visual-foundation/
+/.worktrees/today-planner-ui
