@@ -2,24 +2,28 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
 import { Button, IconButton } from '../components/Button'
-import { MetricTile } from '../components/MetricTile'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { SkeletonRows } from '../components/Skeleton'
 import { PageHeader } from '../shell/PageHeader'
 import { PageScaffold } from '../shell/PageScaffold'
 import { planCompleteReminder, planQuickReschedule, planReopenReminder, planUpdateReminder } from '../../domain/capture'
 import { relativeDescription } from '../../domain/contact'
-import { startOfDay } from '../../domain/dates'
+import { isSameDay, startOfDay } from '../../domain/dates'
 import { BUCKET_TITLES, bucketFor, completedList, sections, type Reminder } from '../../domain/reminders'
 import { formatScheduleSummary } from '../../domain/temporal'
 import { applyPlan } from '../../data/applyPlan'
-import { uniqueCategoryTags } from '../../domain/categoryTags'
+import { categoryKey, uniqueCategoryTags } from '../../domain/categoryTags'
 import { usePeople, useReminders } from '../../data/hooks'
 import { useUID } from '../UserContext'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import { DEFAULT_FOLLOWUP_CATEGORIES, categoryTintStyle } from './categoryStyle'
 import { InlineFollowUpComposer } from './InlineFollowUpComposer'
+import {
+  FollowUpFilterBar,
+  type FollowUpDueFilter,
+  type FollowUpStatusFilter,
+} from './FollowUpFilterBar'
 
 /// The structured schedule chip — never the title's embedded phrase. Someday
 /// rows sit under their heading, so the chip is redundant there.
@@ -41,6 +45,20 @@ function quickAction(reminder: Reminder): { label: string; kind: 'deadline' | 's
   return { label: 'Schedule tomorrow', kind: 'deadline' }
 }
 
+function matchesDueFilter(reminder: Reminder, filter: FollowUpDueFilter, now: Date): boolean {
+  if (filter === 'any') return true
+  if (filter === 'none') return reminder.dueAt === null
+  if (!reminder.dueAt) return false
+  const today = startOfDay(now)
+  if (filter === 'today') return isSameDay(reminder.dueAt, today)
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  if (filter === 'tomorrow') return isSameDay(reminder.dueAt, tomorrow)
+  const end = new Date(today)
+  end.setDate(end.getDate() + 7)
+  return reminder.dueAt.getTime() >= today.getTime() && reminder.dueAt.getTime() < end.getTime()
+}
+
 export function FollowUpsPage() {
   const uid = useUID()
   const navigate = useNavigate()
@@ -49,6 +67,10 @@ export function FollowUpsPage() {
   const [view, setView] = useState<'open' | 'completed'>('open')
   const [editing, setEditing] = useState<Reminder | null>(null)
   const [createRequest, setCreateRequest] = useState(0)
+  const [statusFilter, setStatusFilter] = useState<FollowUpStatusFilter>('all')
+  const [personFilter, setPersonFilter] = useState('')
+  const [dueFilter, setDueFilter] = useState<FollowUpDueFilter>('any')
+  const [categoryFilter, setCategoryFilter] = useState('')
   // One clock per mount — a fresh Date each render silently drifted past the memo.
   const [now] = useState(() => new Date())
 
@@ -64,15 +86,58 @@ export function FollowUpsPage() {
     [reminders],
   )
 
+  const openReminders = useMemo(() => (groups ?? []).flatMap((group) => group.reminders), [groups])
+  const filterPeople = useMemo(() => {
+    const usedIDs = new Set(openReminders.flatMap((reminder) => reminder.personIDs))
+    return (people ?? []).filter((person) => usedIDs.has(person.id))
+  }, [openReminders, people])
+  const filterCategories = useMemo(
+    () => uniqueCategoryTags(openReminders.flatMap((reminder) => reminder.categoryTags ?? [])),
+    [openReminders],
+  )
+  const facetedReminders = useMemo(
+    () =>
+      openReminders.filter(
+        (reminder) =>
+          (!personFilter || reminder.personIDs.includes(personFilter)) &&
+          matchesDueFilter(reminder, dueFilter, now) &&
+          (!categoryFilter ||
+            (reminder.categoryTags ?? []).some((tag) => categoryKey(tag) === categoryKey(categoryFilter))),
+      ),
+    [categoryFilter, dueFilter, now, openReminders, personFilter],
+  )
+  const facetedGroups = useMemo(() => sections(facetedReminders, now), [facetedReminders, now])
+  const visibleGroups = useMemo(
+    () =>
+      statusFilter === 'all'
+        ? facetedGroups
+        : facetedGroups.filter((group) =>
+            statusFilter === 'unscheduled'
+              ? group.bucket === 'anytime' || group.bucket === 'someday'
+              : group.bucket === statusFilter,
+          ),
+    [facetedGroups, statusFilter],
+  )
   const counts = useMemo(() => {
-    const byBucket = new Map((groups ?? []).map((group) => [group.bucket, group.reminders.length]))
+    const byBucket = new Map(facetedGroups.map((group) => [group.bucket, group.reminders.length]))
     return {
+      all: facetedReminders.length,
       overdue: byBucket.get('overdue') ?? 0,
       today: byBucket.get('today') ?? 0,
       upcoming: byBucket.get('upcoming') ?? 0,
       unscheduled: (byBucket.get('anytime') ?? 0) + (byBucket.get('someday') ?? 0),
     }
-  }, [groups])
+  }, [facetedGroups, facetedReminders.length])
+
+  const hasFilters =
+    statusFilter !== 'all' || personFilter !== '' || dueFilter !== 'any' || categoryFilter !== ''
+
+  function clearFilters() {
+    setStatusFilter('all')
+    setPersonFilter('')
+    setDueFilter('any')
+    setCategoryFilter('')
+  }
 
   function requestCreate() {
     setEditing(null)
@@ -142,12 +207,20 @@ export function FollowUpsPage() {
 
       <div className="task-inbox">
         {view === 'open' && groups && (
-          <div className="metric-tiles metric-tiles-four">
-            <MetricTile value={counts.overdue} label="Overdue" tone={counts.overdue > 0 ? 'overdue' : 'neutral'} />
-            <MetricTile value={counts.today} label="Today" tone={counts.today > 0 ? 'today' : 'neutral'} />
-            <MetricTile value={counts.upcoming} label="Upcoming" />
-            <MetricTile value={counts.unscheduled} label="Unscheduled" />
-          </div>
+          <FollowUpFilterBar
+            status={statusFilter}
+            counts={counts}
+            personID={personFilter}
+            people={filterPeople}
+            due={dueFilter}
+            category={categoryFilter}
+            categories={filterCategories}
+            onStatusChange={setStatusFilter}
+            onPersonChange={setPersonFilter}
+            onDueChange={setDueFilter}
+            onCategoryChange={setCategoryFilter}
+            onClear={clearFilters}
+          />
         )}
 
         {view === 'open' && groups && people && (
@@ -170,8 +243,20 @@ export function FollowUpsPage() {
           />
         )}
 
+        {view === 'open' && groups && groups.length > 0 && visibleGroups.length === 0 && (
+          <div className="followup-filter-empty">
+            <Icon name="filter" size={18} />
+            <span>No follow-ups match these filters.</span>
+            {hasFilters && (
+              <button type="button" onClick={clearFilters}>
+                Clear filters
+              </button>
+            )}
+          </div>
+        )}
+
         {view === 'open' &&
-          groups?.map((group) => (
+          visibleGroups.map((group) => (
             <section key={group.bucket}>
               <h2 className="section-header" data-tone={group.bucket === 'overdue' ? 'overdue' : undefined}>
                 {BUCKET_TITLES[group.bucket]}
