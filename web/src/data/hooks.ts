@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AiCredential } from '../ai/credentials'
-import type { Container } from '../domain/container'
+import { archivedContainerIDs, isSuppressedByArchive, type Container } from '../domain/container'
 import type { Interaction } from '../domain/interaction'
 import type { Observation } from '../domain/facts'
 import type { MemoryRecord } from '../domain/memory'
@@ -88,6 +88,14 @@ export function useFeed(uid: string, count = 100): Interaction[] | undefined {
   )
 }
 
+/// The interactions search reads. Deliberately a bigger window than the feed's
+/// 100 and still a window: this is the one collection that grows without bound,
+/// and CLIENT_SEARCH_CEILING in domain/search.ts is where the whole approach
+/// stops being right.
+export function useSearchableInteractions(uid: string, count = 500): Interaction[] | undefined {
+  return useFeed(uid, count)
+}
+
 /// The person-timeline query — the one composite index in firestore.indexes.json.
 export function usePersonInteractions(uid: string, personID: string): Interaction[] | undefined {
   return useQuerySnapshot<Interaction>(
@@ -129,6 +137,30 @@ export function useAllRelationships(uid: string): Relationship[] | undefined {
 /// index list down to the one the person timeline needs.
 export function useReminders(uid: string): Reminder[] | undefined {
   return useQuerySnapshot<Reminder>(() => query(collectionRef(uid, 'reminders')), [uid])
+}
+
+/// The reminders a *live* surface should draw: everything except the work of a
+/// project or folder that has been archived.
+///
+/// A hook rather than a filter each page applies, because the rule has to hold
+/// everywhere at once. Follow-ups, the Feed's Next up, the open count and the
+/// day brief are four surfaces asking the same question, and the fourth one
+/// added is the one that would have got it wrong. See `isSuppressedByArchive`
+/// for why the reminders' own status is never touched.
+///
+/// Returns `undefined` until *both* subscriptions have settled. They arrive
+/// independently and reminders usually win, so answering early means an
+/// archived trip's work flashes into Overdue for a frame.
+export function useLiveReminders(uid: string): Reminder[] | undefined {
+  const reminders = useReminders(uid)
+  const containers = useContainers(uid)
+
+  return useMemo(() => {
+    if (!reminders || !containers) return undefined
+    const archived = archivedContainerIDs(containers)
+    if (archived.size === 0) return reminders
+    return reminders.filter((reminder) => !isSuppressedByArchive(reminder, archived))
+  }, [reminders, containers])
 }
 
 /// The whole tree. Containers are few — a person has a handful of folders and a

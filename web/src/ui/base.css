@@ -4150,3 +4150,15 @@ button.timeline-badge {
   border-radius: 50%;
   border: 1.5px dashed var(--color-separator);
 }
+
+/* The archived group in search results. Present, findable, and visibly not
+   part of today — the whole point of archiving is that both are true. */
+.palette-group[data-archived] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.palette-item[data-archived] .palette-item-label {
+  color: var(--color-text-secondary);
+}
