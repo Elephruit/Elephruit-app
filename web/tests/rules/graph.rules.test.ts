@@ -35,6 +35,11 @@ const OWNED_COLLECTIONS = [
   'observations',
   'reminders',
   'containers',
+  'notes',
+  /// A note's rich content. A sibling collection rather than a subcollection —
+  /// which also means the owner-only wildcard covers it, and this case is what
+  /// proves that rather than assuming it.
+  'noteContents',
   'sources',
   'memories',
 ] as const

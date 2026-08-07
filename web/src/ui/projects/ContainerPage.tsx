@@ -8,7 +8,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { applyPlan } from '../../data/applyPlan'
-import { useContainer, useContainers, usePeople, useRemindersIn } from '../../data/hooks'
+import { useContainer, useContainers, useNotes, usePeople, useRemindersIn } from '../../data/hooks'
 import { planCompleteReminder, planReopenReminder } from '../../domain/capture'
 import {
   buildTree,
@@ -23,6 +23,7 @@ import {
   type Container,
 } from '../../domain/container'
 import { relativeDescription } from '../../domain/contact'
+import { displayTitle, excerptOf, planCreateNote } from '../../domain/note'
 import { BUCKET_TITLES, bucketFor, completedList, sections, type Reminder } from '../../domain/reminders'
 import { formatScheduleSummary } from '../../domain/temporal'
 import { Avatar } from '../components/Avatar'
@@ -57,6 +58,7 @@ export function ContainerPage() {
   const containers = useContainers(uid)
   const reminders = useRemindersIn(uid, containerID)
   const people = usePeople(uid)
+  const allNotes = useNotes(uid)
 
   const [editing, setEditing] = useState(false)
   const [archiving, setArchiving] = useState(false)
@@ -68,6 +70,17 @@ export function ContainerPage() {
   const done = useMemo(() => (reminders ? completedList(reminders) : []), [reminders])
   const progress = useMemo(() => progressOf(reminders ?? []), [reminders])
   const peopleByID = useMemo(() => new Map((people ?? []).map((person) => [person.id, person])), [people])
+
+  /// The trip's notes. Filed by containment like its reminders, so archiving
+  /// the trip takes them with it — the flight confirmations belong with the
+  /// flight, not in a general pile that outlives it.
+  const notes = useMemo(
+    () =>
+      (allNotes ?? [])
+        .filter((note) => note.containerID === containerID)
+        .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()),
+    [allNotes, containerID],
+  )
 
   const trail = useMemo(
     () => (containers && container ? pathTo(containers, container.id).slice(0, -1) : []),
@@ -114,6 +127,13 @@ export function ContainerPage() {
   const descendantCount = containers ? descendantIDs(containers, container.id).size : 0
 
   const subject = container
+
+  async function addNote() {
+    const { plan, note } = planCreateNote({ containerID: subject.id }, new Date())
+    await applyPlan(uid, plan)
+    navigate(`/notes/${note.id}`)
+  }
+
   async function setArchived(next: boolean) {
     // The whole tree is needed to find the subtree and the ancestors; falling
     // back to the subject alone still archives it correctly when the tree has
@@ -170,6 +190,9 @@ export function ContainerPage() {
               <Button variant="quiet" icon="pencil" onClick={() => setEditing(true)}>
                 Edit
               </Button>
+              <Button variant="quiet" icon="note" onClick={() => void addNote()}>
+                New note
+              </Button>
               <Button variant="primary" icon="plus" onClick={() => setCreatingReminder(true)}>
                 New reminder
               </Button>
@@ -216,9 +239,33 @@ export function ContainerPage() {
         </section>
       )}
 
+      {notes.length > 0 && (
+        <section>
+          <h2 className="section-header">Notes</h2>
+          <div className="note-list">
+            {notes.map((note) => {
+              const excerpt = excerptOf(note)
+              return (
+                <div key={note.id} className="note-row">
+                  <button type="button" className="note-row-main" onClick={() => navigate(`/notes/${note.id}`)}>
+                    <span className="note-row-text">
+                      <span className="row-title">{displayTitle(note)}</span>
+                      {excerpt && <span className="row-subtitle">{excerpt}</span>}
+                    </span>
+                    <span className="note-row-meta">
+                      <span className="row-trailing">{relativeDescription(note.updatedAt, now)}</span>
+                    </span>
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
       {groups === undefined && <SkeletonRows count={3} />}
 
-      {!archived && groups?.length === 0 && done.length === 0 && (
+      {!archived && groups?.length === 0 && done.length === 0 && notes.length === 0 && (
         <EmptyState
           icon="bell"
           headline="Nothing to do yet"

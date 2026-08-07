@@ -17,6 +17,8 @@ import { archivedContainerIDs, isSuppressedByArchive, type Container } from '../
 import type { Interaction } from '../domain/interaction'
 import type { Observation } from '../domain/facts'
 import type { MemoryRecord } from '../domain/memory'
+import type { Note } from '../domain/note'
+import { parseDocument, type NoteDocument } from '../domain/noteDocument'
 import type { Person } from '../domain/person'
 import { foldedForMatching } from '../domain/person'
 import type { Relationship } from '../domain/relationships'
@@ -201,6 +203,48 @@ export function useRemindersFor(uid: string, personID: string): Reminder[] | und
     () => query(collectionRef(uid, 'reminders'), where('personIDs', 'array-contains', personID)),
     [uid, personID],
   )
+}
+
+export function useNotes(uid: string): Note[] | undefined {
+  return useQuerySnapshot<Note>(() => query(collectionRef(uid, 'notes')), [uid])
+}
+
+export function useNote(uid: string, noteID: string): Note | null | undefined {
+  const [note, setNote] = useState<Note | null | undefined>(undefined)
+
+  useEffect(() => {
+    setNote(undefined)
+    return onSnapshot(docRef(uid, 'notes', noteID), (snapshot) => {
+      if (!snapshot.exists()) {
+        setNote(null)
+        return
+      }
+      const data = deserialize(snapshot.data()) as Note
+      data.id = snapshot.id
+      setNote(data)
+    })
+  }, [uid, noteID])
+
+  return note
+}
+
+/// A note's rich content, read only when the note is open.
+///
+/// `null` means the note has metadata but has never been saved — a note created
+/// and not yet typed into. That is a real state, distinct from `undefined`
+/// meaning the read has not finished, and the editor must tell them apart or it
+/// will show an empty page over a note that is merely still loading.
+export function useNoteContent(uid: string, noteID: string): NoteDocument | null | undefined {
+  const [content, setContent] = useState<NoteDocument | null | undefined>(undefined)
+
+  useEffect(() => {
+    setContent(undefined)
+    return onSnapshot(docRef(uid, 'noteContents', noteID), (snapshot) => {
+      setContent(snapshot.exists() ? parseDocument(deserialize(snapshot.data())) : null)
+    })
+  }, [uid, noteID])
+
+  return content
 }
 
 export function useSources(uid: string): SourceDocument[] | undefined {

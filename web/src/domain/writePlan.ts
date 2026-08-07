@@ -12,6 +12,11 @@ export const COLLECTIONS = [
   /// Projects and folders — the one shape a trip, a house move, or Travel all
   /// take. See src/domain/container.ts.
   'containers',
+  /// A note's metadata and its capped plain-text projection.
+  'notes',
+  /// A note's rich content, under the same id. A sibling rather than a
+  /// subcollection — see src/domain/note.ts.
+  'noteContents',
   /// Provenance metadata for imported dossiers — never raw file content.
   'sources',
   /// The feed's durable grouping records — one per meaningful save.

@@ -9,6 +9,8 @@ import { FollowUpsPage } from './ui/followups/FollowUpsPage'
 import { LogPage } from './ui/log/LogPage'
 import { PeopleListPage } from './ui/people/PeopleListPage'
 import { PersonPage } from './ui/people/PersonPage'
+import { NotePage } from './ui/notes/NotePage'
+import { NotesPage } from './ui/notes/NotesPage'
 import { ContainerPage } from './ui/projects/ContainerPage'
 import { ProjectsPage } from './ui/projects/ProjectsPage'
 import { SettingsPage } from './ui/settings/SettingsPage'
@@ -26,6 +28,8 @@ function App() {
           <Route index element={<FeedPage />} />
           <Route path="/people" element={<PeopleListPage />} />
           <Route path="/people/:personID" element={<PersonPage />} />
+          <Route path="/notes" element={<NotesPage />} />
+          <Route path="/notes/:noteID" element={<NotePage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:containerID" element={<ContainerPage />} />
           <Route path="/followups" element={<FollowUpsPage />} />

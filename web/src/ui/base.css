@@ -4036,6 +4036,17 @@ button.timeline-badge {
   }
 }
 
+/* A note's title is often derived from its first line, which can be a whole
+   sentence. Without this the header grows to three lines and pushes its own
+   actions onto a row of their own. */
+.page-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
 .container-title-row {
   display: inline-flex;
   align-items: center;
@@ -4161,4 +4172,272 @@ button.timeline-badge {
 
 .palette-item[data-archived] .palette-item-label {
   color: var(--color-text-secondary);
+}
+
+/* MARK: Notes */
+
+.note-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.note-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-bottom: 1px solid var(--color-separator);
+  border-radius: var(--radius-medium);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.note-row:hover {
+  background: var(--color-subtle-fill);
+}
+
+.note-row-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-medium);
+  min-width: 0;
+  padding: var(--space-medium) var(--space-small);
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.note-row-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.note-row-text .row-title,
+.note-row-text .row-subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-row-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-small);
+  white-space: nowrap;
+}
+
+/* MARK: The note editor */
+
+.note-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-small);
+}
+
+.note-title {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: var(--text-title, 600 1.6rem/1.2 var(--font-serif, var(--font-sans)));
+  color: var(--color-text-primary);
+}
+
+.note-title:focus {
+  outline: none;
+}
+
+.note-title::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+/* Sticky so the formatting controls stay reachable in a long note without
+   following the caret around, which is the fidgety alternative. */
+.note-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-tight) 0;
+  background: color-mix(in srgb, var(--color-background) 92%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--color-separator);
+}
+
+.note-tool {
+  min-width: 30px;
+  height: 28px;
+  padding: 0 var(--space-tight);
+  border: 0;
+  border-radius: var(--radius-small, 6px);
+  background: none;
+  color: var(--color-text-secondary);
+  font: 500 0.85rem/1 var(--font-sans);
+  cursor: pointer;
+}
+
+.note-tool:hover {
+  background: var(--color-subtle-fill);
+  color: var(--color-text-primary);
+}
+
+.note-toolbar-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 var(--space-tight);
+  background: var(--color-separator);
+}
+
+.note-surface {
+  position: relative;
+  min-height: 50vh;
+}
+
+.note-content {
+  outline: none;
+  min-height: 50vh;
+  padding: var(--space-small) 0 var(--space-large);
+  caret-color: var(--color-accent);
+}
+
+.note-placeholder {
+  position: absolute;
+  top: var(--space-small);
+  left: 0;
+  pointer-events: none;
+  color: var(--color-text-tertiary);
+}
+
+.note-p {
+  margin: 0 0 var(--space-small);
+}
+
+.note-h1 {
+  margin: var(--space-medium) 0 var(--space-tight);
+  font: var(--text-heading-1, 600 1.5rem/1.25 var(--font-serif, var(--font-sans)));
+}
+
+.note-h2 {
+  margin: var(--space-medium) 0 var(--space-tight);
+  font: var(--text-heading-2, 600 1.25rem/1.3 var(--font-serif, var(--font-sans)));
+}
+
+.note-h3 {
+  margin: var(--space-small) 0 var(--space-tight);
+  font: var(--text-heading-3, 600 1.05rem/1.35 var(--font-sans));
+}
+
+.note-quote {
+  margin: 0 0 var(--space-small);
+  padding-left: var(--space-medium);
+  border-left: 3px solid var(--color-separator);
+  color: var(--color-text-secondary);
+}
+
+.note-code {
+  display: block;
+  margin: 0 0 var(--space-small);
+  padding: var(--space-small) var(--space-medium);
+  border-radius: var(--radius-medium);
+  background: var(--color-subtle-fill);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.9em;
+  white-space: pre-wrap;
+}
+
+.note-ul,
+.note-ol {
+  margin: 0 0 var(--space-small);
+  padding-left: 1.4em;
+}
+
+.note-li {
+  margin: 2px 0;
+}
+
+/* A nested item draws no marker of its own — its parent list already carries
+   one, and two markers on one line reads as a bullet that failed to render. */
+.note-li-nested {
+  list-style: none;
+}
+
+.note-li-checked,
+.note-li-unchecked {
+  position: relative;
+  list-style: none;
+  padding-left: 1.6em;
+  cursor: pointer;
+}
+
+.note-li-checked::before,
+.note-li-unchecked::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.25em;
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  border: 1.5px solid var(--color-separator);
+}
+
+.note-li-checked::before {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.note-li-checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: calc(0.25em + 3px);
+  width: 4px;
+  height: 8px;
+  border: solid var(--color-on-accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.note-li-checked {
+  color: var(--color-text-secondary);
+  text-decoration: line-through;
+}
+
+.note-bold { font-weight: 650; }
+.note-italic { font-style: italic; }
+.note-underline { text-decoration: underline; }
+.note-strike { text-decoration: line-through; }
+
+.note-inline-code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--color-subtle-fill);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.9em;
+}
+
+.note-link {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.note-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-small);
+  margin-bottom: var(--space-medium);
+}
+
+.note-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-tight);
 }

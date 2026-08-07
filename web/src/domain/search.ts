@@ -17,10 +17,11 @@
 import type { Container } from './container'
 import { archivedContainerIDs } from './container'
 import type { Interaction } from './interaction'
+import { displayTitle, type Note } from './note'
 import { foldedForMatching, type Person } from './person'
 import type { Reminder } from './reminders'
 
-export type HitKind = 'person' | 'container' | 'reminder' | 'interaction'
+export type HitKind = 'person' | 'container' | 'reminder' | 'interaction' | 'note'
 
 export interface SearchHit {
   id: string
@@ -67,6 +68,7 @@ export interface SearchInput {
   containers?: Container[]
   reminders?: Reminder[]
   interactions?: Interaction[]
+  notes?: Note[]
 }
 
 /// Everything matching, split into live and archived and ranked within each.
@@ -128,6 +130,24 @@ export function search(query: string, input: SearchInput, limit = 40): SearchRes
       archived: reminder.containerID ? archivedIDs.has(reminder.containerID) : false,
       score,
       at: reminder.dueAt?.getTime() ?? reminder.createdAt?.getTime() ?? 0,
+    })
+  }
+
+  for (const note of input.notes ?? []) {
+    // The projection is capped at BODY_TEXT_CAP, so this matches a note's
+    // title and roughly its first four hundred words rather than its whole
+    // body — see SEARCH_ONLY_READS_THE_PROJECTION.
+    const score = scoreOf(note.title, folded, TITLE_WEIGHT) + scoreOf(note.bodyText, folded, BODY_WEIGHT)
+    if (score === 0) continue
+    const container = note.containerID ? containersByID.get(note.containerID) : undefined
+    hits.push({
+      id: note.id,
+      kind: 'note',
+      title: displayTitle(note),
+      detail: container?.title ?? null,
+      archived: note.containerID ? archivedIDs.has(note.containerID) : false,
+      score,
+      at: note.updatedAt?.getTime() ?? 0,
     })
   }
 
