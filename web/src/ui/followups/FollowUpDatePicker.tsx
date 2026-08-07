@@ -199,7 +199,6 @@ export function FollowUpDatePicker({
   return (
     <div ref={pickerRef} className="followup-date-picker">
       <div className="followup-date-search">
-        <Icon name="search" size={17} />
         <input
           ref={inputRef}
           type="text"

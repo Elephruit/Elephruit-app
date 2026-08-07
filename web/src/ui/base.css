@@ -884,8 +884,8 @@ dialog.palette::backdrop {
   background: transparent;
   padding: 0;
   color: var(--color-text-secondary);
-  font: var(--text-sub);
-  line-height: 1.45;
+  font: 400 1rem/1.45 var(--font-serif);
+  letter-spacing: -0.005em;
 }
 
 .inline-followup-notes::placeholder {
@@ -1063,6 +1063,7 @@ dialog.palette::backdrop {
 }
 
 .inline-followup-panel {
+  width: min(400px, 100%);
   max-width: 400px;
   margin-top: var(--space-tight);
   padding: var(--space-small);
@@ -1084,17 +1085,20 @@ dialog.palette::backdrop {
   display: block;
   width: 100%;
   min-height: 34px;
-  padding: 6px var(--space-small);
+  padding: 0 var(--space-small);
   border: 1px solid var(--color-separator);
   border-radius: var(--radius-medium);
   outline: 0;
   background: var(--color-surface-subtle);
   color: var(--color-text);
   font: var(--text-sub);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
 .inline-checklist-add:focus {
-  border-color: var(--color-focus);
+  border-color: var(--color-accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-focus) 18%, transparent);
 }
 
@@ -1103,32 +1107,36 @@ dialog.palette::backdrop {
 }
 
 .followup-date-picker {
-  overflow: hidden;
+  overflow: visible;
   scroll-margin-block: var(--space-section);
-  border: 1px solid var(--color-separator);
-  border-radius: var(--radius-large);
-  background: var(--color-surface-subtle);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .inline-date-panel {
-  width: min(360px, 100%);
-  max-width: 360px;
-  padding: var(--space-tight);
+  width: min(400px, 100%);
+  max-width: 400px;
 }
 
 .followup-date-search {
   display: flex;
   align-items: center;
   gap: var(--space-small);
-  min-height: 32px;
+  min-height: 34px;
   padding: 0 var(--space-small);
-  border-bottom: 1px solid var(--color-separator);
-  background: var(--color-surface);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-medium);
+  background: var(--color-surface-subtle);
   color: var(--color-text-tertiary);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
 .followup-date-search:focus-within {
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-focus) 55%, transparent);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-focus) 18%, transparent);
   color: var(--color-accent);
 }
 
@@ -1216,7 +1224,11 @@ dialog.palette::backdrop {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
-  border-bottom: 1px solid var(--color-separator);
+  margin-top: var(--space-tight);
+  overflow: hidden;
+  border: 1px solid var(--color-separator);
+  border-bottom: 0;
+  border-radius: var(--radius-medium) var(--radius-medium) 0 0;
   background: var(--color-separator);
 }
 
@@ -1258,6 +1270,9 @@ dialog.palette::backdrop {
 
 .followup-calendar {
   padding: var(--space-tight);
+  border: 1px solid var(--color-separator);
+  border-top: 0;
+  border-radius: 0 0 var(--radius-medium) var(--radius-medium);
   background: var(--color-surface);
 }
 
@@ -1336,12 +1351,17 @@ dialog.palette::backdrop {
 .followup-date-clear {
   width: 100%;
   min-height: 30px;
-  border: 0;
-  border-top: 1px solid var(--color-separator);
+  border: 1px solid var(--color-separator);
+  border-top: 0;
+  border-radius: 0 0 var(--radius-medium) var(--radius-medium);
   background: var(--color-surface-subtle);
   color: var(--color-text-tertiary);
   font: var(--text-label);
   cursor: pointer;
+}
+
+.followup-date-picker:has(.followup-date-clear) .followup-calendar {
+  border-radius: 0;
 }
 
 .followup-date-clear:hover {
@@ -1371,7 +1391,6 @@ dialog.palette::backdrop {
 }
 
 .category-combobox .combobox-control {
-  border-radius: var(--radius-large);
   background: var(--color-surface-subtle);
 }
 
@@ -1393,7 +1412,22 @@ dialog.palette::backdrop {
 
 .inline-followup-panel .combobox-control {
   min-height: 34px;
-  padding: 2px var(--space-small);
+  padding: 0 var(--space-small);
+  border-radius: var(--radius-medium);
+  background: var(--color-surface-subtle);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.inline-followup-panel .combobox-control:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-focus) 18%, transparent);
+}
+
+.inline-followup-panel .combobox-input {
+  padding: 0;
+  font: var(--text-sub);
 }
 
 .inline-followup-panel .combobox-list {
@@ -1472,8 +1506,8 @@ dialog.palette::backdrop {
   }
 
   .inline-date-panel {
-    width: min(360px, 100%);
-    max-width: 360px;
+    width: min(400px, 100%);
+    max-width: 400px;
   }
 
   .inline-date-panel .followup-date-quick {
