@@ -320,9 +320,6 @@ export function FollowUpsPage() {
                       <Button variant="ghost" small onClick={() => void rescheduleTomorrow(reminder)}>
                         {quickAction(reminder).label}
                       </Button>
-                      <Button variant="ghost" small onClick={() => setEditing(reminder)}>
-                        Edit
-                      </Button>
                     </span>
                   </div>
                 )
