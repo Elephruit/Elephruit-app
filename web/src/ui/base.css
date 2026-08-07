@@ -1982,9 +1982,9 @@ textarea.field {
   text-decoration: underline;
 }
 
-/* MARK: Inline composer — the first node on the memory rail. No card: the
-   region is a canvas tint between two hairlines, the accent node and its
-   branch stay fixed while the content grows in place. */
+/* MARK: Inline composer — the first node on the memory rail. The collapsed
+   trigger and expanded composer share one bounded panel treatment, while the
+   accent node and its branch stay fixed as the content grows in place. */
 
 .capture-composer {
   display: flex;
@@ -2038,12 +2038,11 @@ textarea.field {
   align-items: center;
   gap: var(--space-medium);
   min-height: 56px;
-  padding: 0 var(--space-tight);
-  border: 0;
-  border-top: 1px solid var(--color-separator);
-  border-bottom: 1px solid var(--color-separator);
-  border-radius: 0;
-  background: color-mix(in srgb, var(--color-text) 3%, transparent);
+  padding: 0 var(--space-large);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--color-text) 4%, var(--color-background-elevated));
+  box-shadow: var(--shadow-raised);
   color: var(--color-text-tertiary);
   font: var(--text-body);
   cursor: text;
