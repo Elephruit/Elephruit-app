@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AiCredential } from '../ai/credentials'
+import type { Container } from '../domain/container'
 import type { Interaction } from '../domain/interaction'
 import type { Observation } from '../domain/facts'
 import type { MemoryRecord } from '../domain/memory'
@@ -128,6 +129,39 @@ export function useAllRelationships(uid: string): Relationship[] | undefined {
 /// index list down to the one the person timeline needs.
 export function useReminders(uid: string): Reminder[] | undefined {
   return useQuerySnapshot<Reminder>(() => query(collectionRef(uid, 'reminders')), [uid])
+}
+
+/// The whole tree. Containers are few — a person has a handful of folders and a
+/// dozen projects across a life — so this is the one collection where the
+/// spike-scale posture is not a compromise but the right answer.
+export function useContainers(uid: string): Container[] | undefined {
+  return useQuerySnapshot<Container>(() => query(collectionRef(uid, 'containers')), [uid])
+}
+
+export function useContainer(uid: string, containerID: string): Container | null | undefined {
+  const [container, setContainer] = useState<Container | null | undefined>(undefined)
+
+  useEffect(() => {
+    setContainer(undefined)
+    return onSnapshot(docRef(uid, 'containers', containerID), (snapshot) => {
+      if (!snapshot.exists()) {
+        setContainer(null)
+        return
+      }
+      const data = deserialize(snapshot.data()) as Container
+      data.id = snapshot.id
+      setContainer(data)
+    })
+  }, [uid, containerID])
+
+  return container
+}
+
+export function useRemindersIn(uid: string, containerID: string): Reminder[] | undefined {
+  return useQuerySnapshot<Reminder>(
+    () => query(collectionRef(uid, 'reminders'), where('containerID', '==', containerID)),
+    [uid, containerID],
+  )
 }
 
 export function useRemindersFor(uid: string, personID: string): Reminder[] | undefined {

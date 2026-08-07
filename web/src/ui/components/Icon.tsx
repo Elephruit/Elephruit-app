@@ -92,6 +92,14 @@ const PATHS: Record<string, React.ReactNode> = {
   ),
   filter: <path d="M4 6h16M7 12h10M10 18h4" />,
   'arrow-right': <path d="M5 12h14M13 6l6 6-6 6" />,
+  folder: <path d="M4 7.5A1.5 1.5 0 0 1 5.5 6h3.2a1.5 1.5 0 0 1 1.2.6l1 1.4h7.6A1.5 1.5 0 0 1 20 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" />,
+  project: (
+    <>
+      <path d="M4.5 6.5A1.5 1.5 0 0 1 6 5h12a1.5 1.5 0 0 1 1.5 1.5v11A1.5 1.5 0 0 1 18 19H6a1.5 1.5 0 0 1-1.5-1.5z" />
+      <path d="M8 9.5h8M8 13h8M8 16.5h4" />
+    </>
+  ),
+  trash: <path d="M5 7h14M10 7V5.5A1.5 1.5 0 0 1 11.5 4h1A1.5 1.5 0 0 1 14 5.5V7m-7 0 .8 11.1A1.5 1.5 0 0 0 9.3 19.5h5.4a1.5 1.5 0 0 0 1.5-1.4L17 7" />,
 }
 
 export type IconName = keyof typeof PATHS extends string ? string : never

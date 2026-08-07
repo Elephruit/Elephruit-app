@@ -9,6 +9,9 @@ export const COLLECTIONS = [
   'relationships',
   'observations',
   'reminders',
+  /// Projects and folders — the one shape a trip, a house move, or Travel all
+  /// take. See src/domain/container.ts.
+  'containers',
   /// Provenance metadata for imported dossiers — never raw file content.
   'sources',
   /// The feed's durable grouping records — one per meaningful save.

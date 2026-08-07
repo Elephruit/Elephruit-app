@@ -3669,6 +3669,20 @@ button.timeline-badge {
   color: var(--color-text-tertiary);
   font: var(--text-metadata);
   cursor: pointer;
+  /* Six slots fit a phone only if none of them wraps. A wrapped label makes
+     its tab two lines tall, which pushes that one label out of line with the
+     other five — the row stops reading as a row. Shrinking the type is the
+     cheaper concession: "Follow-ups" is what these are called everywhere else
+     in the app, and a tab bar is not the place to invent a second name. */
+  white-space: nowrap;
+  min-width: 0;
+}
+
+@media (max-width: 430px) {
+  .tab {
+    font-size: 0.6rem;
+    letter-spacing: 0;
+  }
 }
 
 .tab[aria-current='page'] {
@@ -3934,4 +3948,175 @@ button.timeline-badge {
   width: 26px;
   height: 26px;
   font-size: 0.65rem;
+}
+
+/* MARK: Containers — projects and folders */
+
+.container-tree {
+  display: flex;
+  flex-direction: column;
+}
+
+.container-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-small);
+  /* The indent is the tree. Applied as padding on the row rather than a margin
+     on the glyph, so the hover fill still spans the full width and a nested row
+     does not look like a narrower row. */
+  padding-left: calc(var(--depth, 0) * var(--space-large));
+  border-bottom: 1px solid var(--color-separator);
+  border-radius: var(--radius-medium);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.container-row:hover {
+  background: var(--color-subtle-fill);
+}
+
+.container-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-medium);
+  min-width: 0;
+  padding: var(--space-medium) var(--space-small);
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.container-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.container-text .row-title,
+.container-text .row-subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.container-glyph {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-medium);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--tint, var(--color-accent)) 14%, transparent);
+  color: var(--tint, var(--color-accent));
+}
+
+/* Actions stay out of the way until the row is under the pointer, and are
+   always present for keyboard and touch — a control that only exists on hover
+   cannot be reached on a phone. */
+.container-actions {
+  display: flex;
+  gap: var(--space-tight);
+  padding-right: var(--space-small);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.container-row:hover .container-actions,
+.container-row:focus-within .container-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .container-actions {
+    opacity: 1;
+  }
+}
+
+.container-title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-small);
+}
+
+/* The header's facts, separated by a mark rather than by whitespace: three
+   adjacent spans with no separator read as one run-on sentence, which is
+   exactly how "October 13, 2026Nothing in it yet" got shipped once. */
+.container-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-tight);
+}
+
+.container-meta > * + *::before {
+  content: '·';
+  margin-right: var(--space-tight);
+  color: var(--color-text-tertiary, var(--color-text-secondary));
+}
+
+.link-button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link-button:hover {
+  color: var(--color-text-primary);
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-medium);
+}
+
+.color-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-tight);
+}
+
+.color-choice {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: var(--tint, var(--color-accent));
+  cursor: pointer;
+  padding: 0;
+}
+
+.color-choice[data-selected] {
+  border-color: var(--color-text-primary);
+  outline: 2px solid var(--color-background);
+  outline-offset: -4px;
+}
+
+/* The project or folder a follow-up belongs to, on the row that shows the
+   day's work. Tinted like the container's own glyph so the two surfaces agree
+   about which trip this is. */
+.task-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-small, 6px);
+  font: var(--text-metadata);
+  color: var(--tint, var(--color-accent));
+  background: color-mix(in srgb, var(--tint, var(--color-accent)) 12%, transparent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.task-container:hover {
+  background: color-mix(in srgb, var(--tint, var(--color-accent)) 20%, transparent);
 }

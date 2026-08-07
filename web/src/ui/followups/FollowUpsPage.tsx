@@ -13,7 +13,7 @@ import { startOfDay } from '../../domain/dates'
 import { BUCKET_TITLES, bucketFor, completedList, sections, type Reminder } from '../../domain/reminders'
 import { formatScheduleSummary } from '../../domain/temporal'
 import { applyPlan } from '../../data/applyPlan'
-import { usePeople, useReminders } from '../../data/hooks'
+import { useContainers, usePeople, useReminders } from '../../data/hooks'
 import { useUID } from '../UserContext'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
@@ -44,6 +44,7 @@ export function FollowUpsPage() {
   const navigate = useNavigate()
   const reminders = useReminders(uid)
   const people = usePeople(uid)
+  const containers = useContainers(uid)
   const [view, setView] = useState<'open' | 'completed'>('open')
   const [editing, setEditing] = useState<Reminder | null>(null)
   const [creating, setCreating] = useState(false)
@@ -53,6 +54,10 @@ export function FollowUpsPage() {
   const groups = useMemo(() => (reminders ? sections(reminders, now) : undefined), [reminders, now])
   const done = useMemo(() => (reminders ? completedList(reminders) : []), [reminders])
   const peopleByID = useMemo(() => new Map((people ?? []).map((p) => [p.id, p])), [people])
+  const containersByID = useMemo(
+    () => new Map((containers ?? []).map((container) => [container.id, container])),
+    [containers],
+  )
 
   const counts = useMemo(() => {
     const byBucket = new Map((groups ?? []).map((group) => [group.bucket, group.reminders.length]))
@@ -160,6 +165,36 @@ export function FollowUpsPage() {
                     <button type="button" className="task-main" onClick={() => setEditing(reminder)}>
                       <span className="row-title">{reminder.title}</span>
                       <span className="task-meta">
+                        {(() => {
+                          // What it belongs to, when it belongs to something.
+                          // Without this the trip's work and the day's work are
+                          // indistinguishable here, and the page's whole claim
+                          // is that they are the same list seen differently.
+                          const container = reminder.containerID
+                            ? containersByID.get(reminder.containerID)
+                            : undefined
+                          if (!container) return null
+                          return (
+                            <span
+                              role="link"
+                              tabIndex={0}
+                              className="task-container"
+                              style={
+                                { '--tint': `var(--palette-${container.colorName})` } as React.CSSProperties
+                              }
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                navigate(`/projects/${container.id}`)
+                              }}
+                              onKeyDown={(event) =>
+                                event.key === 'Enter' && navigate(`/projects/${container.id}`)
+                              }
+                            >
+                              <Icon name={container.kind === 'folder' ? 'folder' : 'project'} size={13} />
+                              {container.title}
+                            </span>
+                          )
+                        })()}
                         {chip && (
                           <span
                             className={
@@ -237,6 +272,7 @@ export function FollowUpsPage() {
         <FollowUpSheet
           existing={editing}
           people={people}
+          containers={containers ?? []}
           onClose={() => {
             setCreating(false)
             setEditing(null)

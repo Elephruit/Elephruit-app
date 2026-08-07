@@ -9,6 +9,7 @@ import { Icon } from '../components/Icon'
 const DESTINATIONS = [
   { to: '/', label: 'Feed', icon: 'feed', end: true },
   { to: '/people', label: 'People', icon: 'people', end: false },
+  { to: '/projects', label: 'Projects', icon: 'project', end: false },
   { to: '/followups', label: 'Follow-ups', icon: 'bell', end: false },
 ] as const
 

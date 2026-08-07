@@ -18,14 +18,18 @@ export interface FollowUpDraft {
   title: string
   notes: string
   personIDs: Set<string>
+  /// The project or folder this is filed in. Independent of `personIDs` — a
+  /// follow-up can be owed to a person, belong to a trip, or both.
+  containerID: string | null
   schedule: ScheduleDraftFields
 }
 
-export function emptyFollowUpDraft(userZone: string): FollowUpDraft {
+export function emptyFollowUpDraft(userZone: string, containerID: string | null = null): FollowUpDraft {
   return {
     title: '',
     notes: '',
     personIDs: new Set(),
+    containerID,
     schedule: { scheduleMode: 'none', localDate: '', localTime: '', timeZone: userZone },
   }
 }
@@ -68,6 +72,7 @@ export function draftFromReminder(reminder: Reminder, userZone: string): FollowU
     title: reminder.title,
     notes: reminder.notes ?? '',
     personIDs: new Set(reminder.personIDs),
+    containerID: reminder.containerID ?? null,
     schedule,
   }
 }
@@ -87,6 +92,7 @@ export interface ReminderFields {
   title: string
   notes: string | null
   personIDs: string[]
+  containerID: string | null
   startAt: Date | null
   dueAt: Date | null
   isSomeday: boolean
@@ -102,6 +108,7 @@ export function reminderFieldsFromDraft(draft: FollowUpDraft, context: TemporalC
     title: draft.title.trim(),
     notes: draft.notes.trim() || null,
     personIDs: [...draft.personIDs],
+    containerID: draft.containerID,
     startAt: resolved.startAt,
     dueAt: resolved.dueAt,
     isSomeday: resolved.isSomeday,

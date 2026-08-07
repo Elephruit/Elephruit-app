@@ -7,6 +7,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { applyPlan } from '../../data/applyPlan'
 import { planCreateReminder, planDeleteReminder, planUpdateReminder } from '../../domain/capture'
+import { buildTree, flattenTree, pathLabel, type Container } from '../../domain/container'
 import {
   draftFromReminder,
   emptyFollowUpDraft,
@@ -31,15 +32,21 @@ const USER_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
 export function FollowUpSheet({
   existing,
   people,
+  containers = [],
+  defaultContainerID = null,
   onClose,
 }: {
   existing: Reminder | null
   people: Person[]
+  /// The filing choices. Empty when the caller has none to offer, which hides
+  /// the control rather than showing an empty picker.
+  containers?: Container[]
+  defaultContainerID?: string | null
   onClose: () => void
 }) {
   const uid = useUID()
   const [draft, setDraft] = useState<FollowUpDraft>(() =>
-    existing ? draftFromReminder(existing, USER_ZONE) : emptyFollowUpDraft(USER_ZONE),
+    existing ? draftFromReminder(existing, USER_ZONE) : emptyFollowUpDraft(USER_ZONE, defaultContainerID),
   )
   const [notesOpen, setNotesOpen] = useState(draft.notes.length > 0)
   const [saving, setSaving] = useState(false)
@@ -191,6 +198,24 @@ export function FollowUpSheet({
           onCreate={() => {}}
         />
       </FormField>
+
+      {containers.length > 0 && (
+        <FormField label="In" htmlFor="followup-container" help="A project or folder, when it belongs to one.">
+          <select
+            id="followup-container"
+            className="field"
+            value={draft.containerID ?? ''}
+            onChange={(event) => set({ containerID: event.target.value || null })}
+          >
+            <option value="">Nothing — just a follow-up</option>
+            {flattenTree(buildTree(containers)).map((node) => (
+              <option key={node.container.id} value={node.container.id}>
+                {pathLabel(containers, node.container.id)}
+              </option>
+            ))}
+          </select>
+        </FormField>
+      )}
 
       <ScheduleEditor value={draft.schedule} userZone={USER_ZONE} onChange={(schedule) => set({ schedule })} />
 

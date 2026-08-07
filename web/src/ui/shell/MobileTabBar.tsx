@@ -10,6 +10,7 @@ const TABS = [
 ] as const
 
 const TRAILING_TABS = [
+  { to: '/projects', label: 'Projects', icon: 'project' },
   { to: '/followups', label: 'Follow-ups', icon: 'bell' },
   { to: '/settings', label: 'Settings', icon: 'gear' },
 ] as const
