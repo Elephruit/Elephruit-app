@@ -179,7 +179,7 @@ export const GROUP_TITLES: Record<RelationshipGroup, string> = {
   family: 'Family',
   household: 'Household',
   work: 'Work',
-  other: 'Other',
+  other: 'Introduction & friends',
 }
 
 /// Which group a relationship is shown under. Every group is a category rather

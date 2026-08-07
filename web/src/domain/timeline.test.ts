@@ -103,7 +103,26 @@ describe('entries', () => {
       viewpointPersonID: 'ana',
     })
 
-    expect(rows.map((row) => row.id)).toEqual(['int-1', 'obs-1'])
+    expect(rows).toHaveLength(2)
+    expect(rows[0].id).toBe('int-1')
+    expect(rows[1].title).toBe('Profile updated')
+    expect(rows[1].excerpt).toBe('Lives in: Portland')
+  })
+
+  it('collapses same-day manual fact edits into one profile update', () => {
+    const role = { ...observation, id: 'obs-role', attribute: 'role', value: 'Design lead' }
+    const rows = projectPersonTimeline({
+      interactions: [],
+      observations: [observation, role],
+      reminders: [],
+      peopleByID: people,
+      viewpointPersonID: 'ana',
+    })
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0].excerpt).toContain('Lives in: Portland')
+    expect(rows[0].excerpt).toContain('Role: Design lead')
+    expect(provenanceLine(rows[0])).toBe('profile update')
   })
 })
 

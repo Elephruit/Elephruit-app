@@ -171,13 +171,13 @@ export function RelationshipsSection({
   return (
     <section className="rail-section remember-people">
       <div className="aside-panel-head">
-        <h2 className="rail-section-title">People in their life</h2>
+        <h2 className="rail-section-title">Connections</h2>
         <button type="button" className="button button-plain button-small" onClick={() => setAdding(true)}>
           Add
         </button>
       </div>
 
-      {grouped.length === 0 && <p className="row-subtitle">Nobody linked yet — a partner, a boss, an unnamed son.</p>}
+      {grouped.length === 0 && <p className="row-subtitle">No connections recorded yet.</p>}
 
       {grouped.map(({ group, rows }) => {
         const groupSuggestions = suggestions.filter((s) => groupOf(s.kind) === group)

@@ -19,7 +19,6 @@ import { DossierReview } from './DossierReview'
 import { DossierTargetPicker } from './DossierTargetPicker'
 import { EditableReviewPanel } from './EditableReviewPanel'
 import { CaptureError, CaptureStatus } from './CaptureStatus'
-import { CaptureSuggestions } from './CaptureSuggestions'
 import type { CaptureController } from './useCaptureController'
 
 const TEXTAREA_MAX_HEIGHT = 240
@@ -82,9 +81,9 @@ export function CaptureComposer({
       ? 'Reading…'
       : readyAttachmentCount > 0
         ? controller.text.trim().length > 0
-          ? 'Review memory and sources'
+          ? 'Review update and sources'
           : 'Review sources'
-        : 'Review memory'
+        : 'Review update'
 
   const primaryAction = controller.ready ? (
     <Button
@@ -131,10 +130,10 @@ export function CaptureComposer({
               dragOpenTimer.current = null
             }
           }}
-          aria-label="What happened? Record a memory"
+          aria-label="What happened? Quick capture"
         >
           <span className="composer-collapsed-prompt">What happened?</span>
-          <span className="composer-collapsed-hint">Click to remember</span>
+          <span className="composer-collapsed-hint">Click to add an update</span>
         </button>
       )}
 
@@ -150,7 +149,7 @@ export function CaptureComposer({
         >
           <header className="composer-head">
             <span className="composer-head-label">
-              {mode === 'reviewing' || mode === 'reviewing-dossier' ? 'Review memory' : 'New memory'}
+              {mode === 'reviewing' || mode === 'reviewing-dossier' ? 'Review update' : 'Quick capture'}
             </span>
             <span className="composer-head-actions">
               {controller.hasDraft && mode === 'composing' && (
@@ -195,15 +194,6 @@ export function CaptureComposer({
                 }}
                 placeholder="Who did you see, and what happened?"
               />
-
-              {controller.text.trim().length === 0 && mode === 'composing' && !hasAttachments && (
-                <CaptureSuggestions
-                  onPick={(example) => {
-                    controller.setText(example)
-                    textareaRef.current?.focus()
-                  }}
-                />
-              )}
 
               {controller.lostAttachments.length > 0 && !hasAttachments && (
                 <p className="composer-reattach" role="status">

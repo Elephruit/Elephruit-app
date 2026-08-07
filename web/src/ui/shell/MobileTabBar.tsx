@@ -26,7 +26,7 @@ export function MobileTabBar() {
         </NavLink>
       ))}
       <div className="tab tab-log">
-        <button className="tab-log-circle" aria-label="Record a memory" onClick={() => navigate('/?capture=1')}>
+        <button className="tab-log-circle" aria-label="Quick capture" onClick={() => navigate('/?capture=1')}>
           <Icon name="plus" size={24} />
         </button>
       </div>

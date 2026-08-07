@@ -134,7 +134,7 @@ export function FollowUpsPage() {
             message="Follow-ups from logged interactions gather here, bucketed by what their dates actually say."
             action={
               <Button variant="primary" icon="plus" onClick={() => navigate('/?capture=1')}>
-                Record a memory
+                Quick capture
               </Button>
             }
             hint="End a capture with what you owe — “need to send her the list” becomes a follow-up."

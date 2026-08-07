@@ -114,9 +114,29 @@ export function projectPersonTimeline(args: {
   peopleByID: Map<string, { displayName: string }>
   viewpointPersonID: string
 }): TimelineEntry[] {
+  const manualByDay = new Map<string, Observation[]>()
+  for (const observation of args.observations.filter((value) => value.sourceInteractionID === null)) {
+    const key = startOfDay(observation.createdAt).toISOString()
+    manualByDay.set(key, [...(manualByDay.get(key) ?? []), observation])
+  }
+  const profileUpdates = [...manualByDay.entries()].map(([key, values]): TimelineEntry => {
+    const sorted = [...values].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    return {
+      id: `profile-update-${key}`,
+      kind: 'observation',
+      title: 'Profile updated',
+      excerpt: sorted.map((value) => `${attributeLabel(value.attribute)}: ${value.value}`).join(' · '),
+      date: sorted[0].createdAt,
+      interactionKind: null,
+      provenance: null,
+      otherPeople: [],
+      isOpen: false,
+      sourceInteractionID: null,
+    }
+  })
   return [
     ...args.interactions.map((interaction) => entryFromInteraction(interaction, args.peopleByID, args.viewpointPersonID)),
-    ...args.observations.filter((observation) => observation.sourceInteractionID === null).map(entryFromObservation),
+    ...profileUpdates,
     ...args.reminders.map(entryFromReminder),
   ]
 }
@@ -131,7 +151,7 @@ export function provenanceLine(entry: TimelineEntry): string {
   } else if (entry.kind === 'reminder') {
     parts.push(entry.isOpen ? 'follow-up' : 'follow-up · done')
   } else if (entry.kind === 'observation') {
-    parts.push('fact noted')
+    parts.push(entry.title === 'Profile updated' ? 'profile update' : 'fact noted')
   }
 
   if (entry.otherPeople.length > 0) {

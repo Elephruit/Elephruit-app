@@ -298,7 +298,7 @@ export function FeedPage() {
               action={
                 <>
                   <Button variant="primary" icon="plus" onClick={() => setSearchParams({ capture: '1' })}>
-                    Record your first memory
+                    Add your first update
                   </Button>
                   <Button variant="secondary" onClick={() => navigate('/people')}>
                     Add a person

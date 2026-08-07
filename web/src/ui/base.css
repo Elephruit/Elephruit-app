@@ -3017,10 +3017,105 @@ a.memory-person-link:hover {
   color: var(--color-text-tertiary);
 }
 
+.profile-connection-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-small);
+  color: var(--color-text-secondary) !important;
+  margin-top: 2px;
+}
+
+.profile-context-edit {
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: var(--text-metadata);
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: var(--radius-small);
+}
+
+.profile-context-edit:hover {
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+.profile-first-met {
+  color: var(--color-text) !important;
+  font: var(--text-label) !important;
+  margin-top: var(--space-tight);
+}
+
 .profile-actions {
   flex: none;
   display: flex;
   gap: var(--space-small);
+}
+
+/* A person-scoped interaction stays on the working board. The surface is
+   deliberately quieter and more compact than the old feed-sized composer. */
+.person-interaction-composer {
+  margin: calc(-1 * var(--space-small)) 0 var(--space-section);
+  padding: var(--space-large);
+  background: var(--color-background-elevated);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-raised);
+}
+
+.interaction-composer-head,
+.interaction-composer-actions,
+.interaction-summary-grid {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-medium);
+}
+
+.interaction-composer-head h2 {
+  font: var(--text-heading);
+}
+
+.interaction-composer-head p {
+  font: var(--text-sub);
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+.interaction-kind-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-tight);
+  margin: var(--space-large) 0 var(--space-small);
+}
+
+.interaction-summary-grid > label:first-child {
+  flex: 1;
+}
+
+.interaction-summary-grid > label:last-child {
+  width: 220px;
+}
+
+.person-interaction-composer > label {
+  display: block;
+  margin-top: var(--space-medium);
+}
+
+.interaction-notes {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.interaction-followups {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.interaction-composer-actions {
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: var(--space-large);
 }
 
 @media (max-width: 719.98px) {
@@ -3043,6 +3138,63 @@ a.memory-person-link:hover {
   min-width: 0;
 }
 
+.person-primary-context {
+  margin-bottom: var(--space-section);
+}
+
+.context-facts[data-emphasis='primary'] {
+  padding: var(--space-large);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-panel);
+  background: var(--color-background-elevated);
+}
+
+.context-facts[data-emphasis='primary'] .rail-section-title {
+  font: var(--text-heading);
+  color: var(--color-text);
+}
+
+.context-facts[data-emphasis='primary'] > div:not(.aside-panel-head) {
+  padding: var(--space-medium) 0 !important;
+}
+
+.working-open-loops {
+  margin-top: var(--space-medium);
+  padding: var(--space-large);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-panel);
+  background: var(--color-background-elevated);
+}
+
+.working-open-loops h2 {
+  font: var(--text-heading);
+}
+
+.working-open-loops .aside-panel-head > span {
+  font: var(--text-metadata);
+  color: var(--color-text-tertiary);
+}
+
+.working-loop-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-small);
+  width: 100%;
+  padding: var(--space-small) 0;
+  border: 0;
+  border-top: 1px solid var(--color-separator);
+  background: none;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.working-loop-row > :last-child {
+  font: var(--text-metadata);
+  color: var(--color-text-secondary);
+}
+
 /* Below the desktop rail the Remember container dissolves (display:contents)
    and its sections interleave with history in the reading order the plan
    requires: follow-ups, facts, relationships, history, talking points. */
@@ -3056,30 +3208,30 @@ a.memory-person-link:hover {
   }
 
   .remember-followups {
-    order: 1;
-  }
-
-  .remember-facts {
-    order: 2;
-  }
-
-  .remember-people {
     order: 3;
   }
 
-  .person-history {
+  .remember-facts {
     order: 4;
   }
 
-  .remember-next {
+  .remember-people {
     order: 5;
+  }
+
+  .person-history {
+    order: 1;
+  }
+
+  .remember-next {
+    order: 2;
   }
 }
 
 @media (min-width: 1024px) {
   .person-cols {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-columns: minmax(0, 1fr) 340px;
     gap: var(--space-generous);
     align-items: start;
   }
@@ -3142,6 +3294,33 @@ a.memory-person-link:hover {
 
 .history-head h2 {
   font: var(--text-heading);
+}
+
+.history-head p {
+  font: var(--text-sub);
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+@media (max-width: 719.98px) {
+  .person-interaction-composer {
+    padding: var(--space-medium);
+    border-radius: var(--radius-medium);
+  }
+
+  .interaction-summary-grid {
+    flex-direction: column;
+  }
+
+  .interaction-summary-grid > label,
+  .interaction-summary-grid > label:last-child {
+    width: 100%;
+  }
+
+  .context-facts[data-emphasis='primary'],
+  .working-open-loops {
+    padding: var(--space-medium);
+  }
 }
 
 .timeline-month-title {

@@ -253,11 +253,17 @@ export function FactsSection({
   person,
   observations,
   addSignal = 0,
+  title = 'Profile details',
+  includeAttributes,
+  emphasis = 'secondary',
 }: {
   person: Person
   observations: Observation[]
   /// Bumping this from outside opens the add dialog — the header overflow.
   addSignal?: number
+  title?: string
+  includeAttributes?: FactAttribute[]
+  emphasis?: 'primary' | 'secondary'
 }) {
   const uid = useUID()
   const now = new Date()
@@ -269,7 +275,9 @@ export function FactsSection({
   const [historyFor, setHistoryFor] = useState<FactAttribute | null>(null)
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
 
-  const attributes = populatedAttributes(observations)
+  const attributes = populatedAttributes(observations).filter(
+    (attribute) => includeAttributes === undefined || includeAttributes.includes(attribute),
+  )
 
   async function confirm(observation: Observation) {
     const { plan } = planConfirmObservation(observation, new Date())
@@ -277,17 +285,15 @@ export function FactsSection({
   }
 
   return (
-    <section className="rail-section remember-facts">
+    <section className="rail-section remember-facts context-facts" data-emphasis={emphasis}>
       <div className="aside-panel-head">
-        <h2 className="rail-section-title">Key facts</h2>
+        <h2 className="rail-section-title">{title}</h2>
         <button type="button" className="button button-plain button-small" onClick={() => setAdding(true)}>
           Add a fact
         </button>
       </div>
 
-      {attributes.length === 0 && (
-        <p className="row-subtitle">Nothing recorded. Facts you add keep their date and their source.</p>
-      )}
+      {attributes.length === 0 && <p className="row-subtitle">Nothing recorded in this section yet.</p>}
 
       {attributes.map((attribute) => {
         const values = currentValues(observations, attribute)
