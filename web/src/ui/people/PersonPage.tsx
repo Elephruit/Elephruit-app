@@ -368,7 +368,8 @@ export function PersonPage() {
         <Icon name="back" size={14} /> Back
       </button>
 
-      <div className="profile-overview">
+      <div className="person-cols">
+        <div className="person-history">
         <header className="profile-header">
           <Avatar name={person.displayName} colorName={person.colorName} size="lg" unnamed={!person.hasStatedName} />
           <div className="profile-id">
@@ -495,25 +496,8 @@ export function PersonPage() {
           </div>
         </header>
 
-        <aside className="profile-next" aria-label="Next time">
-          <h2 className="remember-eyebrow">Next up</h2>
-          {observations && relationships && reminders && interactions && people && (
-            <TalkingPointsPanel
-              person={person}
-              people={people}
-              observations={observations}
-              relationships={relationships}
-              reminders={reminders}
-              interactions={interactions}
-            />
-          )}
-        </aside>
-      </div>
+        {loggingInteraction && <PersonInteractionComposer person={person} onClose={() => setLoggingInteraction(false)} />}
 
-      {loggingInteraction && <PersonInteractionComposer person={person} onClose={() => setLoggingInteraction(false)} />}
-
-      <div className="person-cols">
-        <div className="person-history">
           <div className="person-primary-context">
             <FactsSection
               person={person}
@@ -596,6 +580,19 @@ export function PersonPage() {
         </div>
 
         <aside className="person-context remember-rail" aria-label="Person context">
+          <div className="profile-next" aria-label="Next time">
+            <h2 className="remember-eyebrow">Next up</h2>
+            {observations && relationships && reminders && interactions && people && (
+              <TalkingPointsPanel
+                person={person}
+                people={people}
+                observations={observations}
+                relationships={relationships}
+                reminders={reminders}
+                interactions={interactions}
+              />
+            )}
+          </div>
           {observations && secondaryAttributes.length > 0 && (
             <FactsSection
               person={person}

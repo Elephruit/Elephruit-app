@@ -3976,13 +3976,6 @@ a.memory-person-link:hover {
   margin: var(--space-small) 0 var(--space-large);
 }
 
-.profile-overview {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: var(--space-generous);
-  align-items: start;
-}
-
 .profile-next {
   min-width: 0;
   padding-top: var(--space-small);
@@ -4008,13 +4001,8 @@ a.memory-person-link:hover {
 }
 
 @media (max-width: 1023.98px) {
-  .profile-overview {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-  }
-
   .profile-next {
-    margin-bottom: var(--space-large);
+    display: contents;
   }
 }
 
