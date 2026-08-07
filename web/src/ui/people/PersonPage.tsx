@@ -1,8 +1,8 @@
 /// A person's page answers, in order: who is this, what happened with them,
 /// what matters now, what to remember next. The header is the identity — for
 /// an unnamed person the relationship word and distinguishing facts, never
-/// just a possessive phrase — and the right rail is one Remember hierarchy:
-/// Next time, Open follow-ups, Key facts, People in their life.
+/// just a possessive phrase. The board has one document scroll: active work
+/// stays in the main column while supporting context sits alongside it.
 
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -23,7 +23,6 @@ import {
 import { summarizePerson } from '../../domain/personSummary'
 import { profileFocusOf, type ConnectionOrigin, type Person } from '../../domain/person'
 import { formatScheduleSummary } from '../../domain/temporal'
-import { bucketFor } from '../../domain/reminders'
 import { applyPlan } from '../../data/applyPlan'
 import {
   useAllRelationships,
@@ -269,7 +268,7 @@ export function PersonPage() {
     : null
 
   return (
-    <PageScaffold width="wide">
+    <PageScaffold width="wide" className="person-page">
       <button type="button" className="backlink" onClick={() => navigate(-1)}>
         <Icon name="back" size={14} /> Back
       </button>
@@ -288,8 +287,10 @@ export function PersonPage() {
               {originParts.length > 1 || firstMetLine ? 'Edit' : 'Add how you met'}
             </button>
           </p>
-          {firstMetLine && <p className="profile-first-met">{firstMetLine}</p>}
-          <p className="profile-last">{lastContactLine(derivedLastContact, now, hasProfileData)}</p>
+          <div className="profile-contact-meta">
+            {firstMetLine && <p className="profile-first-met">{firstMetLine}</p>}
+            <p className="profile-last">{lastContactLine(derivedLastContact, now, hasProfileData)}</p>
+          </div>
           {chips.length > 0 && (
             <div className="profile-chips">
               {chips.map((chip) => (
@@ -483,35 +484,6 @@ export function PersonPage() {
               reminders={reminders}
               interactions={interactions}
             />
-          )}
-
-          {openFollowUps.length > 0 && (
-            <section className="rail-section remember-followups">
-              <h4 className="rail-section-title">Open follow-ups</h4>
-              {openFollowUps.map((reminder) => {
-                const bucket = bucketFor(reminder, now)
-                const schedule = formatScheduleSummary(reminder) ?? 'Anytime'
-                return (
-                  <div key={reminder.id} className="rail-row" data-static>
-                    <button
-                      type="button"
-                      className="complete-ring"
-                      aria-label={`Complete ${reminder.title}`}
-                      onClick={() => void toggleReminder(reminder.id, true)}
-                    />
-                    <span className="rail-row-text">
-                      <b>{reminder.title}</b>
-                    </span>
-                    <span
-                      className="rail-row-when tabular"
-                      data-tone={bucket === 'overdue' ? 'overdue' : bucket === 'today' ? 'today' : undefined}
-                    >
-                      {schedule}
-                    </span>
-                  </div>
-                )
-              })}
-            </section>
           )}
 
           {observations && secondaryAttributes.length > 0 && (

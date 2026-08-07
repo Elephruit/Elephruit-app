@@ -2939,6 +2939,10 @@ a.memory-person-link:hover {
 
 /* MARK: Person workspace — profile header over two columns */
 
+.page-scaffold.person-page {
+  padding-top: var(--space-large);
+}
+
 .backlink {
   display: inline-flex;
   align-items: center;
@@ -2961,14 +2965,14 @@ a.memory-person-link:hover {
 .profile-header {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-large);
-  margin: var(--space-medium) 0 var(--space-section);
+  gap: var(--space-medium);
+  margin: var(--space-small) 0 var(--space-large);
 }
 
 .profile-header .avatar-large {
-  width: 64px;
-  height: 64px;
-  font-size: 1.3rem;
+  width: 56px;
+  height: 56px;
+  font-size: 1.15rem;
 }
 
 @media (max-width: 719.98px) {
@@ -2993,7 +2997,7 @@ a.memory-person-link:hover {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-tight);
-  margin-top: var(--space-small);
+  margin-top: var(--space-tight);
 }
 
 .profile-id {
@@ -3014,6 +3018,21 @@ a.memory-person-link:hover {
 }
 
 .profile-last {
+  color: var(--color-text-tertiary);
+}
+
+.profile-contact-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  column-gap: var(--space-medium);
+  row-gap: 2px;
+  margin-top: var(--space-tight);
+}
+
+.profile-contact-meta p + p::before {
+  content: '\00b7';
+  margin-right: var(--space-medium);
   color: var(--color-text-tertiary);
 }
 
@@ -3043,12 +3062,12 @@ a.memory-person-link:hover {
 .profile-first-met {
   color: var(--color-text) !important;
   font: var(--text-label) !important;
-  margin-top: var(--space-tight);
 }
 
 .profile-actions {
   flex: none;
   display: flex;
+  align-items: center;
   gap: var(--space-small);
 }
 
@@ -3195,9 +3214,8 @@ a.memory-person-link:hover {
   color: var(--color-text-secondary);
 }
 
-/* Below the desktop rail the Remember container dissolves (display:contents)
-   and its sections interleave with history in the reading order the plan
-   requires: follow-ups, facts, relationships, history, talking points. */
+/* Below the desktop rail the context container dissolves and its sections
+   interleave with history in one reading order. */
 @media (max-width: 1023.98px) {
   .person-context.remember-rail {
     display: contents;
@@ -3237,10 +3255,6 @@ a.memory-person-link:hover {
   }
 
   .person-context.remember-rail {
-    position: sticky;
-    top: 24px;
-    max-height: calc(100dvh - 48px);
-    overflow-y: auto;
     min-width: 0;
   }
 }

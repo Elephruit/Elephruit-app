@@ -6,9 +6,17 @@ import type { ReactNode } from 'react'
 
 export type PageWidth = 'narrow' | 'reading' | 'wide'
 
-export function PageScaffold({ width = 'reading', children }: { width?: PageWidth; children: ReactNode }) {
+export function PageScaffold({
+  width = 'reading',
+  className,
+  children,
+}: {
+  width?: PageWidth
+  className?: string
+  children: ReactNode
+}) {
   return (
-    <main className="page-scaffold" data-width={width}>
+    <main className={['page-scaffold', className].filter(Boolean).join(' ')} data-width={width}>
       {children}
     </main>
   )
