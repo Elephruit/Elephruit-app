@@ -78,7 +78,7 @@
   --text-heading: 600 1.05rem/1.35 var(--font-sans);
   --text-body: 400 0.9375rem/1.45 var(--font-sans);
   --text-body-strong: 500 0.9375rem/1.45 var(--font-sans);
-  --text-list-title: 500 1rem/1.4 var(--font-serif);
+  --text-list-title: var(--text-body);
   --text-sub: 400 0.8125rem/1.45 var(--font-sans);
   --text-label: 500 0.8125rem/1.4 var(--font-sans);
   --text-metadata: 400 0.75rem/1.4 var(--font-sans);
@@ -122,6 +122,7 @@
   --memory-date-node-size: 12px;
   --memory-branch-length: 35px;
   --memory-content-gap: 10px;
+  --list-control-size: 18px;
 
   /* ——— Semantic colours ——— */
   --color-text: var(--ink-900);

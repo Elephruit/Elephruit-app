@@ -4639,8 +4639,8 @@ a.memory-person-link:hover {
 
 .complete-ring {
   flex: none;
-  width: 18px;
-  height: 18px;
+  width: var(--list-control-size);
+  height: var(--list-control-size);
   border-radius: 50%;
   border: 1.6px solid var(--color-text-tertiary);
   background: none;
@@ -6080,6 +6080,7 @@ button.timeline-badge {
   align-items: center;
   border-bottom: 1px solid var(--color-separator);
   border-radius: var(--radius-medium);
+  margin: 0 calc(-1 * var(--space-small));
   transition: background var(--duration-fast) var(--ease-out);
 }
 
@@ -6093,7 +6094,11 @@ button.timeline-badge {
   align-items: center;
   gap: var(--space-medium);
   min-width: 0;
-  padding: var(--space-medium) var(--space-small);
+  padding:
+    var(--space-medium)
+    var(--space-small)
+    var(--space-medium)
+    calc(var(--space-small) + var(--list-control-size) + var(--space-medium));
   border: 0;
   background: none;
   text-align: left;
