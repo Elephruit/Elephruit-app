@@ -145,7 +145,7 @@ describe('CaptureProposalSchema', () => {
 
 describe('the request', () => {
   it('pins the gateway shape without provider-specific structured-output options', () => {
-    const params = buildRequestParams('claude-opus-5', 'SYSTEM', 'coffee with ana')
+    const params = buildRequestParams('anthropic', 'claude-opus-5', 'SYSTEM', 'coffee with ana')
     expect(params.provider).toBe('anthropic')
     expect(params.model).toBe('claude-opus-5')
     expect(params.maxTokens).toBe(8192)

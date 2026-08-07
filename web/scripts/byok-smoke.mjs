@@ -107,7 +107,11 @@ const captureRequest = {
   system: 'You turn one spoken update into a structured capture proposal.',
   maxTokens: 8192,
   effort: 'low',
-  outputFormat: { type: 'json_schema', schema: { properties: { participantNames: {} } } },
+  outputFormat: {
+    type: 'json_schema',
+    name: 'capture_proposal',
+    schema: { properties: { participantNames: {} } },
+  },
 }
 const result = await runStream(captureRequest)
 check(result.chunks > 1, `stream arrived in chunks (${result.chunks})`)

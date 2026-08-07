@@ -46,8 +46,8 @@ data; start the emulators fresh first.
 
 ## Link an AI key
 
-Settings → **AI**: paste your own Anthropic API key and the AI street runs in
-both directions. Writing: dictated updates in the capture box are parsed into
+Settings → **AI**: choose Anthropic, OpenAI, or Google Gemini, then paste your
+own API key and the AI street runs in both directions. Writing: dictated updates in the capture box are parsed into
 interactions, facts, relationships, and follow-ups — the review beside the
 text shows exactly what will be saved before anything is written. Reading:
 **Prepare my day** on the Feed (also ⌘K) briefs you on the people attached to
@@ -55,15 +55,20 @@ overdue and today follow-ups, and every person page can produce its own
 talking points. Payloads carry current facts (never restricted ones),
 relationships, open follow-ups, and recent interactions.
 
+The server allowlist currently offers Claude Opus/Sonnet/Haiku, OpenAI
+GPT-5.6 Luna and GPT-5 Nano, and Gemini 3.6 Flash and 3.5 Flash-Lite. Adding
+another model requires matching entries in the server catalog and browser
+picker; a parity test prevents either side from drifting.
+
 Custody, stated plainly: the key is sent once when you link it, encrypted
 server-side (Cloud KMS in production, a local dev cipher under the
-emulators), and decrypted only to send requests you start to
-`api.anthropic.com`. It never returns to the browser and cannot be viewed
+emulators), and decrypted only to send requests you start to the selected
+provider. It never returns to the browser and cannot be viewed
 again — Settings shows the last four characters and the server's verdict on
 it. Remove deletes our encrypted copy; revoking the key itself happens in
-the Anthropic console. Under the emulators, `AI_FAKE_ADAPTER=1` (the
-`.env.local` default) serves canned responses so the whole loop runs
-offline — keys starting `sk-ant-test-` behave per their suffix, and nothing
+the provider's console. Under the emulators, `AI_FAKE_ADAPTER=1` (the
+`.env.local` default) serves canned responses for every provider so the whole loop runs
+offline — test keys behave per their `-invalid` or `-flaky` suffix, and nothing
 is ever sent to the real API. Without a credential the capture box still
 works: **Log manually** carries your text into the composer. Architecture
 and threat model: [docs/39](../docs/39-byok-scope.md).

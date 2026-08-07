@@ -16,7 +16,7 @@ import type { CaptureProposal } from '../domain/assist'
 import { CURATED_ATTRIBUTES, attributeLabel } from '../domain/facts'
 import { INTERACTION_KINDS, type InteractionKind } from '../domain/interaction'
 import { RELATIONSHIP_KINDS, kindLabel, type RelationshipKind } from '../domain/relationships'
-import { GatewayError, runAiTask, type GatewayRequest } from './gateway'
+import { GatewayError, runAiTask, type AIProvider, type GatewayRequest } from './gateway'
 import { reportAiTaxonomyGaps } from './taxonomy'
 
 // Structured outputs want every property present and no extras; optionality is
@@ -484,9 +484,9 @@ Rules, in order of importance:
 /// without a network. Capture deliberately uses prompt-directed JSON plus a
 /// tolerant local normalizer: provider structured-output grammars have varied
 /// across models and must not turn a valid streamed reply into a total failure.
-export function buildRequestParams(model: string, system: string, text: string) {
+export function buildRequestParams(provider: AIProvider, model: string, system: string, text: string) {
   return {
-    provider: 'anthropic' as const,
+    provider,
     model,
     maxTokens: 8192,
     system,
@@ -521,11 +521,11 @@ export function extractJsonPayload(raw: string): string {
 
 export async function parseCapture(
   text: string,
-  options: { credentialId: string; model: string; context: CaptureContext },
+  options: { credentialId: string; provider: AIProvider; model: string; context: CaptureContext },
 ): Promise<CaptureProposal> {
   try {
     const request: GatewayRequest = {
-      ...buildRequestParams(options.model, buildSystemPrompt(options.context), text),
+      ...buildRequestParams(options.provider, options.model, buildSystemPrompt(options.context), text),
       credentialId: options.credentialId,
     }
     const { text: reply, final } = await runAiTask(request)

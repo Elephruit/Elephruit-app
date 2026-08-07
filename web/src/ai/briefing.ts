@@ -4,11 +4,10 @@
 /// key, schema-validated output, and the model sees only what
 /// domain/briefing.ts decided it may see.
 
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { z } from 'zod'
 import type { BriefingInput } from '../domain/briefing'
 import { AICaptureError } from './anthropic'
-import { GatewayError, runAiTask, wireOutputFormat, type GatewayRequest } from './gateway'
+import { GatewayError, runAiTask, zodOutputFormat, type AIProvider, type GatewayRequest } from './gateway'
 
 export const DayBriefSchema = z.object({
   people: z.array(
@@ -40,25 +39,25 @@ export function buildBriefingSystemPrompt(): string {
   ].join('\n')
 }
 
-export function buildBriefingRequestParams(model: string, input: BriefingInput) {
+export function buildBriefingRequestParams(provider: AIProvider, model: string, input: BriefingInput) {
   return {
-    provider: 'anthropic' as const,
+    provider,
     model,
     maxTokens: 8192,
     system: buildBriefingSystemPrompt(),
     messages: [{ role: 'user' as const, content: JSON.stringify(input) }],
     effort: 'low' as const,
-    outputFormat: wireOutputFormat(zodOutputFormat(DayBriefSchema)),
+    outputFormat: zodOutputFormat('day_brief', DayBriefSchema),
   }
 }
 
 export async function generateDayBrief(
   input: BriefingInput,
-  options: { credentialId: string; model: string },
+  options: { credentialId: string; provider: AIProvider; model: string },
 ): Promise<DayBrief> {
   try {
     const request: GatewayRequest = {
-      ...buildBriefingRequestParams(options.model, input),
+      ...buildBriefingRequestParams(options.provider, options.model, input),
       credentialId: options.credentialId,
     }
     const { text, final } = await runAiTask(request)

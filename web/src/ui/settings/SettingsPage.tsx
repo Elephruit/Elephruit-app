@@ -7,8 +7,15 @@ import {
   verifyAiCredential,
   type AiCredential,
 } from '../../ai/credentials'
-import { GatewayError } from '../../ai/gateway'
-import { AI_MODELS, clearLegacyAPIKey, legacyStoredAPIKey, setModel, storedModel } from '../../ai/settings'
+import { GatewayError, type AIProvider } from '../../ai/gateway'
+import {
+  DEFAULT_MODEL_BY_PROVIDER,
+  clearLegacyAPIKey,
+  legacyStoredAPIKey,
+  modelsForProvider,
+  setAISelection,
+  storedAISelection,
+} from '../../ai/settings'
 import { signOutUser } from '../../data/auth'
 import { usingEmulators } from '../../data/firebase'
 import { useAiCredentials } from '../../data/hooks'
@@ -30,11 +37,19 @@ const STATUS_CHIP: Record<AiCredential['status'], { className: string; label: st
   revoked: { className: 'chip chip-status-overdue', label: 'Revoked' },
 }
 
+const PROVIDERS: Record<AIProvider, { name: string; keyLabel: string; placeholder: string; consoleName: string }> = {
+  anthropic: { name: 'Anthropic', keyLabel: 'Anthropic API key', placeholder: 'sk-ant-…', consoleName: 'Anthropic console' },
+  openai: { name: 'OpenAI', keyLabel: 'OpenAI API key', placeholder: 'sk-proj-…', consoleName: 'OpenAI dashboard' },
+  google: { name: 'Google Gemini', keyLabel: 'Google API key', placeholder: 'AIza…', consoleName: 'Google AI Studio' },
+}
+
 export function SettingsPage() {
   const uid = useUID()
   const developerAdmin = useDeveloperAdmin()
   const credentials = useAiCredentials(uid)
-  const credential = credentials?.[0] ?? null
+  const [selection, setSelectionState] = useState(storedAISelection())
+  const providerInfo = PROVIDERS[selection.provider]
+  const credential = credentials?.find((item) => item.provider === selection.provider) ?? null
 
   const [keyDraft, setKeyDraft] = useState('')
   const [showKey, setShowKey] = useState(false)
@@ -44,7 +59,6 @@ export function SettingsPage() {
   const [replacing, setReplacing] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [legacyKey, setLegacyKey] = useState<string | null>(() => legacyStoredAPIKey())
-  const [model, setModelState] = useState(storedModel())
   const [theme, setThemeState] = useState<ThemePreference>(themePreference())
   const keyInputRef = useRef<HTMLInputElement>(null)
 
@@ -62,7 +76,8 @@ export function SettingsPage() {
     if (!rawKey.trim() || busy) return
     beginAction('link')
     try {
-      const summary = await addAiCredential(rawKey.trim())
+      const provider = options.fromLegacy ? 'anthropic' : selection.provider
+      const summary = await addAiCredential(provider, rawKey.trim())
       if (options.fromLegacy) {
         clearLegacyAPIKey()
         setLegacyKey(null)
@@ -124,7 +139,8 @@ export function SettingsPage() {
   }
 
   const headChip = credential ? STATUS_CHIP[credential.status] : null
-  const showAddForm = credentials !== undefined && !credential && !legacyKey
+  const migratableLegacyKey = selection.provider === 'anthropic' ? legacyKey : null
+  const showAddForm = credentials !== undefined && !credential && !migratableLegacyKey
   const showKeyInput = showAddForm || (credential !== null && replacing)
 
   return (
@@ -147,12 +163,34 @@ export function SettingsPage() {
           {headChip && <span className={headChip.className}>{headChip.label}</span>}
         </div>
         <p className="settings-help">
-          Your own Anthropic key, in both directions: dictated updates parsed into interactions, facts, and
+          Your own provider key, in both directions: dictated updates parsed into interactions, facts, and
           follow-ups — always reviewed before anything is written — and briefs that prepare you for the people
           you're seeing. When you link it, the key is encrypted and kept server-side; each request you start
-          decrypts it there just long enough to call Anthropic. It is never shown again and never returns to this
+          decrypts it there just long enough to call your selected provider. It is never shown again and never returns to this
           browser. Restricted facts never enter any request.
         </p>
+
+        <FormField label="Provider" htmlFor="ai-provider">
+          <select
+            id="ai-provider"
+            className="field"
+            value={selection.provider}
+            onChange={(event) => {
+              const provider = event.target.value as AIProvider
+              const next = { provider, model: DEFAULT_MODEL_BY_PROVIDER[provider] }
+              setSelectionState(next)
+              setAISelection(next)
+              setReplacing(false)
+              setKeyDraft('')
+              setError(null)
+              setNotice(null)
+            }}
+          >
+            <option value="anthropic">Anthropic</option>
+            <option value="openai">OpenAI</option>
+            <option value="google">Google Gemini</option>
+          </select>
+        </FormField>
 
         {credentials === undefined && (
           <div className="settings-key-row">
@@ -160,7 +198,7 @@ export function SettingsPage() {
           </div>
         )}
 
-        {credentials !== undefined && !credential && legacyKey && (
+        {credentials !== undefined && !credential && migratableLegacyKey && (
           <div className="callout callout-stacked">
             <p>
               A key from the earlier version of this app is still stored in this browser. Link it to your account —
@@ -168,7 +206,7 @@ export function SettingsPage() {
               without your say-so.
             </p>
             <span className="settings-key-actions">
-              <Button variant="primary" small loading={busy === 'link'} onClick={() => void linkKey(legacyKey, { fromLegacy: true })}>
+              <Button variant="primary" small loading={busy === 'link'} onClick={() => void linkKey(migratableLegacyKey, { fromLegacy: true })}>
                 Link this key
               </Button>
               <Button
@@ -185,7 +223,7 @@ export function SettingsPage() {
           </div>
         )}
 
-        {credential && legacyKey && (
+        {selection.provider === 'anthropic' && credential && legacyKey && (
           <div className="callout callout-stacked">
             <p>
               An old copy of a key is still in this browser's local storage. Your credential now lives server-side,
@@ -208,7 +246,7 @@ export function SettingsPage() {
 
         {credential && !replacing && (
           <div className="settings-key-row">
-            <span className="row-subtitle">sk-ant-…{credential.keyHint}</span>
+            <span className="row-subtitle">••••…{credential.keyHint}</span>
             <span className="settings-key-actions">
               {credential.status !== 'active' && (
                 <Button variant="secondary" small loading={busy === 'verify'} onClick={() => void verifyNow()}>
@@ -236,13 +274,13 @@ export function SettingsPage() {
 
         {credential?.status === 'invalid' && !replacing && (
           <p className="settings-help">
-            The provider stopped accepting this key. Replace it, or verify again after fixing it in the Anthropic
-            console.
+            The provider stopped accepting this key. Replace it, or verify again after fixing it in the{' '}
+            {providerInfo.consoleName}.
           </p>
         )}
 
         {showKeyInput && (
-          <FormField label={replacing ? 'New Anthropic API key' : 'Anthropic API key'} htmlFor="ai-key">
+          <FormField label={replacing ? `New ${providerInfo.keyLabel}` : providerInfo.keyLabel} htmlFor="ai-key">
             <div className="settings-key-input">
               <input
                 ref={keyInputRef}
@@ -251,7 +289,7 @@ export function SettingsPage() {
                 type={showKey ? 'text' : 'password'}
                 value={keyDraft}
                 onChange={(event) => setKeyDraft(event.target.value)}
-                placeholder="sk-ant-…"
+                placeholder={providerInfo.placeholder}
                 autoComplete="off"
                 spellCheck={false}
               />
@@ -304,13 +342,14 @@ export function SettingsPage() {
           <select
             id="ai-model"
             className="field"
-            value={model}
+            value={selection.model}
             onChange={(event) => {
-              setModelState(event.target.value)
-              setModel(event.target.value)
+              const next = { ...selection, model: event.target.value }
+              setSelectionState(next)
+              setAISelection(next)
             }}
           >
-            {AI_MODELS.map((choice) => (
+            {modelsForProvider(selection.provider).map((choice) => (
               <option key={choice.id} value={choice.id}>
                 {choice.label}
               </option>
@@ -359,7 +398,7 @@ export function SettingsPage() {
         <Dialog title="Remove this credential?" onClose={() => setConfirmingDelete(false)}>
           <p>
             AI features stop working until you link another key. Removing it here deletes the encrypted copy on our
-            side but does not revoke the key at Anthropic — do that in the Anthropic console if the key itself is
+            side but does not revoke the key at {providerInfo.name} — do that in the {providerInfo.consoleName} if the key itself is
             compromised.
           </p>
           <div className="sheet-actions">

@@ -9,7 +9,7 @@ import { Link } from 'react-router-dom'
 import { generateDayBrief, type DayBrief } from '../../ai/briefing'
 import { AICaptureError } from '../../ai/anthropic'
 import { activeCredential } from '../../ai/credentials'
-import { storedModel } from '../../ai/settings'
+import { storedAISelection } from '../../ai/settings'
 import { useAiCredentials, useAllObservations, useAllRelationships } from '../../data/hooks'
 import { briefingInputFor, defaultBriefingPersonIDs } from '../../domain/briefing'
 import type { Observation } from '../../domain/facts'
@@ -44,7 +44,8 @@ export function DayBriefPanel({
   const [error, setError] = useState<string | null>(null)
 
   const credentials = useAiCredentials(uid)
-  const credential = activeCredential(credentials)
+  const selection = storedAISelection()
+  const credential = activeCredential(credentials, selection.provider)
   const ready = credential !== null
   const peopleByID = useMemo(() => new Map(people.map((p) => [p.id, p])), [people])
   const peopleByName = useMemo(() => new Map(people.map((p) => [p.displayName, p])), [people])
@@ -82,7 +83,7 @@ export function DayBriefPanel({
         interactions,
         new Date(),
       )
-      setBrief(await generateDayBrief(input, { credentialId: credential.id, model: storedModel() }))
+      setBrief(await generateDayBrief(input, { credentialId: credential.id, ...selection }))
     } catch (cause) {
       setError(cause instanceof AICaptureError ? cause.message : 'Something went wrong. Nothing was lost.')
     } finally {
@@ -121,7 +122,7 @@ export function DayBriefPanel({
             <div className="callout">
               <Icon name="sparkle" size={18} />
               <p>
-                <Link to="/settings">Link an Anthropic API key in Settings</Link> to generate briefs. Your data goes
+                <Link to="/settings">Link an AI provider key in Settings</Link> to generate briefs. Your data goes
                 out under your own key, and only when you ask.
               </p>
             </div>

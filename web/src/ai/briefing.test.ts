@@ -37,7 +37,7 @@ describe('the day brief', () => {
   })
 
   it('pins the gateway request shape: chosen model, low effort, the payload as one user turn', () => {
-    const params = buildBriefingRequestParams('claude-opus-5', INPUT)
+    const params = buildBriefingRequestParams('anthropic', 'claude-opus-5', INPUT)
     expect(params.provider).toBe('anthropic')
     expect(params.model).toBe('claude-opus-5')
     expect(params.maxTokens).toBe(8192)

@@ -21,8 +21,9 @@ Cloud Functions (2nd gen, streaming callables)
   │  → resolve the CALLER's credential (uid-keyed path) → concurrency lease
   │  → decrypt (Cloud KMS in production, AES-256-GCM dev cipher in emulator)
   │  → fixed provider adapter → normalized text deltas + normalized outcome
-  ▼
-api.anthropic.com
+  ├─ Anthropic Messages API
+  ├─ OpenAI Responses API (`store: false`)
+  └─ Google Gemini Interactions API (`store: false`)
 ```
 
 Everything is a **callable**: credential lifecycle (`addAiCredential`,
@@ -42,7 +43,8 @@ client already derives from its zod schemas — bounded at 32KB and a
 key, which is why it earns no deeper inspection; it is what lets the two
 structured-output features ride a generic gateway without losing their
 schema guarantees. Replies are re-validated client-side against the same zod
-schema before anything reaches a write plan.
+schema before anything reaches a write plan. Each adapter translates that
+provider-neutral format into its provider's structured-output vocabulary.
 
 ## Data model
 
@@ -115,8 +117,8 @@ error-reporting — nothing to mask, and keeping it that way is the control.
 
 ## The emulator story
 
-`AI_FAKE_ADAPTER=1` (emulator-only, enforced at startup) swaps the
-Anthropic adapter for a deterministic fake: canned schema-valid capture
+`AI_FAKE_ADAPTER=1` (emulator-only, enforced at startup) swaps every
+provider adapter for a deterministic fake: canned schema-valid capture
 proposals and day briefs (echoing the briefed people by name), test keys
 `…-invalid` / `…-flaky` for the failure paths, every outcome tagged
 `adapter:'fake'` so the smoke can prove no real provider was contacted. A
@@ -174,8 +176,7 @@ fail the build, not the user.
 
 ## Deferred, deliberately
 
-OpenAI/Google adapters (the registry and normalized request already speak
-plural) · Memorystore/Redis rate limiting · account-deletion trigger
+Memorystore/Redis rate limiting · account-deletion trigger
 (obligation documented) · incremental streaming UI (the client accumulates;
 both features are structured-output) · App Check debug-token flows (no real
 project yet).
