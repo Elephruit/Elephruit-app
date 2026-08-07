@@ -55,7 +55,7 @@ export function PersonContextDraftEditor({
       </div>
       <div className="draft-editor-pair">
         <FormField label={item.connectionStatus === 'introductionPlanned' ? 'First meeting' : 'First met'} htmlFor={`${id}-date`}>
-          <input id={`${id}-date`} type="date" className="field" value={item.firstMetOn} onChange={(event) => update({ firstMetOn: event.target.value })} />
+          <input id={`${id}-date`} type="month" className="field" value={item.firstMetOn} onChange={(event) => update({ firstMetOn: event.target.value })} />
         </FormField>
         <FormField label="Introduced by" htmlFor={`${id}-introducer`}>
           <select id={`${id}-introducer`} className="field field-select" value={item.introducedBySlotID ?? ''} onChange={(event) => update({ introducedBySlotID: event.target.value || null })}>

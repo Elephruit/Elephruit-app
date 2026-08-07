@@ -40,6 +40,16 @@ import {
 } from './temporal'
 import type { WritePlan } from './writePlan'
 
+function monthValue(value: string | null | undefined): string {
+  const match = /^(\d{4})-(\d{2})/.exec(value ?? '')
+  return match ? `${match[1]}-${match[2]}` : ''
+}
+
+function dateFromMonthValue(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})$/.exec(value)
+  return match ? new Date(Number(match[1]), Number(match[2]) - 1, 1, 12) : null
+}
+
 // MARK: Person slots
 
 /// One mentioned person, shared by every draft item that references them —
@@ -215,7 +225,7 @@ export function draftFromResolved(resolved: ResolvedCapture, now: Date): Resolve
           roleTitle: item.roleTitle ?? '',
           organizationName: item.organizationName ?? '',
           connectionStatus: item.connectionStatus,
-          firstMetOn: item.firstMetOn ?? '',
+          firstMetOn: monthValue(item.firstMetOn),
           context: item.context ?? '',
           introducedBySlotID: item.introducedBy ? ensureSlot(item.introducedBy) : null,
         })
@@ -607,7 +617,7 @@ export function planFromReviewDraft(
             organizationName: item.organizationName.trim() || null,
             connectionOrigin: {
               status: item.connectionStatus,
-              firstMetOn: item.firstMetOn ? new Date(`${item.firstMetOn}T12:00:00`) : null,
+              firstMetOn: dateFromMonthValue(item.firstMetOn),
               context: item.context.trim() || null,
               introducedByPersonID: introducedBy?.id ?? null,
             },

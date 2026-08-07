@@ -45,7 +45,7 @@ import { Icon } from '../components/Icon'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { SkeletonRows } from '../components/Skeleton'
 import { TimelineRow } from '../components/TimelineRow'
-import { fromLocalInputValue, toLocalDateValue } from '../dateInput'
+import { fromLocalMonthValue, toLocalMonthValue } from '../dateInput'
 import { PageScaffold } from '../shell/PageScaffold'
 import { FactsSection } from './FactsSection'
 import { CommitmentBoard } from './CommitmentBoard'
@@ -128,7 +128,7 @@ function ConnectionContextDialog({
 }) {
   const existing = person.connectionOrigin
   const [status, setStatus] = useState<ConnectionOrigin['status']>(existing?.status ?? 'unknown')
-  const [firstMetOn, setFirstMetOn] = useState(() => existing?.firstMetOn ? toLocalDateValue(existing.firstMetOn) : '')
+  const [firstMetOn, setFirstMetOn] = useState(() => existing?.firstMetOn ? toLocalMonthValue(existing.firstMetOn) : '')
   const [context, setContext] = useState(existing?.context ?? '')
   const [introducedByPersonID, setIntroducedByPersonID] = useState(existing?.introducedByPersonID ?? '')
   const [saving, setSaving] = useState(false)
@@ -142,7 +142,7 @@ function ConnectionContextDialog({
         <option value="met">Already met</option>
       </select>
       <label className="field-label" htmlFor="connection-date">{status === 'introductionPlanned' ? 'First meeting' : 'First met'}</label>
-      <input id="connection-date" className="field" type="date" value={firstMetOn} onChange={(event) => setFirstMetOn(event.target.value)} />
+      <input id="connection-date" className="field" type="month" value={firstMetOn} onChange={(event) => setFirstMetOn(event.target.value)} />
       <label className="field-label" htmlFor="connection-introducer">Introduced by</label>
       <select id="connection-introducer" className="field" value={introducedByPersonID} onChange={(event) => setIntroducedByPersonID(event.target.value)}>
         <option value="">Nobody recorded</option>
@@ -156,7 +156,7 @@ function ConnectionContextDialog({
           setSaving(true)
           void onSave({
             status,
-            firstMetOn: firstMetOn ? fromLocalInputValue(`${firstMetOn}T12:00`) : null,
+            firstMetOn: firstMetOn ? fromLocalMonthValue(firstMetOn) : null,
             context: context.trim() || null,
             introducedByPersonID: introducedByPersonID || null,
           }).finally(() => setSaving(false))
@@ -357,7 +357,7 @@ export function PersonPage() {
   ].filter(Boolean)
 
   const firstMetLine = summary?.firstMetOn
-    ? `${summary.firstMeetingPlanned ? 'First meeting' : 'First met'} ${summary.firstMetOn.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: summary.firstMetOn.getFullYear() === now.getFullYear() ? undefined : 'numeric' })}${summary.firstMetContext ? ` · ${summary.firstMetContext}` : ''}`
+    ? `${summary.firstMeetingPlanned ? 'First meeting' : 'First met'} ${summary.firstMetOn.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}${summary.firstMetContext ? ` · ${summary.firstMetContext}` : ''}`
     : summary?.firstMetContext
       ? `How you met · ${summary.firstMetContext}`
       : null
