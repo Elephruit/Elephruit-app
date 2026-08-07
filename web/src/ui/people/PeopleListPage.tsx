@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { relativeDescription } from '../../domain/contact'
 import { startOfDay, wholeDaysBetween } from '../../domain/dates'
 import { foldedForMatching, type Person } from '../../domain/person'
+import { professionalIdentityOf } from '../../domain/personSummary'
+import type { Observation } from '../../domain/facts'
 import { bucketFor, nextOpenReminderByPerson, type Reminder } from '../../domain/reminders'
 import { useAllObservations, useAllRelationships, usePeople, useReminders } from '../../data/hooks'
 import { useUID } from '../UserContext'
@@ -16,9 +18,10 @@ import { CreatePersonSheet } from './CreatePersonSheet'
 
 type SortOrder = 'name' | 'recent' | 'quiet'
 
-function subtitle(person: Person): string | null {
-  if (person.roleTitle && person.organizationName) return `${person.roleTitle} · ${person.organizationName}`
-  return person.roleTitle ?? person.organizationName
+function subtitle(person: Person, observations: Observation[]): string | null {
+  const identity = professionalIdentityOf(person, observations)
+  if (identity.role && identity.organization) return `${identity.role} · ${identity.organization}`
+  return identity.role ?? identity.organization
 }
 
 const COMPARATORS: Record<SortOrder, (a: Person, b: Person) => number> = {
@@ -95,6 +98,15 @@ export function PeopleListPage() {
   }, [people, query, order])
 
   const nextByPerson = useMemo(() => nextOpenReminderByPerson(reminders ?? []), [reminders])
+  const observationsByPerson = useMemo(() => {
+    const byPerson = new Map<string, Observation[]>()
+    for (const observation of observations ?? []) {
+      const rows = byPerson.get(observation.subjectID) ?? []
+      rows.push(observation)
+      byPerson.set(observation.subjectID, rows)
+    }
+    return byPerson
+  }, [observations])
 
   return (
     <PageScaffold width="wide">
@@ -158,7 +170,9 @@ export function PeopleListPage() {
               <Avatar name={person.displayName} colorName={person.colorName} unnamed={!person.hasStatedName} />
               <span className="person-main">
                 <span className="row-title">{person.displayName}</span>
-                {subtitle(person) && <span className="row-subtitle">{subtitle(person)}</span>}
+                {subtitle(person, observationsByPerson.get(person.id) ?? []) && (
+                  <span className="row-subtitle">{subtitle(person, observationsByPerson.get(person.id) ?? [])}</span>
+                )}
               </span>
               <span className="person-last">
                 {person.lastContactAt

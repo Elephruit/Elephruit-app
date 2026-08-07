@@ -16,9 +16,24 @@ export interface PersonSummary {
   nextReminder: Reminder | null
 }
 
+export interface ProfessionalIdentity {
+  role: string | null
+  organization: string | null
+}
+
 function current(observations: Observation[], attribute: string): string | null {
   return currentValues(observations, attribute)
     .find((value) => value.sensitivity !== 'restricted')?.value ?? null
+}
+
+/// Direct identity fields and the observation ledger must resolve the same way
+/// everywhere a person is summarized. Older and AI-captured profiles often
+/// carry role/company only as observations; direct fields still win when set.
+export function professionalIdentityOf(person: Person, observations: Observation[]): ProfessionalIdentity {
+  return {
+    role: person.roleTitle?.trim() || current(observations, FactAttributes.role),
+    organization: person.organizationName?.trim() || current(observations, FactAttributes.employer),
+  }
 }
 
 /// One read model for the header and working board. Direct identity fields win
@@ -34,6 +49,7 @@ export function summarizePerson(args: {
   now: Date
 }): PersonSummary {
   const { person, people, observations, relationships, interactions, reminders, now } = args
+  const professionalIdentity = professionalIdentityOf(person, observations)
   const origin = person.connectionOrigin ?? null
   const introducedByRelationship = relationships.find((relationship) => relationship.kind === 'introducedBy')
   const introducedByID = origin?.introducedByPersonID ?? introducedByRelationship?.otherID ?? null
@@ -54,8 +70,8 @@ export function summarizePerson(args: {
 
   return {
     focus: profileFocusOf(person),
-    role: person.roleTitle?.trim() || current(observations, FactAttributes.role),
-    organization: person.organizationName?.trim() || current(observations, FactAttributes.employer),
+    role: professionalIdentity.role,
+    organization: professionalIdentity.organization,
     location: current(observations, FactAttributes.location),
     introducedBy: introducedByID ? people.find((candidate) => candidate.id === introducedByID) ?? null : null,
     firstMetOn,
