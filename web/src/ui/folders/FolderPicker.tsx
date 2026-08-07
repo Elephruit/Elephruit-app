@@ -58,8 +58,49 @@ export function FolderPicker({
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const root = useRef<HTMLDivElement>(null)
+  const suppressOpenOnFocus = useRef(false)
 
   const selected = folders.find((folder) => folder.id === value) ?? null
+
+  function triggerButton() {
+    return root.current?.querySelector<HTMLButtonElement>('.folder-picker-button') ?? null
+  }
+
+  function optionButtons() {
+    return Array.from(root.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? [])
+  }
+
+  function focusOption(index: number) {
+    const options = optionButtons()
+    if (options.length === 0) return
+    options[(index + options.length) % options.length].focus()
+  }
+
+  function openAndFocus(direction: 'first' | 'last') {
+    setOpen(true)
+    onOpenChange?.(true)
+    window.setTimeout(() => {
+      const options = optionButtons()
+      const selectedIndex = options.findIndex((option) => option.getAttribute('aria-selected') === 'true')
+      if (selectedIndex >= 0) focusOption(selectedIndex)
+      else focusOption(direction === 'first' ? 0 : options.length - 1)
+    }, 0)
+  }
+
+  function focusTriggerWithoutOpening() {
+    suppressOpenOnFocus.current = true
+    triggerButton()?.focus()
+    window.setTimeout(() => {
+      suppressOpenOnFocus.current = false
+    }, 0)
+  }
+
+  function closeAndFocusTrigger() {
+    setOpen(false)
+    onOpenChange?.(false)
+    setQuery('')
+    window.setTimeout(focusTriggerWithoutOpening, 0)
+  }
 
   const rows = useMemo(() => {
     const all = flattenTree(buildTree(folders))
@@ -82,8 +123,17 @@ export function FolderPicker({
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        event.preventDefault()
         setOpen(false)
         onOpenChange?.(false)
+        setQuery('')
+        window.setTimeout(() => {
+          suppressOpenOnFocus.current = true
+          root.current?.querySelector<HTMLButtonElement>('.folder-picker-button')?.focus()
+          window.setTimeout(() => {
+            suppressOpenOnFocus.current = false
+          }, 0)
+        }, 0)
       }
     }
     window.document.addEventListener('mousedown', onPointerDown)
@@ -99,10 +149,31 @@ export function FolderPicker({
     setOpen(false)
     onOpenChange?.(false)
     setQuery('')
+    window.setTimeout(focusTriggerWithoutOpening, 0)
+  }
+
+  function moveOptionFocus(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      focusOption(index + (event.key === 'ArrowDown' ? 1 : -1))
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault()
+      const options = optionButtons()
+      focusOption(event.key === 'Home' ? 0 : options.length - 1)
+    }
   }
 
   return (
-    <div className={['folder-picker', className].filter(Boolean).join(' ')} ref={root}>
+    <div
+      className={['folder-picker', className].filter(Boolean).join(' ')}
+      ref={root}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || !open) return
+        event.preventDefault()
+        event.stopPropagation()
+        closeAndFocusTrigger()
+      }}
+    >
       <button
         ref={buttonRef}
         type="button"
@@ -115,7 +186,7 @@ export function FolderPicker({
         disabled={disabled}
         onMouseDown={onButtonMouseDown}
         onFocus={() => {
-          if (!openOnFocus || open) return
+          if (suppressOpenOnFocus.current || !openOnFocus || open) return
           setOpen(true)
           onOpenChange?.(true)
         }}
@@ -126,17 +197,21 @@ export function FolderPicker({
           })
         }}
         onKeyDown={(event) => {
-          if (event.key !== 'Tab') return
-          if (event.shiftKey && onTabBackward) {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault()
-            setOpen(false)
-            onOpenChange?.(false)
-            onTabBackward()
-          } else if (!event.shiftKey && onTabForward) {
-            event.preventDefault()
-            setOpen(false)
-            onOpenChange?.(false)
-            onTabForward()
+            openAndFocus(event.key === 'ArrowDown' ? 'first' : 'last')
+          } else if (event.key === 'Tab') {
+            if (event.shiftKey && onTabBackward) {
+              event.preventDefault()
+              setOpen(false)
+              onOpenChange?.(false)
+              onTabBackward()
+            } else if (!event.shiftKey && onTabForward) {
+              event.preventDefault()
+              setOpen(false)
+              onOpenChange?.(false)
+              onTabForward()
+            }
           }
         }}
       >
@@ -163,6 +238,12 @@ export function FolderPicker({
                 placeholder="Find a folder…"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+                  event.preventDefault()
+                  const options = optionButtons()
+                  focusOption(event.key === 'ArrowDown' ? 0 : options.length - 1)
+                }}
               />
             </div>
           )}
@@ -174,12 +255,13 @@ export function FolderPicker({
               aria-selected={value === null}
               className="folder-option"
               onClick={() => choose(null)}
+              onKeyDown={(event) => moveOptionFocus(event, 0)}
             >
               <span className="folder-option-name">{emptyLabel}</span>
               {value === null && <Icon name="check" size={13} />}
             </button>
 
-            {rows.map(({ folder, depth, showPath }) => (
+            {rows.map(({ folder, depth, showPath }, index) => (
               <button
                 key={folder.id}
                 type="button"
@@ -188,6 +270,7 @@ export function FolderPicker({
                 className="folder-option"
                 style={{ '--depth': depth } as React.CSSProperties}
                 onClick={() => choose(folder.id)}
+                onKeyDown={(event) => moveOptionFocus(event, index + 1)}
               >
                 <span
                   className="folder-picker-glyph"

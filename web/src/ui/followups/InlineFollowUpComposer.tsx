@@ -615,7 +615,7 @@ export function InlineFollowUpComposer({
             value={draft.folderID}
             onChange={(folderID) => set({ folderID })}
             label="Folder"
-            emptyLabel="Folder"
+            emptyLabel="Unfiled"
             buttonRef={folderButtonRef}
             onButtonMouseDown={(event) => event.preventDefault()}
             openOnFocus
