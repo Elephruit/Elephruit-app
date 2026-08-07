@@ -11,6 +11,7 @@ import {
 import { planPersistFollowUp } from '../../domain/followUpPlan'
 import { newID } from '../../domain/ids'
 import type { Person } from '../../domain/person'
+import type { Folder } from '../../domain/folder'
 import type { Reminder } from '../../domain/reminders'
 import { detectDeadlineFromText } from '../../domain/temporal'
 import { useUID } from '../UserContext'
@@ -19,6 +20,7 @@ import { ParticipantPicker } from '../log/ParticipantPicker'
 import { Avatar } from '../components/Avatar'
 import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
+import { FolderPicker } from '../folders/FolderPicker'
 import { CategoryTagPicker } from './CategoryTagPicker'
 import { categoryTintStyle } from './categoryStyle'
 import { FollowUpDatePicker } from './FollowUpDatePicker'
@@ -78,12 +80,14 @@ function hasDraftContent(draft: FollowUpDraft): boolean {
     draft.checklist.some((item) => item.title.trim().length > 0) ||
     draft.personIDs.size > 0 ||
     draft.categoryTags.size > 0 ||
+    draft.folderID !== null ||
     draft.schedule.scheduleMode !== 'none'
   )
 }
 
 export function InlineFollowUpComposer({
   people,
+  folders,
   tagSuggestions,
   existing = null,
   activationRequest = 0,
@@ -91,6 +95,7 @@ export function InlineFollowUpComposer({
   onClose,
 }: {
   people: Person[]
+  folders: Folder[]
   tagSuggestions: string[]
   existing?: Reminder | null
   activationRequest?: number
@@ -116,6 +121,7 @@ export function InlineFollowUpComposer({
   const peopleButtonRef = useRef<HTMLButtonElement>(null)
   const dateButtonRef = useRef<HTMLButtonElement>(null)
   const categoryButtonRef = useRef<HTMLButtonElement>(null)
+  const folderButtonRef = useRef<HTMLButtonElement>(null)
   const deleteButtonRef = useRef<HTMLButtonElement>(null)
   const cancelButtonRef = useRef<HTMLButtonElement>(null)
   const saveButtonRef = useRef<HTMLButtonElement>(null)
@@ -597,19 +603,33 @@ export function InlineFollowUpComposer({
               if (event.key !== 'Tab') return
               event.preventDefault()
               if (event.shiftKey) openPanelFromTab('date')
-              else (existing ? deleteButtonRef : cancelButtonRef).current?.focus()
+              else folderButtonRef.current?.focus()
             }}
           >
             <Icon name="tag" size={16} />
             Tags
           </button>
+          <FolderPicker
+            className="inline-folder-picker"
+            folders={folders}
+            value={draft.folderID}
+            onChange={(folderID) => set({ folderID })}
+            label="Folder"
+            emptyLabel="Folder"
+            buttonRef={folderButtonRef}
+            onOpenChange={(open) => {
+              if (open) setOpenPanel(null)
+            }}
+            onTabBackward={() => openPanelFromTab('categories')}
+            onTabForward={() => (existing ? deleteButtonRef : cancelButtonRef).current?.focus()}
+          />
           {existing && !confirmingDelete && (
             <button
               ref={deleteButtonRef}
               type="button"
               className="inline-delete-button"
               onClick={() => setConfirmingDelete(true)}
-              onKeyDown={(event) => moveOnTab(event, categoryButtonRef, cancelButtonRef)}
+              onKeyDown={(event) => moveOnTab(event, folderButtonRef, cancelButtonRef)}
             >
               Delete
             </button>
@@ -633,7 +653,7 @@ export function InlineFollowUpComposer({
                 small
                 onClick={close}
                 onKeyDown={(event) =>
-                  moveOnTab(event, existing ? deleteButtonRef : categoryButtonRef, saveButtonRef)
+                  moveOnTab(event, existing ? deleteButtonRef : folderButtonRef, saveButtonRef)
                 }
               >
                 Cancel
@@ -724,10 +744,7 @@ export function InlineFollowUpComposer({
               onTabBackward={() => openPanelFromTab('date')}
               onTabForward={() => {
                 setOpenPanel(null)
-                window.setTimeout(
-                  () => (existing ? deleteButtonRef : cancelButtonRef).current?.focus(),
-                  0,
-                )
+                window.setTimeout(() => folderButtonRef.current?.focus(), 0)
               }}
               onChange={(categoryTags) => set({ categoryTags })}
             />

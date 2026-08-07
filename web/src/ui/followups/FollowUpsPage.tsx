@@ -249,6 +249,7 @@ export function FollowUpsPage() {
         {view === 'open' && groups && people && (
           <InlineFollowUpComposer
             people={people}
+            folders={folders ?? []}
             tagSuggestions={tagSuggestions}
             activationRequest={createRequest}
             hideTrigger
@@ -306,6 +307,7 @@ export function FollowUpsPage() {
                       key={reminder.id}
                       existing={reminder}
                       people={people}
+                      folders={folders ?? []}
                       tagSuggestions={tagSuggestions}
                       onClose={() =>
                         setEditing((current) => (current?.id === reminder.id ? null : current))

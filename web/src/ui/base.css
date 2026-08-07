@@ -1111,6 +1111,21 @@ dialog.palette::backdrop {
   gap: var(--space-tight);
 }
 
+.inline-folder-picker .folder-picker-button {
+  min-height: 28px;
+  padding: 3px var(--space-tight);
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: var(--text-metadata);
+}
+
+.inline-folder-picker .folder-picker-button:hover:not(:disabled),
+.inline-folder-picker .folder-picker-button[aria-expanded='true'] {
+  background: var(--color-hover-fill);
+  color: var(--color-text);
+}
+
 .inline-detail-button {
   display: inline-flex;
   align-items: center;

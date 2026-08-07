@@ -17,7 +17,7 @@
 ///   the indent is meaningless once the tree is cut up, and "Museums" alone
 ///   does not say which trip.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type Ref } from 'react'
 import { buildTree, flattenTree, folderTint, pathLabel, type Folder } from '../../domain/folder'
 import { foldedForMatching } from '../../domain/person'
 import { Icon } from '../components/Icon'
@@ -32,6 +32,11 @@ export function FolderPicker({
   emptyLabel = 'Unfiled',
   disabled = false,
   compact = false,
+  className,
+  buttonRef,
+  onOpenChange,
+  onTabBackward,
+  onTabForward,
 }: {
   folders: Folder[]
   value: string | null
@@ -40,6 +45,11 @@ export function FolderPicker({
   emptyLabel?: string
   disabled?: boolean
   compact?: boolean
+  className?: string
+  buttonRef?: Ref<HTMLButtonElement>
+  onOpenChange?: (open: boolean) => void
+  onTabBackward?: () => void
+  onTabForward?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -61,10 +71,16 @@ export function FolderPicker({
   useEffect(() => {
     if (!open) return
     const onPointerDown = (event: MouseEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false)
+      if (!root.current?.contains(event.target as Node)) {
+        setOpen(false)
+        onOpenChange?.(false)
+      }
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
+      if (event.key === 'Escape') {
+        setOpen(false)
+        onOpenChange?.(false)
+      }
     }
     window.document.addEventListener('mousedown', onPointerDown)
     window.document.addEventListener('keydown', onKeyDown)
@@ -72,17 +88,19 @@ export function FolderPicker({
       window.document.removeEventListener('mousedown', onPointerDown)
       window.document.removeEventListener('keydown', onKeyDown)
     }
-  }, [open])
+  }, [onOpenChange, open])
 
   function choose(folderID: string | null) {
     onChange(folderID)
     setOpen(false)
+    onOpenChange?.(false)
     setQuery('')
   }
 
   return (
-    <div className="folder-picker" ref={root}>
+    <div className={['folder-picker', className].filter(Boolean).join(' ')} ref={root}>
       <button
+        ref={buttonRef}
         type="button"
         className="folder-picker-button"
         data-compact={compact || undefined}
@@ -91,7 +109,22 @@ export function FolderPicker({
         aria-label={compact ? `${label}: ${selected?.title ?? emptyLabel}` : label}
         title={compact ? `${label}: ${selected?.title ?? emptyLabel}` : undefined}
         disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          setOpen((current) => {
+            onOpenChange?.(!current)
+            return !current
+          })
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Tab') return
+          if (event.shiftKey && onTabBackward) {
+            event.preventDefault()
+            onTabBackward()
+          } else if (!event.shiftKey && onTabForward) {
+            event.preventDefault()
+            onTabForward()
+          }
+        }}
       >
         <span
           className="folder-picker-glyph"
