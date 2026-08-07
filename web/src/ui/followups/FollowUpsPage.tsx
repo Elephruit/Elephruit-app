@@ -118,17 +118,6 @@ export function FollowUpsPage() {
           ),
     [facetedGroups, statusFilter],
   )
-  const counts = useMemo(() => {
-    const byBucket = new Map(facetedGroups.map((group) => [group.bucket, group.reminders.length]))
-    return {
-      all: facetedReminders.length,
-      overdue: byBucket.get('overdue') ?? 0,
-      today: byBucket.get('today') ?? 0,
-      upcoming: byBucket.get('upcoming') ?? 0,
-      unscheduled: (byBucket.get('anytime') ?? 0) + (byBucket.get('someday') ?? 0),
-    }
-  }, [facetedGroups, facetedReminders.length])
-
   const hasFilters =
     statusFilter !== 'all' || personFilter !== '' || dueFilter !== 'any' || categoryFilter !== ''
 
@@ -209,7 +198,6 @@ export function FollowUpsPage() {
         {view === 'open' && groups && (
           <FollowUpFilterBar
             status={statusFilter}
-            counts={counts}
             personID={personFilter}
             people={filterPeople}
             due={dueFilter}

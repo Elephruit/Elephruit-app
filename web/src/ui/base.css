@@ -489,7 +489,6 @@ dialog.palette::backdrop {
 .followup-status-filters button {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
   min-height: 28px;
   padding: 4px 7px;
   border: 0;
@@ -512,15 +511,6 @@ dialog.palette::backdrop {
 
 .followup-status-filters button[data-tone='overdue'][aria-pressed='true'] {
   color: var(--color-overdue);
-}
-
-.followup-status-filters b {
-  min-width: 16px;
-  padding: 1px 4px;
-  border-radius: 999px;
-  background: color-mix(in srgb, currentColor 8%, transparent);
-  font: 600 0.66rem/1.25 var(--font-sans);
-  text-align: center;
 }
 
 .followup-filter-divider {

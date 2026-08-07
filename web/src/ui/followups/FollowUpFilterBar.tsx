@@ -117,7 +117,6 @@ function FilterMenu({
 
 export function FollowUpFilterBar({
   status,
-  counts,
   personID,
   people,
   due,
@@ -130,7 +129,6 @@ export function FollowUpFilterBar({
   onClear,
 }: {
   status: FollowUpStatusFilter
-  counts: Record<FollowUpStatusFilter, number>
   personID: string
   people: Person[]
   due: FollowUpDueFilter
@@ -187,7 +185,6 @@ export function FollowUpFilterBar({
             onClick={() => onStatusChange(option.value)}
           >
             <span>{option.label}</span>
-            <b>{counts[option.value]}</b>
           </button>
         ))}
       </div>
