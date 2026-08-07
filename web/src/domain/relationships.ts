@@ -24,6 +24,7 @@ export const RELATIONSHIP_KINDS = [
   'householdMember',
   'petOwner',
   'pet',
+  'unknown',
 ] as const
 
 export type RelationshipKind = (typeof RELATIONSHIP_KINDS)[number]
@@ -58,6 +59,7 @@ export const INVERSE: Record<RelationshipKind, RelationshipKind> = {
   householdMember: 'householdMember',
   petOwner: 'pet',
   pet: 'petOwner',
+  unknown: 'unknown',
 }
 
 export function isSymmetric(kind: RelationshipKind): boolean {
@@ -79,6 +81,7 @@ const KIND_LABELS: Record<RelationshipKind, string> = {
   householdMember: 'household',
   petOwner: 'owner',
   pet: 'pet',
+  unknown: 'unknown relationship',
 }
 
 export function kindLabel(kind: RelationshipKind): string {
@@ -113,6 +116,7 @@ export const SUGGESTED_ATTRIBUTES: Record<RelationshipKind, FactAttribute[]> = {
   introducedBy: [FactAttributes.location, FactAttributes.quickFact],
   introduced: [FactAttributes.location, FactAttributes.quickFact],
   petOwner: [FactAttributes.location, FactAttributes.quickFact],
+  unknown: [FactAttributes.location, FactAttributes.employer, FactAttributes.quickFact],
 }
 
 /// A gendered word for a relationship, when the user supplied one. The app never
@@ -203,6 +207,7 @@ export function groupOf(kind: RelationshipKind): RelationshipGroup {
     case 'friend':
     case 'introducedBy':
     case 'introduced':
+    case 'unknown':
       return 'other'
   }
 }

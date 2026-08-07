@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { resolveProposal } from '../domain/assist'
 import { FactAttributes } from '../domain/facts'
 import { draftFromResolved, planFromReviewDraft, reviewDraftReducer } from '../domain/reviewDraft'
-import { CaptureProposalSchema, buildRequestParams, buildSystemPrompt } from './anthropic'
+import { CaptureProposalSchema, buildRequestParams, buildSystemPrompt, extractJsonPayload, normalizeCaptureProposal } from './anthropic'
 
 const NO_SCHEDULE = {
   mode: 'none',
@@ -72,16 +72,84 @@ describe('CaptureProposalSchema', () => {
       }),
     ).toThrow()
   })
+
+  it('repairs omitted optional fields and string-shaped arrays without losing the capture', () => {
+    const proposal = normalizeCaptureProposal({
+      interaction: { kind: 'coffee', summary: 'Coffee with Madeline' },
+      participantNames: 'Madeline Brooks',
+      personContexts: [{ personName: 'Madeline Brooks' }],
+      facts: [{ personName: 'Madeline Brooks', attribute: 'city', value: 'Chicago Suburbs' }],
+      followUps: [{ title: 'Send Madeline the details', personNames: 'Madeline Brooks', tags: 'Personal' }],
+    })
+
+    expect(proposal.interaction).toMatchObject({ kind: 'in-person', discussion: null, occurredAt: null })
+    expect(proposal.participantNames).toEqual(['Madeline Brooks'])
+    expect(proposal.personContexts).toEqual([
+      expect.objectContaining({ roleTitle: null, organizationName: null, connectionStatus: 'unknown' }),
+    ])
+    expect(proposal.facts[0]).toMatchObject({ confidence: 'stated', sensitivity: 'normal', context: 'personal' })
+    expect(proposal.followUps[0]).toMatchObject({
+      personNames: ['Madeline Brooks'],
+      tags: ['Personal'],
+      schedule: NO_SCHEDULE,
+    })
+    expect(proposal.normalizationWarnings).toEqual(expect.arrayContaining([
+      expect.stringContaining('participant names as text'),
+      expect.stringContaining('follow-up names as text'),
+      expect.stringContaining('tags as text'),
+    ]))
+  })
+
+  it('normalizes relationship aliases, preserves their labels, and accepts string facts', () => {
+    const proposal = normalizeCaptureProposal({
+      relationships: [
+        { subjectName: 'Madeline Brooks', kind: 'twin sister', otherName: 'Morgan Brooks', facts: ['lives in Chicago Suburbs'] },
+        { subjectName: 'Madeline Brooks', kind: 'niece and nephew', facts: [] },
+        { subjectName: 'Madeline Brooks', kind: 'connection', otherName: 'Alex Kim' },
+      ],
+    })
+
+    expect(proposal.relationships).toEqual([
+      expect.objectContaining({ kind: 'sibling', label: 'twin sister', facts: [{ attribute: 'detail', value: 'lives in Chicago Suburbs' }] }),
+      expect.objectContaining({ kind: 'child', label: 'niece and nephew' }),
+      expect.objectContaining({ kind: 'friend', label: 'connection' }),
+    ])
+  })
+
+  it('preserves unknown relationship labels for review without guessing their meaning', () => {
+    const proposal = normalizeCaptureProposal({
+      relationships: [{ subjectName: 'Madeline Brooks', kind: 'godparent', otherName: 'Pat', facts: ['Lives nearby'] }],
+      facts: ['lives in Chicago Suburbs'],
+      reminderChanges: [{ action: 'delete' }],
+    })
+    const resolved = resolveProposal(proposal, [], new Date('2026-08-06T15:00:00'))
+
+    expect(proposal.relationships).toEqual([
+      expect.objectContaining({ kind: 'unknown', label: 'godparent', facts: [{ attribute: 'detail', value: 'Lives nearby' }] }),
+    ])
+    expect(proposal.reminderChanges).toEqual([])
+    expect(resolved.items).toHaveLength(1)
+    expect(resolved.warnings).toEqual(expect.arrayContaining([
+      expect.stringContaining('not in the relationship taxonomy'),
+      expect.stringContaining('fact without both a person and value'),
+      expect.stringContaining('invalid follow-up change'),
+    ]))
+  })
+
+  it('extracts a JSON object from fenced or prefaced provider text', () => {
+    expect(extractJsonPayload('```json\n{"participantNames": []}\n```')).toBe('{"participantNames": []}')
+    expect(extractJsonPayload('Here is the result: {"participantNames": []}')).toBe('{"participantNames": []}')
+  })
 })
 
 describe('the request', () => {
-  it('pins the gateway shape: chosen model, low effort, one user turn, structured format', () => {
+  it('pins the gateway shape without provider-specific structured-output options', () => {
     const params = buildRequestParams('claude-opus-5', 'SYSTEM', 'coffee with ana')
     expect(params.provider).toBe('anthropic')
     expect(params.model).toBe('claude-opus-5')
     expect(params.maxTokens).toBe(8192)
-    expect(params.effort).toBe('low')
-    expect(params.outputFormat).toMatchObject({ type: 'json_schema' })
+    expect(params).not.toHaveProperty('effort')
+    expect(params).not.toHaveProperty('outputFormat')
     expect(params.messages).toEqual([{ role: 'user', content: 'coffee with ana' }])
     expect(params.system).toBe('SYSTEM')
   })
@@ -94,6 +162,8 @@ describe('the request', () => {
     expect(prompt).toContain('quickFact')
     expect(prompt).toContain('folderPath preserves one folder name or slash-separated path')
     expect(prompt).toContain('Tags never substitute for a folder')
+    expect(prompt).toContain('Return only one raw JSON object')
+    expect(prompt).toContain('Always include these top-level keys')
   })
 
   it('grounds temporal resolution in the user absolute date, zone, and offset', () => {

@@ -82,6 +82,10 @@ export interface ProposedFollowUp {
 }
 
 export interface CaptureProposal {
+  /// Repairs or omissions made while normalizing model output. These flow into
+  /// the editable review instead of failing the whole capture or writing
+  /// silently through a lossy coercion.
+  normalizationWarnings?: string[]
   interaction: ProposedInteraction | null
   /// Who took part in the interaction, by name.
   participantNames: string[]
@@ -215,7 +219,7 @@ export function resolveProposal(
   now: Date,
   existing: { reminders?: Reminder[]; observations?: Observation[]; relationships?: Relationship[]; folders?: Folder[] } = {},
 ): ResolvedCapture {
-  const warnings: string[] = []
+  const warnings: string[] = [...(proposal.normalizationWarnings ?? [])]
   const pendingByName = new Map<string, Person>()
 
   function resolveName(rawName: string): PersonSlot {
