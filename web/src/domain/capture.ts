@@ -10,7 +10,7 @@ import { newID } from './ids'
 import type { Interaction, InteractionKind } from './interaction'
 import { nameParts, paletteColorFor, type ConnectionOrigin, type Person, type ProfileFocus } from './person'
 import { possessivePhrase, relationshipPair, type Relationship, type RelationshipKind } from './relationships'
-import type { Reminder } from './reminders'
+import type { Reminder, ReminderProgress } from './reminders'
 import type { WritePlan } from './writePlan'
 
 // MARK: People
@@ -372,6 +372,7 @@ export interface ReminderDraft {
   notes?: string | null
   personIDs?: string[]
   responsibility?: 'mine' | 'theirs'
+  progress?: ReminderProgress
   sourceInteractionID?: string | null
   sourceDocumentID?: string | null
   startAt?: Date | null
@@ -389,6 +390,7 @@ export function planCreateReminder(draft: ReminderDraft, now: Date): { plan: Wri
     notes: draft.notes?.trim() || null,
     personIDs: [...new Set(draft.personIDs ?? [])],
     responsibility: draft.responsibility ?? 'mine',
+    progress: draft.progress ?? 'notStarted',
     sourceInteractionID: draft.sourceInteractionID ?? null,
     sourceDocumentID: draft.sourceDocumentID ?? null,
     startAt: draft.startAt ?? null,
@@ -416,6 +418,7 @@ export function planUpdateReminder(
       | 'isSomeday'
       | 'personIDs'
       | 'responsibility'
+      | 'progress'
       | 'scheduleTimeZone'
       | 'duePrecision'
       | 'startPrecision'

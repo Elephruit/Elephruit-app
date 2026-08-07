@@ -10,7 +10,8 @@ const INPUT = {
       lastContact: 'Last spoke today',
       facts: [{ label: 'Lives in', value: 'Lisbon', confidence: 'Estimated' }],
       relationships: ['partner: Tomás Silva'],
-      openFollowUps: ['Book flights (due today)'],
+      myNextMoves: ['Book flights (due today)'],
+      waitingOnThem: ['Share hiring plan'],
       recentInteractions: [{ when: 'Aug 6', kind: 'in-person', summary: 'Coffee', notes: null }],
     },
   ],
@@ -24,7 +25,8 @@ describe('the day brief', () => {
           name: 'Ana Torres',
           headline: 'Mid-move to Denver, launch behind her.',
           talkingPoints: ['The flat hunt'],
-          openLoops: ['You owe her flight bookings today'],
+          myNextMoves: ['Book her flights today'],
+          statusQuestions: ['How is the hiring plan progressing?'],
           suggestedQuestions: ['Is Lisbon still home base?'],
         },
       ],
@@ -49,5 +51,6 @@ describe('the day brief', () => {
     expect(prompt).toContain('Never invent')
     expect(prompt).toContain('only the records provided')
     expect(prompt.toLowerCase()).toContain('confirm')
+    expect(prompt).toContain('Never reverse ownership')
   })
 })

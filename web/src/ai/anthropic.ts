@@ -87,12 +87,15 @@ export const CaptureProposalSchema = z.object({
       notes: z.string().nullable(),
       schedule: ScheduleSchema,
       responsibility: z.enum(['mine', 'theirs']),
+      progress: z.enum(['notStarted', 'inProgress', 'blocked']),
     }),
   ),
   reminderChanges: z.array(
     z.object({
       reminderID: z.string(),
-      action: z.enum(['complete', 'reopen', 'delete']),
+      action: z.enum(['complete', 'reopen', 'delete', 'update']),
+      progress: z.enum(['notStarted', 'inProgress', 'blocked']).nullable(),
+      notes: z.string().nullable(),
     }),
   ),
   factChanges: z.array(
@@ -115,7 +118,7 @@ export interface CaptureRecordContext {
   name: string
   profile: string
   facts: Array<{ id: string; label: string; value: string }>
-  reminders: Array<{ id: string; title: string; status: 'open' | 'completed'; responsibility: 'mine' | 'theirs' }>
+  reminders: Array<{ id: string; title: string; status: 'open' | 'completed'; responsibility: 'mine' | 'theirs'; progress: 'notStarted' | 'inProgress' | 'blocked'; notes: string | null }>
   relationships: Array<{ id: string; description: string }>
 }
 
@@ -139,7 +142,7 @@ export function buildSystemPrompt(context: CaptureContext): string {
     .map((record) => {
       const lines = [`${record.name} [${record.id}]${record.profile ? ` — ${record.profile}` : ''}`]
       lines.push(...record.facts.slice(0, 20).map((fact) => `  fact ${fact.id}: ${fact.label} = ${fact.value}`))
-      lines.push(...record.reminders.slice(0, 20).map((reminder) => `  follow-up ${reminder.id} (${reminder.status}, ${reminder.responsibility}): ${reminder.title}`))
+      lines.push(...record.reminders.slice(0, 20).map((reminder) => `  follow-up ${reminder.id} (${reminder.status}, ${reminder.responsibility}, ${reminder.progress}): ${reminder.title}${reminder.notes ? ` — ${reminder.notes}` : ''}`))
       lines.push(...record.relationships.slice(0, 20).map((relationship) => `  relationship ${relationship.id}: ${relationship.description}`))
       return lines.join('\n')
     })
@@ -172,7 +175,8 @@ Rules, in order of importance:
 - Every fact also has sensitivity, context, observedOn, and effectiveOn. sensitivity is "restricted" for secrets or deeply private material, "sensitive" for delicate personal information, otherwise "normal". context controls where custom facts appear: identity, professional, or personal. Dates are YYYY-MM-DD or null; observedOn is when the speaker learned it and effectiveOn is when it becomes true if different.
 - relationships: family, work, and social ties the update reveals (${kinds}). label carries the speaker's own word ("son", "boss"). Facts about a person who was only described relative to somebody else ("her son is a senior") belong in that relationship's facts, not in the top-level facts.
 - followUps: commitments and expected actions, one entry each, titled as a short imperative ("Send the neighborhood list"). responsibility is "mine" when the SPEAKER owes or intends the action and "theirs" when the other person owes it or the speaker is waiting on them. personNames lists who each one concerns. notes carries any extra detail worth keeping; null otherwise.
-- reminderChanges: when the speaker clearly says an existing follow-up was completed, reopened, or deleted, reference its exact supplied ID. Never guess an ID, and never also create a duplicate follow-up. Deletion stays an explicit review item.
+- progress is "notStarted", "inProgress", or "blocked". Use a non-default state only when the speaker explicitly describes it.
+- reminderChanges: when the speaker clearly says an existing follow-up was completed, reopened, deleted, or has a progress update, reference its exact supplied ID. Use action "update" with progress and/or a concise notes update for statements like "the forecast is blocked on Finance". Never guess an ID or create a duplicate. Deletion stays an explicit review item.
 - factChanges: use "confirm" when the speaker says an existing supplied fact still holds. Use "correct" with the replacement value and an optional correction note when it changed or was wrong. Reference the exact supplied observation ID; never guess one or emit the same correction as a new fact.
 - relationshipChanges: use "remove" only when the speaker clearly asks to remove an existing supplied relationship. Reference its exact supplied ID. This remains explicit in review because both reciprocal relationship rows will be removed.
 - schedule: every follow-up carries one. Read temporal phrases carefully:

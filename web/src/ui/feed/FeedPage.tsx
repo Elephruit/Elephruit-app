@@ -65,7 +65,9 @@ function NextUpSection({
                 </span>
               )}
             </span>
-            <span className="rail-row-when tabular">{schedule}</span>
+            <span className="rail-row-when tabular">
+              {reminder.responsibility === 'theirs' ? 'Waiting · ' : ''}{schedule}
+            </span>
           </button>
         )
       })}

@@ -3251,11 +3251,53 @@ a.memory-person-link:hover {
   color: var(--color-text-tertiary);
 }
 
-.person-followup-grid {
+.person-followup-board {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-small);
+  gap: var(--space-medium);
   margin-top: var(--space-small);
+}
+
+.person-followup-lane {
+  min-width: 0;
+  border-radius: var(--radius-large);
+  background: color-mix(in srgb, var(--color-background-elevated) 72%, transparent);
+  padding: var(--space-medium);
+}
+
+.person-followup-lane[data-owner='theirs'] {
+  background: color-mix(in srgb, var(--color-personal) 5%, var(--color-background-elevated));
+}
+
+.person-followup-lane-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-small);
+  margin-bottom: var(--space-small);
+}
+
+.person-followup-lane-head h3 {
+  margin: 0;
+  font: var(--text-label);
+}
+
+.person-followup-lane-head p,
+.person-followup-empty {
+  margin: 2px 0 0;
+  color: var(--color-text-tertiary);
+  font: var(--text-metadata);
+}
+
+.person-followup-lane-head > span {
+  color: var(--color-text-tertiary);
+  font: var(--text-metadata);
+}
+
+.person-followup-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-small);
 }
 
 .person-followup {
@@ -3300,20 +3342,18 @@ a.memory-person-link:hover {
   color: var(--color-text-secondary);
 }
 
-.person-followup-owner {
+.person-followup-progress {
   align-self: flex-start;
   border-radius: 999px;
   background: color-mix(in srgb, var(--color-accent) 9%, transparent);
   color: var(--color-accent);
-  font-size: 0.72rem;
-  font-weight: 600;
-  line-height: 1;
-  padding: 0.32rem 0.5rem;
+  font: var(--text-metadata);
+  padding: 3px 7px;
 }
 
-.person-followup-owner[data-owner='theirs'] {
-  background: color-mix(in srgb, var(--color-personal) 12%, transparent);
-  color: var(--color-text-secondary);
+.person-followup-progress[data-progress='blocked'] {
+  background: color-mix(in srgb, var(--color-overdue) 9%, transparent);
+  color: var(--color-overdue);
 }
 
 .person-followup[data-tone='overdue'] .person-followup-when {
@@ -3328,9 +3368,36 @@ a.memory-person-link:hover {
   width: 100%;
 }
 
+.meeting-checklist {
+  display: grid;
+  gap: var(--space-tight);
+  margin-top: var(--space-small);
+}
+
+.meeting-checklist-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-small);
+  padding: 7px 0;
+  border-bottom: 1px solid var(--color-separator);
+  font: var(--text-metadata);
+}
+
+.meeting-checklist-row:last-child {
+  border-bottom: 0;
+}
+
+.meeting-checklist-row > span:last-child {
+  color: var(--color-text-tertiary);
+}
+
 /* Below the desktop rail the context container dissolves and its sections
    interleave with history in one reading order. */
 @media (max-width: 1023.98px) {
+  .person-followup-board {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .person-context.remember-rail {
     display: contents;
   }

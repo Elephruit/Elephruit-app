@@ -104,6 +104,7 @@ describe('briefingInputFor', () => {
       [
         reminder({ personIDs: [ana.id], title: 'Book flights', dueAt: new Date('2026-08-06T21:00:00') }),
         reminder({ personIDs: [ana.id], title: 'Send intro', dueAt: new Date('2026-07-31T12:00:00') }),
+        reminder({ personIDs: [ana.id], title: 'Share hiring plan', responsibility: 'theirs' }),
         reminder({ personIDs: ['someone-else'], title: 'Not hers' }),
       ],
       [
@@ -119,7 +120,8 @@ describe('briefingInputFor', () => {
 
     const person = input.people[0]
     expect(person.relationships).toEqual([`son: unnamed ("Ana Torres's son")`])
-    expect(person.openFollowUps).toEqual(['Book flights (due today)', 'Send intro (due 6 days ago)'])
+    expect(person.myNextMoves).toEqual(['Book flights (due today)', 'Send intro (due 6 days ago)'])
+    expect(person.waitingOnThem).toEqual(['Share hiring plan'])
     expect(person.recentInteractions).toHaveLength(5)
     expect(person.recentInteractions.map((i) => i.summary)).not.toContain('Too old to include')
     expect(person.recentInteractions[0].notes!.length).toBeLessThanOrEqual(141)

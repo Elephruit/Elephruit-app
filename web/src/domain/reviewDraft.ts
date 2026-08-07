@@ -11,6 +11,7 @@ import {
   planCompleteReminder,
   planDeleteReminder,
   planReopenReminder,
+  planUpdateReminder,
   planInteractionBundle,
   planConfirmObservation,
   planCorrection,
@@ -25,6 +26,7 @@ import type { InteractionKind } from './interaction'
 import { defaultMemoryTitle, planMemoryRecord, type MemoryRecord } from './memory'
 import type { Person } from './person'
 import type { Reminder } from './reminders'
+import type { ReminderProgress } from './reminders'
 import { kindLabel, type RelationshipKind } from './relationships'
 import type { Relationship } from './relationships'
 import {
@@ -115,6 +117,7 @@ export interface FollowUpDraftItem extends DraftItemBase {
   scheduleSource: string | null
   scheduleConfidence: 'stated' | 'inferred' | 'uncertain'
   responsibility: 'mine' | 'theirs'
+  progress: ReminderProgress
   /// The explicit "Save without date" override for the temporal safeguard.
   /// Transient review state only — never persisted.
   allowUnscheduled: boolean
@@ -123,7 +126,9 @@ export interface FollowUpDraftItem extends DraftItemBase {
 export interface ReminderChangeDraftItem extends DraftItemBase {
   type: 'reminderChange'
   reminder: Reminder
-  action: 'complete' | 'reopen' | 'delete'
+  action: 'complete' | 'reopen' | 'delete' | 'update'
+  progress: ReminderProgress
+  notes: string
 }
 
 export interface FactChangeDraftItem extends DraftItemBase {
@@ -257,11 +262,16 @@ export function draftFromResolved(resolved: ResolvedCapture, now: Date): Resolve
           scheduleSource: item.schedule.sourceText,
           scheduleConfidence: item.schedule.confidence,
           responsibility: item.responsibility,
+          progress: item.progress,
           allowUnscheduled: false,
         })
         break
       case 'reminderChange':
-        items.push({ id: item.id, removed: false, type: 'reminderChange', reminder: item.reminder, action: item.action })
+        items.push({
+          id: item.id, removed: false, type: 'reminderChange', reminder: item.reminder, action: item.action,
+          progress: item.progress ?? item.reminder.progress ?? 'notStarted',
+          notes: item.notes ?? item.reminder.notes ?? '',
+        })
         break
       case 'factChange':
         items.push({
@@ -348,7 +358,7 @@ export type ReviewDraftAction =
   | { type: 'update-person-context'; id: string; changes: Partial<Omit<PersonContextDraftItem, 'id' | 'type' | 'removed'>> }
   | { type: 'update-relationship'; id: string; changes: Partial<Omit<RelationshipDraftItem, 'id' | 'type' | 'removed'>> }
   | { type: 'update-follow-up'; id: string; changes: Partial<Omit<FollowUpDraftItem, 'id' | 'type' | 'removed'>> }
-  | { type: 'update-reminder-change'; id: string; changes: Partial<Pick<ReminderChangeDraftItem, 'action'>> }
+  | { type: 'update-reminder-change'; id: string; changes: Partial<Pick<ReminderChangeDraftItem, 'action' | 'progress' | 'notes'>> }
   | { type: 'update-fact-change'; id: string; changes: Partial<Pick<FactChangeDraftItem, 'action' | 'value' | 'correctionNote' | 'confidence' | 'sensitivity'>> }
   | { type: 'update-title'; title: string }
   | { type: 'resolve-person'; slotID: string; resolution: PersonSlotResolution }
@@ -669,6 +679,7 @@ export function planFromReviewDraft(
             duePrecision: schedule.duePrecision,
             startPrecision: schedule.startPrecision,
             responsibility: item.responsibility,
+            progress: item.progress,
           },
           now,
         )
@@ -681,6 +692,8 @@ export function planFromReviewDraft(
           ? planCompleteReminder(item.reminder.id, now)
           : item.action === 'delete'
             ? planDeleteReminder(item.reminder.id)
+            : item.action === 'update'
+              ? planUpdateReminder(item.reminder.id, { progress: item.progress, notes: item.notes.trim() || null })
             : planReopenReminder(item.reminder.id)
         reminderIDs.push(item.reminder.id)
         for (const personID of item.reminder.personIDs) personIDs.add(personID)
@@ -750,7 +763,7 @@ export function draftItemSummary(draft: ResolvedCaptureDraft, item: ReviewDraftI
     case 'followUp':
       return item.title || (item.responsibility === 'theirs' ? 'Waiting on' : 'Follow-up')
     case 'reminderChange':
-      return `${item.action === 'complete' ? 'Complete' : item.action === 'delete' ? 'Delete' : 'Reopen'} “${item.reminder.title}”`
+      return `${item.action === 'complete' ? 'Complete' : item.action === 'delete' ? 'Delete' : item.action === 'update' ? 'Update' : 'Reopen'} “${item.reminder.title}”`
     case 'factChange':
       return `${item.action === 'confirm' ? 'Confirm' : 'Correct'} ${item.observation.attribute}: ${item.value}`
     case 'relationshipChange':

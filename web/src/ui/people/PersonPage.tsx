@@ -229,6 +229,20 @@ export function PersonPage() {
   }, [person, allRelationships, people, observations])
 
   const openFollowUps = reminders?.filter((r) => r.status === 'open') ?? []
+  const followUpLanes = [
+    {
+      key: 'mine' as const,
+      title: 'My next moves',
+      description: `What you committed to do for ${person?.displayName.split(' ')[0] ?? 'them'}.`,
+      reminders: openFollowUps.filter((reminder) => (reminder.responsibility ?? 'mine') === 'mine'),
+    },
+    {
+      key: 'theirs' as const,
+      title: 'Waiting on them',
+      description: 'Delegated work and updates to revisit next time.',
+      reminders: openFollowUps.filter((reminder) => reminder.responsibility === 'theirs'),
+    },
+  ]
 
   const summary = useMemo(() => {
     if (!person || !people || !observations || !relationships || !interactions || !reminders) return null
@@ -463,60 +477,48 @@ export function PersonPage() {
               />
             )}
 
-            {focus === 'professional' && openFollowUps.length > 0 && (
+            {openFollowUps.length > 0 && (
               <section className="person-followups">
                 <div className="aside-panel-head">
-                  <h2>Follow-ups & commitments</h2>
+                  <h2>Commitments</h2>
                   <span>{openFollowUps.length}</span>
                 </div>
-                <div className="person-followup-grid">
-                  {openFollowUps.map((reminder) => {
-                    const bucket = bucketFor(reminder, now)
-                    return (
-                      <article key={reminder.id} className="person-followup" data-tone={bucket}>
-                        <button
-                          type="button"
-                          className="complete-ring"
-                          aria-label={`Complete ${reminder.title}`}
-                          onClick={() => void toggleReminder(reminder.id, true)}
-                        />
-                        <div className="person-followup-body">
-                          {inlineReminder?.id === reminder.id ? (
-                            <input
-                              className="inline-text-editor person-followup-editor"
-                              aria-label="Edit follow-up title"
-                              value={inlineReminder.title}
-                              onChange={(event) => setInlineReminder({ id: reminder.id, title: event.target.value })}
-                              onBlur={(event) => void commitReminderTitle(reminder.id, event.target.value)}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') {
-                                  event.preventDefault()
-                                  void commitReminderTitle(reminder.id, event.currentTarget.value)
-                                }
-                                if (event.key === 'Escape') setInlineReminder(null)
-                              }}
-                              autoFocus
-                            />
-                          ) : (
-                            <button
-                              type="button"
-                              className="person-followup-title"
-                              title="Edit follow-up"
-                              onClick={() => setInlineReminder({ id: reminder.id, title: reminder.title })}
-                            >
-                              {reminder.title}
-                            </button>
-                          )}
-                          <span className="person-followup-when tabular">
-                            {formatScheduleSummary(reminder) ?? 'Anytime'}
-                          </span>
-                          <span className="person-followup-owner" data-owner={reminder.responsibility ?? 'mine'}>
-                            {reminder.responsibility === 'theirs' ? 'Waiting on them' : 'Mine'}
-                          </span>
+                <div className="person-followup-board">
+                  {followUpLanes.map((lane) => (
+                    <section key={lane.key} className="person-followup-lane" data-owner={lane.key}>
+                      <div className="person-followup-lane-head">
+                        <div><h3>{lane.title}</h3><p>{lane.description}</p></div>
+                        <span>{lane.reminders.length}</span>
+                      </div>
+                      {lane.reminders.length === 0 ? (
+                        <p className="person-followup-empty">Nothing open.</p>
+                      ) : (
+                        <div className="person-followup-grid">
+                          {lane.reminders.map((reminder) => {
+                            const bucket = bucketFor(reminder, now)
+                            return (
+                              <article key={reminder.id} className="person-followup" data-tone={bucket}>
+                                <button type="button" className="complete-ring" aria-label={`Complete ${reminder.title}`} onClick={() => void toggleReminder(reminder.id, true)} />
+                                <div className="person-followup-body">
+                                  {inlineReminder?.id === reminder.id ? (
+                                    <input className="inline-text-editor person-followup-editor" aria-label="Edit follow-up title" value={inlineReminder.title} onChange={(event) => setInlineReminder({ id: reminder.id, title: event.target.value })} onBlur={(event) => void commitReminderTitle(reminder.id, event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void commitReminderTitle(reminder.id, event.currentTarget.value) } if (event.key === 'Escape') setInlineReminder(null) }} autoFocus />
+                                  ) : (
+                                    <button type="button" className="person-followup-title" title="Edit follow-up" onClick={() => setInlineReminder({ id: reminder.id, title: reminder.title })}>{reminder.title}</button>
+                                  )}
+                                  <span className="person-followup-when tabular">{formatScheduleSummary(reminder) ?? 'Anytime'}</span>
+                                  {lane.key === 'theirs' && reminder.progress && reminder.progress !== 'notStarted' && (
+                                    <span className="person-followup-progress" data-progress={reminder.progress}>
+                                      {reminder.progress === 'blocked' ? 'Blocked' : 'In progress'}
+                                    </span>
+                                  )}
+                                </div>
+                              </article>
+                            )
+                          })}
                         </div>
-                      </article>
-                    )
-                  })}
+                      )}
+                    </section>
+                  ))}
                 </div>
               </section>
             )}

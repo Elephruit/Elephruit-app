@@ -116,7 +116,7 @@ function RowSummary({ draft, item }: { draft: ResolvedCaptureDraft; item: Review
       )
     }
     case 'reminderChange':
-      return <><span className="draft-row-title">{item.action === 'complete' ? 'Mark complete' : item.action === 'delete' ? 'Delete' : 'Reopen'} · {item.reminder.title}</span><span className="draft-row-sub">Existing follow-up{item.action === 'delete' ? ' · Cannot be undone after confirmation' : ''}</span></>
+      return <><span className="draft-row-title">{item.action === 'complete' ? 'Mark complete' : item.action === 'delete' ? 'Delete' : item.action === 'update' ? 'Update' : 'Reopen'} · {item.reminder.title}</span><span className="draft-row-sub">Existing follow-up{item.action === 'delete' ? ' · Cannot be undone after confirmation' : ''}</span></>
     case 'factChange':
       return <><span className="draft-row-title">{item.action === 'confirm' ? 'Confirm' : 'Correct'} · {item.observation.attribute}</span><span className="draft-row-sub">{item.observation.value}{item.action === 'correct' && item.value !== item.observation.value ? ` → ${item.value}` : ''}</span></>
     case 'relationshipChange':
@@ -387,12 +387,14 @@ export function EditableReviewPanel({
                       {item.type === 'reminderChange' && (
                         <div className="draft-editor">
                           <FormField label="Change">
-                            <select className="field field-select" value={item.action} onChange={(event) => dispatch({ type: 'update-reminder-change', id: item.id, changes: { action: event.target.value as 'complete' | 'reopen' | 'delete' } })}>
+                            <select className="field field-select" value={item.action} onChange={(event) => dispatch({ type: 'update-reminder-change', id: item.id, changes: { action: event.target.value as 'complete' | 'reopen' | 'delete' | 'update' } })}>
                               <option value="complete">Mark complete</option>
                               <option value="reopen">Reopen</option>
                               <option value="delete">Delete permanently</option>
+                              <option value="update">Update progress</option>
                             </select>
                           </FormField>
+                          {item.action === 'update' && <><FormField label="Current status"><select className="field field-select" value={item.progress} onChange={(event) => dispatch({ type: 'update-reminder-change', id: item.id, changes: { progress: event.target.value as typeof item.progress } })}><option value="notStarted">Not started</option><option value="inProgress">In progress</option><option value="blocked">Blocked</option></select></FormField><FormField label="Latest update"><textarea className="field" rows={2} value={item.notes} onChange={(event) => dispatch({ type: 'update-reminder-change', id: item.id, changes: { notes: event.target.value } })} /></FormField></>}
                         </div>
                       )}
                       {item.type === 'factChange' && (

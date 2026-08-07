@@ -3,7 +3,7 @@
 /// model and its conversions, so there is exactly one place that knows how a
 /// reminder's dates become editable fields and back.
 
-import type { Reminder } from './reminders'
+import type { Reminder, ReminderProgress } from './reminders'
 import {
   hasTemporalCue,
   resolveScheduleDraft,
@@ -18,6 +18,8 @@ export interface FollowUpDraft {
   title: string
   notes: string
   personIDs: Set<string>
+  responsibility: 'mine' | 'theirs'
+  progress: ReminderProgress
   schedule: ScheduleDraftFields
 }
 
@@ -26,6 +28,8 @@ export function emptyFollowUpDraft(userZone: string): FollowUpDraft {
     title: '',
     notes: '',
     personIDs: new Set(),
+    responsibility: 'mine',
+    progress: 'notStarted',
     schedule: { scheduleMode: 'none', localDate: '', localTime: '', timeZone: userZone },
   }
 }
@@ -68,6 +72,8 @@ export function draftFromReminder(reminder: Reminder, userZone: string): FollowU
     title: reminder.title,
     notes: reminder.notes ?? '',
     personIDs: new Set(reminder.personIDs),
+    responsibility: reminder.responsibility ?? 'mine',
+    progress: reminder.progress ?? 'notStarted',
     schedule,
   }
 }
@@ -87,6 +93,8 @@ export interface ReminderFields {
   title: string
   notes: string | null
   personIDs: string[]
+  responsibility: 'mine' | 'theirs'
+  progress: ReminderProgress
   startAt: Date | null
   dueAt: Date | null
   isSomeday: boolean
@@ -102,6 +110,8 @@ export function reminderFieldsFromDraft(draft: FollowUpDraft, context: TemporalC
     title: draft.title.trim(),
     notes: draft.notes.trim() || null,
     personIDs: [...draft.personIDs],
+    responsibility: draft.responsibility,
+    progress: draft.progress,
     startAt: resolved.startAt,
     dueAt: resolved.dueAt,
     isSomeday: resolved.isSomeday,

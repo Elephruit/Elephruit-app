@@ -359,6 +359,8 @@ export function useCaptureController(): CaptureController {
               title: reminder.title,
               status: reminder.status,
               responsibility: reminder.responsibility ?? 'mine' as const,
+              progress: reminder.progress ?? 'notStarted' as const,
+              notes: reminder.notes,
             })),
           relationships: (relationships ?? [])
             .filter((relationship) => relationship.subjectID === person.id)

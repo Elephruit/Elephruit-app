@@ -18,7 +18,8 @@ export const DayBriefSchema = z.object({
       /// One line on where things stand with this person.
       headline: z.string(),
       talkingPoints: z.array(z.string()),
-      openLoops: z.array(z.string()),
+      myNextMoves: z.array(z.string()),
+      statusQuestions: z.array(z.string()),
       suggestedQuestions: z.array(z.string()),
     }),
   ),
@@ -32,7 +33,8 @@ export function buildBriefingSystemPrompt(): string {
   return [
     'You prepare a private, personal relationship brief. The user is about to talk to these people and wants to be a thoughtful presence in their lives.',
     'Use only the records provided. Never invent names, events, dates, or details that are not in the data. If little is recorded about someone, say less about them rather than padding.',
-    'For each person: a one-line headline of where things stand; two to four talking points grounded in recorded facts and recent conversations; follow-ups the user owes them; one to three questions worth asking, favoring what has changed lately or is going stale.',
+    'For each person: a one-line headline of where things stand; two to four talking points grounded in recorded facts and recent conversations; output myNextMoves only from the input myNextMoves; turn input waitingOnThem into statusQuestions; and add one to three suggestedQuestions favoring what has changed lately or is going stale.',
+    'Never reverse ownership. Turn waitingOnThem into concise status questions, not statements that the user owes the work.',
     'Confidence labels like "Estimated" mean the record is uncertain — phrase those as things to confirm, not facts to assert.',
     'Write in plain, warm, second-person prose ("ask her", "you owe him"). No emoji, no headers inside strings, no markdown.',
   ].join('\n')

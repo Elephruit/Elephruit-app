@@ -7,6 +7,7 @@
 import { isSameDay, startOfDay } from './dates'
 
 export type ReminderStatus = 'open' | 'completed'
+export type ReminderProgress = 'notStarted' | 'inProgress' | 'blocked'
 
 export interface Reminder {
   id: string
@@ -16,6 +17,8 @@ export interface Reminder {
   personIDs: string[]
   /// Who is expected to act. Missing on older records means the user.
   responsibility?: 'mine' | 'theirs'
+  /// Lightweight meeting status for delegated work. Missing means not started.
+  progress?: ReminderProgress
   /// The interaction it fell out of, when it fell out of one.
   sourceInteractionID: string | null
   /// The imported document it fell out of, for dossier-derived follow-ups.

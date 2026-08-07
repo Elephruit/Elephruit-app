@@ -167,14 +167,20 @@ export function DayBriefPanel({
                     </ul>
                   </div>
                 )}
-                {entry.openLoops.length > 0 && (
+                {entry.myNextMoves.length > 0 && (
                   <div className="brief-section">
-                    <h4>Follow-ups</h4>
+                    <h4>My next moves</h4>
                     <ul>
-                      {entry.openLoops.map((loop) => (
-                        <li key={loop}>{loop}</li>
+                      {entry.myNextMoves.map((move) => (
+                        <li key={move}>{move}</li>
                       ))}
                     </ul>
+                  </div>
+                )}
+                {entry.statusQuestions.length > 0 && (
+                  <div className="brief-section">
+                    <h4>Waiting on them</h4>
+                    <ul>{entry.statusQuestions.map((question) => <li key={question}>{question}</li>)}</ul>
                   </div>
                 )}
                 {entry.suggestedQuestions.length > 0 && (

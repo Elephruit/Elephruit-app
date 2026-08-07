@@ -19,7 +19,7 @@ import type { InteractionKind } from './interaction'
 import { makePerson } from './capture'
 import { foldedForMatching, type Person } from './person'
 import type { Relationship, RelationshipKind } from './relationships'
-import type { Reminder } from './reminders'
+import type { Reminder, ReminderProgress } from './reminders'
 import type { ProposedSchedule } from './temporal'
 
 // MARK: What the parser proposes
@@ -72,6 +72,7 @@ export interface ProposedFollowUp {
   notes?: string | null
   schedule?: ProposedSchedule
   responsibility?: 'mine' | 'theirs'
+  progress?: ReminderProgress
 }
 
 export interface CaptureProposal {
@@ -82,7 +83,12 @@ export interface CaptureProposal {
   facts: ProposedFact[]
   relationships: ProposedRelationship[]
   followUps: ProposedFollowUp[]
-  reminderChanges?: Array<{ reminderID: string; action: 'complete' | 'reopen' | 'delete' }>
+  reminderChanges?: Array<{
+    reminderID: string
+    action: 'complete' | 'reopen' | 'delete' | 'update'
+    progress?: ReminderProgress | null
+    notes?: string | null
+  }>
   factChanges?: Array<{
     observationID: string
     action: 'confirm' | 'correct'
@@ -156,8 +162,16 @@ export type ResolvedItem =
       notes: string | null
       schedule: ProposedSchedule
       responsibility: 'mine' | 'theirs'
+      progress: ReminderProgress
     }
-  | { id: string; type: 'reminderChange'; reminder: Reminder; action: 'complete' | 'reopen' | 'delete' }
+  | {
+      id: string
+      type: 'reminderChange'
+      reminder: Reminder
+      action: 'complete' | 'reopen' | 'delete' | 'update'
+      progress: ReminderProgress | null
+      notes: string | null
+    }
   | {
       id: string
       type: 'factChange'
@@ -328,6 +342,7 @@ export function resolveProposal(
         confidence: 'stated',
       },
       responsibility: followUp.responsibility ?? 'mine',
+      progress: followUp.progress ?? 'notStarted',
     })
   }
 
@@ -337,7 +352,10 @@ export function resolveProposal(
       warnings.push('A requested follow-up change could not be matched. It was not saved.')
       continue
     }
-    items.push({ id: nextID(), type: 'reminderChange', reminder, action: change.action })
+    items.push({
+      id: nextID(), type: 'reminderChange', reminder, action: change.action,
+      progress: change.progress ?? null, notes: change.notes?.trim() || null,
+    })
   }
 
   for (const change of proposal.factChanges ?? []) {
