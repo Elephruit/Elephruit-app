@@ -5907,16 +5907,6 @@ button.timeline-badge {
   margin-inline: auto;
 }
 
-.note-inline-navigation {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-small);
-  margin-bottom: var(--space-medium);
-  padding-bottom: var(--space-small);
-  border-bottom: 1px solid var(--color-separator);
-}
-
 .note-inline-pane {
   min-width: 0;
 }
@@ -6302,17 +6292,36 @@ button.timeline-badge {
 
 .note-header {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-small);
   margin-bottom: var(--space-medium);
+  padding-bottom: var(--space-small);
+  border-bottom: 1px solid var(--color-separator);
+}
+
+.note-header > .container-meta {
+  flex: 1;
+  min-width: 0;
 }
 
 .note-header-actions {
   display: flex;
   align-items: center;
   gap: var(--space-tight);
+}
+
+.folder-picker-button[data-compact] {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.folder-picker-button[data-compact] .folder-picker-glyph {
+  width: 24px;
+  height: 24px;
 }
 
 /* MARK: The editor's chrome, such as it is */

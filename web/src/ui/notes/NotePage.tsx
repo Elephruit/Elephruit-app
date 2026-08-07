@@ -22,7 +22,7 @@ import {
   type PendingNoteEdit,
 } from '../../domain/note'
 import type { NoteDocument } from '../../domain/noteDocument'
-import { Button } from '../components/Button'
+import { Button, IconButton } from '../components/Button'
 import { Dialog } from '../components/Dialog'
 import { EmptyState } from '../components/EmptyState'
 import { SkeletonRows } from '../components/Skeleton'
@@ -33,7 +33,17 @@ import { NoteEditor } from './NoteEditor'
 
 const SAVE_DEBOUNCE_MS = 700
 
-export function NotePage({ embedded = false }: { embedded?: boolean }) {
+export function NotePage({
+  embedded = false,
+  focusMode = false,
+  onBack,
+  onToggleFocus,
+}: {
+  embedded?: boolean
+  focusMode?: boolean
+  onBack?: () => void
+  onToggleFocus?: () => void
+}) {
   const uid = useUID()
   const navigate = useNavigate()
   const { noteID = '' } = useParams()
@@ -172,6 +182,7 @@ export function NotePage({ embedded = false }: { embedded?: boolean }) {
           as the title having been said twice. This row is the metadata and the
           actions only. */}
       <div className="note-header">
+        {embedded && onBack && <IconButton label="Back to notes" icon="back" size={18} onClick={onBack} />}
         <span className="container-meta">
           <span>Edited {relativeDescription(note.updatedAt, new Date())}</span>
           {status === 'saving' && <span>Saving…</span>}
@@ -185,10 +196,17 @@ export function NotePage({ embedded = false }: { embedded?: boolean }) {
             onChange={(id) => void setFolder(id)}
             label="File this note in"
             disabled={readOnly}
+            compact
           />
-          <Button variant="quiet" icon="trash" onClick={() => setDeleting(true)}>
-            Delete
-          </Button>
+          <IconButton label="Delete note" icon="trash" size={18} onClick={() => setDeleting(true)} />
+          {embedded && onToggleFocus && (
+            <IconButton
+              label={focusMode ? 'Show folders' : 'Hide folders'}
+              icon={focusMode ? 'collapse' : 'expand'}
+              size={18}
+              onClick={onToggleFocus}
+            />
+          )}
         </span>
       </div>
 

@@ -31,6 +31,7 @@ export function FolderPicker({
   label = 'Folder',
   emptyLabel = 'Unfiled',
   disabled = false,
+  compact = false,
 }: {
   folders: Folder[]
   value: string | null
@@ -38,6 +39,7 @@ export function FolderPicker({
   label?: string
   emptyLabel?: string
   disabled?: boolean
+  compact?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -83,9 +85,11 @@ export function FolderPicker({
       <button
         type="button"
         className="folder-picker-button"
+        data-compact={compact || undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={label}
+        aria-label={compact ? `${label}: ${selected?.title ?? emptyLabel}` : label}
+        title={compact ? `${label}: ${selected?.title ?? emptyLabel}` : undefined}
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
       >
@@ -97,8 +101,8 @@ export function FolderPicker({
         >
           <Icon name="folder" size={14} />
         </span>
-        <span className="folder-picker-value">{selected?.title ?? emptyLabel}</span>
-        <Icon name="chevron-down" size={13} />
+        {!compact && <span className="folder-picker-value">{selected?.title ?? emptyLabel}</span>}
+        {!compact && <Icon name="chevron-down" size={13} />}
       </button>
 
       {open && (

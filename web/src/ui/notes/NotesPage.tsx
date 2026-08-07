@@ -173,25 +173,15 @@ export function NotesPage() {
         <div className="notes-main">
           {noteID ? (
             <>
-              <div className="note-inline-navigation">
-                <Button
-                  variant="quiet"
-                  icon="back"
-                  onClick={() => {
-                    setCleanScreen(false)
-                    navigate('/notes')
-                  }}
-                >
-                  Back
-                </Button>
-                <IconButton
-                  label={cleanScreen ? 'Show folders' : 'Hide folders'}
-                  icon={cleanScreen ? 'collapse' : 'expand'}
-                  size={18}
-                  onClick={() => setCleanScreen((current) => !current)}
-                />
-              </div>
-              <NotePage embedded />
+              <NotePage
+                embedded
+                focusMode={cleanScreen}
+                onBack={() => {
+                  setCleanScreen(false)
+                  navigate('/notes')
+                }}
+                onToggleFocus={() => setCleanScreen((current) => !current)}
+              />
             </>
           ) : (
             <>
