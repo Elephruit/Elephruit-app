@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
 import { Button, IconButton } from '../components/Button'
 import { SegmentedControl } from '../components/SegmentedControl'
@@ -62,9 +62,18 @@ function matchesDueFilter(reminder: Reminder, filter: FollowUpDueFilter, now: Da
   return reminder.dueAt.getTime() >= today.getTime() && reminder.dueAt.getTime() < end.getTime()
 }
 
+const FOLLOW_UP_STATUS_FILTERS: FollowUpStatusFilter[] = ['all', 'overdue', 'today', 'upcoming', 'unscheduled']
+
+function statusFilterFromSearch(value: string | null): FollowUpStatusFilter {
+  return FOLLOW_UP_STATUS_FILTERS.includes(value as FollowUpStatusFilter)
+    ? (value as FollowUpStatusFilter)
+    : 'all'
+}
+
 export function FollowUpsPage() {
   const uid = useUID()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const live = useLiveReminders(uid)
   const people = usePeople(uid)
   const folders = useFolders(uid)
@@ -72,7 +81,7 @@ export function FollowUpsPage() {
   const [ownership, setOwnership] = useState<FollowUpResponsibilityFilter>('all')
   const [editing, setEditing] = useState<Reminder | null>(null)
   const [createRequest, setCreateRequest] = useState(0)
-  const [statusFilter, setStatusFilter] = useState<FollowUpStatusFilter>('all')
+  const statusFilter = statusFilterFromSearch(searchParams.get('status'))
   const [personFilter, setPersonFilter] = useState('')
   const [dueFilter, setDueFilter] = useState<FollowUpDueFilter>('any')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -150,12 +159,19 @@ export function FollowUpsPage() {
     ownership !== 'all'
 
   function clearFilters() {
-    setStatusFilter('all')
+    setSearchParams({}, { replace: true })
     setPersonFilter('')
     setDueFilter('any')
     setCategoryFilter('')
     setFolderFilter('')
     setOwnership('all')
+  }
+
+  function changeStatusFilter(next: FollowUpStatusFilter) {
+    const nextParams = new URLSearchParams(searchParams)
+    if (next === 'all') nextParams.delete('status')
+    else nextParams.set('status', next)
+    setSearchParams(nextParams, { replace: true })
   }
 
   function requestCreate() {
@@ -236,7 +252,7 @@ export function FollowUpsPage() {
             folderID={folderFilter}
             folders={filterFolders}
             responsibility={ownership}
-            onStatusChange={setStatusFilter}
+            onStatusChange={changeStatusFilter}
             onPersonChange={setPersonFilter}
             onDueChange={setDueFilter}
             onCategoryChange={setCategoryFilter}

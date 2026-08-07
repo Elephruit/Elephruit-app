@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { relativeDescription } from '../../domain/contact'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { followUpSuggestions, relativeDescription } from '../../domain/contact'
 import { startOfDay, wholeDaysBetween } from '../../domain/dates'
 import { foldedForMatching, type Person } from '../../domain/person'
 import { professionalIdentityOf } from '../../domain/personSummary'
@@ -69,6 +69,7 @@ function NextFollowUp({ reminder, now }: { reminder: Reminder | undefined; now: 
 export function PeopleListPage() {
   const uid = useUID()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const people = usePeople(uid)
   const reminders = useReminders(uid)
   const observations = useAllObservations(uid)
@@ -92,7 +93,23 @@ export function PeopleListPage() {
   const [order, setOrder] = useState<SortOrder>('name')
   const [sortOpen, setSortOpen] = useState(false)
   const sortMenuRef = useRef<HTMLDivElement>(null)
-  const now = new Date()
+  const [now] = useState(() => new Date())
+  const quietOnly = searchParams.get('filter') === 'quiet'
+  const quietSuggestions = useMemo(
+    () =>
+      followUpSuggestions(
+        (people ?? [])
+          .filter((person) => !person.isPlaceholder)
+          .map((person) => ({
+            personID: person.id,
+            displayName: person.displayName,
+            lastContactAt: person.lastContactAt,
+          })),
+        now,
+      ),
+    [now, people],
+  )
+  const quietIDs = useMemo(() => new Set(quietSuggestions.map((suggestion) => suggestion.personID)), [quietSuggestions])
 
   // Placeholders stay off the list — they surface on the pages of the people
   // they belong to, and in the to-fill-in queue, same as the Mac app.
@@ -101,10 +118,12 @@ export function PeopleListPage() {
     const folded = foldedForMatching(query)
     const matches = people.filter(
       (person) =>
-        !person.isPlaceholder && (!folded || foldedForMatching(person.displayName).includes(folded)),
+        !person.isPlaceholder &&
+        (!quietOnly || quietIDs.has(person.id)) &&
+        (!folded || foldedForMatching(person.displayName).includes(folded)),
     )
     return [...matches].sort(COMPARATORS[order])
-  }, [people, query, order])
+  }, [people, query, quietIDs, quietOnly, order])
 
   const nextByPerson = useMemo(() => nextOpenReminderByPerson(reminders ?? []), [reminders])
   const observationsByPerson = useMemo(() => {
@@ -121,7 +140,13 @@ export function PeopleListPage() {
     <PageScaffold width="wide">
       <PageHeader
         title="People"
-        subtitle={people ? `${people.filter((p) => !p.isPlaceholder).length} on record` : undefined}
+        subtitle={
+          people
+            ? quietOnly
+              ? `${quietSuggestions.length} going quiet`
+              : `${people.filter((p) => !p.isPlaceholder).length} on record`
+            : undefined
+        }
         actions={
           <>
             <input
@@ -192,7 +217,7 @@ export function PeopleListPage() {
 
       {listed === undefined && <SkeletonRows avatar count={8} />}
 
-      {listed && listed.length === 0 && !query && (
+      {listed && listed.length === 0 && !query && !quietOnly && (
         <EmptyState
           icon="people"
           headline="Nobody recorded yet"
@@ -203,6 +228,10 @@ export function PeopleListPage() {
             </Button>
           }
         />
+      )}
+
+      {listed && listed.length === 0 && quietOnly && !query && (
+        <p className="directory-empty">Nobody is going quiet.</p>
       )}
 
       {listed && listed.length === 0 && query && <p className="directory-empty">Nobody matches “{query}”.</p>}

@@ -247,7 +247,7 @@ export function FeedPage() {
                 type="button"
                 className="feed-summary-item"
                 data-tone={overview.overdue > 0 ? 'overdue' : 'neutral'}
-                onClick={() => navigate('/followups')}
+                onClick={() => navigate('/followups?status=overdue')}
               >
                 <b className="tabular">{overview.overdue}</b>
                 <span>{overview.overdue === 1 ? 'Overdue follow-up' : 'Overdue follow-ups'}</span>
@@ -257,7 +257,7 @@ export function FeedPage() {
                 type="button"
                 className="feed-summary-item"
                 data-tone={overview.today > 0 ? 'today' : 'neutral'}
-                onClick={() => navigate('/followups')}
+                onClick={() => navigate('/followups?status=today')}
               >
                 <b className="tabular">{overview.today}</b>
                 <span>Due today</span>
@@ -268,7 +268,7 @@ export function FeedPage() {
                 className="feed-summary-item"
                 data-tone={overview.quiet.length > 0 ? 'accent' : 'neutral'}
                 data-span
-                onClick={() => navigate('/people')}
+                onClick={() => navigate('/people?filter=quiet')}
               >
                 <b className="tabular">{overview.quiet.length}</b>
                 <span>Going quiet</span>
