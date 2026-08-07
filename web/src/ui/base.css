@@ -6324,8 +6324,15 @@ button.timeline-badge {
   height: 36px;
   min-height: 36px;
   justify-content: center;
-  padding: 0;
-  border-radius: 50%;
+  padding: 6px;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+}
+
+.folder-picker-button[data-compact]:hover:not(:disabled),
+.folder-picker-button[data-compact][aria-expanded='true'] {
+  background: transparent;
 }
 
 .folder-picker-button[data-compact] .folder-picker-glyph {
