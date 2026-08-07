@@ -13,6 +13,7 @@ import { useFolders, useNotes, useReminders } from '../../data/hooks'
 import {
   buildTree,
   isArchived,
+  planCreateFolder,
   planDeleteFolder,
   planUnarchiveFolder,
   progressOf,
@@ -41,7 +42,6 @@ export function FoldersPage() {
 
   const [view, setView] = useState<'live' | 'archived'>('live')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
-  const [creating, setCreating] = useState<{ parentID: string | null } | null>(null)
   const [editing, setEditing] = useState<Folder | null>(null)
   const [deleting, setDeleting] = useState<Folder | null>(null)
 
@@ -104,6 +104,20 @@ export function FoldersPage() {
     setDeleting(null)
   }
 
+  async function createFolder(parentID: string | null) {
+    const siblings = (folders ?? []).filter((folder) => folder.parentID === parentID)
+    const usedTitles = new Set(siblings.map((folder) => folder.title))
+    let title = 'New folder'
+    let suffix = 2
+    while (usedTitles.has(title)) {
+      title = `New folder ${suffix}`
+      suffix += 1
+    }
+
+    const { plan } = planCreateFolder({ title, parentID }, new Date())
+    await applyPlan(uid, plan)
+  }
+
   /// What a folder holds, in words. A trip says how far along it is; a plain
   /// folder says what is in it; an empty one says nothing at all rather than
   /// "0 notes, 0 reminders" on every row.
@@ -158,7 +172,7 @@ export function FoldersPage() {
               small
               icon="plus"
               aria-label={`New folder inside ${node.folder.title}`}
-              onClick={() => setCreating({ parentID: node.folder.id })}
+              onClick={() => void createFolder(node.folder.id)}
             >
               Inside
             </Button>
@@ -194,7 +208,7 @@ export function FoldersPage() {
               />
             )}
             {(view === 'archived' || (tree?.length ?? 0) > 0) && (
-              <Button variant="primary" icon="plus" onClick={() => setCreating({ parentID: null })}>
+              <Button variant="primary" icon="plus" onClick={() => void createFolder(null)}>
                 New folder
               </Button>
             )}
@@ -210,7 +224,7 @@ export function FoldersPage() {
           headline="Nothing filed yet"
           message="A folder holds notes and reminders, and folders hold folders. Give one dates and it becomes a trip you can archive when it is over."
           action={
-            <Button variant="primary" icon="plus" onClick={() => setCreating({ parentID: null })}>
+            <Button variant="primary" icon="plus" onClick={() => void createFolder(null)}>
               New folder
             </Button>
           }
@@ -256,13 +270,11 @@ export function FoldersPage() {
         </div>
       )}
 
-      {(creating || editing) && folders && (
+      {editing && folders && (
         <FolderSheet
           existing={editing}
           folders={folders}
-          defaultParentID={creating?.parentID ?? null}
           onClose={() => {
-            setCreating(null)
             setEditing(null)
           }}
         />
