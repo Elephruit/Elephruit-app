@@ -4,6 +4,7 @@
 /// reminder's dates become editable fields and back.
 
 import type { Reminder } from './reminders'
+import { uniqueCategoryTags } from './categoryTags'
 import {
   hasTemporalCue,
   resolveScheduleDraft,
@@ -70,7 +71,7 @@ export function draftFromReminder(reminder: Reminder, userZone: string): FollowU
     title: reminder.title,
     notes: reminder.notes ?? '',
     personIDs: new Set(reminder.personIDs),
-    categoryTags: new Set(reminder.categoryTags ?? []),
+    categoryTags: new Set(uniqueCategoryTags(reminder.categoryTags ?? [])),
     schedule,
   }
 }
@@ -106,7 +107,7 @@ export function reminderFieldsFromDraft(draft: FollowUpDraft, context: TemporalC
     title: draft.title.trim(),
     notes: draft.notes.trim() || null,
     personIDs: [...draft.personIDs],
-    categoryTags: [...draft.categoryTags],
+    categoryTags: uniqueCategoryTags(draft.categoryTags),
     startAt: resolved.startAt,
     dueAt: resolved.dueAt,
     isSomeday: resolved.isSomeday,

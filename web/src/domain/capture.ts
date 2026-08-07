@@ -12,6 +12,7 @@ import { nameParts, paletteColorFor, type Person } from './person'
 import { possessivePhrase, relationshipPair, type Relationship, type RelationshipKind } from './relationships'
 import type { Reminder } from './reminders'
 import type { WritePlan } from './writePlan'
+import { uniqueCategoryTags } from './categoryTags'
 
 // MARK: People
 
@@ -374,7 +375,7 @@ export function planCreateReminder(draft: ReminderDraft, now: Date): { plan: Wri
     title: draft.title.trim(),
     notes: draft.notes?.trim() || null,
     personIDs: [...new Set(draft.personIDs ?? [])],
-    categoryTags: [...new Set((draft.categoryTags ?? []).map((tag) => tag.trim()).filter(Boolean))],
+    categoryTags: uniqueCategoryTags(draft.categoryTags ?? []),
     sourceInteractionID: draft.sourceInteractionID ?? null,
     sourceDocumentID: draft.sourceDocumentID ?? null,
     startAt: draft.startAt ?? null,

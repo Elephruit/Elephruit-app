@@ -1,9 +1,10 @@
 import { useId, useRef, useState } from 'react'
+import { categoryKey, uniqueCategoryTags } from '../../domain/categoryTags'
 import { Icon } from '../components/Icon'
 import { categoryTintStyle } from './categoryStyle'
 
 function folded(value: string): string {
-  return value.trim().toLocaleLowerCase()
+  return categoryKey(value)
 }
 
 export function CategoryTagPicker({
@@ -26,7 +27,7 @@ export function CategoryTagPicker({
   const listID = useId()
 
   const selectedKeys = new Set([...selected].map(folded))
-  const candidates = [...new Set(suggestions.map((tag) => tag.trim()).filter(Boolean))]
+  const candidates = uniqueCategoryTags(suggestions)
   const visible = candidates.filter(
     (tag) => !selectedKeys.has(folded(tag)) && (!search.trim() || folded(tag).includes(folded(search))),
   )
@@ -38,7 +39,7 @@ export function CategoryTagPicker({
   function add(tag: string) {
     const value = tag.trim()
     if (!value) return
-    onChange(new Set([...selected, value]))
+    onChange(new Set(uniqueCategoryTags([...selected, value])))
     setSearch('')
     setActiveIndex(0)
     inputRef.current?.focus()

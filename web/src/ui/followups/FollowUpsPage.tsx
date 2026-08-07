@@ -13,6 +13,7 @@ import { startOfDay } from '../../domain/dates'
 import { BUCKET_TITLES, bucketFor, completedList, sections, type Reminder } from '../../domain/reminders'
 import { formatScheduleSummary } from '../../domain/temporal'
 import { applyPlan } from '../../data/applyPlan'
+import { uniqueCategoryTags } from '../../domain/categoryTags'
 import { usePeople, useReminders } from '../../data/hooks'
 import { useUID } from '../UserContext'
 import { EmptyState } from '../components/EmptyState'
@@ -55,12 +56,11 @@ export function FollowUpsPage() {
   const done = useMemo(() => (reminders ? completedList(reminders) : []), [reminders])
   const peopleByID = useMemo(() => new Map((people ?? []).map((p) => [p.id, p])), [people])
   const tagSuggestions = useMemo(
-    () => [
-      ...new Set([
-        ...DEFAULT_FOLLOWUP_CATEGORIES,
+    () =>
+      uniqueCategoryTags([
         ...(reminders ?? []).flatMap((reminder) => reminder.categoryTags ?? []),
+        ...DEFAULT_FOLLOWUP_CATEGORIES,
       ]),
-    ],
     [reminders],
   )
 
@@ -223,7 +223,7 @@ export function FollowUpsPage() {
                             </span>
                           )
                         })}
-                        {(reminder.categoryTags ?? []).map((tag) => (
+                        {uniqueCategoryTags(reminder.categoryTags ?? []).map((tag) => (
                           <span key={tag} className="task-category" style={categoryTintStyle(tag)}>
                             <span className="category-option-dot" aria-hidden="true" />
                             {tag}

@@ -20,6 +20,7 @@ import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
 import { CategoryTagPicker } from './CategoryTagPicker'
 import { categoryTintStyle } from './categoryStyle'
+import { FollowUpDatePicker } from './FollowUpDatePicker'
 
 const USER_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
 
@@ -28,12 +29,6 @@ type OpenPanel = 'people' | 'date' | 'categories' | null
 function shiftedDate(days: number): string {
   const date = new Date()
   date.setDate(date.getDate() + days)
-  return toLocalDateValue(date)
-}
-
-function nextMonday(): string {
-  const date = new Date()
-  date.setDate(date.getDate() + ((8 - date.getDay()) % 7 || 7))
   return toLocalDateValue(date)
 }
 
@@ -284,11 +279,6 @@ export function InlineFollowUpComposer({
   }
 
   const dueDate = draft.schedule.scheduleMode === 'deadline' ? draft.schedule.localDate : ''
-  const quickDates = [
-    { label: 'Today', value: shiftedDate(0) },
-    { label: 'Tomorrow', value: shiftedDate(1) },
-    { label: 'Next Monday', value: nextMonday() },
-  ]
 
   return (
     <div
@@ -448,36 +438,18 @@ export function InlineFollowUpComposer({
               <span className="inline-panel-icon"><Icon name="calendar" size={17} /></span>
               <span><strong>{dueDate ? `Due ${formatDueDate(dueDate)}` : 'Choose a due date'}</strong><small>Only due dates can become overdue.</small></span>
             </div>
-            <div className="inline-date-choices">
-              {quickDates.map((choice) => (
-                <button
-                  key={choice.label}
-                  type="button"
-                  className="inline-date-choice"
-                  aria-pressed={dueDate === choice.value}
-                  onClick={() => setDueDate(choice.value)}
-                >
-                  <strong>{choice.label}</strong>
-                  <span>{calendarLabel(choice.value)}</span>
-                </button>
-              ))}
-            </div>
-            <div className="inline-custom-date">
-              <Icon name="calendar" size={16} />
-              <label htmlFor={`followup-date-${existingID ?? 'new'}`}>Choose another date</label>
-              <input
-                id={`followup-date-${existingID ?? 'new'}`}
-                type="date"
-                aria-label="Due date"
-                value={dueDate}
-                onChange={(event) => setDueDate(event.target.value)}
-              />
-              {dueDate && (
-                <button type="button" className="button button-plain button-small" onClick={() => setDueDate('')}>
-                  Clear
-                </button>
-              )}
-            </div>
+            <FollowUpDatePicker
+              value={dueDate}
+              autoFocus
+              onSelect={(localDate) => {
+                setDueDate(localDate)
+                setOpenPanel(null)
+              }}
+              onClear={() => {
+                setDueDate('')
+                setOpenPanel(null)
+              }}
+            />
           </div>
         )}
 
