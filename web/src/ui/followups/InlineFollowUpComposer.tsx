@@ -50,7 +50,7 @@ function formatDueDate(localDate: string): string {
 function formatScheduleButton(draft: FollowUpDraft): string {
   if (draft.schedule.scheduleMode === 'someday') return 'Someday'
   if (draft.schedule.scheduleMode === 'start' && draft.schedule.localDate) {
-    return `Starts ${formatDueDate(draft.schedule.localDate)}`
+    return formatDueDate(draft.schedule.localDate)
   }
   if (draft.schedule.scheduleMode === 'deadline') return formatDueDate(draft.schedule.localDate)
   return 'Due date'
@@ -320,7 +320,10 @@ export function InlineFollowUpComposer({
     )
   }
 
-  const dueDate = draft.schedule.scheduleMode === 'deadline' ? draft.schedule.localDate : ''
+  const dueDate =
+    draft.schedule.scheduleMode === 'deadline' || draft.schedule.scheduleMode === 'start'
+      ? draft.schedule.localDate
+      : ''
 
   return (
     <div

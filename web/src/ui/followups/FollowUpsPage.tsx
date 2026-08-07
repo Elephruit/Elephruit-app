@@ -29,8 +29,9 @@ import {
 /// rows sit under their heading, so the chip is redundant there.
 function dateChip(reminder: Reminder, now: Date): { text: string; tone: 'overdue' | 'today' | null } | null {
   if (reminder.isSomeday) return null
-  const text = formatScheduleSummary(reminder)
-  if (!text) return null
+  const summary = formatScheduleSummary(reminder)
+  if (!summary) return null
+  const text = summary.replace(/^(Due|Starts) /, '')
   const bucket = bucketFor(reminder, now)
   if (bucket === 'overdue') return { text, tone: 'overdue' }
   if (bucket === 'today') return { text, tone: 'today' }
@@ -41,7 +42,7 @@ function dateChip(reminder: Reminder, now: Date): { text: string; tone: 'overdue
 /// item starts, an unscheduled one gets scheduled — the copy says which.
 function quickAction(reminder: Reminder): { label: string; kind: 'deadline' | 'start' } {
   if (reminder.dueAt) return { label: 'Move to tomorrow', kind: 'deadline' }
-  if (reminder.startAt) return { label: 'Start tomorrow', kind: 'start' }
+  if (reminder.startAt) return { label: 'Move to tomorrow', kind: 'start' }
   return { label: 'Schedule tomorrow', kind: 'deadline' }
 }
 
