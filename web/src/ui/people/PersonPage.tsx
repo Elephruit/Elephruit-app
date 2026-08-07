@@ -432,16 +432,15 @@ export function PersonPage() {
       <div className="person-cols">
         <div className="person-history">
           <div className="person-primary-context">
-            {primaryAttributes.length > 0 && (
-              <FactsSection
-                person={person}
-                observations={observations ?? []}
-                title={focus === 'professional' ? 'Work context' : 'Personal context'}
-                includeAttributes={primaryAttributes}
-                addSignal={addFactSignal}
-                emphasis="primary"
-              />
-            )}
+            <FactsSection
+              person={person}
+              observations={observations ?? []}
+              title={focus === 'professional' ? 'Work context' : 'Personal context'}
+              includeAttributes={primaryAttributes}
+              addSignal={addFactSignal}
+              emphasis="primary"
+              hideWhenEmpty
+            />
 
             {openFollowUps.length > 0 && (
               <CommitmentBoard
