@@ -826,7 +826,6 @@ dialog.palette::backdrop {
   margin-top: 0;
   margin-bottom: var(--space-small);
   background: color-mix(in srgb, var(--color-accent) 5%, var(--color-background));
-  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-accent) 48%, transparent);
 }
 
 @keyframes inline-followup-open {
