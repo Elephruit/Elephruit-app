@@ -5168,7 +5168,7 @@ button.timeline-badge {
   color: var(--color-text-secondary);
 }
 
-.empty-state svg {
+.empty-state > svg {
   color: var(--color-text-tertiary);
   margin-bottom: var(--space-medium);
 }

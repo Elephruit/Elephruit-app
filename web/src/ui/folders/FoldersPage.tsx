@@ -193,9 +193,11 @@ export function FoldersPage() {
                 onChange={setView}
               />
             )}
-            <Button variant="primary" icon="plus" onClick={() => setCreating({ parentID: null })}>
-              New folder
-            </Button>
+            {(view === 'archived' || (tree?.length ?? 0) > 0) && (
+              <Button variant="primary" icon="plus" onClick={() => setCreating({ parentID: null })}>
+                New folder
+              </Button>
+            )}
           </>
         }
       />
