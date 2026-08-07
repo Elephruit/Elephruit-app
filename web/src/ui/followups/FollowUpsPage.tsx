@@ -13,7 +13,7 @@ import { startOfDay } from '../../domain/dates'
 import { BUCKET_TITLES, bucketFor, completedList, sections, type Reminder } from '../../domain/reminders'
 import { formatScheduleSummary } from '../../domain/temporal'
 import { applyPlan } from '../../data/applyPlan'
-import { useContainers, useLiveReminders, usePeople } from '../../data/hooks'
+import { useFolders, useLiveReminders, usePeople } from '../../data/hooks'
 import { useUID } from '../UserContext'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
@@ -44,7 +44,7 @@ export function FollowUpsPage() {
   const navigate = useNavigate()
   const live = useLiveReminders(uid)
   const people = usePeople(uid)
-  const containers = useContainers(uid)
+  const folders = useFolders(uid)
   const [view, setView] = useState<'open' | 'completed'>('open')
   const [editing, setEditing] = useState<Reminder | null>(null)
   const [creating, setCreating] = useState(false)
@@ -54,9 +54,9 @@ export function FollowUpsPage() {
   const groups = useMemo(() => (live ? sections(live, now) : undefined), [live, now])
   const done = useMemo(() => (live ? completedList(live) : []), [live])
   const peopleByID = useMemo(() => new Map((people ?? []).map((p) => [p.id, p])), [people])
-  const containersByID = useMemo(
-    () => new Map((containers ?? []).map((container) => [container.id, container])),
-    [containers],
+  const foldersByID = useMemo(
+    () => new Map((folders ?? []).map((folder) => [folder.id, folder])),
+    [folders],
   )
 
   const counts = useMemo(() => {
@@ -170,28 +170,22 @@ export function FollowUpsPage() {
                           // Without this the trip's work and the day's work are
                           // indistinguishable here, and the page's whole claim
                           // is that they are the same list seen differently.
-                          const container = reminder.containerID
-                            ? containersByID.get(reminder.containerID)
-                            : undefined
-                          if (!container) return null
+                          const folder = reminder.folderID ? foldersByID.get(reminder.folderID) : undefined
+                          if (!folder) return null
                           return (
                             <span
                               role="link"
                               tabIndex={0}
                               className="task-container"
-                              style={
-                                { '--tint': `var(--palette-${container.colorName})` } as React.CSSProperties
-                              }
+                              style={{ '--tint': `var(--palette-${folder.colorName})` } as React.CSSProperties}
                               onClick={(event) => {
                                 event.stopPropagation()
-                                navigate(`/projects/${container.id}`)
+                                navigate(`/folders/${folder.id}`)
                               }}
-                              onKeyDown={(event) =>
-                                event.key === 'Enter' && navigate(`/projects/${container.id}`)
-                              }
+                              onKeyDown={(event) => event.key === 'Enter' && navigate(`/folders/${folder.id}`)}
                             >
-                              <Icon name={container.kind === 'folder' ? 'folder' : 'project'} size={13} />
-                              {container.title}
+                              <Icon name="folder" size={13} />
+                              {folder.title}
                             </span>
                           )
                         })()}
@@ -272,7 +266,7 @@ export function FollowUpsPage() {
         <FollowUpSheet
           existing={editing}
           people={people}
-          containers={containers ?? []}
+          folders={folders ?? []}
           onClose={() => {
             setCreating(false)
             setEditing(null)

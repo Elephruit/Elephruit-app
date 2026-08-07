@@ -10,8 +10,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useContainers, useNotes, usePeople, useReminders, useSearchableInteractions } from '../../data/hooks'
-import type { Container } from '../../domain/container'
+import { useFolders, useNotes, usePeople, useReminders, useSearchableInteractions } from '../../data/hooks'
+import type { Folder } from '../../domain/folder'
 import type { Interaction } from '../../domain/interaction'
 import type { Note } from '../../domain/note'
 import { foldedForMatching, type Person } from '../../domain/person'
@@ -38,14 +38,14 @@ interface Command {
 /// full re-search of every collection on every keystroke *and* on every
 /// unrelated re-render.
 const EMPTY_PEOPLE: Person[] = []
-const EMPTY_CONTAINERS: Container[] = []
+const EMPTY_FOLDERS: Folder[] = []
 const EMPTY_REMINDERS: Reminder[] = []
 const EMPTY_INTERACTIONS: Interaction[] = []
 const EMPTY_NOTES: Note[] = []
 
 const HIT_ICONS: Record<HitKind, string> = {
   person: 'people',
-  container: 'project',
+  folder: 'folder',
   reminder: 'bell',
   interaction: 'feed',
   note: 'note',
@@ -55,8 +55,8 @@ function routeFor(hit: SearchHit): string {
   switch (hit.kind) {
     case 'person':
       return `/people/${hit.id}`
-    case 'container':
-      return `/projects/${hit.id}`
+    case 'folder':
+      return `/folders/${hit.id}`
     // A reminder opens where it lives; an unfiled one has only the list.
     case 'reminder':
       return '/followups'
@@ -72,7 +72,7 @@ const STATIC_COMMANDS: Command[] = [
   { id: 'action-brief', group: 'Actions', label: 'Prepare my day', icon: 'sparkle', to: '/?brief=1' },
   { id: 'page-feed', group: 'Pages', label: 'Feed', icon: 'feed', to: '/' },
   { id: 'page-people', group: 'Pages', label: 'People', icon: 'people', to: '/people' },
-  { id: 'page-projects', group: 'Pages', label: 'Projects', icon: 'project', to: '/projects' },
+  { id: 'page-folders', group: 'Pages', label: 'Folders', icon: 'folder', to: '/folders' },
   { id: 'page-notes', group: 'Pages', label: 'Notes', icon: 'note', to: '/notes' },
   { id: 'page-followups', group: 'Pages', label: 'Follow-ups', icon: 'bell', to: '/followups' },
   { id: 'page-settings', group: 'Pages', label: 'Settings', icon: 'gear', to: '/settings' },
@@ -83,7 +83,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   // Subscribed here rather than in the shell so the cost is paid only while the
   // palette is open, instead of on every page for a box nobody has opened.
   const people = usePeople(uid) ?? EMPTY_PEOPLE
-  const containers = useContainers(uid) ?? EMPTY_CONTAINERS
+  const folders = useFolders(uid) ?? EMPTY_FOLDERS
   const notes = useNotes(uid) ?? EMPTY_NOTES
   const reminders = useReminders(uid) ?? EMPTY_REMINDERS
   const interactions = useSearchableInteractions(uid) ?? EMPTY_INTERACTIONS
@@ -109,7 +109,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       foldedForMatching(command.label).includes(folded),
     )
 
-    const { live, archived } = search(query, { people, containers, reminders, interactions, notes })
+    const { live, archived } = search(query, { people, folders, reminders, interactions, notes })
     const toCommand = (hit: SearchHit, group: Group): Command => ({
       id: `${hit.kind}-${hit.id}`,
       group,
@@ -125,7 +125,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       ...live.map((hit) => toCommand(hit, 'Results')),
       ...archived.map((hit) => toCommand(hit, 'Archived')),
     ]
-  }, [people, containers, reminders, interactions, notes, peopleByID, query])
+  }, [people, folders, reminders, interactions, notes, peopleByID, query])
 
   const clampedActive = Math.min(activeIndex, Math.max(0, commands.length - 1))
 

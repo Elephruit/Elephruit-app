@@ -9,9 +9,9 @@ export const COLLECTIONS = [
   'relationships',
   'observations',
   'reminders',
-  /// Projects and folders — the one shape a trip, a house move, or Travel all
-  /// take. See src/domain/container.ts.
-  'containers',
+  /// Trips, house moves, Travel, Recipes — one shape, nesting. See
+  /// src/domain/folder.ts.
+  'folders',
   /// A note's metadata and its capped plain-text projection.
   'notes',
   /// A note's rich content, under the same id. A sibling rather than a

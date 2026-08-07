@@ -34,7 +34,7 @@ const OWNED_COLLECTIONS = [
   'relationships',
   'observations',
   'reminders',
-  'containers',
+  'folders',
   'notes',
   /// A note's rich content. A sibling collection rather than a subcollection —
   /// which also means the owner-only wildcard covers it, and this case is what

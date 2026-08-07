@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AiCredential } from '../ai/credentials'
-import { archivedContainerIDs, isSuppressedByArchive, type Container } from '../domain/container'
+import { archivedFolderIDs, isSuppressedByArchive, type Folder } from '../domain/folder'
 import type { Interaction } from '../domain/interaction'
 import type { Observation } from '../domain/facts'
 import type { MemoryRecord } from '../domain/memory'
@@ -155,46 +155,46 @@ export function useReminders(uid: string): Reminder[] | undefined {
 /// archived trip's work flashes into Overdue for a frame.
 export function useLiveReminders(uid: string): Reminder[] | undefined {
   const reminders = useReminders(uid)
-  const containers = useContainers(uid)
+  const folders = useFolders(uid)
 
   return useMemo(() => {
-    if (!reminders || !containers) return undefined
-    const archived = archivedContainerIDs(containers)
+    if (!reminders || !folders) return undefined
+    const archived = archivedFolderIDs(folders)
     if (archived.size === 0) return reminders
     return reminders.filter((reminder) => !isSuppressedByArchive(reminder, archived))
-  }, [reminders, containers])
+  }, [reminders, folders])
 }
 
-/// The whole tree. Containers are few — a person has a handful of folders and a
-/// dozen projects across a life — so this is the one collection where the
-/// spike-scale posture is not a compromise but the right answer.
-export function useContainers(uid: string): Container[] | undefined {
-  return useQuerySnapshot<Container>(() => query(collectionRef(uid, 'containers')), [uid])
+/// The whole tree. Folders are few — a handful of them across a life — so this
+/// is the one collection where the spike-scale posture is not a compromise but
+/// the right answer.
+export function useFolders(uid: string): Folder[] | undefined {
+  return useQuerySnapshot<Folder>(() => query(collectionRef(uid, 'folders')), [uid])
 }
 
-export function useContainer(uid: string, containerID: string): Container | null | undefined {
-  const [container, setContainer] = useState<Container | null | undefined>(undefined)
+export function useFolder(uid: string, folderID: string): Folder | null | undefined {
+  const [folder, setFolder] = useState<Folder | null | undefined>(undefined)
 
   useEffect(() => {
-    setContainer(undefined)
-    return onSnapshot(docRef(uid, 'containers', containerID), (snapshot) => {
+    setFolder(undefined)
+    return onSnapshot(docRef(uid, 'folders', folderID), (snapshot) => {
       if (!snapshot.exists()) {
-        setContainer(null)
+        setFolder(null)
         return
       }
-      const data = deserialize(snapshot.data()) as Container
+      const data = deserialize(snapshot.data()) as Folder
       data.id = snapshot.id
-      setContainer(data)
+      setFolder(data)
     })
-  }, [uid, containerID])
+  }, [uid, folderID])
 
-  return container
+  return folder
 }
 
-export function useRemindersIn(uid: string, containerID: string): Reminder[] | undefined {
+export function useRemindersIn(uid: string, folderID: string): Reminder[] | undefined {
   return useQuerySnapshot<Reminder>(
-    () => query(collectionRef(uid, 'reminders'), where('containerID', '==', containerID)),
-    [uid, containerID],
+    () => query(collectionRef(uid, 'reminders'), where('folderID', '==', folderID)),
+    [uid, folderID],
   )
 }
 

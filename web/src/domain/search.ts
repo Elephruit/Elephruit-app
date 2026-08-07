@@ -2,7 +2,7 @@
 ///
 /// Firestore has no full-text search, and the honest options are a third-party
 /// index or doing it on the client. At this app's scale it is the client:
-/// people, reminders, observations and containers already subscribe as whole
+/// people, reminders, observations and folders already subscribe as whole
 /// collections, so the rows are in memory before anybody types. The ceiling is
 /// real and stated at the bottom of this file rather than discovered.
 ///
@@ -14,14 +14,13 @@
 /// live ones rather than mixed in, because a finished thing and a live thing
 /// answer different questions even when they match equally well.
 
-import type { Container } from './container'
-import { archivedContainerIDs } from './container'
+import { archivedFolderIDs, type Folder } from './folder'
 import type { Interaction } from './interaction'
 import { displayTitle, type Note } from './note'
 import { foldedForMatching, type Person } from './person'
 import type { Reminder } from './reminders'
 
-export type HitKind = 'person' | 'container' | 'reminder' | 'interaction' | 'note'
+export type HitKind = 'person' | 'folder' | 'reminder' | 'interaction' | 'note'
 
 export interface SearchHit {
   id: string
@@ -65,7 +64,7 @@ const BODY_WEIGHT = 12
 
 export interface SearchInput {
   people?: Person[]
-  containers?: Container[]
+  folders?: Folder[]
   reminders?: Reminder[]
   interactions?: Interaction[]
   notes?: Note[]
@@ -76,9 +75,9 @@ export function search(query: string, input: SearchInput, limit = 40): SearchRes
   const folded = foldedForMatching(query)
   if (!folded) return { live: [], archived: [] }
 
-  const containers = input.containers ?? []
-  const archivedIDs = archivedContainerIDs(containers)
-  const containersByID = new Map(containers.map((container) => [container.id, container]))
+  const folders = input.folders ?? []
+  const archivedIDs = archivedFolderIDs(folders)
+  const foldersByID = new Map(folders.map((folder) => [folder.id, folder]))
   const hits: SearchHit[] = []
 
   for (const person of input.people ?? []) {
@@ -101,33 +100,32 @@ export function search(query: string, input: SearchInput, limit = 40): SearchRes
     })
   }
 
-  for (const container of containers) {
-    const score =
-      scoreOf(container.title, folded, TITLE_WEIGHT) + scoreOf(container.summary, folded, BODY_WEIGHT)
+  for (const folder of folders) {
+    const score = scoreOf(folder.title, folded, TITLE_WEIGHT) + scoreOf(folder.summary, folded, BODY_WEIGHT)
     if (score === 0) continue
     hits.push({
-      id: container.id,
-      kind: 'container',
-      title: container.title,
-      detail: container.summary,
-      archived: archivedIDs.has(container.id),
+      id: folder.id,
+      kind: 'folder',
+      title: folder.title,
+      detail: folder.summary,
+      archived: archivedIDs.has(folder.id),
       score,
-      at: container.updatedAt?.getTime() ?? 0,
+      at: folder.updatedAt?.getTime() ?? 0,
     })
   }
 
   for (const reminder of input.reminders ?? []) {
     const score = scoreOf(reminder.title, folded, TITLE_WEIGHT) + scoreOf(reminder.notes, folded, BODY_WEIGHT)
     if (score === 0) continue
-    const container = reminder.containerID ? containersByID.get(reminder.containerID) : undefined
+    const folder = reminder.folderID ? foldersByID.get(reminder.folderID) : undefined
     hits.push({
       id: reminder.id,
       kind: 'reminder',
       title: reminder.title,
-      detail: container?.title ?? null,
-      // A reminder is archived when the thing it belongs to is. It has no
+      detail: folder?.title ?? null,
+      // A reminder is archived when the folder it belongs to is. It has no
       // archived flag of its own — one place to look, one place to be wrong.
-      archived: reminder.containerID ? archivedIDs.has(reminder.containerID) : false,
+      archived: reminder.folderID ? archivedIDs.has(reminder.folderID) : false,
       score,
       at: reminder.dueAt?.getTime() ?? reminder.createdAt?.getTime() ?? 0,
     })
@@ -139,13 +137,13 @@ export function search(query: string, input: SearchInput, limit = 40): SearchRes
     // body — see SEARCH_ONLY_READS_THE_PROJECTION.
     const score = scoreOf(note.title, folded, TITLE_WEIGHT) + scoreOf(note.bodyText, folded, BODY_WEIGHT)
     if (score === 0) continue
-    const container = note.containerID ? containersByID.get(note.containerID) : undefined
+    const folder = note.folderID ? foldersByID.get(note.folderID) : undefined
     hits.push({
       id: note.id,
       kind: 'note',
       title: displayTitle(note),
-      detail: container?.title ?? null,
-      archived: note.containerID ? archivedIDs.has(note.containerID) : false,
+      detail: folder?.title ?? null,
+      archived: note.folderID ? archivedIDs.has(note.folderID) : false,
       score,
       at: note.updatedAt?.getTime() ?? 0,
     })

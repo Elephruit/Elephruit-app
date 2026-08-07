@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Container } from './container'
+import type { Folder } from './folder'
 import type { Interaction } from './interaction'
 import type { Person } from './person'
 import type { Reminder } from './reminders'
@@ -7,25 +7,22 @@ import { search } from './search'
 
 const now = new Date('2026-11-01T09:00:00Z')
 
-const travel: Container = {
+const travel: Folder = {
   id: 'travel',
-  kind: 'folder',
   title: 'Travel',
   summary: null,
   colorName: 'blue',
   parentID: null,
   startAt: null,
   dueAt: null,
-  status: 'active',
   archivedAt: null,
   createdAt: now,
   updatedAt: now,
 }
 
-const chicago: Container = {
+const chicago: Folder = {
   ...travel,
   id: 'chicago',
-  kind: 'project',
   title: 'Chicago, October',
   parentID: 'travel',
   archivedAt: now,
@@ -36,7 +33,7 @@ const tickets: Reminder = {
   title: 'Buy tickets for the Pokémon exhibit at the Field Museum',
   notes: null,
   personIDs: [],
-  containerID: 'chicago',
+  folderID: 'chicago',
   sourceInteractionID: null,
   startAt: null,
   dueAt: null,
@@ -46,7 +43,7 @@ const tickets: Reminder = {
   createdAt: now,
 }
 
-const groceries: Reminder = { ...tickets, id: 'groceries', title: 'Buy milk', containerID: null }
+const groceries: Reminder = { ...tickets, id: 'groceries', title: 'Buy milk', folderID: null }
 
 const ana: Person = {
   id: 'ana',
@@ -73,7 +70,7 @@ const chat: Interaction = {
   createdAt: now,
 }
 
-const everything = { people: [ana], containers: [travel, chicago], reminders: [tickets, groceries], interactions: [chat] }
+const everything = { people: [ana], folders: [travel, chicago], reminders: [tickets, groceries], interactions: [chat] }
 
 describe('search', () => {
   it('finds nothing for an empty query rather than everything', () => {
@@ -91,7 +88,7 @@ describe('search', () => {
     expect(live.map((hit) => hit.id)).not.toContain('tickets')
   })
 
-  it('treats a reminder as archived because its container is', () => {
+  it('treats a reminder as archived because its folder is', () => {
     const { archived } = search('pokémon', everything)
     expect(archived.find((hit) => hit.id === 'tickets')?.archived).toBe(true)
   })
@@ -120,20 +117,20 @@ describe('search', () => {
   })
 
   it('prefers a whole-word start over a match inside a word', () => {
-    const containers = [
+    const folders = [
       { ...travel, id: 'a', title: 'Rescheduling' },
       { ...travel, id: 'b', title: 'The schedule' },
     ]
-    const { live } = search('schedule', { containers })
+    const { live } = search('schedule', { folders })
     expect(live[0].id).toBe('b')
   })
 
-  it('finds a container by its summary', () => {
+  it('finds a folder by its summary', () => {
     const withSummary = [{ ...travel, id: 'x', title: 'Nothing', summary: 'deep dish pizza' }]
-    expect(search('pizza', { containers: withSummary }).live.map((h) => h.id)).toEqual(['x'])
+    expect(search('pizza', { folders: withSummary }).live.map((h) => h.id)).toEqual(['x'])
   })
 
-  it('names the container a reminder belongs to, so two similar rows differ', () => {
+  it('names the folder a reminder belongs to, so two similar rows differ', () => {
     const { archived } = search('pokémon', everything)
     expect(archived.find((hit) => hit.id === 'tickets')?.detail).toBe('Chicago, October')
   })
@@ -145,7 +142,7 @@ describe('search', () => {
 
   it('respects the limit on each group independently', () => {
     const many = Array.from({ length: 60 }, (_, i) => ({ ...travel, id: `c${i}`, title: `Trip ${i}` }))
-    expect(search('trip', { containers: many }, 10).live).toHaveLength(10)
+    expect(search('trip', { folders: many }, 10).live).toHaveLength(10)
   })
 
   it('copes with collections that were not passed at all', () => {

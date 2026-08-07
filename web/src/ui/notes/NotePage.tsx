@@ -10,8 +10,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { applyPlan } from '../../data/applyPlan'
-import { useContainers, useNote, useNoteContent, usePeople } from '../../data/hooks'
-import { buildTree, flattenTree, isArchived, pathLabel } from '../../domain/container'
+import { useFolders, useNote, useNoteContent, usePeople } from '../../data/hooks'
+import { isArchived } from '../../domain/folder'
 import { relativeDescription } from '../../domain/contact'
 import {
   NOTHING_PENDING,
@@ -28,6 +28,7 @@ import { EmptyState } from '../components/EmptyState'
 import { SkeletonRows } from '../components/Skeleton'
 import { PageScaffold } from '../shell/PageScaffold'
 import { useUID } from '../UserContext'
+import { FolderPicker } from '../folders/FolderPicker'
 import { NoteEditor } from './NoteEditor'
 
 const SAVE_DEBOUNCE_MS = 700
@@ -38,7 +39,7 @@ export function NotePage() {
   const { noteID = '' } = useParams()
   const note = useNote(uid, noteID)
   const content = useNoteContent(uid, noteID)
-  const containers = useContainers(uid)
+  const folders = useFolders(uid)
   const people = usePeople(uid)
 
   const [title, setTitle] = useState('')
@@ -129,9 +130,9 @@ export function NotePage() {
     [schedule],
   )
 
-  async function setContainer(containerID: string | null) {
+  async function setFolder(folderID: string | null) {
     if (!note) return
-    await applyPlan(uid, planUpdateNote(note.id, { containerID }, new Date()).plan)
+    await applyPlan(uid, planUpdateNote(note.id, { folderID }, new Date()).plan)
   }
 
   async function confirmDelete() {
@@ -165,8 +166,8 @@ export function NotePage() {
     )
   }
 
-  const container = containers?.find((entry) => entry.id === note.containerID)
-  const readOnly = container ? isArchived(container) : false
+  const folder = folders?.find((entry) => entry.id === note.folderID)
+  const readOnly = folder ? isArchived(folder) : false
 
   return (
     <PageScaffold width="reading">
@@ -182,21 +183,13 @@ export function NotePage() {
           {status === 'error' && <span className="field-error">Not saved</span>}
         </span>
         <span className="note-header-actions">
-          {containers && containers.length > 0 && (
-            <select
-              className="field field-inline"
-              aria-label="File this note in"
-              value={note.containerID ?? ''}
-              onChange={(event) => void setContainer(event.target.value || null)}
-            >
-              <option value="">Unfiled</option>
-              {flattenTree(buildTree(containers)).map((node) => (
-                <option key={node.container.id} value={node.container.id}>
-                  {pathLabel(containers, node.container.id)}
-                </option>
-              ))}
-            </select>
-          )}
+          <FolderPicker
+            folders={folders ?? []}
+            value={note.folderID}
+            onChange={(id) => void setFolder(id)}
+            label="File this note in"
+            disabled={readOnly}
+          />
           <Button variant="quiet" icon="trash" onClick={() => setDeleting(true)}>
             Delete
           </Button>
@@ -206,7 +199,7 @@ export function NotePage() {
       {readOnly && (
         <div className="archive-banner">
           <span>
-            {container?.title} is archived, so this note is read-only. Unarchive it to make changes.
+            {folder?.title} is archived, so this note is read-only. Unarchive it to make changes.
           </span>
         </div>
       )}

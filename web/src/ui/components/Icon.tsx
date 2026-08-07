@@ -99,6 +99,18 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M8 9.5h8M8 13h8M8 16.5h4" />
     </>
   ),
+  format: (
+    <>
+      <path d="M4.5 18.5L9.5 5.5h1.2l5 13" />
+      <path d="M6.4 14.2h6.8M16.5 18.5h4" />
+    </>
+  ),
+  pin: (
+    <>
+      <path d="M9 4.5h6l-.8 5.2 3 3.3H6.8l3-3.3z" />
+      <path d="M12 13v6.5" />
+    </>
+  ),
   note: (
     <>
       <path d="M6 3.5h8.5L19 8v12.5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1z" />

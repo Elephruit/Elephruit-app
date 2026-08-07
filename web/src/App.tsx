@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useAuthUser } from './data/auth'
 import { SignInPage } from './ui/SignInPage'
 import { UIDProvider } from './ui/UserContext'
@@ -11,9 +11,16 @@ import { PeopleListPage } from './ui/people/PeopleListPage'
 import { PersonPage } from './ui/people/PersonPage'
 import { NotePage } from './ui/notes/NotePage'
 import { NotesPage } from './ui/notes/NotesPage'
-import { ContainerPage } from './ui/projects/ContainerPage'
-import { ProjectsPage } from './ui/projects/ProjectsPage'
+import { FolderPage } from './ui/folders/FolderPage'
+import { FoldersPage } from './ui/folders/FoldersPage'
 import { SettingsPage } from './ui/settings/SettingsPage'
+
+/// `/projects/:id` kept its id when it became `/folders/:id`, so the old link
+/// still opens the same thing rather than the list.
+function LegacyProjectRoute() {
+  const { folderID } = useParams()
+  return <Navigate to={`/folders/${folderID}`} replace />
+}
 
 function App() {
   const { user, ready } = useAuthUser()
@@ -30,8 +37,12 @@ function App() {
           <Route path="/people/:personID" element={<PersonPage />} />
           <Route path="/notes" element={<NotesPage />} />
           <Route path="/notes/:noteID" element={<NotePage />} />
-          <Route path="/projects" element={<ProjectsPage />} />
-          <Route path="/projects/:containerID" element={<ContainerPage />} />
+          <Route path="/folders" element={<FoldersPage />} />
+          <Route path="/folders/:folderID" element={<FolderPage />} />
+          {/* Projects became Folders. The old paths still land rather than
+              404ing, because a link may be sitting in somebody's history. */}
+          <Route path="/projects" element={<Navigate to="/folders" replace />} />
+          <Route path="/projects/:folderID" element={<LegacyProjectRoute />} />
           <Route path="/followups" element={<FollowUpsPage />} />
           <Route path="/log" element={<LogPage />} />
           {/* Capture lives inline on the feed now; the old page redirects. */}

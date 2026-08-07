@@ -37,7 +37,7 @@ describe('creation', () => {
   })
 
   it('files into a container when told to', () => {
-    expect(makeNote({ containerID: 'chicago' }, now).containerID).toBe('chicago')
+    expect(makeNote({ folderID: 'chicago' }, now).folderID).toBe('chicago')
   })
 
   it('starts unarchived and unpinned', () => {
@@ -149,12 +149,12 @@ describe('what a row shows', () => {
 
 describe('metadata updates', () => {
   it('stamps updatedAt so lists re-sort', () => {
-    const { plan } = planUpdateNote('n1', { containerID: 'chicago' }, now)
+    const { plan } = planUpdateNote('n1', { folderID: 'chicago' }, now)
     expect(plan[0]).toEqual({
       op: 'update',
       collection: 'notes',
       id: 'n1',
-      data: { containerID: 'chicago', updatedAt: now },
+      data: { folderID: 'chicago', updatedAt: now },
     })
   })
 })

@@ -40,7 +40,7 @@ export interface Note {
   /// The plain-text projection, capped. Never the source of truth — always
   /// recomputed from the document on save, so it cannot drift.
   bodyText: string
-  containerID: string | null
+  folderID: string | null
   /// The people a note is about. A note about Maya belongs on Maya's page.
   personIDs: string[]
   pinnedAt: Date | null
@@ -118,7 +118,7 @@ export function excerptOf(note: Pick<Note, 'title' | 'bodyText'>, length = 160):
 
 export interface NoteDraft {
   title?: string
-  containerID?: string | null
+  folderID?: string | null
   personIDs?: string[]
 }
 
@@ -127,7 +127,7 @@ export function makeNote(draft: NoteDraft, now: Date): Note {
     id: newID(),
     title: draft.title?.trim() ?? '',
     bodyText: '',
-    containerID: draft.containerID ?? null,
+    folderID: draft.folderID ?? null,
     personIDs: [...new Set(draft.personIDs ?? [])],
     pinnedAt: null,
     archivedAt: null,
@@ -224,7 +224,7 @@ export function planFlush(
 
 export function planUpdateNote(
   id: string,
-  changes: Partial<Pick<Note, 'title' | 'containerID' | 'personIDs' | 'pinnedAt' | 'archivedAt'>>,
+  changes: Partial<Pick<Note, 'title' | 'folderID' | 'personIDs' | 'pinnedAt' | 'archivedAt'>>,
   now: Date,
 ): { plan: WritePlan } {
   return { plan: [{ op: 'update', collection: 'notes', id, data: { ...changes, updatedAt: now } }] }

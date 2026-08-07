@@ -1,4 +1,4 @@
-/// One project or folder: what it holds, and nothing it does not.
+/// One folder: what it holds, and nothing it does not.
 ///
 /// The reminders are drawn with the same five buckets Follow-ups uses, from the
 /// same `sections()` — a trip's work is not a different kind of work, and a
@@ -8,20 +8,20 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { applyPlan } from '../../data/applyPlan'
-import { useContainer, useContainers, useNotes, usePeople, useRemindersIn } from '../../data/hooks'
+import { useFolder, useFolders, useNotes, usePeople, useRemindersIn } from '../../data/hooks'
 import { planCompleteReminder, planReopenReminder } from '../../domain/capture'
 import {
-  buildTree,
   descendantIDs,
   isArchived,
   leftOpen,
   pathTo,
-  planArchiveContainer,
-  planUnarchiveContainer,
+  planArchiveFolder,
+  planCreateFolder,
+  planUnarchiveFolder,
   progressOf,
   progressSentence,
-  type Container,
-} from '../../domain/container'
+  type Folder,
+} from '../../domain/folder'
 import { relativeDescription } from '../../domain/contact'
 import { displayTitle, excerptOf, planCreateNote } from '../../domain/note'
 import { BUCKET_TITLES, bucketFor, completedList, sections, type Reminder } from '../../domain/reminders'
@@ -36,29 +36,29 @@ import { FollowUpSheet } from '../followups/FollowUpSheet'
 import { PageHeader } from '../shell/PageHeader'
 import { PageScaffold } from '../shell/PageScaffold'
 import { useUID } from '../UserContext'
-import { ContainerSheet } from './ContainerSheet'
+import { FolderSheet } from './FolderSheet'
 
-/// The one date line a project shows. Descriptive, never a verdict — a trip
-/// that has started is not late, and a trip that has ended is not a failure.
-function dateLine(container: Container, now: Date): string | null {
+/// The one date line a folder shows. Descriptive, never a verdict — a trip that
+/// has started is not late, and one that has ended is not a failure.
+function dateLine(folder: Folder, now: Date): string | null {
   const format = (date: Date) =>
     date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
 
-  if (container.startAt && container.dueAt) return `${format(container.startAt)} – ${format(container.dueAt)}`
-  if (container.dueAt) return `Ends ${format(container.dueAt)} · ${relativeDescription(container.dueAt, now)}`
-  if (container.startAt) return `Starts ${format(container.startAt)}`
+  if (folder.startAt && folder.dueAt) return `${format(folder.startAt)} – ${format(folder.dueAt)}`
+  if (folder.dueAt) return `Ends ${format(folder.dueAt)} · ${relativeDescription(folder.dueAt, now)}`
+  if (folder.startAt) return `Starts ${format(folder.startAt)}`
   return null
 }
 
-export function ContainerPage() {
+export function FolderPage() {
   const uid = useUID()
   const navigate = useNavigate()
-  const { containerID = '' } = useParams()
-  const container = useContainer(uid, containerID)
-  const containers = useContainers(uid)
-  const reminders = useRemindersIn(uid, containerID)
-  const people = usePeople(uid)
+  const { folderID = '' } = useParams()
+  const folder = useFolder(uid, folderID)
+  const folders = useFolders(uid)
+  const reminders = useRemindersIn(uid, folderID)
   const allNotes = useNotes(uid)
+  const people = usePeople(uid)
 
   const [editing, setEditing] = useState(false)
   const [archiving, setArchiving] = useState(false)
@@ -71,33 +71,24 @@ export function ContainerPage() {
   const progress = useMemo(() => progressOf(reminders ?? []), [reminders])
   const peopleByID = useMemo(() => new Map((people ?? []).map((person) => [person.id, person])), [people])
 
-  /// The trip's notes. Filed by containment like its reminders, so archiving
-  /// the trip takes them with it — the flight confirmations belong with the
-  /// flight, not in a general pile that outlives it.
   const notes = useMemo(
     () =>
       (allNotes ?? [])
-        .filter((note) => note.containerID === containerID)
+        .filter((note) => note.folderID === folderID)
         .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()),
-    [allNotes, containerID],
+    [allNotes, folderID],
   )
 
   const trail = useMemo(
-    () => (containers && container ? pathTo(containers, container.id).slice(0, -1) : []),
-    [containers, container],
+    () => (folders && folder ? pathTo(folders, folder.id).slice(0, -1) : []),
+    [folders, folder],
   )
   const children = useMemo(
-    () =>
-      containers && container
-        ? buildTree(containers).flatMap(function find(node): Container[] {
-            if (node.container.id === container.id) return node.children.map((child) => child.container)
-            return node.children.flatMap(find)
-          })
-        : [],
-    [containers, container],
+    () => (folders && folder ? folders.filter((entry) => entry.parentID === folder.id) : []),
+    [folders, folder],
   )
 
-  if (container === undefined) {
+  if (folder === undefined) {
     return (
       <PageScaffold width="wide">
         <SkeletonRows count={4} />
@@ -105,16 +96,16 @@ export function ContainerPage() {
     )
   }
 
-  if (container === null) {
+  if (folder === null) {
     return (
       <PageScaffold width="wide">
         <EmptyState
           icon="folder"
           headline="Not here"
-          message="This project or folder has been deleted."
+          message="This folder has been deleted."
           action={
-            <Button variant="primary" onClick={() => navigate('/projects')}>
-              Back to Projects
+            <Button variant="primary" onClick={() => navigate('/folders')}>
+              Back to Folders
             </Button>
           }
         />
@@ -122,28 +113,30 @@ export function ContainerPage() {
     )
   }
 
-  const line = dateLine(container, now)
-  const archived = isArchived(container)
-  const descendantCount = containers ? descendantIDs(containers, container.id).size : 0
+  const subject = folder
+  const line = dateLine(subject, now)
+  const archived = isArchived(subject)
+  const descendantCount = folders ? descendantIDs(folders, subject.id).size : 0
 
-  const subject = container
+  async function setArchived(next: boolean) {
+    const tree = folders ?? [subject]
+    const plan = next
+      ? planArchiveFolder(tree, subject, new Date()).plan
+      : planUnarchiveFolder(tree, subject, new Date()).plan
+    await applyPlan(uid, plan)
+    setArchiving(false)
+  }
 
   async function addNote() {
-    const { plan, note } = planCreateNote({ containerID: subject.id }, new Date())
+    const { plan, note } = planCreateNote({ folderID: subject.id }, new Date())
     await applyPlan(uid, plan)
     navigate(`/notes/${note.id}`)
   }
 
-  async function setArchived(next: boolean) {
-    // The whole tree is needed to find the subtree and the ancestors; falling
-    // back to the subject alone still archives it correctly when the tree has
-    // not arrived, just without its children.
-    const tree = containers ?? [subject]
-    const plan = next
-      ? planArchiveContainer(tree, subject, new Date()).plan
-      : planUnarchiveContainer(tree, subject, new Date()).plan
+  async function addFolder() {
+    const { plan, folder: made } = planCreateFolder({ title: 'New folder', parentID: subject.id }, new Date())
     await applyPlan(uid, plan)
-    setArchiving(false)
+    navigate(`/folders/${made.id}`)
   }
 
   return (
@@ -152,12 +145,12 @@ export function ContainerPage() {
         title={
           <span className="container-title-row">
             <span
-              className="container-glyph"
-              style={{ '--tint': `var(--palette-${container.colorName})` } as React.CSSProperties}
+              className="folder-picker-glyph folder-glyph-large"
+              style={{ '--tint': `var(--palette-${subject.colorName})` } as React.CSSProperties}
             >
-              <Icon name={container.kind === 'folder' ? 'folder' : 'project'} size={19} />
+              <Icon name="folder" size={18} />
             </span>
-            {container.title}
+            {subject.title}
           </span>
         }
         subtitle={
@@ -167,14 +160,14 @@ export function ContainerPage() {
                 key={ancestor.id}
                 type="button"
                 className="link-button"
-                onClick={() => navigate(`/projects/${ancestor.id}`)}
+                onClick={() => navigate(`/folders/${ancestor.id}`)}
               >
                 {ancestor.title}
               </button>
             ))}
-            {container.summary && <span>{container.summary}</span>}
+            {subject.summary && <span>{subject.summary}</span>}
             {line && <span>{line}</span>}
-            {container.kind === 'project' && <span>{progressSentence(progress)}</span>}
+            {progress.total > 0 && <span>{progressSentence(progress)}</span>}
           </span>
         }
         actions={
@@ -188,7 +181,7 @@ export function ContainerPage() {
                 Archive
               </Button>
               <Button variant="quiet" icon="pencil" onClick={() => setEditing(true)}>
-                Edit
+                Rename
               </Button>
               <Button variant="quiet" icon="note" onClick={() => void addNote()}>
                 New note
@@ -205,30 +198,27 @@ export function ContainerPage() {
         <div className="archive-banner">
           <Icon name="archive" size={16} />
           <span>
-            Archived{container.archivedAt ? ` ${relativeDescription(container.archivedAt, now)}` : ''}. Its
-            reminders no longer appear in Follow-ups, and nothing here was marked done on its behalf.
+            Archived{subject.archivedAt ? ` ${relativeDescription(subject.archivedAt, now)}` : ''}. Its reminders
+            no longer appear in Follow-ups, and nothing here was marked done on its behalf.
           </span>
         </div>
       )}
 
       {children.length > 0 && (
         <section>
-          <h2 className="section-header">Inside</h2>
-          <div className="container-tree">
+          <h2 className="section-header">Folders</h2>
+          <div className="folder-list">
             {children.map((child) => (
-              <div key={child.id} className="container-row" data-kind={child.kind}>
-                <button
-                  type="button"
-                  className="container-main"
-                  onClick={() => navigate(`/projects/${child.id}`)}
-                >
+              <div key={child.id} className="folder-row">
+                <span className="folder-tree-twisty" aria-hidden="true" />
+                <button type="button" className="folder-row-main" onClick={() => navigate(`/folders/${child.id}`)}>
                   <span
-                    className="container-glyph"
+                    className="folder-picker-glyph"
                     style={{ '--tint': `var(--palette-${child.colorName})` } as React.CSSProperties}
                   >
-                    <Icon name={child.kind === 'folder' ? 'folder' : 'project'} size={17} />
+                    <Icon name="folder" size={15} />
                   </span>
-                  <span className="container-text">
+                  <span className="folder-row-text">
                     <span className="row-title">{child.title}</span>
                     {child.summary && <span className="row-subtitle">{child.summary}</span>}
                   </span>
@@ -265,15 +255,23 @@ export function ContainerPage() {
 
       {groups === undefined && <SkeletonRows count={3} />}
 
-      {!archived && groups?.length === 0 && done.length === 0 && notes.length === 0 && (
+      {!archived && groups?.length === 0 && done.length === 0 && notes.length === 0 && children.length === 0 && (
         <EmptyState
-          icon="bell"
-          headline="Nothing to do yet"
-          message="Reminders filed here show up in Follow-ups too — this is the same work, seen from the trip rather than from the day."
+          icon="folder"
+          headline="Nothing in here yet"
+          message="Reminders filed here show up in Follow-ups too, and notes filed here archive with the folder — this is the same work, seen from the trip rather than from the day."
           action={
-            <Button variant="primary" icon="plus" onClick={() => setCreatingReminder(true)}>
-              New reminder
-            </Button>
+            <>
+              <Button variant="primary" icon="plus" onClick={() => setCreatingReminder(true)}>
+                New reminder
+              </Button>
+              <Button variant="secondary" icon="note" onClick={() => void addNote()}>
+                New note
+              </Button>
+              <Button variant="secondary" icon="folder" onClick={() => void addFolder()}>
+                New folder
+              </Button>
+            </>
           }
         />
       )}
@@ -294,50 +292,50 @@ export function ContainerPage() {
 
       {!archived &&
         groups?.map((group) => (
-        <section key={group.bucket}>
-          <h2 className="section-header" data-tone={group.bucket === 'overdue' ? 'overdue' : undefined}>
-            {BUCKET_TITLES[group.bucket]}
-          </h2>
-          {group.reminders.map((reminder) => {
-            const schedule = reminder.isSomeday ? null : formatScheduleSummary(reminder)
-            const bucket = bucketFor(reminder, now)
-            return (
-              <div key={reminder.id} className="task-row">
-                <button
-                  type="button"
-                  className="complete-ring"
-                  aria-label={`Complete ${reminder.title}`}
-                  onClick={() => void applyPlan(uid, planCompleteReminder(reminder.id, new Date()).plan)}
-                />
-                <button type="button" className="task-main" onClick={() => setEditingReminder(reminder)}>
-                  <span className="row-title">{reminder.title}</span>
-                  <span className="task-meta">
-                    {schedule && (
-                      <span
-                        className={
-                          bucket === 'overdue'
-                            ? 'chip chip-status-overdue'
-                            : bucket === 'today'
-                              ? 'chip chip-status-today'
-                              : 'chip'
-                        }
-                      >
-                        {schedule}
-                      </span>
-                    )}
-                    {reminder.personIDs.map((id) => {
-                      const person = peopleByID.get(id)
-                      if (!person) return null
-                      return (
-                        <span key={id} className="task-person">
-                          <Avatar name={person.displayName} colorName={person.colorName} small />
-                          {person.displayName}
+          <section key={group.bucket}>
+            <h2 className="section-header" data-tone={group.bucket === 'overdue' ? 'overdue' : undefined}>
+              {BUCKET_TITLES[group.bucket]}
+            </h2>
+            {group.reminders.map((reminder) => {
+              const schedule = reminder.isSomeday ? null : formatScheduleSummary(reminder)
+              const bucket = bucketFor(reminder, now)
+              return (
+                <div key={reminder.id} className="task-row">
+                  <button
+                    type="button"
+                    className="complete-ring"
+                    aria-label={`Complete ${reminder.title}`}
+                    onClick={() => void applyPlan(uid, planCompleteReminder(reminder.id, new Date()).plan)}
+                  />
+                  <button type="button" className="task-main" onClick={() => setEditingReminder(reminder)}>
+                    <span className="row-title">{reminder.title}</span>
+                    <span className="task-meta">
+                      {schedule && (
+                        <span
+                          className={
+                            bucket === 'overdue'
+                              ? 'chip chip-status-overdue'
+                              : bucket === 'today'
+                                ? 'chip chip-status-today'
+                                : 'chip'
+                          }
+                        >
+                          {schedule}
                         </span>
-                      )
-                    })}
-                  </span>
-                </button>
-              </div>
+                      )}
+                      {reminder.personIDs.map((id) => {
+                        const person = peopleByID.get(id)
+                        if (!person) return null
+                        return (
+                          <span key={id} className="task-person">
+                            <Avatar name={person.displayName} colorName={person.colorName} small />
+                            {person.displayName}
+                          </span>
+                        )
+                      })}
+                    </span>
+                  </button>
+                </div>
               )
             })}
           </section>
@@ -367,13 +365,13 @@ export function ContainerPage() {
       )}
 
       {archiving && (
-        <Dialog title={`Archive ${container.title}?`} onClose={() => setArchiving(false)}>
+        <Dialog title={`Archive ${subject.title}?`} onClose={() => setArchiving(false)}>
           <p className="row-subtitle">
             {descendantCount > 0
-              ? `${container.title} and the ${descendantCount} thing${descendantCount === 1 ? '' : 's'} inside it move to the archive. `
+              ? `${subject.title} and the ${descendantCount} folder${descendantCount === 1 ? '' : 's'} inside it move to the archive. `
               : ''}
-            Its reminders leave Follow-ups. Nothing is completed and nothing is deleted — anything still open
-            stays open, and you can search for all of it or bring it back.
+            Its reminders leave Follow-ups and its notes become read-only. Nothing is completed and nothing is
+            deleted — anything still open stays open, and you can search for all of it or bring it back.
           </p>
           <div className="sheet-actions">
             <Button variant="quiet" onClick={() => setArchiving(false)}>
@@ -386,16 +384,16 @@ export function ContainerPage() {
         </Dialog>
       )}
 
-      {editing && containers && (
-        <ContainerSheet existing={container} containers={containers} onClose={() => setEditing(false)} />
+      {editing && folders && (
+        <FolderSheet existing={subject} folders={folders} onClose={() => setEditing(false)} />
       )}
 
       {(creatingReminder || editingReminder) && people && (
         <FollowUpSheet
           existing={editingReminder}
           people={people}
-          containers={containers ?? []}
-          defaultContainerID={container.id}
+          folders={folders ?? []}
+          defaultFolderID={subject.id}
           onClose={() => {
             setCreatingReminder(false)
             setEditingReminder(null)
