@@ -698,6 +698,11 @@ dialog.palette::backdrop {
   padding: var(--space-tight) 0;
 }
 
+.task-main > .row-title {
+  font: 500 1rem/1.4 var(--font-serif);
+  letter-spacing: -0.005em;
+}
+
 .task-meta {
   display: flex;
   align-items: center;
