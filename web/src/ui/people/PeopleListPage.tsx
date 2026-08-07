@@ -9,7 +9,7 @@ import { bucketFor, nextOpenReminderByPerson, type Reminder } from '../../domain
 import { useAllObservations, useAllRelationships, usePeople, useReminders } from '../../data/hooks'
 import { useUID } from '../UserContext'
 import { Avatar } from '../components/Avatar'
-import { Button } from '../components/Button'
+import { Button, IconButton } from '../components/Button'
 import { EmptyState } from '../components/EmptyState'
 import { SkeletonRows } from '../components/Skeleton'
 import { PageHeader } from '../shell/PageHeader'
@@ -133,9 +133,13 @@ export function PeopleListPage() {
               <option value="recent">Recently contacted</option>
               <option value="quiet">Longest quiet</option>
             </select>
-            <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
-              New person
-            </Button>
+            <IconButton
+              className="page-header-add"
+              label="New person"
+              icon="plus"
+              size={19}
+              onClick={() => setCreating(true)}
+            />
           </>
         }
       />

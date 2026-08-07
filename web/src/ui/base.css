@@ -1493,7 +1493,7 @@ dialog.palette::backdrop {
   color: var(--color-destructive);
 }
 
-.page-header-actions .icon-button.followup-header-add {
+.page-header-actions .icon-button.page-header-add {
   width: var(--control-height);
   height: var(--control-height);
   border-radius: 50%;
@@ -1506,14 +1506,14 @@ dialog.palette::backdrop {
     transform var(--duration-fast) var(--ease-out);
 }
 
-.page-header-actions .icon-button.followup-header-add:hover {
+.page-header-actions .icon-button.page-header-add:hover {
   background: var(--color-accent-hover);
   color: var(--color-on-accent);
   box-shadow: var(--shadow-interactive);
   transform: translateY(-1px);
 }
 
-.page-header-actions .icon-button.followup-header-add:focus-visible {
+.page-header-actions .icon-button.page-header-add:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--color-focus) 45%, transparent);
   outline-offset: 3px;
 }

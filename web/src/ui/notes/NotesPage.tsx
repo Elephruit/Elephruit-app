@@ -137,9 +137,13 @@ export function NotesPage() {
               />
             )}
             {!noteID && scope === 'live' && (visible?.length ?? 0) > 0 && (
-              <Button variant="primary" icon="plus" onClick={() => void create()}>
-                New note
-              </Button>
+              <IconButton
+                className="page-header-add"
+                label="New note"
+                icon="plus"
+                size={19}
+                onClick={() => void create()}
+              />
             )}
           </>
         }

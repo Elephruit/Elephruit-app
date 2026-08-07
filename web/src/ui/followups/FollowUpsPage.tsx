@@ -195,7 +195,7 @@ export function FollowUpsPage() {
             />
             {view === 'open' && (
               <IconButton
-                className="followup-header-add"
+                className="page-header-add"
                 label="Add a follow-up"
                 icon="plus"
                 size={19}

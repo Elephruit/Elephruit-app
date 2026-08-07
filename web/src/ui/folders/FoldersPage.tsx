@@ -27,7 +27,7 @@ import {
 } from '../../domain/folder'
 import { relativeDescription } from '../../domain/contact'
 import { PALETTE_COLORS, type PaletteColor } from '../../domain/person'
-import { Button } from '../components/Button'
+import { Button, IconButton } from '../components/Button'
 import { Dialog } from '../components/Dialog'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
@@ -310,9 +310,13 @@ export function FoldersPage() {
               />
             )}
             {(view === 'archived' || (tree?.length ?? 0) > 0) && (
-              <Button variant="primary" icon="plus" onClick={() => void createFolder(null)}>
-                New folder
-              </Button>
+              <IconButton
+                className="page-header-add"
+                label="New folder"
+                icon="plus"
+                size={19}
+                onClick={() => void createFolder(null)}
+              />
             )}
           </>
         }
