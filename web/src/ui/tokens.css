@@ -1,0 +1,264 @@
+/* Elephruit's web-native tokens. Two layers: raw ramps (stone, ink, azure,
+   status, the 13-key person palette) that nothing outside this file references,
+   and the semantic tokens every component consumes. Dark mode, when it arrives,
+   re-points only the semantic layer under [data-theme='dark'] — see theme.ts.
+
+   The ground is warm ivory, the text is warm ink, and there is one accent: the
+   azure of the logo. azure-500 is the brand (marks, sign-in, big moments);
+   azure-600 is the interactive accent — darkened until white-on-600 and 600-on-
+   ivory both clear 4.5:1. The one tint recipe — 14% alpha fill, 28% alpha
+   stroke, calibrated for the ivory ground — keeps every chip, badge, and avatar
+   in the same family.
+
+   Breakpoints (media queries cannot read custom properties — the canonical
+   numbers live in breakpoints.ts): 720 mobile→tablet, 1024 tablet→desktop rail,
+   1280 wide (feed right rail). */
+
+:root {
+  color-scheme: light;
+
+  /* ——— Raw ramps — never referenced outside this file ——— */
+
+  --stone-0: #fdfcfa;
+  --stone-50: #f8f6f2;
+  --stone-100: #f1eee7;
+  --stone-150: #e9e5db;
+  --stone-200: #ddd7ca;
+
+  --ink-900: #221f1a;
+  --ink-600: rgba(46, 40, 30, 0.72);
+  --ink-400: rgba(46, 40, 30, 0.5);
+  --ink-150: rgba(46, 40, 30, 0.13);
+
+  --azure-100: #e4f1f9;
+  --azure-300: #7cc4e8;
+  --azure-400: #4aaee0;
+  --azure-500: #2f9fd8;
+  --azure-600: #1873a6;
+  --azure-700: #125e8a;
+
+  /* ——— Spacing — the 8pt grid with a 4pt half-step, plus a desktop stride ——— */
+  --space-hairline: 2px;
+  --space-tight: 4px;
+  --space-small: 8px;
+  --space-medium: 12px;
+  --space-large: 16px;
+  --space-section: 24px;
+  --space-xl: 32px;
+  --space-generous: 40px;
+  --space-huge: 64px;
+
+  /* ——— Radius — exactly four ——— */
+  --radius-small: 6px;
+  --radius-medium: 8px;
+  --radius-large: 12px;
+  --radius-panel: 16px;
+
+  /* ——— Elevation — exactly four levels. Flat is the canvas and every feed
+         memory; Raised is summary modules and small controls (1px border plus
+         this two-layer whisper); Interactive is hover/focus on raised things
+         (never a scale transform); Overlay is sheets and command surfaces.
+         --shadow-floating/--shadow-panel are legacy aliases kept until every
+         reference migrates. ——— */
+  --shadow-flat: none;
+  --shadow-raised: 0 1px 2px rgba(50, 42, 28, 0.05), 0 1px 3px rgba(50, 42, 28, 0.05);
+  --shadow-interactive: 0 2px 6px rgba(50, 42, 28, 0.09), 0 1px 3px rgba(50, 42, 28, 0.06);
+  --shadow-overlay: 0 18px 50px rgba(50, 42, 28, 0.22);
+  --shadow-floating: var(--shadow-interactive);
+  --shadow-panel: 0 8px 24px rgba(50, 42, 28, 0.14);
+
+  /* ——— Type — Geist carries the interface; Newsreader appears only at
+         --text-display moments (greeting, sign-in, empty-state headlines) ——— */
+  --font-sans: 'Geist Variable', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-serif: 'Newsreader Variable', Georgia, 'Times New Roman', serif;
+
+  --text-display: italic 500 1.6rem/1.3 var(--font-serif);
+  --text-title: 600 1.4rem/1.25 var(--font-sans);
+  --text-heading: 600 1.05rem/1.35 var(--font-sans);
+  --text-body: 400 0.9375rem/1.45 var(--font-sans);
+  --text-body-strong: 500 0.9375rem/1.45 var(--font-sans);
+  --text-sub: 400 0.8125rem/1.45 var(--font-sans);
+  --text-label: 500 0.8125rem/1.4 var(--font-sans);
+  --text-metadata: 400 0.75rem/1.4 var(--font-sans);
+  --text-chip: 500 0.75rem/1.2 var(--font-sans);
+  --text-section: 600 0.6875rem/1.3 var(--font-sans);
+
+  /* ——— Motion — state continuity only, never decoration. Instant is hover
+         feedback, fast is hover/focus transitions, base is sheet entrances,
+         expand is the composer growing in place, insert is a new memory
+         joining the rail. --ease-out is the legacy alias for standard. ——— */
+  --duration-instant: 80ms;
+  --duration-fast: 140ms;
+  --duration-base: 200ms;
+  --duration-expand: 280ms;
+  --duration-insert: 360ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-out: var(--ease-standard);
+  --duration-sheet: 240ms;
+  --duration-slow: 260ms;
+
+  /* ——— Density and measure ——— */
+  --control-height: 36px;
+  --control-height-small: 28px;
+  --content-narrow: 640px;
+  --content-reading: 760px;
+  --content-wide: 1120px;
+
+  /* ——— Timeline geometry — the rail is the feed's skeleton ——— */
+  --rail-width: 40px;
+  --rail-inset: 8px;
+  --badge-size: 27px;
+  --row-padding: 16px;
+
+  /* ——— Memory-rail geometry — the one contract the composer, the feed, and
+         profile history all share, so their rails cannot drift apart. ——— */
+  --memory-rail-column: 52px;
+  --memory-rail-x: 25px;
+  --memory-rail-width: 2px;
+  --memory-node-size: 33px;
+  --memory-date-node-size: 12px;
+  --memory-branch-length: 35px;
+  --memory-content-gap: 10px;
+
+  /* ——— Semantic colours ——— */
+  --color-text: var(--ink-900);
+  --color-text-secondary: var(--ink-600);
+  --color-text-tertiary: var(--ink-400);
+
+  /* Surfaces. The canvas is the page; the surface is anything that must read
+     as sitting on it (sheets, raised modules). Subtle/hover are the in-between
+     tints for regions that merge with the canvas rather than float on it.
+     --color-background/--color-background-elevated are migration aliases. */
+  --color-canvas: var(--stone-50);
+  --color-surface: var(--stone-0);
+  --color-surface-subtle: color-mix(in srgb, var(--stone-0) 66%, var(--stone-100));
+  --color-surface-hover: color-mix(in srgb, var(--stone-0) 76%, var(--stone-100));
+  --color-surface-selected: color-mix(in srgb, var(--color-accent) 8%, var(--stone-0));
+  --color-note-surface: color-mix(in srgb, var(--color-personal) 6%, var(--stone-0));
+  --color-backdrop: rgba(34, 27, 18, 0.32);
+  --color-background: var(--color-canvas);
+  --color-background-elevated: var(--color-surface);
+  --color-subtle-fill: rgba(58, 48, 30, 0.055);
+  --color-hover-fill: rgba(58, 48, 30, 0.085);
+  --color-separator: var(--ink-150);
+  --color-border-strong: var(--stone-200);
+  --color-rail: var(--stone-100);
+  --color-accent: var(--azure-600);
+  --color-accent-hover: var(--azure-700);
+  --color-brand: var(--azure-500);
+  --color-on-accent: #ffffff;
+  --color-focus: var(--azure-500);
+  --color-overdue: #b5432e;
+  --color-due-today: #8f5f10;
+  --color-completed: #3e7d4f;
+  --color-destructive: #b5432e;
+  --color-personal: #2f8fa4;
+  --color-work: #5f5cba;
+  --color-capture: #8d55c4;
+
+  /* ——— The 13 user-pickable person colours. The key names are persisted in
+         Firestore (Person.colorName) and must never change; the values are
+         re-derived to sit on ivory at the tint recipe's alphas. ——— */
+  --palette-red: #bd4a3a;
+  --palette-orange: #b96e2c;
+  --palette-yellow: #9d7f1d;
+  --palette-green: #5a8e51;
+  --palette-mint: #41a08a;
+  --palette-teal: #2f8fa4;
+  --palette-cyan: #3f9fc9;
+  --palette-blue: #4168c6;
+  --palette-indigo: #5f5cba;
+  --palette-purple: #8d55c4;
+  --palette-pink: #bd4f7a;
+  --palette-brown: #96754e;
+  --palette-graphite: #7c766c;
+}
+
+/* ——— Dark — the same warmth after hours. Only the semantic layer re-points;
+       theme.ts stamps data-theme on <html> and Settings › Appearance drives it. ——— */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-text: #ece7dc;
+  --color-text-secondary: rgba(236, 231, 220, 0.7);
+  --color-text-tertiary: rgba(236, 231, 220, 0.48);
+
+  /* Surfaces re-derived for the dark ground, never reused light values. The
+     aliases in :root already point at canvas/surface, so only the family is
+     re-pointed here. */
+  --color-canvas: #191713;
+  --color-surface: #211e19;
+  --color-surface-subtle: color-mix(in srgb, #211e19 72%, #2b261f);
+  --color-surface-hover: color-mix(in srgb, #211e19 56%, #2b261f);
+  --color-surface-selected: color-mix(in srgb, var(--color-accent) 13%, #211e19);
+  --color-note-surface: color-mix(in srgb, var(--color-personal) 10%, #211e19);
+  --color-backdrop: rgba(0, 0, 0, 0.52);
+  --color-rail: #1e1b16;
+  --color-subtle-fill: rgba(235, 225, 205, 0.06);
+  --color-hover-fill: rgba(235, 225, 205, 0.09);
+  --color-separator: rgba(236, 231, 220, 0.12);
+  --color-border-strong: #3d372d;
+  --color-accent: var(--azure-400);
+  --color-accent-hover: var(--azure-300);
+  --color-brand: var(--azure-400);
+  --color-on-accent: #10151b;
+  --color-focus: var(--azure-400);
+  --color-overdue: #dd7a63;
+  --color-due-today: #cfa14e;
+  --color-completed: #82b98c;
+  --color-destructive: #dd7a63;
+  --color-personal: #63b4c8;
+  --color-work: #948fe0;
+  --color-capture: #b78ade;
+
+  --palette-red: #d47d68;
+  --palette-orange: #cf9a58;
+  --palette-yellow: #c4ad55;
+  --palette-green: #8ab97f;
+  --palette-mint: #6fc2ae;
+  --palette-teal: #62b4c9;
+  --palette-cyan: #6cbfe4;
+  --palette-blue: #7d9ce0;
+  --palette-indigo: #928fdb;
+  --palette-purple: #b285dd;
+  --palette-pink: #d883a5;
+  --palette-brown: #b59877;
+  --palette-graphite: #a29c90;
+
+  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.25);
+  --shadow-interactive: 0 2px 6px rgba(0, 0, 0, 0.42), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-panel: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-overlay: 0 18px 50px rgba(0, 0, 0, 0.6);
+}
+
+/* The one tint recipe. Anything tinted uses these two, never bespoke alphas. */
+.tinted {
+  background: color-mix(in srgb, var(--tint, var(--color-accent)) 14%, transparent);
+  color: var(--tint, var(--color-accent));
+}
+.tinted-stroke {
+  border: 1px solid color-mix(in srgb, var(--tint, var(--color-accent)) 28%, transparent);
+}
+
+/* One focus treatment for the whole app. */
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Numbers that line up — dates, counts, times. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

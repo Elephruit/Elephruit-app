@@ -1,0 +1,44 @@
+{
+  "name": "web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "test": "vitest run",
+    "test:functions": "npm --prefix functions test",
+    "test:rules": "vitest run --config tests/rules/vitest.config.ts",
+    "preview": "vite preview",
+    "emulators": "npm --prefix functions run build && firebase emulators:start --project demo-elephruit --export-on-exit ./.emulator-data",
+    "emulators:resume": "npm --prefix functions run build && firebase emulators:start --project demo-elephruit --import ./.emulator-data --export-on-exit ./.emulator-data",
+    "smoke": "node scripts/emulator-smoke.mjs",
+    "smoke:byok": "node scripts/byok-smoke.mjs",
+    "seed": "node --import ./scripts/ts-import.mjs scripts/seed-demo.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/newsreader": "^5.3.0",
+    "firebase": "^12.17.1",
+    "mammoth": "1.11.0",
+    "pdfjs-dist": "5.4.624",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "firebase-tools": "^15.26.0",
+    "oxlint": "^1.75.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
+  }
+}
