@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
+import { buildTree, flattenTree, folderTint, pathLabel, type Folder } from '../../domain/folder'
 import type { Person } from '../../domain/person'
 import { Avatar } from '../components/Avatar'
 import { Icon } from '../components/Icon'
@@ -129,11 +130,14 @@ export function FollowUpFilterBar({
   due,
   category,
   categories,
+  folderID,
+  folders,
   responsibility,
   onStatusChange,
   onPersonChange,
   onDueChange,
   onCategoryChange,
+  onFolderChange,
   onResponsibilityChange,
   onClear,
 }: {
@@ -143,17 +147,25 @@ export function FollowUpFilterBar({
   due: FollowUpDueFilter
   category: string
   categories: string[]
+  folderID: string
+  folders: Folder[]
   responsibility: FollowUpResponsibilityFilter
   onStatusChange: (value: FollowUpStatusFilter) => void
   onPersonChange: (value: string) => void
   onDueChange: (value: FollowUpDueFilter) => void
   onCategoryChange: (value: string) => void
+  onFolderChange: (value: string) => void
   onResponsibilityChange: (value: FollowUpResponsibilityFilter) => void
   onClear: () => void
 }) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const hasFilters =
-    status !== 'all' || personID !== '' || due !== 'any' || category !== '' || responsibility !== 'all'
+    status !== 'all' ||
+    personID !== '' ||
+    due !== 'any' ||
+    category !== '' ||
+    folderID !== '' ||
+    responsibility !== 'all'
   const statuses: Array<{ value: FollowUpStatusFilter; label: string }> = [
     { value: 'all', label: 'All' },
     { value: 'overdue', label: 'Overdue' },
@@ -183,6 +195,21 @@ export function FollowUpFilterBar({
       label: tag,
       leading: <span className="category-option-dot" />,
       style: categoryTintStyle(tag),
+    })),
+  ]
+  const folderOptions: FilterOption[] = [
+    { value: '', label: 'Any folder', leading: <Icon name="folder" size={15} /> },
+    ...flattenTree(buildTree(folders)).map(({ folder }) => ({
+      value: folder.id,
+      label: pathLabel(folders, folder.id),
+      leading: (
+        <span
+          className="folder-picker-glyph"
+          style={{ '--tint': folderTint(folder.colorName) } as React.CSSProperties}
+        >
+          <Icon name="folder" size={13} />
+        </span>
+      ),
     })),
   ]
   const responsibilityOptions: FilterOption[] = [
@@ -240,6 +267,16 @@ export function FollowUpFilterBar({
           open={openMenu === 'category'}
           onOpenChange={(open) => setOpenMenu(open ? 'category' : null)}
           onChange={onCategoryChange}
+        />
+        <FilterMenu
+          id="folder"
+          label="Folder"
+          icon="folder"
+          value={folderID}
+          options={folderOptions}
+          open={openMenu === 'folder'}
+          onOpenChange={(open) => setOpenMenu(open ? 'folder' : null)}
+          onChange={onFolderChange}
         />
         <FilterMenu
           id="responsibility"

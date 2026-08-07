@@ -14,7 +14,7 @@ import { formatScheduleSummary } from '../../domain/temporal'
 import { applyPlan } from '../../data/applyPlan'
 import { categoryKey, uniqueCategoryTags } from '../../domain/categoryTags'
 import { useFolders, useLiveReminders, usePeople } from '../../data/hooks'
-import { folderTint } from '../../domain/folder'
+import { descendantIDs, folderTint, isArchived } from '../../domain/folder'
 import { useUID } from '../UserContext'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
@@ -76,6 +76,7 @@ export function FollowUpsPage() {
   const [personFilter, setPersonFilter] = useState('')
   const [dueFilter, setDueFilter] = useState<FollowUpDueFilter>('any')
   const [categoryFilter, setCategoryFilter] = useState('')
+  const [folderFilter, setFolderFilter] = useState('')
   // One clock per mount — a fresh Date each render silently drifted past the memo.
   const [now] = useState(() => new Date())
 
@@ -108,16 +109,25 @@ export function FollowUpsPage() {
     () => uniqueCategoryTags(openReminders.flatMap((reminder) => reminder.categoryTags ?? [])),
     [openReminders],
   )
+  const filterFolders = useMemo(() => (folders ?? []).filter((folder) => !isArchived(folder)), [folders])
+  const folderScope = useMemo(
+    () =>
+      folderFilter && folders
+        ? new Set([folderFilter, ...descendantIDs(folders, folderFilter)])
+        : null,
+    [folderFilter, folders],
+  )
   const facetedReminders = useMemo(
     () =>
       openReminders.filter(
         (reminder) =>
           (!personFilter || reminder.personIDs.includes(personFilter)) &&
           matchesDueFilter(reminder, dueFilter, now) &&
+          (!folderScope || (!!reminder.folderID && folderScope.has(reminder.folderID))) &&
           (!categoryFilter ||
             (reminder.categoryTags ?? []).some((tag) => categoryKey(tag) === categoryKey(categoryFilter))),
       ),
-    [categoryFilter, dueFilter, now, openReminders, personFilter],
+    [categoryFilter, dueFilter, folderScope, now, openReminders, personFilter],
   )
   const facetedGroups = useMemo(() => sections(facetedReminders, now), [facetedReminders, now])
   const visibleGroups = useMemo(
@@ -132,13 +142,19 @@ export function FollowUpsPage() {
     [facetedGroups, statusFilter],
   )
   const hasFilters =
-    statusFilter !== 'all' || personFilter !== '' || dueFilter !== 'any' || categoryFilter !== '' || ownership !== 'all'
+    statusFilter !== 'all' ||
+    personFilter !== '' ||
+    dueFilter !== 'any' ||
+    categoryFilter !== '' ||
+    folderFilter !== '' ||
+    ownership !== 'all'
 
   function clearFilters() {
     setStatusFilter('all')
     setPersonFilter('')
     setDueFilter('any')
     setCategoryFilter('')
+    setFolderFilter('')
     setOwnership('all')
   }
 
@@ -217,11 +233,14 @@ export function FollowUpsPage() {
             due={dueFilter}
             category={categoryFilter}
             categories={filterCategories}
+            folderID={folderFilter}
+            folders={filterFolders}
             responsibility={ownership}
             onStatusChange={setStatusFilter}
             onPersonChange={setPersonFilter}
             onDueChange={setDueFilter}
             onCategoryChange={setCategoryFilter}
+            onFolderChange={setFolderFilter}
             onResponsibilityChange={setOwnership}
             onClear={clearFilters}
           />
