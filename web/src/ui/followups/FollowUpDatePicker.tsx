@@ -38,15 +38,21 @@ function calendarDays(month: Date): Date[] {
 
 export function FollowUpDatePicker({
   value,
+  timeValue,
   onSelect,
+  onTimeChange,
   onClear,
+  onDone,
   onExitBackward,
   onExitForward,
   autoFocus = false,
 }: {
   value: string
+  timeValue: string
   onSelect: (localDate: string) => void
+  onTimeChange: (localTime: string) => void
   onClear: () => void
+  onDone: () => void
   onExitBackward?: () => void
   onExitForward?: () => void
   autoFocus?: boolean
@@ -61,6 +67,7 @@ export function FollowUpDatePicker({
   const [activeDate, setActiveDate] = useState(() => localDateValue(initial))
   const calendarRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const timeRef = useRef<HTMLInputElement>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
   const suggestions = useMemo(() => dateSuggestions(query, now), [now, query])
   const days = useMemo(() => calendarDays(month), [month])
@@ -129,11 +136,16 @@ export function FollowUpDatePicker({
     focusDate(new Date(nextMonth.getFullYear(), nextMonth.getMonth(), Math.min(active.getDate(), maxDay), 12))
   }
 
+  function focusTimeOrExit() {
+    if (value) timeRef.current?.focus()
+    else onExitForward?.()
+  }
+
   function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Tab') {
       event.preventDefault()
       if (event.shiftKey) onExitBackward?.()
-      else onExitForward?.()
+      else focusTimeOrExit()
     } else if (event.key === 'ArrowDown') {
       event.preventDefault()
       if (suggestions.length > 0) {
@@ -172,7 +184,7 @@ export function FollowUpDatePicker({
       } else if (index < suggestions.length - 1) {
         focusSuggestion(index + 1)
       } else {
-        onExitForward?.()
+        focusTimeOrExit()
       }
     }
   }
@@ -182,7 +194,7 @@ export function FollowUpDatePicker({
     if (event.key === 'Tab') {
       event.preventDefault()
       if (event.shiftKey) inputRef.current?.focus()
-      else onExitForward?.()
+      else focusTimeOrExit()
       return
     }
     if (event.key === 'Enter' || event.key === ' ') {
@@ -308,9 +320,39 @@ export function FollowUpDatePicker({
       )}
 
       {value && (
-        <button type="button" className="followup-date-clear" onClick={onClear}>
-          Clear due date
-        </button>
+        <div className="followup-date-footer">
+          <label className="followup-time-field">
+            <span>Time</span>
+            <input
+              ref={timeRef}
+              type="time"
+              value={timeValue}
+              aria-label="Due time"
+              onChange={(event) => onTimeChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Tab' && event.shiftKey) {
+                  event.preventDefault()
+                  inputRef.current?.focus()
+                }
+              }}
+            />
+          </label>
+          <button type="button" className="button button-quiet button-small" onClick={onClear}>
+            Clear date
+          </button>
+          <button
+            type="button"
+            className="button button-secondary button-small"
+            onClick={onDone}
+            onKeyDown={(event) => {
+              if (event.key !== 'Tab' || event.shiftKey) return
+              event.preventDefault()
+              onExitForward?.()
+            }}
+          >
+            Done
+          </button>
+        </div>
       )}
     </div>
   )

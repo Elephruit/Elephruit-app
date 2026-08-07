@@ -48,12 +48,26 @@ function formatDueDate(localDate: string): string {
   return calendarLabel(localDate)
 }
 
+function formatDueTime(localTime: string): string {
+  const [hour, minute] = localTime.split(':').map(Number)
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return ''
+  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(
+    new Date(2000, 0, 1, hour, minute),
+  )
+}
+
 function formatScheduleButton(draft: FollowUpDraft): string {
   if (draft.schedule.scheduleMode === 'someday') return 'Someday'
   if (draft.schedule.scheduleMode === 'start' && draft.schedule.localDate) {
-    return formatDueDate(draft.schedule.localDate)
+    const date = formatDueDate(draft.schedule.localDate)
+    const time = formatDueTime(draft.schedule.localTime)
+    return time ? `${date} · ${time}` : date
   }
-  if (draft.schedule.scheduleMode === 'deadline') return formatDueDate(draft.schedule.localDate)
+  if (draft.schedule.scheduleMode === 'deadline') {
+    const date = formatDueDate(draft.schedule.localDate)
+    const time = formatDueTime(draft.schedule.localTime)
+    return time ? `${date} · ${time}` : date
+  }
   return 'Due date'
 }
 
@@ -240,12 +254,22 @@ export function InlineFollowUpComposer({
     }
   }
 
-  function setDueDate(localDate: string) {
+  function setDueDate(localDate: string, localTime = draft.schedule.localTime) {
     set({
       schedule: {
         scheduleMode: localDate ? 'deadline' : 'none',
         localDate,
-        localTime: '',
+        localTime: localDate ? localTime : '',
+        timeZone: USER_ZONE,
+      },
+    })
+  }
+
+  function setDueTime(localTime: string) {
+    set({
+      schedule: {
+        ...draft.schedule,
+        localTime,
         timeZone: USER_ZONE,
       },
     })
@@ -674,15 +698,16 @@ export function InlineFollowUpComposer({
           <div className="inline-followup-panel inline-date-panel">
             <FollowUpDatePicker
               value={dueDate}
+              timeValue={draft.schedule.localTime}
               autoFocus
               onSelect={(localDate) => {
                 setDueDate(localDate)
-                closeDatePanelAndFocus(dateButtonRef)
               }}
+              onTimeChange={setDueTime}
               onClear={() => {
                 setDueDate('')
-                closeDatePanelAndFocus(dateButtonRef)
               }}
+              onDone={() => closeDatePanelAndFocus(dateButtonRef)}
               onExitBackward={() => openPanelFromTab('people')}
               onExitForward={() => openPanelFromTab('categories')}
             />
@@ -722,7 +747,7 @@ export function InlineFollowUpComposer({
                   type="button"
                   className="button button-secondary button-small"
                   onClick={() => {
-                    setDueDate(detected.localDate)
+                    setDueDate(detected.localDate, detected.localTime ?? '')
                     setOpenPanel('date')
                   }}
                 >
