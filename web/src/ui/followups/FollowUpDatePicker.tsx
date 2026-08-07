@@ -75,6 +75,16 @@ export function FollowUpDatePicker({
     setActiveSuggestion(0)
   }, [query])
 
+  useEffect(() => {
+    if (!query || suggestions.length === 0) return
+    const frame = window.requestAnimationFrame(() => {
+      pickerRef.current
+        ?.querySelector<HTMLElement>(`#${CSS.escape(`${suggestionListID}-option-${Math.min(activeSuggestion, suggestions.length - 1)}`)}`)
+        ?.scrollIntoView({ block: 'nearest' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [activeSuggestion, query, suggestionListID, suggestions.length])
+
   useLayoutEffect(() => {
     if (query) return
     let secondFrame = 0

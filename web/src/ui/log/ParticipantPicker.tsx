@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { foldedForMatching, type Person } from '../../domain/person'
 import { Avatar } from '../components/Avatar'
 import { Icon } from '../components/Icon'
@@ -39,6 +39,7 @@ export function ParticipantPicker({
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const listID = useId()
 
   const folded = foldedForMatching(search)
@@ -53,6 +54,16 @@ export function ParticipantPicker({
   const offerCreate = allowCreate && folded.length > 0 && !exactMatch
   const optionCount = visible.length + (offerCreate ? 1 : 0)
   const clampedActive = Math.min(activeIndex, Math.max(0, optionCount - 1))
+
+  useEffect(() => {
+    if (!open || optionCount === 0) return
+    const frame = window.requestAnimationFrame(() => {
+      listRef.current
+        ?.querySelector<HTMLElement>(`#${CSS.escape(`${listID}-option-${clampedActive}`)}`)
+        ?.scrollIntoView({ block: 'nearest' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [clampedActive, listID, open, optionCount])
 
   function choose(index: number) {
     if (index < visible.length) {
@@ -135,7 +146,7 @@ export function ParticipantPicker({
       </div>
 
       {open && optionCount > 0 && (
-        <div className="combobox-list" role="listbox" id={listID} aria-label="People">
+        <div ref={listRef} className="combobox-list" role="listbox" id={listID} aria-label="People">
           {visible.map((person, index) => (
             <button
               key={person.id}

@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { categoryKey, uniqueCategoryTags } from '../../domain/categoryTags'
 import { Icon } from '../components/Icon'
 import { categoryTintStyle } from './categoryStyle'
@@ -28,6 +28,7 @@ export function CategoryTagPicker({
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const listID = useId()
 
   const selectedKeys = new Set([...selected].map(folded))
@@ -39,6 +40,16 @@ export function CategoryTagPicker({
   const offerCreate = search.trim().length > 0 && !exactMatch
   const optionCount = visible.length + (offerCreate ? 1 : 0)
   const clampedActive = Math.min(activeIndex, Math.max(optionCount - 1, 0))
+
+  useEffect(() => {
+    if (!open || optionCount === 0) return
+    const frame = window.requestAnimationFrame(() => {
+      listRef.current
+        ?.querySelector<HTMLElement>(`#${CSS.escape(`${listID}-option-${clampedActive}`)}`)
+        ?.scrollIntoView({ block: 'nearest' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [clampedActive, listID, open, optionCount])
 
   function add(tag: string) {
     const value = tag.trim()
@@ -127,7 +138,7 @@ export function CategoryTagPicker({
         />
       </div>
       {open && optionCount > 0 && (
-        <div className="combobox-list" id={listID} role="listbox" aria-label="Categories">
+        <div ref={listRef} className="combobox-list" id={listID} role="listbox" aria-label="Categories">
           {visible.map((tag, index) => (
             <button
               key={tag}
