@@ -1,7 +1,7 @@
 # 41 — Containers and notes, on the web
 
-- **Status:** Phases 1–3 and 7 built (`containers`, the container page, archive, search). Phases
-  4–6 — the notes module — outstanding.
+- **Status:** Built. All seven phases. What follows is the plan as written; the notes below each
+  phase record where it was wrong.
 - **Date:** 2026-08-06
 - **Branch:** `claude/trip-planning-reminders-notes-0b4b1d`
 - **Target:** `web/` only. Nothing here touches Swift, the Xcode targets, or the native apps.
@@ -228,16 +228,21 @@ browser walk against seeded emulators. Phases 1–3 deliver the trip; 4–6 the 
    **Left open**, an Active/Archived toggle, and Unarchive. *The trip request is complete here.*
    Phase 7 landed with it rather than the planned stopgap, because a real search was cheaper than a
    narrow title match plus its later replacement.
-4. **Notes: format and storage.** The bake-off and its round-trip test; ADR 0006 in TypeScript; the
-   metadata/content split; the 1 MiB guard; the plain-text projection; a working editor with headings,
-   lists, checklists, code, quote, links, and inline marks. Notes live in containers and stand alone.
-5. **Notes: the module.** The list with excerpt, date and pin; sort; a notes tree in the rail with
-   folders; move; duplicate; delete to a recoverable state; keyboard-first new-note.
-6. **Notes meet people.** `personIDs` on a note, notes on the person page, and the timeline filter
-   fix: **`notes` currently means `observation`**
-   ([timeline.ts:199](../web/src/domain/timeline.ts)) — that chip becomes **Facts**, and **Notes**
-   becomes notes. Doing this in the same commit as real notes is what stops a week of the word meaning
-   two things.
+4. **Notes: format and storage.** ✅ Built. Lexical passed the gate on the second attempt — see the
+   commit for the two `setIndent` failures and the newline-in-a-run bug that only appeared when the
+   real editor was driven in a browser. The content split moved from a `notes/{id}/content/document`
+   subcollection to a `noteContents/{id}` sibling: Firestore does not cascade deletes into
+   subcollections, and the orphan it leaves is invisible in the console while still being billed.
+5. **Notes: the module.** ✅ Mostly built — list with excerpt, date, pin, sort, container filter,
+   archive scope, delete. **Not built:** duplicate, and a notes *tree* in the rail. Notes nest by
+   container rather than inside each other, which is the filing system the containers already
+   provide; a second hierarchy inside notes would be a second answer to the same question.
+6. **Notes meet people.** ⚠️ **Partly built.** `personIDs` is on the note and search covers notes,
+   but **nothing sets it yet** and the person page does not list notes. The timeline filter still
+   calls observations "Notes"
+   ([timeline.ts:199](../web/src/domain/timeline.ts)) — the rename is still owed, and is now more
+   urgent than when this was written, because the word has a second meaning in the app as of today.
+   This is the one part of the plan left genuinely undone.
 7. **Search.** ✅ Built, out of order — see phase 3. `domain/search.ts`, archived results in their
    own group, and `useLiveReminders` after building it found the Feed counting an archived trip's
    work.
@@ -259,6 +264,15 @@ click, and stub `fetch` for anything AI-shaped.
   ticket reminder under Archived, open the archived trip, unarchive, confirm the buckets come back.
   That walk is the request, start to finish.
 - `web/docs/visual-qa.md`'s four viewports at every phase that changes a screen.
+
+## What is left
+
+- **Phase 6's second half** — attaching a note to a person, notes on the person page, and renaming
+  the timeline's "Notes" filter to "Facts". The collision is live right now.
+- **Duplicate a note**, and drag-to-reorder anything.
+- **A `/` menu** in the editor. The toolbar covers every block kind; the slash menu is the faster
+  road to the same place, not a new destination.
+- **Markdown shortcuts** (`# `, `- `, `1. `) while typing.
 
 ## Not in this plan
 
