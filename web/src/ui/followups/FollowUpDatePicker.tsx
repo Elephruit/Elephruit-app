@@ -122,15 +122,8 @@ export function FollowUpDatePicker({
   function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Tab') {
       event.preventDefault()
-      if (event.shiftKey) {
-        onExitBackward?.()
-      } else if (suggestions.length > 0) {
-        focusSuggestion(activeSuggestion)
-      } else if (!query) {
-        focusDate(dateFromValue(activeDate) ?? initial)
-      } else {
-        onExitForward?.()
-      }
+      if (event.shiftKey) onExitBackward?.()
+      else onExitForward?.()
     } else if (event.key === 'ArrowDown') {
       event.preventDefault()
       if (suggestions.length > 0) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { applyPlan } from '../../data/applyPlan'
 import { planDeleteReminder } from '../../domain/capture'
 import {
@@ -71,12 +71,14 @@ export function InlineFollowUpComposer({
   tagSuggestions,
   existing = null,
   activationRequest = 0,
+  hideTrigger = false,
   onClose,
 }: {
   people: Person[]
   tagSuggestions: string[]
   existing?: Reminder | null
   activationRequest?: number
+  hideTrigger?: boolean
   onClose?: () => void
 }) {
   const uid = useUID()
@@ -100,6 +102,7 @@ export function InlineFollowUpComposer({
   const cancelButtonRef = useRef<HTMLButtonElement>(null)
   const saveButtonRef = useRef<HTMLButtonElement>(null)
   const guardRef = useRef<HTMLDivElement>(null)
+  const suppressBlurRef = useRef(false)
 
   const detected = useMemo(
     () =>
@@ -115,12 +118,17 @@ export function InlineFollowUpComposer({
     window.setTimeout(() => titleRef.current?.focus(), 0)
   }, [existingID])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (existing || activationRequest === 0) return
+    suppressBlurRef.current = true
     setActive(true)
+    setOpenPanel(null)
     window.setTimeout(() => {
       composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       titleRef.current?.focus()
+      window.setTimeout(() => {
+        suppressBlurRef.current = false
+      }, 0)
     }, 0)
   }, [activationRequest, existing])
 
@@ -265,7 +273,12 @@ export function InlineFollowUpComposer({
   function handleBlur(event: React.FocusEvent<HTMLDivElement>) {
     const next = event.relatedTarget
     if (next instanceof Node && event.currentTarget.contains(next)) return
+    if (next instanceof Element && next.closest('[data-followup-create]')) return
     window.setTimeout(() => {
+      if (suppressBlurRef.current) {
+        suppressBlurRef.current = false
+        return
+      }
       if (composerRef.current?.contains(document.activeElement)) return
       if (!hasDraftContent(draft)) close()
       else if (draft.title.trim()) void save(false)
@@ -289,7 +302,14 @@ export function InlineFollowUpComposer({
     window.setTimeout(() => target.current?.focus(), 0)
   }
 
+  function openPanelFromTab(panel: Exclude<OpenPanel, null>) {
+    setOpenPanel(panel)
+    setEscapeArmed(false)
+    setConfirmingDelete(false)
+  }
+
   if (!active) {
+    if (hideTrigger) return null
     return (
       <button type="button" className="inline-followup-trigger" onClick={activate}>
         <span className="inline-followup-plus" aria-hidden="true">
@@ -325,7 +345,7 @@ export function InlineFollowUpComposer({
           onKeyDown={(event) => {
             if (event.key === 'Tab' && !event.shiftKey) {
               event.preventDefault()
-              peopleButtonRef.current?.focus()
+              openPanelFromTab('people')
               return
             }
             if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
@@ -379,7 +399,12 @@ export function InlineFollowUpComposer({
             data-selected={draft.personIDs.size > 0 || undefined}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => togglePanel('people')}
-            onKeyDown={(event) => moveOnTab(event, titleRef, dateButtonRef)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Tab') return
+              event.preventDefault()
+              if (event.shiftKey) titleRef.current?.focus()
+              else openPanelFromTab('date')
+            }}
           >
             <Icon name="people" size={16} />
             People
@@ -392,7 +417,11 @@ export function InlineFollowUpComposer({
             data-selected={draft.schedule.scheduleMode !== 'none' || undefined}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => togglePanel('date')}
-            onKeyDown={(event) => moveOnTab(event, peopleButtonRef, categoryButtonRef)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Tab') return
+              event.preventDefault()
+              openPanelFromTab(event.shiftKey ? 'people' : 'categories')
+            }}
           >
             <Icon name="calendar" size={16} />
             {formatScheduleButton(draft)}
@@ -405,7 +434,12 @@ export function InlineFollowUpComposer({
             data-selected={draft.categoryTags.size > 0 || undefined}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => togglePanel('categories')}
-            onKeyDown={(event) => moveOnTab(event, dateButtonRef, existing ? deleteButtonRef : cancelButtonRef)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Tab') return
+              event.preventDefault()
+              if (event.shiftKey) openPanelFromTab('date')
+              else (existing ? deleteButtonRef : cancelButtonRef).current?.focus()
+            }}
           >
             <Icon name="tag" size={16} />
             Categories
@@ -475,6 +509,11 @@ export function InlineFollowUpComposer({
               ariaLabel="Tag people"
               autoFocus
               showSelected={false}
+              onTabBackward={() => {
+                setOpenPanel(null)
+                window.setTimeout(() => titleRef.current?.focus(), 0)
+              }}
+              onTabForward={() => openPanelFromTab('date')}
               onToggle={togglePerson}
               onCreate={() => {}}
             />
@@ -498,8 +537,8 @@ export function InlineFollowUpComposer({
                 setDueDate('')
                 closeDatePanelAndFocus(dateButtonRef)
               }}
-              onExitBackward={() => closeDatePanelAndFocus(dateButtonRef)}
-              onExitForward={() => closeDatePanelAndFocus(categoryButtonRef)}
+              onExitBackward={() => openPanelFromTab('people')}
+              onExitForward={() => openPanelFromTab('categories')}
             />
           </div>
         )}
@@ -515,6 +554,14 @@ export function InlineFollowUpComposer({
               suggestions={tagSuggestions}
               autoFocus
               showSelected={false}
+              onTabBackward={() => openPanelFromTab('date')}
+              onTabForward={() => {
+                setOpenPanel(null)
+                window.setTimeout(
+                  () => (existing ? deleteButtonRef : cancelButtonRef).current?.focus(),
+                  0,
+                )
+              }}
               onChange={(categoryTags) => set({ categoryTags })}
             />
           </div>

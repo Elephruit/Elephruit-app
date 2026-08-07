@@ -74,6 +74,11 @@ export function FollowUpsPage() {
     }
   }, [groups])
 
+  function requestCreate() {
+    setEditing(null)
+    setCreateRequest((request) => request + 1)
+  }
+
   async function complete(reminder: Reminder) {
     await applyPlan(uid, planCompleteReminder(reminder.id, new Date()).plan)
   }
@@ -127,10 +132,8 @@ export function FollowUpsPage() {
                 label="Add a follow-up"
                 icon="plus"
                 size={19}
-                onClick={() => {
-                  setEditing(null)
-                  setCreateRequest((request) => request + 1)
-                }}
+                data-followup-create
+                onClick={requestCreate}
               />
             )}
           </>
@@ -145,6 +148,15 @@ export function FollowUpsPage() {
             <MetricTile value={counts.upcoming} label="Upcoming" />
             <MetricTile value={counts.unscheduled} label="Unscheduled" />
           </div>
+        )}
+
+        {view === 'open' && groups && people && (
+          <InlineFollowUpComposer
+            people={people}
+            tagSuggestions={tagSuggestions}
+            activationRequest={createRequest}
+            hideTrigger
+          />
         )}
 
         {groups === undefined && <SkeletonRows count={5} />}
@@ -246,11 +258,17 @@ export function FollowUpsPage() {
           ))}
 
         {view === 'open' && groups && people && (
-          <InlineFollowUpComposer
-            people={people}
-            tagSuggestions={tagSuggestions}
-            activationRequest={createRequest}
-          />
+          <button
+            type="button"
+            className="inline-followup-trigger"
+            data-followup-create
+            onClick={requestCreate}
+          >
+            <span className="inline-followup-plus" aria-hidden="true">
+              <Icon name="plus" size={17} />
+            </span>
+            <span>Add a follow-up</span>
+          </button>
         )}
 
         {view === 'completed' && (

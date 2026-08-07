@@ -13,12 +13,16 @@ export function CategoryTagPicker({
   onChange,
   autoFocus = false,
   showSelected = true,
+  onTabBackward,
+  onTabForward,
 }: {
   selected: Set<string>
   suggestions: string[]
   onChange: (next: Set<string>) => void
   autoFocus?: boolean
   showSelected?: boolean
+  onTabBackward?: () => void
+  onTabForward?: () => void
 }) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
@@ -57,7 +61,12 @@ export function CategoryTagPicker({
   }
 
   function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'ArrowDown') {
+    if (event.key === 'Tab' && (onTabBackward || onTabForward)) {
+      event.preventDefault()
+      setOpen(false)
+      if (event.shiftKey) onTabBackward?.()
+      else onTabForward?.()
+    } else if (event.key === 'ArrowDown') {
       event.preventDefault()
       setOpen(true)
       setActiveIndex((index) => Math.min(index + 1, optionCount - 1))

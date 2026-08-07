@@ -19,6 +19,8 @@ export function ParticipantPicker({
   ariaLabel = 'Search people',
   autoFocus = false,
   showSelected = true,
+  onTabBackward,
+  onTabForward,
 }: {
   people: Person[]
   pendingNew: Person[]
@@ -30,6 +32,8 @@ export function ParticipantPicker({
   ariaLabel?: string
   autoFocus?: boolean
   showSelected?: boolean
+  onTabBackward?: () => void
+  onTabForward?: () => void
 }) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
@@ -62,7 +66,12 @@ export function ParticipantPicker({
   }
 
   function onKeyDown(event: React.KeyboardEvent) {
-    if (event.key === 'ArrowDown') {
+    if (event.key === 'Tab' && (onTabBackward || onTabForward)) {
+      event.preventDefault()
+      setOpen(false)
+      if (event.shiftKey) onTabBackward?.()
+      else onTabForward?.()
+    } else if (event.key === 'ArrowDown') {
       event.preventDefault()
       setOpen(true)
       setActiveIndex((index) => Math.min(index + 1, optionCount - 1))
