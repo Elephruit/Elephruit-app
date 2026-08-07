@@ -223,6 +223,25 @@ describe('planFromReviewDraft', () => {
     ])
   })
 
+  it('routes a dictated ownership transfer through the same commitment field as drag and drop', () => {
+    const reminder: Reminder = {
+      id: 'reminder-forecast', title: 'Finish the forecast', notes: null, personIDs: ['ana'],
+      responsibility: 'mine', progress: 'notStarted', sourceInteractionID: null, startAt: null, dueAt: null,
+      isSomeday: false, status: 'open', completedAt: null, createdAt: NOW,
+    }
+    const proposal: CaptureProposal = {
+      interaction: null, participantNames: [], facts: [], personContexts: [], relationships: [], followUps: [],
+      reminderChanges: [{ reminderID: reminder.id, action: 'update', responsibility: 'theirs' }],
+    }
+    const draft = draftFromResolved(resolveProposal(proposal, [], NOW, { reminders: [reminder] }), NOW)
+    expect(draft.items[0]).toMatchObject({ type: 'reminderChange', responsibility: 'theirs' })
+    const { plan } = planFromReviewDraft(draft, NOW, CHICAGO)
+    expect(plan).toContainEqual({
+      op: 'update', collection: 'reminders', id: reminder.id,
+      data: { progress: 'notStarted', notes: null, responsibility: 'theirs' },
+    })
+  })
+
   it('writes the edited values, never the original proposal', () => {
     let draft = kellyDraft()
     const fact = draft.items.find((i) => i.type === 'fact')!

@@ -19,6 +19,9 @@ export interface Reminder {
   responsibility?: 'mine' | 'theirs'
   /// Lightweight meeting status for delegated work. Missing means not started.
   progress?: ReminderProgress
+  /// Stable ordering on each person's workspace. A reminder may concern
+  /// several people, so the order is keyed by person rather than global.
+  personOrder?: Record<string, number>
   /// The interaction it fell out of, when it fell out of one.
   sourceInteractionID: string | null
   /// The imported document it fell out of, for dossier-derived follow-ups.

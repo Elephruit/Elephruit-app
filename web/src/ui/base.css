@@ -3263,10 +3263,17 @@ a.memory-person-link:hover {
   border-radius: var(--radius-large);
   background: color-mix(in srgb, var(--color-background-elevated) 72%, transparent);
   padding: var(--space-medium);
+  outline: 1px solid transparent;
+  transition: background var(--duration-fast) var(--ease-out), outline-color var(--duration-fast) var(--ease-out);
 }
 
 .person-followup-lane[data-owner='theirs'] {
   background: color-mix(in srgb, var(--color-personal) 5%, var(--color-background-elevated));
+}
+
+.person-followup-lane[data-drag-target='true'] {
+  background: color-mix(in srgb, var(--color-accent) 7%, var(--color-background-elevated));
+  outline-color: color-mix(in srgb, var(--color-accent) 32%, transparent);
 }
 
 .person-followup-lane-head {
@@ -3302,7 +3309,7 @@ a.memory-person-link:hover {
 
 .person-followup {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-columns: 18px 18px minmax(0, 1fr);
   align-items: start;
   gap: var(--space-small);
   padding: var(--space-medium);
@@ -3310,6 +3317,61 @@ a.memory-person-link:hover {
   border-radius: var(--radius-medium);
   background: var(--color-background-elevated);
   color: var(--color-text);
+  transition: opacity var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.person-followup[data-drag-source='true'] {
+  opacity: 0.18;
+  border-style: dashed;
+}
+
+.person-followup-board[data-dragging='true'] {
+  user-select: none;
+}
+
+.commitment-drag-handle {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: grab;
+  padding: 0;
+  font: 600 18px/18px var(--font-sans);
+  touch-action: none;
+}
+
+.commitment-drag-handle:hover,
+.commitment-drag-handle:focus-visible {
+  color: var(--color-accent);
+}
+
+.commitment-drag-handle:active {
+  cursor: grabbing;
+}
+
+.commitment-drag-ghost {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-small);
+  padding: var(--space-medium);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-separator));
+  border-radius: var(--radius-medium);
+  background: var(--color-background-elevated);
+  box-shadow: var(--shadow-popover);
+  color: var(--color-text);
+  font: var(--text-label);
+  transform: rotate(0.35deg) scale(1.012);
+  will-change: left, top;
+}
+
+.commitment-drag-ghost-handle {
+  color: var(--color-accent);
+  font: 600 18px/18px var(--font-sans);
 }
 
 .person-followup[data-tone='overdue'] {

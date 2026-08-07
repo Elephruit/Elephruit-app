@@ -88,6 +88,7 @@ export interface CaptureProposal {
     action: 'complete' | 'reopen' | 'delete' | 'update'
     progress?: ReminderProgress | null
     notes?: string | null
+    responsibility?: 'mine' | 'theirs' | null
   }>
   factChanges?: Array<{
     observationID: string
@@ -171,6 +172,7 @@ export type ResolvedItem =
       action: 'complete' | 'reopen' | 'delete' | 'update'
       progress: ReminderProgress | null
       notes: string | null
+      responsibility: 'mine' | 'theirs' | null
     }
   | {
       id: string
@@ -355,6 +357,7 @@ export function resolveProposal(
     items.push({
       id: nextID(), type: 'reminderChange', reminder, action: change.action,
       progress: change.progress ?? null, notes: change.notes?.trim() || null,
+      responsibility: change.responsibility ?? null,
     })
   }
 

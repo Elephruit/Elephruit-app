@@ -129,6 +129,7 @@ export interface ReminderChangeDraftItem extends DraftItemBase {
   action: 'complete' | 'reopen' | 'delete' | 'update'
   progress: ReminderProgress
   notes: string
+  responsibility: 'mine' | 'theirs'
 }
 
 export interface FactChangeDraftItem extends DraftItemBase {
@@ -271,6 +272,7 @@ export function draftFromResolved(resolved: ResolvedCapture, now: Date): Resolve
           id: item.id, removed: false, type: 'reminderChange', reminder: item.reminder, action: item.action,
           progress: item.progress ?? item.reminder.progress ?? 'notStarted',
           notes: item.notes ?? item.reminder.notes ?? '',
+          responsibility: item.responsibility ?? item.reminder.responsibility ?? 'mine',
         })
         break
       case 'factChange':
@@ -358,7 +360,7 @@ export type ReviewDraftAction =
   | { type: 'update-person-context'; id: string; changes: Partial<Omit<PersonContextDraftItem, 'id' | 'type' | 'removed'>> }
   | { type: 'update-relationship'; id: string; changes: Partial<Omit<RelationshipDraftItem, 'id' | 'type' | 'removed'>> }
   | { type: 'update-follow-up'; id: string; changes: Partial<Omit<FollowUpDraftItem, 'id' | 'type' | 'removed'>> }
-  | { type: 'update-reminder-change'; id: string; changes: Partial<Pick<ReminderChangeDraftItem, 'action' | 'progress' | 'notes'>> }
+  | { type: 'update-reminder-change'; id: string; changes: Partial<Pick<ReminderChangeDraftItem, 'action' | 'progress' | 'notes' | 'responsibility'>> }
   | { type: 'update-fact-change'; id: string; changes: Partial<Pick<FactChangeDraftItem, 'action' | 'value' | 'correctionNote' | 'confidence' | 'sensitivity'>> }
   | { type: 'update-title'; title: string }
   | { type: 'resolve-person'; slotID: string; resolution: PersonSlotResolution }
@@ -693,7 +695,7 @@ export function planFromReviewDraft(
           : item.action === 'delete'
             ? planDeleteReminder(item.reminder.id)
             : item.action === 'update'
-              ? planUpdateReminder(item.reminder.id, { progress: item.progress, notes: item.notes.trim() || null })
+              ? planUpdateReminder(item.reminder.id, { progress: item.progress, notes: item.notes.trim() || null, responsibility: item.responsibility })
             : planReopenReminder(item.reminder.id)
         reminderIDs.push(item.reminder.id)
         for (const personID of item.reminder.personIDs) personIDs.add(personID)
