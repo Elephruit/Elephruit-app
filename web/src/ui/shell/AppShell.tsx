@@ -1,6 +1,7 @@
 /// The application frame: rail beside content from 720 up, bottom tabs below.
-/// Content scrolls with the document — native find-in-page and scroll
-/// restoration stay intact. A crashing page is contained to the content column.
+/// Content scrolls with the document while the desktop rail stays fixed to
+/// the visible viewport. Native find-in-page and scroll restoration stay intact.
+/// A crashing page is contained to the content column.
 /// ⌘K opens the command palette and ⌘J opens Quick capture from anywhere.
 
 import { useEffect, useState } from 'react'
