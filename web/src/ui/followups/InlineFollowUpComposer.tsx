@@ -501,7 +501,7 @@ export function InlineFollowUpComposer({
           <div className="inline-followup-panel inline-people-panel">
             <div className="inline-panel-heading">
               <span className="inline-panel-icon"><Icon name="people" size={17} /></span>
-              <span><strong>Tag people</strong><small>Who is this follow-up for?</small></span>
+              <span><strong>Tag people</strong></span>
             </div>
             <ParticipantPicker
               people={people}
@@ -527,7 +527,7 @@ export function InlineFollowUpComposer({
           <div className="inline-followup-panel inline-date-panel">
             <div className="inline-panel-heading">
               <span className="inline-panel-icon"><Icon name="calendar" size={17} /></span>
-              <span><strong>{dueDate ? `Due ${formatDueDate(dueDate)}` : 'Choose a due date'}</strong><small>Only due dates can become overdue.</small></span>
+              <span><strong>{dueDate ? `Due ${formatDueDate(dueDate)}` : 'Choose a due date'}</strong></span>
             </div>
             <FollowUpDatePicker
               value={dueDate}
@@ -550,7 +550,7 @@ export function InlineFollowUpComposer({
           <div className="inline-followup-panel inline-category-panel">
             <div className="inline-panel-heading">
               <span className="inline-panel-icon"><Icon name="tag" size={17} /></span>
-              <span><strong>Categories</strong><small>Group related follow-ups with color.</small></span>
+              <span><strong>Categories</strong></span>
             </div>
             <CategoryTagPicker
               selected={draft.categoryTags}
@@ -602,9 +602,6 @@ export function InlineFollowUpComposer({
             {error}
           </p>
         )}
-        <p className="inline-followup-hint">
-          {existing ? 'Enter saves · Escape closes' : 'Enter adds another · ⌘Enter finishes · Escape cancels'}
-        </p>
       </div>
     </div>
   )

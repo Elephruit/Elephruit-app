@@ -996,11 +996,6 @@ dialog.palette::backdrop {
   color: var(--color-text);
 }
 
-.inline-panel-heading small {
-  font: var(--text-metadata);
-  color: var(--color-text-tertiary);
-}
-
 .inline-panel-icon {
   display: inline-flex;
   align-items: center;
@@ -1261,12 +1256,6 @@ dialog.palette::backdrop {
   margin-top: var(--space-small);
   font: var(--text-metadata);
   color: var(--color-destructive);
-}
-
-.inline-followup-hint {
-  margin-top: var(--space-small);
-  font: var(--text-metadata);
-  color: var(--color-text-tertiary);
 }
 
 .category-token {
