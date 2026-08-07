@@ -186,6 +186,42 @@ export function planSaveNote(
   }
 }
 
+/// What an editor is holding that has not been written yet.
+///
+/// `null` means *untouched*, and that distinction is the whole reason this type
+/// exists. The first version used `''` for "no pending title", which is the
+/// same value as "the user cleared the title" — so every time a note was closed
+/// without its title being retyped, the flush on the way out wrote an empty
+/// string over it. The note kept its text and silently lost its name.
+export interface PendingNoteEdit {
+  document: NoteDocument | null
+  title: string | null
+}
+
+export const NOTHING_PENDING: PendingNoteEdit = { document: null, title: null }
+
+/// The plan a flush should apply, or `null` when there is nothing to write.
+///
+/// Pure, so the rule can be tested without a React tree — which is where the
+/// bug above would have been caught.
+export function planFlush(
+  note: Note,
+  edit: PendingNoteEdit,
+  now: Date,
+): { plan: WritePlan; refusal: string | null } | null {
+  const title = edit.title ?? note.title
+  const titleChanged = edit.title !== null && edit.title.trim() !== note.title.trim()
+
+  if (!edit.document && !titleChanged) return null
+
+  if (!edit.document) {
+    return { plan: planUpdateNote(note.id, { title: title.trim() }, now).plan, refusal: null }
+  }
+
+  const { plan, refusal } = planSaveNote({ ...note, title }, edit.document, now)
+  return { plan, refusal }
+}
+
 export function planUpdateNote(
   id: string,
   changes: Partial<Pick<Note, 'title' | 'containerID' | 'personIDs' | 'pinnedAt' | 'archivedAt'>>,

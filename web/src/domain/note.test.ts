@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DOCUMENT_BYTE_BUDGET,
+  NOTHING_PENDING,
   displayTitle,
   documentByteSize,
   documentRefusal,
@@ -8,6 +9,7 @@ import {
   makeNote,
   planCreateNote,
   planDeleteNote,
+  planFlush,
   planSaveNote,
   planUpdateNote,
   type Note,
@@ -160,5 +162,57 @@ describe('metadata updates', () => {
 describe('an empty note', () => {
   it('opens with somewhere to put the caret', () => {
     expect(emptyDocument().pieces).toHaveLength(1)
+  })
+})
+
+/// The bug this exists to prevent: a note that keeps its text and silently
+/// loses its name. `pending.title` used to start as `''`, which is the same
+/// value as "the user cleared the title" — so the flush that runs when a note
+/// is closed wrote an empty string over a perfectly good title, every time.
+describe('what a flush should write', () => {
+  const saved = note({ id: 'n1', title: 'Chicago notes', bodyText: 'Field Museum opens at 9' })
+
+  it('writes nothing when nothing was touched', () => {
+    expect(planFlush(saved, NOTHING_PENDING, now)).toBeNull()
+  })
+
+  it('keeps the stored title when only the body was edited', () => {
+    const result = planFlush(saved, { document: documentOf('New text'), title: null }, now)
+    const metadata = result!.plan.find((write) => write.collection === 'notes')
+    expect((metadata as { data: { title: string } }).data.title).toBe('Chicago notes')
+  })
+
+  it('writes a new title when the title was actually edited', () => {
+    const result = planFlush(saved, { document: null, title: 'Chicago, October' }, now)
+    expect(result!.plan).toEqual([
+      {
+        op: 'update',
+        collection: 'notes',
+        id: 'n1',
+        data: { title: 'Chicago, October', updatedAt: now },
+      },
+    ])
+  })
+
+  /// Clearing the title on purpose is a real edit and must still be honoured —
+  /// the fix must not make the title unclearable.
+  it('honours a title the user deliberately cleared', () => {
+    const result = planFlush(saved, { document: null, title: '' }, now)
+    expect((result!.plan[0] as { data: { title: string } }).data.title).toBe('')
+  })
+
+  it('writes nothing when the title was retyped identically', () => {
+    expect(planFlush(saved, { document: null, title: 'Chicago notes' }, now)).toBeNull()
+  })
+
+  it('ignores whitespace-only differences in the title', () => {
+    expect(planFlush(saved, { document: null, title: '  Chicago notes  ' }, now)).toBeNull()
+  })
+
+  it('passes the size refusal through rather than writing', () => {
+    const huge = documentOf('x'.repeat(DOCUMENT_BYTE_BUDGET + 1000))
+    const result = planFlush(saved, { document: huge, title: null }, now)
+    expect(result!.refusal).toContain('too large to save')
+    expect(result!.plan).toEqual([])
   })
 })

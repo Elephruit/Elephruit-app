@@ -13,7 +13,14 @@ import { applyPlan } from '../../data/applyPlan'
 import { useContainers, useNote, useNoteContent, usePeople } from '../../data/hooks'
 import { buildTree, flattenTree, isArchived, pathLabel } from '../../domain/container'
 import { relativeDescription } from '../../domain/contact'
-import { planDeleteNote, planSaveNote, planUpdateNote, type Note } from '../../domain/note'
+import {
+  NOTHING_PENDING,
+  planDeleteNote,
+  planFlush,
+  planUpdateNote,
+  type Note,
+  type PendingNoteEdit,
+} from '../../domain/note'
 import type { NoteDocument } from '../../domain/noteDocument'
 import { Button } from '../components/Button'
 import { Dialog } from '../components/Dialog'
@@ -42,42 +49,40 @@ export function NotePage() {
   /// The unsaved edit. A ref rather than state because a flush must read the
   /// latest value from inside a `visibilitychange` handler, which closes over
   /// whatever state was current when it was registered.
-  const pending = useRef<{ document: NoteDocument | null; title: string }>({ document: null, title: '' })
+  ///
+  /// `title: null` means untouched — never `''`, which is what the user typing
+  /// an empty title means. See `planFlush`.
+  const pending = useRef<PendingNoteEdit>({ ...NOTHING_PENDING })
   const timer = useRef<number | undefined>(undefined)
   const noteRef = useRef<Note | null>(null)
 
   useEffect(() => {
-    if (note) {
-      noteRef.current = note
-      setTitle((current) => (current === '' && pending.current.title === '' ? note.title : current))
-    }
+    if (!note) return
+    noteRef.current = note
+    // Only adopt the stored title while nothing is being typed, or a snapshot
+    // arriving mid-edit would yank the field back to what is on the server.
+    if (pending.current.title === null) setTitle(note.title)
   }, [note])
 
   const flush = useCallback(async () => {
     const subject = noteRef.current
-    const edit = pending.current
-    if (!subject || (!edit.document && edit.title === subject.title)) return
+    if (!subject) return
+
+    const work = planFlush(subject, pending.current, new Date())
+    if (!work) return
 
     window.clearTimeout(timer.current)
-    pending.current = { document: null, title: edit.title }
+    pending.current = { ...NOTHING_PENDING }
 
-    const document = edit.document
-    if (!document) {
-      await applyPlan(uid, planUpdateNote(subject.id, { title: edit.title }, new Date()).plan)
-      setStatus('saved')
-      return
-    }
-
-    const { plan, refusal: tooBig } = planSaveNote({ ...subject, title: edit.title }, document, new Date())
-    if (tooBig) {
-      setRefusal(tooBig)
+    if (work.refusal) {
+      setRefusal(work.refusal)
       setStatus('error')
       return
     }
 
     setStatus('saving')
     try {
-      await applyPlan(uid, plan)
+      await applyPlan(uid, work.plan)
       setRefusal(null)
       setStatus('saved')
     } catch {
