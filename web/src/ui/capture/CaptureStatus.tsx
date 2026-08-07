@@ -13,7 +13,7 @@ export function CaptureStatus({ mode }: { mode: CaptureMode }) {
       {mode === 'saved' && (
         <span className="composer-saved">
           <Icon name="check-circle" size={16} />
-          Added to your memories
+          Added to your timeline
         </span>
       )}
     </p>

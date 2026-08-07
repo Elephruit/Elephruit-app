@@ -471,7 +471,7 @@ export function PersonPage() {
           ))}
         </div>
 
-        <aside className="person-context remember-rail" aria-label="Remember">
+        <aside className="person-context remember-rail" aria-label="Person context">
           <h2 className="remember-eyebrow">Next up</h2>
 
           {observations && relationships && reminders && interactions && people && (

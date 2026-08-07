@@ -214,7 +214,7 @@ export function EditableReviewPanel({
       <p className="editable-review-subtitle">Edit anything that was misunderstood. Nothing is saved until you confirm.</p>
 
       <label className="field-label" htmlFor="memory-title">
-        Memory title
+        Update title
       </label>
       <input
         id="memory-title"

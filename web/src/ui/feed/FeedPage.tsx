@@ -109,7 +109,7 @@ function FeedAside({
                   />
                 </span>
                 <Button variant="ghost" small onClick={() => navigate(`/?capture=1&person=${suggestion.personID}`)}>
-                  Remember
+                  Add update
                 </Button>
               </div>
             )
@@ -283,7 +283,7 @@ export function FeedPage() {
 
           {feed.status === 'error' && (
             <div className="feed-error" role="alert">
-              <p>The feed could not load. Your memories are safe — this is a connection problem.</p>
+              <p>The feed could not load. Your records are safe — this is a connection problem.</p>
               <Button variant="secondary" onClick={feed.retry}>
                 Try again
               </Button>
