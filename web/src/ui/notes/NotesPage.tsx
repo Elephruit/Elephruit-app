@@ -140,7 +140,7 @@ export function NotesPage() {
         }
       />
 
-      <div className="notes-layout">
+      <div className="notes-layout" data-has-sidebar={folders && folders.length > 0 || undefined}>
         {folders && folders.length > 0 && (
           <aside className="notes-sidebar">
             <FolderTree
