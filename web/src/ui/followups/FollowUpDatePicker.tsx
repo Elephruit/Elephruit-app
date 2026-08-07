@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { dateSuggestions, localDateValue } from '../../domain/dateSuggestions'
 import { Icon } from '../components/Icon'
 
@@ -40,13 +40,18 @@ export function FollowUpDatePicker({
   value,
   onSelect,
   onClear,
+  onExitBackward,
+  onExitForward,
   autoFocus = false,
 }: {
   value: string
   onSelect: (localDate: string) => void
   onClear: () => void
+  onExitBackward?: () => void
+  onExitForward?: () => void
   autoFocus?: boolean
 }) {
+  const suggestionListID = useId()
   const now = useMemo(() => new Date(), [])
   const selected = dateFromValue(value)
   const initial = selected ?? new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12)
@@ -56,6 +61,7 @@ export function FollowUpDatePicker({
   const [activeDate, setActiveDate] = useState(() => localDateValue(initial))
   const calendarRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const pickerRef = useRef<HTMLDivElement>(null)
   const suggestions = useMemo(() => dateSuggestions(query, now), [now, query])
   const days = useMemo(() => calendarDays(month), [month])
   const todayValue = localDateValue(now)
@@ -67,6 +73,20 @@ export function FollowUpDatePicker({
 
   useEffect(() => {
     setActiveSuggestion(0)
+  }, [query])
+
+  useLayoutEffect(() => {
+    if (query) return
+    let secondFrame = 0
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        pickerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+      })
+    })
+    return () => {
+      window.cancelAnimationFrame(firstFrame)
+      window.cancelAnimationFrame(secondFrame)
+    }
   }, [query])
 
   function choose(localDate: string) {
@@ -82,6 +102,16 @@ export function FollowUpDatePicker({
     }, 0)
   }
 
+  function focusSuggestion(index: number) {
+    const clamped = Math.max(0, Math.min(index, suggestions.length - 1))
+    setActiveSuggestion(clamped)
+    window.setTimeout(() => {
+      pickerRef.current
+        ?.querySelector<HTMLButtonElement>(`#${CSS.escape(`${suggestionListID}-option-${clamped}`)}`)
+        ?.focus()
+    }, 0)
+  }
+
   function moveMonth(offset: number) {
     const nextMonth = new Date(month.getFullYear(), month.getMonth() + offset, 1, 12)
     const active = dateFromValue(activeDate) ?? nextMonth
@@ -90,7 +120,18 @@ export function FollowUpDatePicker({
   }
 
   function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'ArrowDown') {
+    if (event.key === 'Tab') {
+      event.preventDefault()
+      if (event.shiftKey) {
+        onExitBackward?.()
+      } else if (suggestions.length > 0) {
+        focusSuggestion(activeSuggestion)
+      } else if (!query) {
+        focusDate(dateFromValue(activeDate) ?? initial)
+      } else {
+        onExitForward?.()
+      }
+    } else if (event.key === 'ArrowDown') {
       event.preventDefault()
       if (suggestions.length > 0) {
         setActiveSuggestion((index) => Math.min(index + 1, suggestions.length - 1))
@@ -110,8 +151,37 @@ export function FollowUpDatePicker({
     }
   }
 
+  function handleSuggestionKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      focusSuggestion(index + 1)
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      focusSuggestion(index - 1)
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      choose(suggestions[index].localDate)
+    } else if (event.key === 'Tab') {
+      event.preventDefault()
+      if (event.shiftKey) {
+        if (index === 0) inputRef.current?.focus()
+        else focusSuggestion(index - 1)
+      } else if (index < suggestions.length - 1) {
+        focusSuggestion(index + 1)
+      } else {
+        onExitForward?.()
+      }
+    }
+  }
+
   function handleDayKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, date: Date) {
     let next: Date | null = null
+    if (event.key === 'Tab') {
+      event.preventDefault()
+      if (event.shiftKey) inputRef.current?.focus()
+      else onExitForward?.()
+      return
+    }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       choose(localDateValue(date))
@@ -134,7 +204,7 @@ export function FollowUpDatePicker({
   }
 
   return (
-    <div className="followup-date-picker">
+    <div ref={pickerRef} className="followup-date-picker">
       <div className="followup-date-search">
         <Icon name="search" size={17} />
         <input
@@ -145,8 +215,8 @@ export function FollowUpDatePicker({
           autoFocus={autoFocus}
           value={query}
           aria-label="Type a due date"
-          aria-controls="followup-date-suggestions"
-          aria-activedescendant={suggestions.length ? `followup-date-suggestion-${activeSuggestion}` : undefined}
+          aria-controls={suggestionListID}
+          aria-activedescendant={suggestions.length ? `${suggestionListID}-option-${activeSuggestion}` : undefined}
           placeholder="Type a date — 8, 8/8, Thursday"
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={handleSearchKeyDown}
@@ -159,16 +229,19 @@ export function FollowUpDatePicker({
       </div>
 
       {query ? (
-        <div id="followup-date-suggestions" className="followup-date-suggestions" role="listbox" aria-label="Date suggestions">
+        <div id={suggestionListID} className="followup-date-suggestions" role="listbox" aria-label="Date suggestions">
           {suggestions.map((suggestion, index) => (
             <button
-              id={`followup-date-suggestion-${index}`}
+              id={`${suggestionListID}-option-${index}`}
               key={suggestion.id}
               type="button"
               role="option"
               aria-selected={index === activeSuggestion}
               data-active={index === activeSuggestion || undefined}
+              tabIndex={index === activeSuggestion ? 0 : -1}
               onMouseEnter={() => setActiveSuggestion(index)}
+              onFocus={() => setActiveSuggestion(index)}
+              onKeyDown={(event) => handleSuggestionKeyDown(event, index)}
               onClick={() => choose(suggestion.localDate)}
             >
               <span className="followup-date-suggestion-main"><Icon name="calendar" size={16} />{suggestion.label}</span>

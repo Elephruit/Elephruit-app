@@ -93,6 +93,12 @@ export function InlineFollowUpComposer({
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const composerRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLInputElement>(null)
+  const peopleButtonRef = useRef<HTMLButtonElement>(null)
+  const dateButtonRef = useRef<HTMLButtonElement>(null)
+  const categoryButtonRef = useRef<HTMLButtonElement>(null)
+  const deleteButtonRef = useRef<HTMLButtonElement>(null)
+  const cancelButtonRef = useRef<HTMLButtonElement>(null)
+  const saveButtonRef = useRef<HTMLButtonElement>(null)
   const guardRef = useRef<HTMLDivElement>(null)
 
   const detected = useMemo(
@@ -267,6 +273,22 @@ export function InlineFollowUpComposer({
     }, 0)
   }
 
+  function moveOnTab(
+    event: React.KeyboardEvent<HTMLElement>,
+    backward: React.RefObject<HTMLElement | null>,
+    forward: React.RefObject<HTMLElement | null>,
+  ) {
+    if (event.key !== 'Tab') return
+    event.preventDefault()
+    const target = event.shiftKey ? backward.current : forward.current
+    target?.focus()
+  }
+
+  function closeDatePanelAndFocus(target: React.RefObject<HTMLElement | null>) {
+    setOpenPanel(null)
+    window.setTimeout(() => target.current?.focus(), 0)
+  }
+
   if (!active) {
     return (
       <button type="button" className="inline-followup-trigger" onClick={activate}>
@@ -301,6 +323,11 @@ export function InlineFollowUpComposer({
           disabled={saving}
           onChange={(event) => set({ title: event.target.value })}
           onKeyDown={(event) => {
+            if (event.key === 'Tab' && !event.shiftKey) {
+              event.preventDefault()
+              peopleButtonRef.current?.focus()
+              return
+            }
             if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
             event.preventDefault()
             void save(existing ? false : !(event.metaKey || event.ctrlKey))
@@ -345,40 +372,52 @@ export function InlineFollowUpComposer({
 
         <div className="inline-followup-toolbar" aria-label="Follow-up details">
           <button
+            ref={peopleButtonRef}
             type="button"
             className="inline-detail-button"
             aria-expanded={openPanel === 'people'}
             data-selected={draft.personIDs.size > 0 || undefined}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => togglePanel('people')}
+            onKeyDown={(event) => moveOnTab(event, titleRef, dateButtonRef)}
           >
             <Icon name="people" size={16} />
             People
           </button>
           <button
+            ref={dateButtonRef}
             type="button"
             className="inline-detail-button"
             aria-expanded={openPanel === 'date'}
             data-selected={draft.schedule.scheduleMode !== 'none' || undefined}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => togglePanel('date')}
+            onKeyDown={(event) => moveOnTab(event, peopleButtonRef, categoryButtonRef)}
           >
             <Icon name="calendar" size={16} />
             {formatScheduleButton(draft)}
           </button>
           <button
+            ref={categoryButtonRef}
             type="button"
             className="inline-detail-button"
             aria-expanded={openPanel === 'categories'}
             data-selected={draft.categoryTags.size > 0 || undefined}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => togglePanel('categories')}
+            onKeyDown={(event) => moveOnTab(event, dateButtonRef, existing ? deleteButtonRef : cancelButtonRef)}
           >
             <Icon name="tag" size={16} />
             Categories
           </button>
           {existing && !confirmingDelete && (
-            <button type="button" className="inline-delete-button" onClick={() => setConfirmingDelete(true)}>
+            <button
+              ref={deleteButtonRef}
+              type="button"
+              className="inline-delete-button"
+              onClick={() => setConfirmingDelete(true)}
+              onKeyDown={(event) => moveOnTab(event, categoryButtonRef, cancelButtonRef)}
+            >
               Delete
             </button>
           )}
@@ -395,15 +434,25 @@ export function InlineFollowUpComposer({
             </span>
           ) : (
             <>
-              <Button variant="quiet" small onClick={close}>
+              <Button
+                buttonRef={cancelButtonRef}
+                variant="quiet"
+                small
+                onClick={close}
+                onKeyDown={(event) =>
+                  moveOnTab(event, existing ? deleteButtonRef : categoryButtonRef, saveButtonRef)
+                }
+              >
                 Cancel
               </Button>
               <Button
+                buttonRef={saveButtonRef}
                 variant="primary"
                 small
                 loading={saving}
                 disabled={!draft.title.trim()}
                 onClick={() => void save(false)}
+                onKeyDown={(event) => moveOnTab(event, cancelButtonRef, titleRef)}
               >
                 {existing ? 'Save' : 'Add'}
               </Button>
@@ -443,12 +492,14 @@ export function InlineFollowUpComposer({
               autoFocus
               onSelect={(localDate) => {
                 setDueDate(localDate)
-                setOpenPanel(null)
+                closeDatePanelAndFocus(dateButtonRef)
               }}
               onClear={() => {
                 setDueDate('')
-                setOpenPanel(null)
+                closeDatePanelAndFocus(dateButtonRef)
               }}
+              onExitBackward={() => closeDatePanelAndFocus(dateButtonRef)}
+              onExitForward={() => closeDatePanelAndFocus(categoryButtonRef)}
             />
           </div>
         )}
