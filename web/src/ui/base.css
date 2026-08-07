@@ -2153,7 +2153,7 @@ textarea.field {
 .capture-composer .memory-branch {
   position: absolute;
   left: var(--memory-rail-x);
-  right: calc(-1 * var(--memory-content-gap));
+  right: var(--space-tight);
   top: calc(50% - 0.5px);
   height: 1px;
   background: var(--color-separator);
@@ -3191,6 +3191,10 @@ textarea.field {
   bottom: calc(-1 * var(--space-large));
   width: var(--memory-rail-width);
   background: color-mix(in srgb, var(--color-accent) 22%, var(--color-separator));
+}
+
+.feed-main:has(.memory-rail) .capture-composer[data-mode]:not([data-mode='collapsed'])::before {
+  display: none;
 }
 
 .memory-rail .memory-rail-col,
