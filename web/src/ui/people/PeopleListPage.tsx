@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { relativeDescription } from '../../domain/contact'
 import { startOfDay, wholeDaysBetween } from '../../domain/dates'
@@ -11,12 +11,19 @@ import { useUID } from '../UserContext'
 import { Avatar } from '../components/Avatar'
 import { Button, IconButton } from '../components/Button'
 import { EmptyState } from '../components/EmptyState'
+import { Icon } from '../components/Icon'
 import { SkeletonRows } from '../components/Skeleton'
 import { PageHeader } from '../shell/PageHeader'
 import { PageScaffold } from '../shell/PageScaffold'
 import { CreatePersonSheet } from './CreatePersonSheet'
 
 type SortOrder = 'name' | 'recent' | 'quiet'
+
+const SORT_OPTIONS: Array<{ value: SortOrder; label: string }> = [
+  { value: 'name', label: 'Name' },
+  { value: 'recent', label: 'Recently contacted' },
+  { value: 'quiet', label: 'Longest quiet' },
+]
 
 function subtitle(person: Person, observations: Observation[]): string | null {
   const identity = professionalIdentityOf(person, observations)
@@ -83,6 +90,8 @@ export function PeopleListPage() {
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
   const [order, setOrder] = useState<SortOrder>('name')
+  const [sortOpen, setSortOpen] = useState(false)
+  const sortMenuRef = useRef<HTMLDivElement>(null)
   const now = new Date()
 
   // Placeholders stay off the list — they surface on the pages of the people
@@ -123,16 +132,53 @@ export function PeopleListPage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
-            <select
-              className="field field-inline field-select"
-              aria-label="Sort order"
-              value={order}
-              onChange={(event) => setOrder(event.target.value as SortOrder)}
+            <div
+              ref={sortMenuRef}
+              className="people-sort-menu"
+              onBlur={(event) => {
+                if (event.relatedTarget instanceof Node && sortMenuRef.current?.contains(event.relatedTarget)) return
+                setSortOpen(false)
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Escape' || !sortOpen) return
+                event.stopPropagation()
+                setSortOpen(false)
+                sortMenuRef.current?.querySelector<HTMLButtonElement>('.people-sort-trigger')?.focus()
+              }}
             >
-              <option value="name">By name</option>
-              <option value="recent">Recently contacted</option>
-              <option value="quiet">Longest quiet</option>
-            </select>
+              <IconButton
+                className="people-sort-trigger"
+                label={`Sort people: ${SORT_OPTIONS.find((option) => option.value === order)?.label}`}
+                icon="sort"
+                size={18}
+                aria-expanded={sortOpen}
+                aria-haspopup="menu"
+                onClick={() => setSortOpen((open) => !open)}
+              />
+              {sortOpen && (
+                <div className="people-sort-popover" role="menu" aria-label="Sort people">
+                  <p className="people-sort-title">Sort by</p>
+                  {SORT_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={order === option.value}
+                      onClick={() => {
+                        setOrder(option.value)
+                        setSortOpen(false)
+                        window.setTimeout(() => {
+                          sortMenuRef.current?.querySelector<HTMLButtonElement>('.people-sort-trigger')?.focus()
+                        }, 0)
+                      }}
+                    >
+                      <span>{option.label}</span>
+                      {order === option.value && <Icon name="check" size={14} />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <IconButton
               className="page-header-add"
               label="New person"

@@ -97,6 +97,12 @@ const PATHS: Record<string, React.ReactNode> = {
     </>
   ),
   filter: <path d="M4 6h16M7 12h10M10 18h4" />,
+  sort: (
+    <>
+      <path d="M5 7h11M5 12h8M5 17h5" />
+      <path d="M18 11v8M15 16l3 3 3-3" />
+    </>
+  ),
   expand: (
     <>
       <path d="M13 4h7v7M20 4l-7 7" />

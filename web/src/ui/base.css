@@ -413,6 +413,82 @@ dialog.palette::backdrop {
   flex: none;
 }
 
+.people-sort-menu {
+  position: relative;
+}
+
+.page-header-actions .icon-button.people-sort-trigger {
+  width: var(--control-height);
+  height: var(--control-height);
+  border: 1px solid var(--color-separator);
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  box-shadow: var(--shadow-raised);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.page-header-actions .icon-button.people-sort-trigger:hover,
+.page-header-actions .icon-button.people-sort-trigger[aria-expanded='true'] {
+  background: var(--color-hover-fill);
+  color: var(--color-text);
+  box-shadow: var(--shadow-interactive);
+  transform: translateY(-1px);
+}
+
+.people-sort-popover {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + var(--space-small));
+  right: 0;
+  width: 220px;
+  padding: var(--space-tight);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-large);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+  animation: inline-panel-reveal var(--duration-fast) var(--ease-standard);
+}
+
+.people-sort-title {
+  padding: 6px var(--space-small) var(--space-tight);
+  color: var(--color-text-tertiary);
+  font: var(--text-section);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.people-sort-popover > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-medium);
+  width: 100%;
+  min-height: 36px;
+  padding: 7px var(--space-small);
+  border: 0;
+  border-radius: var(--radius-medium);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: var(--text-sub);
+  text-align: left;
+  cursor: pointer;
+}
+
+.people-sort-popover > button:hover,
+.people-sort-popover > button:focus-visible,
+.people-sort-popover > button[aria-checked='true'] {
+  background: var(--color-hover-fill);
+  color: var(--color-text);
+}
+
+.people-sort-popover > button svg {
+  color: var(--color-accent);
+}
+
 .error-panel {
   background: var(--color-background-elevated);
   border: 1px solid var(--color-separator);
