@@ -17,11 +17,17 @@ import { newID } from './ids'
 import type { PaletteColor } from './person'
 import type { WritePlan } from './writePlan'
 
+export type FolderColor = PaletteColor | `#${string}`
+
+export function folderTint(color: FolderColor): string {
+  return color.startsWith('#') ? color : `var(--palette-${color})`
+}
+
 export interface Folder {
   id: string
   title: string
   summary: string | null
-  colorName: PaletteColor
+  colorName: FolderColor
   parentID: string | null
   /// User-defined order among siblings. Older folders omit this and keep their
   /// alphabetical order until the first drag normalizes that branch.
@@ -40,7 +46,7 @@ export interface Folder {
 export interface FolderDraft {
   title: string
   summary?: string | null
-  colorName?: PaletteColor
+  colorName?: FolderColor
   parentID?: string | null
   sortOrder?: number
   startAt?: Date | null

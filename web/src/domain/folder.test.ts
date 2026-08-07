@@ -4,6 +4,7 @@ import {
   buildTree,
   descendantIDs,
   flattenTree,
+  folderTint,
   hasDates,
   isArchived,
   isSuppressedByArchive,
@@ -78,6 +79,13 @@ describe('creation', () => {
 
   it('starts unarchived, so no document is ever missing the field', () => {
     expect(makeFolder({ title: 'Travel' }, now).archivedAt).toBeNull()
+  })
+
+  it('keeps custom RGB colors as CSS-ready values', () => {
+    const made = makeFolder({ title: 'Studio', colorName: '#4f7bd9' }, now)
+    expect(made.colorName).toBe('#4f7bd9')
+    expect(folderTint(made.colorName)).toBe('#4f7bd9')
+    expect(folderTint('blue')).toBe('var(--palette-blue)')
   })
 
   it('knows whether it has dates worth showing', () => {

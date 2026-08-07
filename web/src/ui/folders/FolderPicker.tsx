@@ -18,7 +18,7 @@
 ///   does not say which trip.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { buildTree, flattenTree, pathLabel, type Folder } from '../../domain/folder'
+import { buildTree, flattenTree, folderTint, pathLabel, type Folder } from '../../domain/folder'
 import { foldedForMatching } from '../../domain/person'
 import { Icon } from '../components/Icon'
 
@@ -92,7 +92,7 @@ export function FolderPicker({
         <span
           className="folder-picker-glyph"
           style={
-            selected ? ({ '--tint': `var(--palette-${selected.colorName})` } as React.CSSProperties) : undefined
+            selected ? ({ '--tint': folderTint(selected.colorName) } as React.CSSProperties) : undefined
           }
         >
           <Icon name="folder" size={14} />
@@ -140,7 +140,7 @@ export function FolderPicker({
               >
                 <span
                   className="folder-picker-glyph"
-                  style={{ '--tint': `var(--palette-${folder.colorName})` } as React.CSSProperties}
+                  style={{ '--tint': folderTint(folder.colorName) } as React.CSSProperties}
                 >
                   <Icon name="folder" size={13} />
                 </span>

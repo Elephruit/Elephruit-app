@@ -6,12 +6,13 @@
 /// replaces. So: branches collapse, a row carries what is in it rather than a
 /// pair of buttons, and the actions moved into a menu on the row.
 
-import { useMemo, useState, type DragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { applyPlan } from '../../data/applyPlan'
 import { useFolders, useNotes, useReminders } from '../../data/hooks'
 import {
   buildTree,
+  folderTint,
   foldersInOrder,
   isArchived,
   moveRefusal,
@@ -23,10 +24,11 @@ import {
   progressOf,
   progressSentence,
   type Folder,
+  type FolderColor,
   type FolderNode,
 } from '../../domain/folder'
 import { relativeDescription } from '../../domain/contact'
-import { PALETTE_COLORS, type PaletteColor } from '../../domain/person'
+import { PALETTE_COLORS } from '../../domain/person'
 import { Button, IconButton } from '../components/Button'
 import { Dialog } from '../components/Dialog'
 import { EmptyState } from '../components/EmptyState'
@@ -50,6 +52,7 @@ export function FoldersPage() {
   const [editing, setEditing] = useState<Folder | null>(null)
   const [deleting, setDeleting] = useState<Folder | null>(null)
   const [coloring, setColoring] = useState<Folder | null>(null)
+  const colorControlRef = useRef<HTMLDivElement>(null)
   const [draggingID, setDraggingID] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState<{ id: string; position: 'before' | 'inside' | 'after' } | null>(null)
 
@@ -126,7 +129,16 @@ export function FoldersPage() {
     await applyPlan(uid, plan)
   }
 
-  async function changeColor(colorName: PaletteColor) {
+  useEffect(() => {
+    if (!coloring) return
+    const dismiss = (event: PointerEvent) => {
+      if (!colorControlRef.current?.contains(event.target as Node)) setColoring(null)
+    }
+    document.addEventListener('pointerdown', dismiss)
+    return () => document.removeEventListener('pointerdown', dismiss)
+  }, [coloring])
+
+  async function changeColor(colorName: FolderColor) {
     if (!coloring) return
     await applyPlan(uid, planUpdateFolder(coloring.id, { colorName }, new Date()).plan)
     setColoring(null)
@@ -250,15 +262,57 @@ export function FoldersPage() {
             <span className="folder-tree-twisty" aria-hidden="true" />
           )}
 
-          <button
-            type="button"
-            className="folder-picker-glyph folder-color-button"
-            style={{ '--tint': `var(--palette-${node.folder.colorName})` } as React.CSSProperties}
-            aria-label={`Change color for ${node.folder.title}`}
-            onClick={() => setColoring(node.folder)}
+          <div
+            className="folder-color-control"
+            ref={coloring?.id === node.folder.id ? colorControlRef : undefined}
+            onKeyDown={(event) => {
+              if (event.key !== 'Escape' || coloring?.id !== node.folder.id) return
+              event.stopPropagation()
+              setColoring(null)
+            }}
           >
-            <Icon name="folder" size={15} />
-          </button>
+            <button
+              type="button"
+              className="folder-picker-glyph folder-color-button"
+              style={{ '--tint': folderTint(node.folder.colorName) } as React.CSSProperties}
+              aria-label={`Change color for ${node.folder.title}`}
+              aria-haspopup="dialog"
+              aria-expanded={coloring?.id === node.folder.id}
+              onClick={() => setColoring((current) => current?.id === node.folder.id ? null : node.folder)}
+            >
+              <Icon name="folder" size={15} />
+            </button>
+            {coloring?.id === node.folder.id && (
+              <div className="folder-color-popover" role="dialog" aria-label={`Color for ${node.folder.title}`}>
+                <div className="color-choices folder-color-choices">
+                  {PALETTE_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className="color-choice"
+                      style={{ '--tint': folderTint(color) } as React.CSSProperties}
+                      data-selected={color === coloring.colorName || undefined}
+                      aria-label={`Set ${color} color`}
+                      aria-pressed={color === coloring.colorName}
+                      onClick={() => void changeColor(color)}
+                    />
+                  ))}
+                  <label
+                    className="color-choice color-choice-custom"
+                    data-selected={coloring.colorName.startsWith('#') || undefined}
+                    title="Custom color"
+                  >
+                    <input
+                      type="color"
+                      aria-label="Choose custom folder color"
+                      value={coloring.colorName.startsWith('#') ? coloring.colorName : '#4168c6'}
+                      onChange={(event) => void changeColor(event.target.value as FolderColor)}
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
 
           <button type="button" className="folder-row-main" onClick={() => navigate(`/folders/${node.folder.id}`)}>
             <span className="folder-row-text">
@@ -385,7 +439,7 @@ export function FoldersPage() {
               <button type="button" className="folder-row-main" onClick={() => navigate(`/folders/${folder.id}`)}>
                 <span
                   className="folder-picker-glyph"
-                  style={{ '--tint': `var(--palette-${folder.colorName})` } as React.CSSProperties}
+                  style={{ '--tint': folderTint(folder.colorName) } as React.CSSProperties}
                 >
                   <Icon name="folder" size={15} />
                 </span>
@@ -422,25 +476,6 @@ export function FoldersPage() {
             setEditing(null)
           }}
         />
-      )}
-
-      {coloring && (
-        <Dialog title={`Color for ${coloring.title}`} onClose={() => setColoring(null)}>
-          <div className="color-choices folder-color-choices">
-            {PALETTE_COLORS.map((color) => (
-              <button
-                key={color}
-                type="button"
-                className="color-choice"
-                style={{ '--tint': `var(--palette-${color})` } as React.CSSProperties}
-                data-selected={color === coloring.colorName || undefined}
-                aria-label={`Set ${color} color`}
-                aria-pressed={color === coloring.colorName}
-                onClick={() => void changeColor(color)}
-              />
-            ))}
-          </div>
-        </Dialog>
       )}
 
       {deleting && (

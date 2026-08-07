@@ -14,6 +14,7 @@ import { formatScheduleSummary } from '../../domain/temporal'
 import { applyPlan } from '../../data/applyPlan'
 import { categoryKey, uniqueCategoryTags } from '../../domain/categoryTags'
 import { useFolders, useLiveReminders, usePeople } from '../../data/hooks'
+import { folderTint } from '../../domain/folder'
 import { useUID } from '../UserContext'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
@@ -316,7 +317,7 @@ export function FollowUpsPage() {
                               role="link"
                               tabIndex={0}
                               className="task-container"
-                              style={{ '--tint': `var(--palette-${folder.colorName})` } as React.CSSProperties}
+                              style={{ '--tint': folderTint(folder.colorName) } as React.CSSProperties}
                               onClick={(event) => {
                                 event.stopPropagation()
                                 navigate(`/folders/${folder.id}`)

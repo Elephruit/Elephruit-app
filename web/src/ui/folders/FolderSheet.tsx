@@ -10,12 +10,14 @@ import { useMemo, useState } from 'react'
 import { applyPlan } from '../../data/applyPlan'
 import {
   moveRefusal,
+  folderTint,
   planCreateFolder,
   planUpdateFolder,
   validateFolderDraft,
   type Folder,
+  type FolderColor,
 } from '../../domain/folder'
-import { PALETTE_COLORS, type PaletteColor } from '../../domain/person'
+import { PALETTE_COLORS } from '../../domain/person'
 import { fromLocalDateValue, toLocalDateValue } from '../dateInput'
 import { Button } from '../components/Button'
 import { FormField } from '../components/FormField'
@@ -39,7 +41,7 @@ export function FolderSheet({
   const uid = useUID()
   const [title, setTitle] = useState(existing?.title ?? '')
   const [summary, setSummary] = useState(existing?.summary ?? '')
-  const [colorName, setColorName] = useState<PaletteColor>(existing?.colorName ?? 'blue')
+  const [colorName, setColorName] = useState<FolderColor>(existing?.colorName ?? 'blue')
   const [parentID, setParentID] = useState<string | null>(existing?.parentID ?? defaultParentID)
   const [datesOpen, setDatesOpen] = useState(Boolean(existing?.startAt || existing?.dueAt))
   const [startField, setStartField] = useState(existing?.startAt ? toLocalDateValue(existing.startAt) : '')
@@ -136,13 +138,21 @@ export function FolderSheet({
               key={color}
               type="button"
               className="color-choice"
-              style={{ '--tint': `var(--palette-${color})` } as React.CSSProperties}
+              style={{ '--tint': folderTint(color) } as React.CSSProperties}
               data-selected={color === colorName || undefined}
               aria-label={color}
               aria-pressed={color === colorName}
               onClick={() => setColorName(color)}
             />
           ))}
+          <label className="color-choice color-choice-custom" data-selected={colorName.startsWith('#') || undefined}>
+            <input
+              type="color"
+              aria-label="Custom folder color"
+              value={colorName.startsWith('#') ? colorName : '#4168c6'}
+              onChange={(event) => setColorName(event.target.value as FolderColor)}
+            />
+          </label>
         </div>
       </FormField>
 

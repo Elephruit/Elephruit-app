@@ -20,6 +20,7 @@ import {
   planUnarchiveFolder,
   progressOf,
   progressSentence,
+  folderTint,
   type Folder,
 } from '../../domain/folder'
 import { relativeDescription } from '../../domain/contact'
@@ -146,7 +147,7 @@ export function FolderPage() {
           <span className="container-title-row">
             <span
               className="folder-picker-glyph folder-glyph-large"
-              style={{ '--tint': `var(--palette-${subject.colorName})` } as React.CSSProperties}
+              style={{ '--tint': folderTint(subject.colorName) } as React.CSSProperties}
             >
               <Icon name="folder" size={18} />
             </span>
@@ -214,7 +215,7 @@ export function FolderPage() {
                 <button type="button" className="folder-row-main" onClick={() => navigate(`/folders/${child.id}`)}>
                   <span
                     className="folder-picker-glyph"
-                    style={{ '--tint': `var(--palette-${child.colorName})` } as React.CSSProperties}
+                    style={{ '--tint': folderTint(child.colorName) } as React.CSSProperties}
                   >
                     <Icon name="folder" size={15} />
                   </span>

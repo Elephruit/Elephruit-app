@@ -15,6 +15,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { applyPlan } from '../../data/applyPlan'
 import { useFolders, useNotes } from '../../data/hooks'
 import { archivedFolderIDs, descendantIDs, pathLabel } from '../../domain/folder'
+import { folderTint } from '../../domain/folder'
 import { relativeDescription } from '../../domain/contact'
 import { displayTitle, excerptOf, planCreateNote, planUpdateNote, type Note } from '../../domain/note'
 import { Button, IconButton } from '../components/Button'
@@ -242,7 +243,7 @@ export function NotesPage() {
                         {folder && !selectedFolder && (
                           <span
                             className="task-container"
-                            style={{ '--tint': `var(--palette-${folder.colorName})` } as React.CSSProperties}
+                            style={{ '--tint': folderTint(folder.colorName) } as React.CSSProperties}
                           >
                             <Icon name="folder" size={13} />
                             {folder.title}
