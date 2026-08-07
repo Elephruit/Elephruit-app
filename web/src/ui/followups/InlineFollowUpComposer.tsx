@@ -9,6 +9,7 @@ import {
   type FollowUpDraft,
 } from '../../domain/followUpDraft'
 import { planPersistFollowUp } from '../../domain/followUpPlan'
+import { newID } from '../../domain/ids'
 import type { Person } from '../../domain/person'
 import type { Reminder } from '../../domain/reminders'
 import { detectDeadlineFromText } from '../../domain/temporal'
@@ -24,7 +25,7 @@ import { FollowUpDatePicker } from './FollowUpDatePicker'
 
 const USER_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
 
-type OpenPanel = 'people' | 'date' | 'categories' | null
+type OpenPanel = 'checklist' | 'people' | 'date' | 'categories' | null
 
 function shiftedDate(days: number): string {
   const date = new Date()
@@ -60,6 +61,7 @@ function hasDraftContent(draft: FollowUpDraft): boolean {
   return (
     draft.title.trim().length > 0 ||
     draft.notes.trim().length > 0 ||
+    draft.checklist.some((item) => item.title.trim().length > 0) ||
     draft.personIDs.size > 0 ||
     draft.categoryTags.size > 0 ||
     draft.schedule.scheduleMode !== 'none'
@@ -95,6 +97,8 @@ export function InlineFollowUpComposer({
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const composerRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLInputElement>(null)
+  const notesRef = useRef<HTMLTextAreaElement>(null)
+  const checklistButtonRef = useRef<HTMLButtonElement>(null)
   const peopleButtonRef = useRef<HTMLButtonElement>(null)
   const dateButtonRef = useRef<HTMLButtonElement>(null)
   const categoryButtonRef = useRef<HTMLButtonElement>(null)
@@ -102,6 +106,7 @@ export function InlineFollowUpComposer({
   const cancelButtonRef = useRef<HTMLButtonElement>(null)
   const saveButtonRef = useRef<HTMLButtonElement>(null)
   const guardRef = useRef<HTMLDivElement>(null)
+  const checklistItemRefs = useRef(new Map<string, HTMLInputElement>())
   const suppressBlurRef = useRef(false)
 
   const detected = useMemo(
@@ -131,6 +136,15 @@ export function InlineFollowUpComposer({
       }, 0)
     }, 0)
   }, [activationRequest, existing])
+
+  useLayoutEffect(() => {
+    const field = notesRef.current
+    if (!field) return
+    field.style.height = '0px'
+    const height = Math.min(field.scrollHeight, 96)
+    field.style.height = `${Math.max(height, 24)}px`
+    field.style.overflowY = field.scrollHeight > 96 ? 'auto' : 'hidden'
+  }, [active, draft.notes])
 
   function set(changes: Partial<FollowUpDraft>) {
     setDraft((current) => ({ ...current, ...changes }))
@@ -256,6 +270,35 @@ export function InlineFollowUpComposer({
     set({ categoryTags })
   }
 
+  function focusChecklistItem(id: string) {
+    window.setTimeout(() => {
+      const input = checklistItemRefs.current.get(id)
+      input?.focus()
+      input?.setSelectionRange(input.value.length, input.value.length)
+    }, 0)
+  }
+
+  function addChecklistItem(title: string, afterID?: string) {
+    const item = { id: newID(), title, isCompleted: false }
+    const checklist = [...draft.checklist]
+    const afterIndex = afterID ? checklist.findIndex((candidate) => candidate.id === afterID) : -1
+    if (afterIndex >= 0) checklist.splice(afterIndex + 1, 0, item)
+    else checklist.push(item)
+    set({ checklist })
+    setOpenPanel(null)
+    focusChecklistItem(item.id)
+  }
+
+  function updateChecklistItem(id: string, changes: { title?: string; isCompleted?: boolean }) {
+    set({
+      checklist: draft.checklist.map((item) => (item.id === id ? { ...item, ...changes } : item)),
+    })
+  }
+
+  function removeChecklistItem(id: string) {
+    set({ checklist: draft.checklist.filter((item) => item.id !== id) })
+  }
+
   function handleEscape() {
     if (openPanel) {
       setOpenPanel(null)
@@ -348,7 +391,7 @@ export function InlineFollowUpComposer({
           onKeyDown={(event) => {
             if (event.key === 'Tab' && !event.shiftKey) {
               event.preventDefault()
-              openPanelFromTab('people')
+              notesRef.current?.focus()
               return
             }
             if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
@@ -356,6 +399,79 @@ export function InlineFollowUpComposer({
             void save(existing ? false : !(event.metaKey || event.ctrlKey))
           }}
         />
+
+        <div className="inline-followup-notes-area">
+          <textarea
+            ref={notesRef}
+            className="inline-followup-notes"
+            rows={1}
+            value={draft.notes}
+            placeholder="Notes"
+            aria-label="Notes"
+            disabled={saving}
+            onChange={(event) => set({ notes: event.target.value })}
+            onKeyDown={(event) => {
+              if (event.key !== 'Tab') return
+              event.preventDefault()
+              if (event.shiftKey) titleRef.current?.focus()
+              else openPanelFromTab('checklist')
+            }}
+          />
+
+          {draft.checklist.length > 0 && (
+            <div className="inline-followup-checklist" aria-label="Checklist">
+              {draft.checklist.map((item, index) => (
+                <div className="inline-checklist-row" data-completed={item.isCompleted || undefined} key={item.id}>
+                  <button
+                    type="button"
+                    className="inline-checklist-toggle"
+                    aria-label={`${item.isCompleted ? 'Mark incomplete' : 'Complete'} ${item.title || `item ${index + 1}`}`}
+                    aria-pressed={item.isCompleted}
+                    tabIndex={-1}
+                    onClick={() => updateChecklistItem(item.id, { isCompleted: !item.isCompleted })}
+                  >
+                    {item.isCompleted && <Icon name="check" size={12} />}
+                  </button>
+                  <input
+                    ref={(element) => {
+                      if (element) checklistItemRefs.current.set(item.id, element)
+                      else checklistItemRefs.current.delete(item.id)
+                    }}
+                    value={item.title}
+                    aria-label={`Checklist item ${index + 1}`}
+                    placeholder="Checklist item"
+                    disabled={saving}
+                    onChange={(event) => updateChecklistItem(item.id, { title: event.target.value })}
+                    onBlur={() => {
+                      if (!item.title.trim()) removeChecklistItem(item.id)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                        event.preventDefault()
+                        if (item.title.trim()) addChecklistItem('', item.id)
+                        return
+                      }
+                      if (event.key !== 'Tab') return
+                      event.preventDefault()
+                      if (!item.title.trim()) removeChecklistItem(item.id)
+                      if (event.shiftKey) notesRef.current?.focus()
+                      else openPanelFromTab('people')
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="inline-checklist-remove"
+                    aria-label={`Remove ${item.title || `item ${index + 1}`}`}
+                    tabIndex={-1}
+                    onClick={() => removeChecklistItem(item.id)}
+                  >
+                    <Icon name="x" size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {(draft.personIDs.size > 0 || draft.categoryTags.size > 0) && (
           <div className="inline-followup-selections" aria-label="Selected details">
@@ -395,6 +511,24 @@ export function InlineFollowUpComposer({
 
         <div className="inline-followup-toolbar" aria-label="Follow-up details">
           <button
+            ref={checklistButtonRef}
+            type="button"
+            className="inline-detail-button"
+            aria-expanded={openPanel === 'checklist'}
+            data-selected={draft.checklist.some((item) => item.title.trim()) || undefined}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => togglePanel('checklist')}
+            onKeyDown={(event) => {
+              if (event.key !== 'Tab') return
+              event.preventDefault()
+              if (event.shiftKey) notesRef.current?.focus()
+              else openPanelFromTab('people')
+            }}
+          >
+            <Icon name="check-circle" size={16} />
+            Checklist
+          </button>
+          <button
             ref={peopleButtonRef}
             type="button"
             className="inline-detail-button"
@@ -405,7 +539,7 @@ export function InlineFollowUpComposer({
             onKeyDown={(event) => {
               if (event.key !== 'Tab') return
               event.preventDefault()
-              if (event.shiftKey) titleRef.current?.focus()
+              if (event.shiftKey) openPanelFromTab('checklist')
               else openPanelFromTab('date')
             }}
           >
@@ -497,6 +631,30 @@ export function InlineFollowUpComposer({
           )}
         </div>
 
+        {openPanel === 'checklist' && (
+          <div className="inline-followup-panel inline-checklist-panel">
+            <div className="inline-panel-heading">
+              <span className="inline-panel-icon"><Icon name="check-circle" size={17} /></span>
+              <span><strong>Checklist</strong></span>
+            </div>
+            <input
+              className="inline-checklist-add"
+              aria-label="Add a checklist item"
+              placeholder="Add a checklist item"
+              autoFocus
+              onChange={(event) => {
+                if (event.target.value) addChecklistItem(event.target.value)
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Tab') return
+                event.preventDefault()
+                if (event.shiftKey) notesRef.current?.focus()
+                else openPanelFromTab('people')
+              }}
+            />
+          </div>
+        )}
+
         {openPanel === 'people' && (
           <div className="inline-followup-panel inline-people-panel">
             <div className="inline-panel-heading">
@@ -513,8 +671,7 @@ export function InlineFollowUpComposer({
               autoFocus
               showSelected={false}
               onTabBackward={() => {
-                setOpenPanel(null)
-                window.setTimeout(() => titleRef.current?.focus(), 0)
+                openPanelFromTab('checklist')
               }}
               onTabForward={() => openPanelFromTab('date')}
               onToggle={togglePerson}

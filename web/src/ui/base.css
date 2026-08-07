@@ -871,6 +871,109 @@ dialog.palette::backdrop {
   color: var(--color-text-tertiary);
 }
 
+.inline-followup-notes-area {
+  margin-bottom: var(--space-small);
+}
+
+.inline-followup-notes {
+  display: block;
+  width: 100%;
+  min-height: 24px;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-sub);
+  line-height: 1.45;
+}
+
+.inline-followup-notes::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.inline-followup-checklist {
+  display: grid;
+  gap: 2px;
+  margin-top: var(--space-tight);
+}
+
+.inline-checklist-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: var(--space-tight);
+  min-height: 28px;
+  border-radius: var(--radius-small);
+}
+
+.inline-checklist-row:focus-within,
+.inline-checklist-row:hover {
+  background: color-mix(in srgb, var(--color-accent) 5%, transparent);
+}
+
+.inline-checklist-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  border: 1.5px solid color-mix(in srgb, var(--color-text-tertiary) 72%, transparent);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-on-accent);
+  cursor: pointer;
+}
+
+.inline-checklist-toggle[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+.inline-checklist-row input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: var(--text-sub);
+}
+
+.inline-checklist-row[data-completed] input {
+  color: var(--color-text-tertiary);
+  text-decoration: line-through;
+}
+
+.inline-checklist-row input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.inline-checklist-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+}
+
+.inline-checklist-row:hover .inline-checklist-remove,
+.inline-checklist-remove:focus-visible {
+  color: var(--color-text-tertiary);
+}
+
+.inline-checklist-remove:hover {
+  background: color-mix(in srgb, var(--color-destructive) 8%, transparent);
+  color: var(--color-destructive);
+}
+
 .inline-followup-selections {
   display: flex;
   align-items: center;
@@ -1005,6 +1108,28 @@ dialog.palette::backdrop {
   border-radius: 50%;
   background: color-mix(in srgb, var(--color-accent) 11%, transparent);
   color: var(--color-accent);
+}
+
+.inline-checklist-add {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px var(--space-small);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-medium);
+  outline: 0;
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+  font: var(--text-sub);
+}
+
+.inline-checklist-add:focus {
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-focus) 18%, transparent);
+}
+
+.inline-checklist-add::placeholder {
+  color: var(--color-text-tertiary);
 }
 
 .followup-date-picker {
