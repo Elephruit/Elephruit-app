@@ -265,6 +265,7 @@ export function FoldersPage() {
           <div
             className="folder-color-control"
             ref={coloring?.id === node.folder.id ? colorControlRef : undefined}
+            data-open={coloring?.id === node.folder.id || undefined}
             onKeyDown={(event) => {
               if (event.key !== 'Escape' || coloring?.id !== node.folder.id) return
               event.stopPropagation()

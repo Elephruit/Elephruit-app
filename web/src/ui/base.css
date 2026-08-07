@@ -5616,6 +5616,10 @@ button.timeline-badge {
   display: inline-flex;
 }
 
+.folder-color-control[data-open] {
+  z-index: 40;
+}
+
 .folder-color-popover {
   position: absolute;
   z-index: 30;
@@ -5625,7 +5629,7 @@ button.timeline-badge {
   padding: var(--space-small);
   border: 1px solid var(--color-separator);
   border-radius: var(--radius-large);
-  background: var(--color-surface);
+  background: var(--color-background-elevated);
   box-shadow: var(--shadow-overlay);
   animation: inline-panel-reveal var(--duration-fast) var(--ease-standard);
 }
