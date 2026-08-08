@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { listAiTaxonomyGaps, type TaxonomyGapSummary } from '../../ai/taxonomy'
+import { listAiTaxonomyGaps, taxonomyListErrorMessage, type TaxonomyGapSummary } from '../../ai/taxonomy'
 import { Button } from '../components/Button'
 import { Skeleton } from '../components/Skeleton'
 import { PageHeader } from '../shell/PageHeader'
@@ -20,8 +20,8 @@ export function DeveloperPage() {
     setError(null)
     try {
       setGaps(await listAiTaxonomyGaps())
-    } catch {
-      setError('Could not load taxonomy reports. Confirm this account is the verified developer admin.')
+    } catch (cause) {
+      setError(taxonomyListErrorMessage(cause))
     } finally {
       setRefreshing(false)
     }
