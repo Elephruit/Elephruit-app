@@ -9,7 +9,6 @@ import {
 } from '../../ai/credentials'
 import { GatewayError, type AIProvider } from '../../ai/gateway'
 import {
-  DEFAULT_MODEL_BY_PROVIDER,
   clearLegacyAPIKey,
   legacyStoredAPIKey,
   modelsForProvider,
@@ -54,8 +53,9 @@ export function SettingsPage() {
   const developerAdmin = useDeveloperAdmin()
   const credentials = useAiCredentials(uid)
   const [selection, setSelectionState] = useState(storedAISelection())
-  const providerInfo = PROVIDERS[selection.provider]
-  const credential = credentials?.find((item) => item.provider === selection.provider) ?? null
+  const [credentialProvider, setCredentialProvider] = useState<AIProvider>(selection.provider)
+  const providerInfo = PROVIDERS[credentialProvider]
+  const credential = credentials?.find((item) => item.provider === credentialProvider) ?? null
 
   const [keyDraft, setKeyDraft] = useState('')
   const [showKey, setShowKey] = useState(false)
@@ -82,7 +82,7 @@ export function SettingsPage() {
     if (!rawKey.trim() || busy) return
     beginAction('link')
     try {
-      const provider = options.fromLegacy ? 'anthropic' : selection.provider
+      const provider = options.fromLegacy ? 'anthropic' : credentialProvider
       const summary = await addAiCredential(provider, rawKey.trim())
       if (options.fromLegacy) {
         clearLegacyAPIKey()
@@ -145,14 +145,16 @@ export function SettingsPage() {
   }
 
   const headChip = credential ? STATUS_CHIP[credential.status] : null
-  const migratableLegacyKey = selection.provider === 'anthropic' ? legacyKey : null
+  const migratableLegacyKey = credentialProvider === 'anthropic' ? legacyKey : null
   const showAddForm = credentials !== undefined && !credential && !migratableLegacyKey
   const showKeyInput = showAddForm || (credential !== null && replacing)
+  const keyProviderOptions = PROVIDER_OPTIONS.map((option) => ({
+    ...option,
+    label: credentials?.some((item) => item.provider === option.value) ? `${option.label} ✓` : option.label,
+  }))
 
-  function selectProvider(provider: AIProvider) {
-    const next = { provider, model: DEFAULT_MODEL_BY_PROVIDER[provider] }
-    setSelectionState(next)
-    setAISelection(next)
+  function showProviderKey(provider: AIProvider) {
+    setCredentialProvider(provider)
     setReplacing(false)
     setKeyDraft('')
     setError(null)
@@ -176,7 +178,6 @@ export function SettingsPage() {
       <section className="settings-panel aside-panel">
         <div className="aside-panel-head">
           <h2 className="aside-title">AI</h2>
-          {headChip && <span className={headChip.className}>{headChip.label}</span>}
         </div>
         <p className="settings-help">
           Your own provider key, in both directions: dictated updates parsed into interactions, facts, and
@@ -186,16 +187,59 @@ export function SettingsPage() {
           browser. Restricted facts never enter any request.
         </p>
 
-        <FormField label="Provider">
+        <div className="ai-model-heading">
+          <span className="field-label" id="active-model-label">Active model</span>
+          <span className="ai-active-model-summary">
+            {modelsForProvider(selection.provider).find((model) => model.id === selection.model)?.shortLabel}
+            <span>{PROVIDERS[selection.provider].name}</span>
+          </span>
+        </div>
+        <p className="field-help">This is the one model used by capture, briefs, and talking points.</p>
+
+        <div className="ai-model-picker" role="radiogroup" aria-labelledby="active-model-label">
+          {PROVIDER_OPTIONS.map((provider) => (
+            <div className="ai-model-provider-row" key={provider.value}>
+              <span className="ai-model-provider-name">{provider.label}</span>
+              <div className="seg">
+                {modelsForProvider(provider.value).map((model) => {
+                  const active = model.id === selection.model
+                  return (
+                    <button
+                      key={model.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => {
+                        const next = { provider: model.provider, model: model.id }
+                        setSelectionState(next)
+                        setAISelection(next)
+                      }}
+                    >
+                      {model.shortLabel}
+                      {active && <span className="ai-model-active-label">Active</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="ai-key-settings">
+          <div className="aside-panel-head">
+            <h3 className="field-label">API keys</h3>
+            {headChip && <span className={headChip.className}>{headChip.label}</span>}
+          </div>
+          <p className="field-help">Keep keys for every provider here, then switch the active model without re-entering them.</p>
           <div className="settings-segmented">
             <SegmentedControl
-              label="AI provider"
-              options={PROVIDER_OPTIONS}
-              value={selection.provider}
-              onChange={selectProvider}
+              label="Manage provider key"
+              options={keyProviderOptions}
+              value={credentialProvider}
+              onChange={showProviderKey}
             />
           </div>
-        </FormField>
+        </div>
 
         {credentials === undefined && (
           <div className="settings-key-row">
@@ -228,7 +272,7 @@ export function SettingsPage() {
           </div>
         )}
 
-        {selection.provider === 'anthropic' && credential && legacyKey && (
+        {credentialProvider === 'anthropic' && credential && legacyKey && (
           <div className="callout callout-stacked">
             <p>
               An old copy of a key is still in this browser's local storage. Your credential now lives server-side,
@@ -343,23 +387,6 @@ export function SettingsPage() {
         )}
         {notice && <p className="field-help">{notice}</p>}
 
-        <FormField label="Model — your key, your cost call">
-          <div className="settings-segmented">
-            <SegmentedControl
-              label={`${providerInfo.name} model`}
-              options={modelsForProvider(selection.provider).map((choice) => ({
-                value: choice.id,
-                label: choice.shortLabel,
-              }))}
-              value={selection.model}
-              onChange={(model) => {
-                const next = { ...selection, model }
-                setSelectionState(next)
-                setAISelection(next)
-              }}
-            />
-          </div>
-        </FormField>
       </section>
 
       <section className="settings-panel aside-panel">
