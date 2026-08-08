@@ -56,16 +56,22 @@ const MessageSchema = z.strictObject({
   ]),
 })
 
+const OutputFormatSchema = z.strictObject({
+  type: z.literal('json_schema'),
+  name: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
+  schema: z.record(z.string(), z.unknown()),
+})
+
 export const GatewayRequestSchema = z
   .strictObject({
     credentialId: z.string().regex(CREDENTIAL_ID_PATTERN),
-    provider: z.enum(['anthropic']),
+    provider: z.enum(['anthropic', 'openai', 'google']),
     model: z.string().min(1).max(100),
     messages: z.array(MessageSchema).min(1).max(GATEWAY_LIMITS.maxMessages),
     system: z.string().max(GATEWAY_LIMITS.maxSystemChars).optional(),
     maxTokens: z.number().int().min(1).max(GATEWAY_LIMITS.maxOutputTokens).optional(),
     effort: z.enum(['low', 'medium', 'high']).optional(),
-    outputFormat: z.record(z.string(), z.unknown()).optional(),
+    outputFormat: OutputFormatSchema.optional(),
   })
   .superRefine((request, ctx) => {
     let textChars = request.system?.length ?? 0
@@ -94,9 +100,6 @@ export const GatewayRequestSchema = z
       ctx.addIssue({ code: 'custom', message: 'attachments too large' })
     }
     if (request.outputFormat) {
-      if (request.outputFormat.type !== 'json_schema') {
-        ctx.addIssue({ code: 'custom', message: 'outputFormat must be a json_schema format object' })
-      }
       if (JSON.stringify(request.outputFormat).length > GATEWAY_LIMITS.maxOutputFormatChars) {
         ctx.addIssue({ code: 'custom', message: 'outputFormat too large' })
       }

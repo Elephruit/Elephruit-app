@@ -99,7 +99,7 @@ async function makeDeps(options: DepsOptions = {}) {
         return fakeEncryption.decrypt(payload, ctx)
       },
     },
-    adapters: { anthropic: adapter },
+    adapters: { anthropic: adapter, openai: adapter, google: adapter },
     rateLimiter: { consume: async () => !(options.rateLimited ?? false) },
     leases: {
       acquire: async () => {
@@ -129,7 +129,7 @@ const goodRequest = {
   messages: [{ role: 'user', content: 'Coffee with Ana this morning.' }],
   system: 'You turn updates into proposals.',
   effort: 'low',
-  outputFormat: { type: 'json_schema', schema: { properties: { participantNames: {} } } },
+  outputFormat: { type: 'json_schema', name: 'capture_proposal', schema: { properties: { participantNames: {} } } },
 }
 
 async function expectPublicError(promise: Promise<unknown>, code: string) {
@@ -163,14 +163,13 @@ describe('handleStreamAiResponse', () => {
     expect(seen.request?.outputFormat).toEqual(goodRequest.outputFormat)
   })
 
-  it('strips everything but type and schema from the output format', async () => {
-    const { deps, seen } = await makeDeps()
+  it('rejects extra fields in the provider-neutral output format', async () => {
+    const { deps } = await makeDeps()
     const contaminated = {
       ...goodRequest,
-      outputFormat: { type: 'json_schema', schema: { properties: {} }, parse: {}, extra: 'nope' },
+      outputFormat: { type: 'json_schema', name: 'capture_proposal', schema: { properties: {} }, extra: 'nope' },
     }
-    await handleStreamAiResponse(deps, 'alice', contaminated, makeSink().sink)
-    expect(seen.request?.outputFormat).toEqual({ type: 'json_schema', schema: { properties: {} } })
+    await expectPublicError(handleStreamAiResponse(deps, 'alice', contaminated, makeSink().sink), 'INVALID_REQUEST')
   })
 
   it('rejects malformed shapes, oversized prompts, and oversized output formats', async () => {

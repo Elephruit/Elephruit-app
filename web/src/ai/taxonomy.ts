@@ -38,3 +38,16 @@ export async function listAiTaxonomyGaps(): Promise<TaxonomyGapSummary[]> {
   )({})
   return response.data.gaps
 }
+
+export function taxonomyListErrorMessage(error: unknown): string {
+  const code = typeof (error as { code?: unknown } | null)?.code === 'string'
+    ? (error as { code: string }).code
+    : ''
+  if (code === 'functions/permission-denied' || code === 'permission-denied') {
+    return 'This account is signed in, but its developer access was rejected. Refresh sign-in and try again.'
+  }
+  if (code === 'functions/not-found' || code === 'not-found') {
+    return 'This server build does not include taxonomy reports. Restart the Functions server from this worktree.'
+  }
+  return 'Could not load taxonomy reports. Check the Functions server and try again.'
+}

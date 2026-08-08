@@ -6,7 +6,10 @@
 /// functions/src/gateway/events.ts, pinned by a parity test.
 
 import { httpsCallable } from 'firebase/functions'
+import { z } from 'zod'
 import { functions } from '../data/firebase'
+
+export type AIProvider = 'anthropic' | 'openai' | 'google'
 
 /// Provider-neutral content blocks. Text is what it always was; image and
 /// document carry base64 payloads of *processed* attachments — re-encoded
@@ -21,7 +24,7 @@ export type GatewayMessageContent = string | GatewayContentBlock[]
 
 export interface GatewayRequest {
   credentialId: string
-  provider: 'anthropic'
+  provider: AIProvider
   model: string
   messages: Array<{ role: 'user' | 'assistant'; content: GatewayMessageContent }>
   system?: string
@@ -134,11 +137,14 @@ export interface AiTaskResult {
   final: GatewayFinal
 }
 
-/// The SDK's zodOutputFormat carries a client-side parse helper alongside the
-/// wire fields; only type and schema may travel. The server strips to the
-/// same pair regardless — this keeps the request honest at the source.
-export function wireOutputFormat(format: { type: string; schema: unknown }): Record<string, unknown> {
-  return { type: format.type, schema: format.schema }
+/// Convert an app-owned zod proposal schema into the provider-neutral wire
+/// format. Adapters translate these three fields into their SDK vocabulary.
+export function zodOutputFormat(name: string, schema: z.ZodType): Record<string, unknown> {
+  return {
+    type: 'json_schema',
+    name,
+    schema: z.toJSONSchema(schema),
+  }
 }
 
 interface StreamSource {

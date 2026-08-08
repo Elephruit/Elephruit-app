@@ -9,6 +9,8 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import type { RuntimeConfig } from '../config.js'
+import { verifyGoogleKey } from './google.js'
+import { verifyOpenAIKey } from './openai.js'
 import type { KeyVerification, KeyVerifier } from './types.js'
 
 const VERIFY_TIMEOUT_MS = 10_000
@@ -46,6 +48,10 @@ export function buildKeyVerifier(config: RuntimeConfig): KeyVerifier {
     switch (provider) {
       case 'anthropic':
         return useFake ? fakeVerifyKey(apiKey) : verifyAnthropicKey(apiKey)
+      case 'openai':
+        return useFake ? fakeVerifyKey(apiKey) : verifyOpenAIKey(apiKey)
+      case 'google':
+        return useFake ? fakeVerifyKey(apiKey) : verifyGoogleKey(apiKey)
     }
   }
 }

@@ -14,6 +14,8 @@ public enum RelationshipKind: String, Codable, Sendable, Hashable, CaseIterable 
     case partner
     case parent
     case child
+    case auntUncle
+    case nieceNephew
     case sibling
     case friend
     case colleague
@@ -46,6 +48,8 @@ public enum RelationshipKind: String, Codable, Sendable, Hashable, CaseIterable 
         case .partner: .partner
         case .parent: .child
         case .child: .parent
+        case .auntUncle: .nieceNephew
+        case .nieceNephew: .auntUncle
         case .sibling: .sibling
         case .friend: .friend
         case .colleague: .colleague
@@ -71,6 +75,8 @@ public enum RelationshipKind: String, Codable, Sendable, Hashable, CaseIterable 
         case .partner: "partner"
         case .parent: "parent"
         case .child: "child"
+        case .auntUncle: "aunt / uncle"
+        case .nieceNephew: "niece / nephew"
         case .sibling: "sibling"
         case .friend: "friend"
         case .colleague: "colleague"
@@ -104,7 +110,7 @@ public enum RelationshipKind: String, Codable, Sendable, Hashable, CaseIterable 
     public var symbolName: String {
         switch self {
         case .partner: "heart"
-        case .parent, .child: "figure.2.and.child.holdinghands"
+        case .parent, .child, .auntUncle, .nieceNephew: "figure.2.and.child.holdinghands"
         case .sibling: "figure.2"
         case .friend: "hand.wave"
         case .colleague, .worksWith: "person.2"
@@ -132,9 +138,9 @@ public enum RelationshipKind: String, Codable, Sendable, Hashable, CaseIterable 
     /// A `switch` rather than a table, so a kind added later has to be given an answer.
     public var suggestedAttributes: [FactAttribute] {
         switch self {
-        case .child:
+        case .child, .nieceNephew:
             [.observedAge, .schoolGrade, .school, .quickFact]
-        case .partner, .parent, .sibling, .householdMember:
+        case .partner, .parent, .auntUncle, .sibling, .householdMember:
             [.employer, .quickFact]
         case .colleague, .manager, .directReport, .worksWith:
             [.role, .employer, .quickFact]
@@ -155,6 +161,8 @@ public enum RelationshipKind: String, Codable, Sendable, Hashable, CaseIterable 
     public static func gendered(_ word: String) -> RelationshipKind? {
         switch word.lowercased() {
         case "son", "daughter", "kid", "child": .child
+        case "niece", "nephew", "nibling": .nieceNephew
+        case "aunt", "uncle", "pibling": .auntUncle
         case "mother", "father", "mum", "mom", "dad", "parent": .parent
         case "brother", "sister", "sibling": .sibling
         case "husband", "wife", "spouse", "partner", "boyfriend", "girlfriend": .partner
@@ -232,7 +240,7 @@ extension RelationshipKind {
     /// falling into *Other*.
     public var group: RelationshipGroup {
         switch self {
-        case .partner, .parent, .child, .sibling: .family
+        case .partner, .parent, .child, .auntUncle, .nieceNephew, .sibling: .family
         case .householdMember, .petOwner, .pet: .household
         case .colleague, .manager, .directReport, .worksWith: .work
         case .friend, .introducedBy, .introduced: .other
@@ -275,7 +283,7 @@ public enum RelationshipChartKind: String, Sendable, Hashable, CaseIterable, Ide
     /// The relationship kinds this chart draws.
     public var includedKinds: Set<RelationshipKind> {
         switch self {
-        case .family: [.partner, .parent, .child, .sibling, .petOwner, .pet]
+        case .family: [.partner, .parent, .child, .auntUncle, .nieceNephew, .sibling, .petOwner, .pet]
         case .household: [.householdMember, .partner, .child, .parent, .petOwner, .pet]
         case .professional: [.manager, .directReport, .colleague, .worksWith]
         case .network: Set(RelationshipKind.allCases)
@@ -398,8 +406,8 @@ public struct RelationshipChart: Sendable, Hashable {
     /// conclusions about which way is up.
     public static func rank(for kind: RelationshipKind) -> Int {
         switch kind {
-        case .parent, .manager: -1
-        case .child, .directReport, .pet: 1
+        case .parent, .auntUncle, .manager: -1
+        case .child, .nieceNephew, .directReport, .pet: 1
         case .partner, .sibling, .friend, .colleague, .worksWith, .householdMember,
              .introducedBy, .introduced, .petOwner: 0
         }

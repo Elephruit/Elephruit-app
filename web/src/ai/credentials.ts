@@ -6,14 +6,14 @@
 
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../data/firebase'
-import { toGatewayError } from './gateway'
+import { toGatewayError, type AIProvider } from './gateway'
 
 export type AiCredentialStatus = 'active' | 'invalid' | 'unverified' | 'revoked'
 
 /// Mirror of the server-written metadata document (dates deserialized).
 export interface AiCredential {
   id: string
-  provider: 'anthropic'
+  provider: AIProvider
   label: string | null
   keyHint: string
   status: AiCredentialStatus
@@ -38,8 +38,8 @@ async function call<Request, Response>(name: string, payload: Request): Promise<
   }
 }
 
-export function addAiCredential(apiKey: string, label?: string): Promise<AiCredentialSummary> {
-  return call('addAiCredential', { provider: 'anthropic', apiKey, ...(label ? { label } : {}) })
+export function addAiCredential(provider: AIProvider, apiKey: string, label?: string): Promise<AiCredentialSummary> {
+  return call('addAiCredential', { provider, apiKey, ...(label ? { label } : {}) })
 }
 
 export function verifyAiCredential(
@@ -59,11 +59,11 @@ export function deleteAiCredential(credentialId: string): Promise<{ deleted: boo
 /// The credential AI features run under: an active one if any, else an
 /// unverified one (added while the provider was unreachable — using it is
 /// effectively the retry). invalid and revoked never auto-selected.
-export function activeCredential(credentials: AiCredential[] | undefined): AiCredential | null {
+export function activeCredential(credentials: AiCredential[] | undefined, provider: AIProvider): AiCredential | null {
   if (!credentials) return null
   return (
-    credentials.find((credential) => credential.status === 'active') ??
-    credentials.find((credential) => credential.status === 'unverified') ??
+    credentials.find((credential) => credential.provider === provider && credential.status === 'active') ??
+    credentials.find((credential) => credential.provider === provider && credential.status === 'unverified') ??
     null
   )
 }

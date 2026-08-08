@@ -140,7 +140,7 @@ describe('handleAddCredential', () => {
       handleAddCredential(deps, 'alice', { provider: 'anthropic', apiKey: 'short' }),
       'INVALID_REQUEST',
     )
-    await expectPublicError(handleAddCredential(deps, 'alice', { provider: 'openai', apiKey: RAW_KEY }), 'INVALID_REQUEST')
+    await expectPublicError(handleAddCredential(deps, 'alice', { provider: 'mistral', apiKey: RAW_KEY }), 'INVALID_REQUEST')
   })
 })
 

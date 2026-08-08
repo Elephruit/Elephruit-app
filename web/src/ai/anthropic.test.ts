@@ -111,9 +111,10 @@ describe('CaptureProposalSchema', () => {
 
     expect(proposal.relationships).toEqual([
       expect.objectContaining({ kind: 'sibling', label: 'twin sister', facts: [{ attribute: 'detail', value: 'lives in Chicago Suburbs' }] }),
-      expect.objectContaining({ kind: 'child', label: 'niece and nephew' }),
+      expect.objectContaining({ kind: 'nieceNephew', label: 'niece and nephew' }),
       expect.objectContaining({ kind: 'friend', label: 'connection' }),
     ])
+    expect(proposal.taxonomyGaps).toEqual([])
   })
 
   it('preserves unknown relationship labels for review without guessing their meaning', () => {
@@ -145,7 +146,7 @@ describe('CaptureProposalSchema', () => {
 
 describe('the request', () => {
   it('pins the gateway shape without provider-specific structured-output options', () => {
-    const params = buildRequestParams('claude-opus-5', 'SYSTEM', 'coffee with ana')
+    const params = buildRequestParams('anthropic', 'claude-opus-5', 'SYSTEM', 'coffee with ana')
     expect(params.provider).toBe('anthropic')
     expect(params.model).toBe('claude-opus-5')
     expect(params.maxTokens).toBe(8192)

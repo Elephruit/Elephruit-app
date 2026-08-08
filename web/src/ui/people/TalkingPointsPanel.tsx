@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom'
 import { AICaptureError } from '../../ai/anthropic'
 import { generateDayBrief, type DayBrief } from '../../ai/briefing'
 import { activeCredential } from '../../ai/credentials'
-import { storedModel } from '../../ai/settings'
+import { storedAISelection } from '../../ai/settings'
 import { useAiCredentials } from '../../data/hooks'
 import { applyPlan } from '../../data/applyPlan'
 import { briefingInputFor } from '../../domain/briefing'
@@ -41,7 +41,8 @@ export function TalkingPointsPanel({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const credentials = useAiCredentials(uid)
-  const credential = activeCredential(credentials)
+  const selection = storedAISelection()
+  const credential = activeCredential(credentials, selection.provider)
   const ready = credential !== null
   const waitingOnThem = reminders.filter(
     (reminder) => reminder.status === 'open' && reminder.responsibility === 'theirs' && reminder.personIDs.includes(person.id),
@@ -61,7 +62,7 @@ export function TalkingPointsPanel({
         interactions,
         new Date(),
       )
-      setBrief(await generateDayBrief(input, { credentialId: credential.id, model: storedModel() }))
+      setBrief(await generateDayBrief(input, { credentialId: credential.id, ...selection }))
     } catch (cause) {
       setError(cause instanceof AICaptureError ? cause.message : 'Something went wrong.')
     } finally {

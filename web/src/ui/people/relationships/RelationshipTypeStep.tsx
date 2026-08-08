@@ -19,6 +19,8 @@ const KIND_ICONS: Partial<Record<RelationshipKind, string>> = {
   partner: 'heart',
   child: 'people',
   parent: 'people',
+  auntUncle: 'people',
+  nieceNephew: 'people',
   sibling: 'people',
   householdMember: 'in-person',
   pet: 'heart',

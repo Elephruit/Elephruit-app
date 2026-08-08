@@ -50,7 +50,9 @@ function buildParams(request: NormalizedRequest): Anthropic.MessageStreamParams 
       // Client-derived JSON schema, validated for size and coarse shape at
       // the gateway; the SDK type is narrower than "arbitrary schema", hence
       // the deliberate cast.
-      ...(request.outputFormat ? { format: request.outputFormat as never } : {}),
+      ...(request.outputFormat
+        ? { format: { type: request.outputFormat.type, schema: request.outputFormat.schema } as never }
+        : {}),
     }
   }
   return params

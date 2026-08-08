@@ -14,7 +14,7 @@ import {
   type DossierAttachmentInput,
   type DossierProposal,
 } from '../../ai/dossier'
-import { storedModel } from '../../ai/settings'
+import { storedAISelection } from '../../ai/settings'
 import { ingestFile } from '../../attachments/ingest'
 import { resolveProposal, type ResolvedCapture } from '../../domain/assist'
 import {
@@ -160,10 +160,14 @@ export function useCaptureController(): CaptureController {
   const attachmentsRef = useRef<CaptureAttachment[]>([])
   attachmentsRef.current = attachments
 
-  const credential = activeCredential(credentials)
+  const selection = storedAISelection()
+  const credential = activeCredential(credentials, selection.provider)
   const ready = credential !== null
   const credentialNeedsAttention =
-    !ready && (credentials ?? []).some((entry) => entry.status === 'invalid' || entry.status === 'revoked')
+    !ready &&
+    (credentials ?? []).some(
+      (entry) => entry.provider === selection.provider && (entry.status === 'invalid' || entry.status === 'revoked'),
+    )
 
   const persistDraft = useCallback((nextText: string, nextAttachments: CaptureAttachment[]) => {
     if (draftTimer.current !== null) window.clearTimeout(draftTimer.current)
@@ -433,7 +437,8 @@ export function useCaptureController(): CaptureController {
         const preselected = initialPersonID ? (people ?? []).find((p) => p.id === initialPersonID) : undefined
         const proposal = await parseDossier(await dossierInputs(), {
           credentialId: credential.id,
-          model: storedModel(),
+          provider: selection.provider,
+          model: selection.model,
           context: {
             peopleNames: (people ?? []).filter((p) => p.hasStatedName).map((p) => p.displayName),
             targetName: preselected?.displayName ?? null,
@@ -450,7 +455,8 @@ export function useCaptureController(): CaptureController {
 
       const proposal = await parseCapture(text, {
         credentialId: credential.id,
-        model: storedModel(),
+        provider: selection.provider,
+        model: selection.model,
         context: captureContext(),
       })
       setReview(resolveProposal(proposal, people ?? [], new Date(), { reminders: reminders ?? [], observations: observations ?? [], relationships: relationships ?? [], folders: folders ?? [] }))
@@ -465,7 +471,7 @@ export function useCaptureController(): CaptureController {
       }
       setMode('error')
     }
-  }, [credential, canParse, text, people, reminders, observations, relationships, folders, captureContext, dossierInputs, initialPersonID])
+  }, [credential, selection.provider, selection.model, canParse, text, people, reminders, observations, relationships, folders, captureContext, dossierInputs, initialPersonID])
 
   const chooseDossierTarget = useCallback((target: DossierTarget) => {
     setDossier((current) => (current ? { phase: 'review', proposal: current.proposal, target } : current))

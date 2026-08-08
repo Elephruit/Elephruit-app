@@ -6,14 +6,14 @@
 /// the system prompt says so explicitly, and every proposed item must cite
 /// its attachment and an evidence excerpt.
 
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { z } from 'zod'
 import { ATTACHMENT_LIMITS } from '../domain/attachments'
 import { RELATIONSHIP_KINDS } from '../domain/relationships'
 import {
   GatewayError,
   runAiTask,
-  wireOutputFormat,
+  zodOutputFormat,
+  type AIProvider,
   type GatewayContentBlock,
   type GatewayRequest,
 } from './gateway'
@@ -129,17 +129,17 @@ function contentForAttachment(input: DossierAttachmentInput): GatewayContentBloc
 
 async function requestProposal(
   content: GatewayContentBlock[] | string,
-  options: { credentialId: string; model: string; system: string },
+  options: { credentialId: string; provider: AIProvider; model: string; system: string },
 ): Promise<DossierProposal> {
   const request: GatewayRequest = {
     credentialId: options.credentialId,
-    provider: 'anthropic',
+    provider: options.provider,
     model: options.model,
     maxTokens: 8192,
     system: options.system,
     messages: [{ role: 'user', content }],
     effort: 'low',
-    outputFormat: wireOutputFormat(zodOutputFormat(DossierProposalSchema)),
+    outputFormat: zodOutputFormat('dossier_proposal', DossierProposalSchema),
   }
   const { text, final } = await runAiTask(request)
   if (final.stopReason === 'refusal') {
@@ -170,7 +170,7 @@ function dedupeFacts(proposal: DossierProposal): DossierProposal {
 /// caller shows the disclosure before ever calling here.
 export async function parseDossier(
   inputs: DossierAttachmentInput[],
-  options: { credentialId: string; model: string; context: DossierContext },
+  options: { credentialId: string; provider: AIProvider; model: string; context: DossierContext },
 ): Promise<DossierProposal> {
   if (inputs.length === 0) throw new AICaptureError('No readable files to review.')
   const system = buildDossierSystemPrompt(options.context)

@@ -16,7 +16,7 @@ import type { CaptureProposal } from '../domain/assist'
 import { CURATED_ATTRIBUTES, attributeLabel } from '../domain/facts'
 import { INTERACTION_KINDS, type InteractionKind } from '../domain/interaction'
 import { RELATIONSHIP_KINDS, kindLabel, type RelationshipKind } from '../domain/relationships'
-import { GatewayError, runAiTask, type GatewayRequest } from './gateway'
+import { GatewayError, runAiTask, type AIProvider, type GatewayRequest } from './gateway'
 import { reportAiTaxonomyGaps } from './taxonomy'
 
 // Structured outputs want every property present and no extras; optionality is
@@ -189,7 +189,9 @@ function relationshipKind(value: unknown): { kind: RelationshipKind; label: stri
   const aliases: Record<string, RelationshipKind> = {
     husband: 'partner', wife: 'partner', spouse: 'partner', fiance: 'partner', fiancee: 'partner',
     mother: 'parent', father: 'parent', mom: 'parent', dad: 'parent',
-    son: 'child', daughter: 'child', kid: 'child', niece: 'child', nephew: 'child', nieceandnephew: 'child',
+    son: 'child', daughter: 'child', kid: 'child',
+    niece: 'nieceNephew', nephew: 'nieceNephew', nibling: 'nieceNephew', nieceandnephew: 'nieceNephew',
+    aunt: 'auntUncle', uncle: 'auntUncle', pibling: 'auntUncle', auntanduncle: 'auntUncle',
     sister: 'sibling', brother: 'sibling', twin: 'sibling', twinsister: 'sibling', twinbrother: 'sibling',
     connection: 'friend', contact: 'friend',
     coworker: 'colleague', colleague: 'colleague', peer: 'colleague', teammate: 'colleague', consultant: 'colleague',
@@ -472,7 +474,7 @@ Rules, in order of importance:
   "participantNames": ["..."],
   "personContexts": [{ "personName": "...", "profileFocus": "[professional|personal]", "roleTitle": null, "organizationName": null, "connectionStatus": "[met|introductionPlanned|unknown]", "firstMetOn": null, "context": null, "introducedByName": null }],
   "facts": [{ "personName": "...", "attribute": "...", "value": "...", "confidence": "[stated|inferred|uncertain]", "sensitivity": "[normal|sensitive|restricted]", "context": "[professional|personal|identity]", "observedOn": null, "effectiveOn": null }],
-  "relationships": [{ "subjectName": "...", "kind": "[partner|parent|child|sibling|friend|colleague|manager|directReport|introducedBy|introduced|worksWith|householdMember|petOwner|pet|unknown]", "label": null, "otherName": null, "facts": [{ "attribute": "...", "value": "..." }] }],
+  "relationships": [{ "subjectName": "...", "kind": "[partner|parent|child|auntUncle|nieceNephew|sibling|friend|colleague|manager|directReport|introducedBy|introduced|worksWith|householdMember|petOwner|pet|unknown]", "label": null, "otherName": null, "facts": [{ "attribute": "...", "value": "..." }] }],
   "followUps": [{ "title": "...", "personNames": ["..."], "notes": null, "schedule": { "mode": "[deadline|start|someday|none]", "localDate": null, "localTime": null, "timeZone": null, "sourceText": null, "confidence": "[stated|inferred|uncertain]" }, "responsibility": "[mine|theirs]", "progress": "[notStarted|inProgress|blocked]", "tags": [], "folderPath": null }],
   "reminderChanges": [{ "reminderID": "...", "action": "[complete|reopen|delete|update]", "progress": null, "notes": null, "responsibility": null }],
   "factChanges": [{ "observationID": "...", "action": "[confirm|correct]", "value": null, "correctionNote": null, "confidence": null, "sensitivity": null }],
@@ -484,9 +486,9 @@ Rules, in order of importance:
 /// without a network. Capture deliberately uses prompt-directed JSON plus a
 /// tolerant local normalizer: provider structured-output grammars have varied
 /// across models and must not turn a valid streamed reply into a total failure.
-export function buildRequestParams(model: string, system: string, text: string) {
+export function buildRequestParams(provider: AIProvider, model: string, system: string, text: string) {
   return {
-    provider: 'anthropic' as const,
+    provider,
     model,
     maxTokens: 8192,
     system,
@@ -521,11 +523,11 @@ export function extractJsonPayload(raw: string): string {
 
 export async function parseCapture(
   text: string,
-  options: { credentialId: string; model: string; context: CaptureContext },
+  options: { credentialId: string; provider: AIProvider; model: string; context: CaptureContext },
 ): Promise<CaptureProposal> {
   try {
     const request: GatewayRequest = {
-      ...buildRequestParams(options.model, buildSystemPrompt(options.context), text),
+      ...buildRequestParams(options.provider, options.model, buildSystemPrompt(options.context), text),
       credentialId: options.credentialId,
     }
     const { text: reply, final } = await runAiTask(request)

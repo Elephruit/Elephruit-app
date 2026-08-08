@@ -23,6 +23,7 @@ describe('taxonomy gap handlers', () => {
         { field: 'relationship.kind', value: '  Godparent  ' },
         { field: 'relationship.kind', value: 'GODPARENT' },
         { field: 'relationship.kind', value: 'Former colleague!' },
+        { field: 'relationship.kind', value: 'niece and nephew' },
       ],
     })
 
@@ -43,10 +44,17 @@ describe('taxonomy gap handlers', () => {
 
   it('returns the store summaries for the admin view', async () => {
     const store = new MemoryStore()
-    store.rows = [{
-      id: 'gap-1', field: 'relationship.kind', value: 'godparent', count: 3,
+    const unresolved = {
+      id: 'gap-1', field: 'relationship.kind' as const, value: 'godparent', count: 3,
       firstSeenAt: '2026-08-01T00:00:00.000Z', lastSeenAt: '2026-08-07T00:00:00.000Z',
-    }]
-    await expect(handleListTaxonomyGaps(store)).resolves.toEqual({ gaps: store.rows })
+    }
+    store.rows = [
+      unresolved,
+      {
+        id: 'gap-2', field: 'relationship.kind', value: 'niece and nephew', count: 1,
+        firstSeenAt: '2026-08-07T20:01:48.000Z', lastSeenAt: '2026-08-07T20:01:48.000Z',
+      },
+    ]
+    await expect(handleListTaxonomyGaps(store)).resolves.toEqual({ gaps: [unresolved] })
   })
 })

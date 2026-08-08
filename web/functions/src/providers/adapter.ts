@@ -13,8 +13,9 @@ export interface NormalizedRequest {
   messages: Array<{ role: 'user' | 'assistant'; content: string | GatewayContentBlock[] }>
   maxTokens: number
   effort: 'low' | 'medium' | 'high' | null
-  /// Client-derived JSON-schema output format, forwarded opaquely.
-  outputFormat: Record<string, unknown> | null
+  /// Client-derived JSON schema. Each provider adapter translates this
+  /// app-owned shape into its own structured-output vocabulary.
+  outputFormat: { type: 'json_schema'; name: string; schema: Record<string, unknown> } | null
 }
 
 export interface StreamOutcome {

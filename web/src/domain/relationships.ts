@@ -13,6 +13,8 @@ export const RELATIONSHIP_KINDS = [
   'partner',
   'parent',
   'child',
+  'auntUncle',
+  'nieceNephew',
   'sibling',
   'friend',
   'colleague',
@@ -48,6 +50,8 @@ export const INVERSE: Record<RelationshipKind, RelationshipKind> = {
   partner: 'partner',
   parent: 'child',
   child: 'parent',
+  auntUncle: 'nieceNephew',
+  nieceNephew: 'auntUncle',
   sibling: 'sibling',
   friend: 'friend',
   colleague: 'colleague',
@@ -70,6 +74,8 @@ const KIND_LABELS: Record<RelationshipKind, string> = {
   partner: 'partner',
   parent: 'parent',
   child: 'child',
+  auntUncle: 'aunt / uncle',
+  nieceNephew: 'niece / nephew',
   sibling: 'sibling',
   friend: 'friend',
   colleague: 'colleague',
@@ -103,8 +109,10 @@ export function possessivePhrase(subjectName: string, kind: RelationshipKind, la
 /// `customAttribute` will make an attribute out of whatever the user types.
 export const SUGGESTED_ATTRIBUTES: Record<RelationshipKind, FactAttribute[]> = {
   child: [FactAttributes.observedAge, FactAttributes.schoolGrade, FactAttributes.school, FactAttributes.quickFact],
+  nieceNephew: [FactAttributes.observedAge, FactAttributes.schoolGrade, FactAttributes.school, FactAttributes.quickFact],
   partner: [FactAttributes.employer, FactAttributes.quickFact],
   parent: [FactAttributes.employer, FactAttributes.quickFact],
+  auntUncle: [FactAttributes.employer, FactAttributes.quickFact],
   sibling: [FactAttributes.employer, FactAttributes.quickFact],
   householdMember: [FactAttributes.employer, FactAttributes.quickFact],
   colleague: [FactAttributes.role, FactAttributes.employer, FactAttributes.quickFact],
@@ -130,6 +138,14 @@ export function genderedKind(word: string): RelationshipKind | null {
     case 'kid':
     case 'child':
       return 'child'
+    case 'niece':
+    case 'nephew':
+    case 'nibling':
+      return 'nieceNephew'
+    case 'aunt':
+    case 'uncle':
+    case 'pibling':
+      return 'auntUncle'
     case 'mother':
     case 'father':
     case 'mum':
@@ -193,6 +209,8 @@ export function groupOf(kind: RelationshipKind): RelationshipGroup {
     case 'partner':
     case 'parent':
     case 'child':
+    case 'auntUncle':
+    case 'nieceNephew':
     case 'sibling':
       return 'family'
     case 'householdMember':

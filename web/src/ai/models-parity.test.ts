@@ -20,9 +20,9 @@ describe('model catalog parity', () => {
     expect(MODEL_CATALOG.some((model) => model.id === DEFAULT_AI_MODEL && model.enabled)).toBe(true)
   })
 
-  it('all cataloged models belong to the one supported provider', () => {
-    for (const model of MODEL_CATALOG) {
-      expect(model.provider).toBe('anthropic')
+  it('keeps each picker model paired with the same provider as the server catalog', () => {
+    for (const choice of AI_MODELS) {
+      expect(MODEL_CATALOG.find((model) => model.id === choice.id)?.provider).toBe(choice.provider)
     }
   })
 })
