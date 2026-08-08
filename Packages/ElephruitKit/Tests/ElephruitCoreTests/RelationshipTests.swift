@@ -34,6 +34,8 @@ struct RelationshipTests {
         #expect(RelationshipKind.child.group == .family)
         #expect(RelationshipKind.parent.group == .family)
         #expect(RelationshipKind.sibling.group == .family)
+        #expect(RelationshipKind.auntUncle.group == .family)
+        #expect(RelationshipKind.nieceNephew.group == .family)
 
         #expect(RelationshipKind.householdMember.group == .household)
         #expect(RelationshipKind.pet.group == .household)
@@ -71,6 +73,12 @@ struct RelationshipTests {
         #expect(RelationshipKind.child.inverse == .parent)
     }
 
+    @Test("Aunts and uncles are reciprocal with nieces and nephews")
+    func extendedFamilyReciprocal() {
+        #expect(RelationshipKind.auntUncle.inverse == .nieceNephew)
+        #expect(RelationshipKind.nieceNephew.inverse == .auntUncle)
+    }
+
     @Test("Manager and direct report are each other's inverse")
     func managementReciprocal() {
         #expect(RelationshipKind.manager.inverse == .directReport)
@@ -102,6 +110,9 @@ struct RelationshipTests {
         #expect(RelationshipKind.gendered("brother") == .sibling)
         #expect(RelationshipKind.gendered("boss") == .manager)
         #expect(RelationshipKind.gendered("roommate") == .householdMember)
+        #expect(RelationshipKind.gendered("niece") == .nieceNephew)
+        #expect(RelationshipKind.gendered("nephew") == .nieceNephew)
+        #expect(RelationshipKind.gendered("uncle") == .auntUncle)
     }
 
     @Test("A word that is not a relationship is not forced into being one")
@@ -118,6 +129,7 @@ struct RelationshipTests {
         #expect(kinds.contains(.parent))
         #expect(kinds.contains(.partner))
         #expect(kinds.contains(.pet))
+        #expect(kinds.contains(.nieceNephew))
         #expect(!kinds.contains(.manager))
         #expect(!kinds.contains(.colleague))
     }
@@ -140,6 +152,8 @@ struct RelationshipTests {
     func rankingPutsGenerationsInOrder() {
         #expect(RelationshipChart.rank(for: .parent) == -1)
         #expect(RelationshipChart.rank(for: .child) == 1)
+        #expect(RelationshipChart.rank(for: .nieceNephew) == 1)
+        #expect(RelationshipChart.rank(for: .auntUncle) == -1)
         #expect(RelationshipChart.rank(for: .partner) == 0)
         #expect(RelationshipChart.rank(for: .sibling) == 0)
     }

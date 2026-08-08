@@ -22,6 +22,7 @@ describe('the inverse map', () => {
 
   it('pairs the asymmetric kinds the way the world does', () => {
     expect(INVERSE.parent).toBe('child')
+    expect(INVERSE.auntUncle).toBe('nieceNephew')
     expect(INVERSE.manager).toBe('directReport')
     expect(INVERSE.introducedBy).toBe('introduced')
     expect(INVERSE.petOwner).toBe('pet')
@@ -89,8 +90,10 @@ describe('phrases and words', () => {
     expect(genderedKind('co-worker')).toBe('colleague')
     expect(genderedKind('dog')).toBe('pet')
     expect(genderedKind('flatmate')).toBe('householdMember')
+    expect(genderedKind('niece')).toBe('nieceNephew')
+    expect(genderedKind('nephew')).toBe('nieceNephew')
+    expect(genderedKind('aunt')).toBe('auntUncle')
     expect(genderedKind('Alice')).toBeNull()
-    expect(genderedKind('nephew')).toBeNull()
   })
 })
 
@@ -111,6 +114,7 @@ describe('suggestions and groups', () => {
 
   it('places every kind in a named group, closest first', () => {
     expect(groupOf('partner')).toBe('family')
+    expect(groupOf('nieceNephew')).toBe('family')
     expect(groupOf('pet')).toBe('household')
     expect(groupOf('worksWith')).toBe('work')
     expect(groupOf('introducedBy')).toBe('other')

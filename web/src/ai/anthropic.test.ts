@@ -111,9 +111,10 @@ describe('CaptureProposalSchema', () => {
 
     expect(proposal.relationships).toEqual([
       expect.objectContaining({ kind: 'sibling', label: 'twin sister', facts: [{ attribute: 'detail', value: 'lives in Chicago Suburbs' }] }),
-      expect.objectContaining({ kind: 'child', label: 'niece and nephew' }),
+      expect.objectContaining({ kind: 'nieceNephew', label: 'niece and nephew' }),
       expect.objectContaining({ kind: 'friend', label: 'connection' }),
     ])
+    expect(proposal.taxonomyGaps).toEqual([])
   })
 
   it('preserves unknown relationship labels for review without guessing their meaning', () => {

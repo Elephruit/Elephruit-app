@@ -9,6 +9,20 @@ const ReportSchema = z.object({
   })).max(10),
 })
 
+/// Values resolved by a newer relationship taxonomy. Older clients may have
+/// reported them before the new persisted kinds shipped; keep those historical
+/// rows out of the unresolved admin queue and refuse to increment them again.
+const RESOLVED_RELATIONSHIP_VALUES = new Set([
+  'niece',
+  'nephew',
+  'nibling',
+  'niece and nephew',
+  'aunt',
+  'uncle',
+  'pibling',
+  'aunt and uncle',
+])
+
 function sanitizedValue(value: string): string {
   return value
     .normalize('NFKC')
@@ -29,7 +43,7 @@ export async function handleReportTaxonomyGaps(
   const unique = new Map<string, TaxonomyGap>()
   for (const gap of parsed.data.gaps) {
     const value = sanitizedValue(gap.value)
-    if (!value || value.split(/\s+/).length > 3) continue
+    if (!value || value.split(/\s+/).length > 3 || RESOLVED_RELATIONSHIP_VALUES.has(value)) continue
     const normalized = { field: gap.field, value } satisfies TaxonomyGap
     unique.set(`${normalized.field}:${normalized.value}`, normalized)
   }
@@ -40,5 +54,6 @@ export async function handleReportTaxonomyGaps(
 export async function handleListTaxonomyGaps(
   store: TaxonomyGapStore,
 ): Promise<{ gaps: TaxonomyGapSummary[] }> {
-  return { gaps: await store.list(100) }
+  const gaps = await store.list(100)
+  return { gaps: gaps.filter((gap) => !RESOLVED_RELATIONSHIP_VALUES.has(sanitizedValue(gap.value))) }
 }

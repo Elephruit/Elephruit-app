@@ -25,6 +25,7 @@ export interface RelationshipIdentitySummary {
 function detailPriority(kind: RelationshipKind): FactAttribute[] {
   switch (kind) {
     case 'child':
+    case 'nieceNephew':
     case 'pet':
       return [FactAttributes.observedAge, FactAttributes.schoolGrade, FactAttributes.school, FactAttributes.quickFact]
     case 'colleague':
