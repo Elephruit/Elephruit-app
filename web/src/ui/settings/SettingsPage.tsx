@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
+  activeCredential,
   addAiCredential,
   deleteAiCredential,
   replaceAiCredential,
@@ -148,9 +149,15 @@ export function SettingsPage() {
   const migratableLegacyKey = credentialProvider === 'anthropic' ? legacyKey : null
   const showAddForm = credentials !== undefined && !credential && !migratableLegacyKey
   const showKeyInput = showAddForm || (credential !== null && replacing)
+  const selectedModel = modelsForProvider(selection.provider).find((model) => model.id === selection.model) ?? null
+  const activeModel = activeCredential(credentials, selection.provider) ? selectedModel : null
   const keyProviderOptions = PROVIDER_OPTIONS.map((option) => ({
     ...option,
-    label: credentials?.some((item) => item.provider === option.value) ? `${option.label} ✓` : option.label,
+    label: activeCredential(credentials, option.value)
+      ? `${option.label} ✓`
+      : credentials?.some((item) => item.provider === option.value)
+        ? `${option.label} !`
+        : option.label,
   }))
 
   function showProviderKey(provider: AIProvider) {
@@ -189,12 +196,22 @@ export function SettingsPage() {
 
         <div className="ai-model-heading">
           <span className="field-label" id="active-model-label">Active model</span>
-          <span className="ai-active-model-summary">
-            {modelsForProvider(selection.provider).find((model) => model.id === selection.model)?.shortLabel}
-            <span>{PROVIDERS[selection.provider].name}</span>
-          </span>
+          {activeModel ? (
+            <span className="ai-active-model-summary">
+              {activeModel.shortLabel}
+              <span>{PROVIDERS[activeModel.provider].name}</span>
+            </span>
+          ) : (
+            <span className="ai-no-active-model">No active model</span>
+          )}
         </div>
-        <p className="field-help">This is the one model used by capture, briefs, and talking points.</p>
+        <p className="field-help">
+          {credentials === undefined
+            ? 'Checking linked API keys…'
+            : activeModel
+              ? 'This is the one model used by capture, briefs, and talking points.'
+              : 'Link an API key below, then choose one of that provider’s models.'}
+        </p>
 
         <div className="ai-model-picker" role="radiogroup" aria-labelledby="active-model-label">
           {PROVIDER_OPTIONS.map((provider) => (
@@ -202,13 +219,16 @@ export function SettingsPage() {
               <span className="ai-model-provider-name">{provider.label}</span>
               <div className="seg">
                 {modelsForProvider(provider.value).map((model) => {
-                  const active = model.id === selection.model
+                  const providerReady = activeCredential(credentials, provider.value) !== null
+                  const active = providerReady && model.id === selection.model
                   return (
                     <button
                       key={model.id}
                       type="button"
                       role="radio"
                       aria-checked={active}
+                      disabled={!providerReady}
+                      title={providerReady ? model.label : `Link a ${PROVIDERS[provider.value].name} API key first`}
                       onClick={() => {
                         const next = { provider: model.provider, model: model.id }
                         setSelectionState(next)
